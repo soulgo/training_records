@@ -1,0 +1,282 @@
+<%
+const dashboard = site.data.training || { daily: [], charts: {}, latest: {} };
+const latestMeasurement = dashboard.latest?.measurement || null;
+const latestDay = latestMeasurement
+  ? dashboard.daily.find((entry) => entry.date === latestMeasurement.archivedDate) || dashboard.latest?.daily || null
+  : dashboard.latest?.daily || null;
+const recentDays = [...(dashboard.daily || [])].reverse();
+
+function formatNumber(value, digits = 2) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return '—';
+  }
+  return Number(value).toFixed(digits).replace(/\.00$/, '');
+}
+
+function formatDuration(seconds) {
+  if (!seconds) {
+    return '—';
+  }
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) {
+    return `${hours}小时${minutes}分`;
+  }
+  return `${minutes}分`;
+}
+
+function formatDateLabel(value) {
+  return value ? value.slice(5) : '—';
+}
+%>
+
+<section class="dashboard-page">
+  <div class="dashboard-intro">
+    <span class="dashboard-kicker">Markdown · Hexo · GitHub Pages</span>
+    <h1>训练记录可视化看板</h1>
+    <% if (page.content) { %>
+      <div class="dashboard-copy"><%- page.content %></div>
+    <% } %>
+  </div>
+
+  <% if (!latestMeasurement) { %>
+    <div class="dashboard-empty">
+      <p>还没有可展示的数据。先在仓库里补充 `训练记录.md`，然后重新构建站点。</p>
+    </div>
+  <% } else { %>
+    <section class="hero-metrics">
+      <article class="hero-card hero-card--primary">
+        <span class="hero-label">最新归档日期</span>
+        <strong><%= latestMeasurement.archivedDate %></strong>
+        <p>真实测量时间：<%= latestMeasurement.measuredAt %></p>
+      </article>
+      <article class="hero-card">
+        <span class="hero-label">体重</span>
+        <strong><%= formatNumber(latestMeasurement.weightKg) %> kg</strong>
+        <p>BMI <%= formatNumber(latestMeasurement.bmi, 1) %></p>
+      </article>
+      <article class="hero-card">
+        <span class="hero-label">体脂率</span>
+        <strong><%= formatNumber(latestMeasurement.bodyFatPct, 1) %>%</strong>
+        <p>骨骼肌量 <%= formatNumber(latestMeasurement.skeletalMuscleKg) %> kg</p>
+      </article>
+      <article class="hero-card">
+        <span class="hero-label">训练消耗</span>
+        <strong><%= formatNumber(latestDay?.workoutSummary?.trainingCalories || 0, 0) %> kcal</strong>
+        <p>饮食摄入 <%= formatNumber(latestDay?.nutrition?.totalCalories, 0) %> kcal</p>
+      </article>
+    </section>
+
+    <section class="metric-grid">
+      <article class="metric-card">
+        <span class="metric-title">基础代谢</span>
+        <strong><%= formatNumber(latestMeasurement.basalMetabolismKcal, 0) %> kcal/日</strong>
+        <p>内脏脂肪等级 <%= formatNumber(latestMeasurement.visceralFatLevel, 1) %></p>
+      </article>
+      <article class="metric-card">
+        <span class="metric-title">水分与蛋白质</span>
+        <strong><%= formatNumber(latestMeasurement.bodyWaterPct, 1) %>% / <%= formatNumber(latestMeasurement.proteinPct, 1) %>%</strong>
+        <p>身体年龄 <%= formatNumber(latestMeasurement.bodyAge, 0) %> 岁</p>
+      </article>
+      <article class="metric-card">
+        <span class="metric-title">骑行里程</span>
+        <strong><%= formatNumber(latestDay?.workoutSummary?.cyclingDistanceKm || 0) %> km</strong>
+        <p>当日活动 <%= formatNumber(latestDay?.workoutSummary?.totalActivities || 0, 0) %> 次</p>
+      </article>
+      <article class="metric-card">
+        <span class="metric-title">活动总时长</span>
+        <strong><%= formatDuration(latestDay?.workoutSummary?.totalDurationSeconds || 0) %></strong>
+        <p>身体类型 <%= latestMeasurement.bodyType || '—' %></p>
+      </article>
+    </section>
+
+    <section class="chart-grid">
+      <article class="chart-card">
+        <div class="chart-heading">
+          <h2>体重趋势</h2>
+          <span>按归档日期</span>
+        </div>
+        <canvas id="weight-chart"></canvas>
+      </article>
+      <article class="chart-card">
+        <div class="chart-heading">
+          <h2>体脂与骨骼肌</h2>
+          <span>观察减脂与保肌</span>
+        </div>
+        <canvas id="composition-chart"></canvas>
+      </article>
+      <article class="chart-card">
+        <div class="chart-heading">
+          <h2>热量对比</h2>
+          <span>摄入 vs 训练消耗</span>
+        </div>
+        <canvas id="calorie-chart"></canvas>
+      </article>
+      <article class="chart-card">
+        <div class="chart-heading">
+          <h2>骑行里程</h2>
+          <span>通勤有氧累积</span>
+        </div>
+        <canvas id="cycling-chart"></canvas>
+      </article>
+    </section>
+
+    <section class="daily-section">
+      <div class="chart-heading">
+        <h2>每日记录速览</h2>
+        <span>最近记录优先显示</span>
+      </div>
+      <div class="daily-grid">
+        <% recentDays.forEach((day) => { %>
+          <article class="day-card">
+            <div class="day-card__header">
+              <h3><%= day.date %></h3>
+              <% if (day.measurement) { %>
+                <span><%= formatNumber(day.measurement.weightKg) %> kg</span>
+              <% } else { %>
+                <span>无体脂数据</span>
+              <% } %>
+            </div>
+            <ul class="day-card__stats">
+              <li>活动次数：<strong><%= formatNumber(day.workoutSummary.totalActivities, 0) %></strong></li>
+              <li>训练消耗：<strong><%= formatNumber(day.workoutSummary.trainingCalories, 0) %> kcal</strong></li>
+              <li>骑行里程：<strong><%= formatNumber(day.workoutSummary.cyclingDistanceKm) %> km</strong></li>
+              <li>饮食热量：<strong><%= day.nutrition.totalCalories === null ? '—' : `${formatNumber(day.nutrition.totalCalories, 0)} kcal` %></strong></li>
+            </ul>
+            <% if (day.activities.length) { %>
+              <div class="day-card__tags">
+                <% Object.entries(day.workoutSummary.countsByType).forEach(([type, count]) => { %>
+                  <span><%= type %> × <%= count %></span>
+                <% }) %>
+              </div>
+            <% } %>
+          </article>
+        <% }) %>
+      </div>
+    </section>
+
+    <script id="training-dashboard-data" type="application/json"><%- JSON.stringify(dashboard) %></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script>
+      (() => {
+        const payload = document.getElementById('training-dashboard-data');
+        if (!payload || typeof Chart === 'undefined') {
+          return;
+        }
+
+        const data = JSON.parse(payload.textContent);
+        const charts = data.charts || {};
+
+        const labels = (charts.weightKg || []).map((point) => point.date.slice(5));
+        const weightValues = (charts.weightKg || []).map((point) => point.value);
+        const bodyFatValues = (charts.bodyFatPct || []).map((point) => point.value);
+        const muscleValues = (charts.skeletalMuscleKg || []).map((point) => point.value);
+        const intakeValues = (charts.intakeCalories || []).map((point) => point.value);
+        const trainingValues = (charts.trainingCalories || []).map((point) => point.value);
+        const cyclingLabels = (charts.cyclingDistanceKm || []).map((point) => point.date.slice(5));
+        const cyclingValues = (charts.cyclingDistanceKm || []).map((point) => point.value);
+
+        const commonOptions = {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: {
+                usePointStyle: true,
+                boxWidth: 10
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                display: false
+              }
+            },
+            y: {
+              ticks: {
+                precision: 0
+              }
+            }
+          }
+        };
+
+        new Chart(document.getElementById('weight-chart'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: '体重 (kg)',
+              data: weightValues,
+              borderColor: '#0f766e',
+              backgroundColor: 'rgba(15, 118, 110, 0.12)',
+              tension: 0.35,
+              fill: true,
+              pointRadius: 3
+            }]
+          },
+          options: commonOptions
+        });
+
+        new Chart(document.getElementById('composition-chart'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [{
+              label: '体脂率 (%)',
+              data: bodyFatValues,
+              borderColor: '#ea580c',
+              backgroundColor: 'rgba(234, 88, 12, 0.12)',
+              tension: 0.35,
+              fill: false,
+              pointRadius: 3
+            }, {
+              label: '骨骼肌量 (kg)',
+              data: muscleValues,
+              borderColor: '#2563eb',
+              backgroundColor: 'rgba(37, 99, 235, 0.12)',
+              tension: 0.35,
+              fill: false,
+              pointRadius: 3
+            }]
+          },
+          options: commonOptions
+        });
+
+        new Chart(document.getElementById('calorie-chart'), {
+          type: 'bar',
+          data: {
+            labels: (charts.intakeCalories || []).map((point) => point.date.slice(5)),
+            datasets: [{
+              label: '饮食摄入 (kcal)',
+              data: intakeValues,
+              backgroundColor: '#f97316'
+            }, {
+              label: '训练消耗 (kcal)',
+              data: trainingValues,
+              backgroundColor: '#14b8a6'
+            }]
+          },
+          options: commonOptions
+        });
+
+        new Chart(document.getElementById('cycling-chart'), {
+          type: 'line',
+          data: {
+            labels: cyclingLabels,
+            datasets: [{
+              label: '骑行里程 (km)',
+              data: cyclingValues,
+              borderColor: '#7c3aed',
+              backgroundColor: 'rgba(124, 58, 237, 0.12)',
+              tension: 0.35,
+              fill: true,
+              pointRadius: 3
+            }]
+          },
+          options: commonOptions
+        });
+      })();
+    </script>
+  <% } %>
+</section>

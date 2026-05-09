@@ -1,0 +1,22 @@
+{
+  "name": "training-records-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hexo dashboard for Markdown-based training records",
+  "scripts": {
+    "test": "node --test",
+    "build:data": "node tools/generate-training-data.mjs",
+    "build:site": "node tools/run-hexo-command.mjs generate",
+    "build": "npm run build:data && npm run build:site",
+    "clean": "node tools/run-hexo-command.mjs clean",
+    "server": "npm run build:data && node tools/run-hexo-command.mjs server"
+  },
+  "dependencies": {
+    "hexo": "^7.3.0",
+    "hexo-cli": "^4.3.2",
+    "hexo-renderer-ejs": "^2.0.0",
+    "hexo-renderer-marked": "^7.0.1",
+    "hexo-renderer-stylus": "^3.0.1",
+    "hexo-server": "^3.0.0"
+  }
+}

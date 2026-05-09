@@ -1,0 +1,193 @@
+.dashboard-page
+  margin-top 2.5rem
+
+.dashboard-intro
+  margin-bottom 2rem
+
+.dashboard-kicker
+  display inline-block
+  padding 0.35rem 0.75rem
+  border-radius 999px
+  background #ecfeff
+  color #0f766e
+  font-size 0.85rem
+  letter-spacing 0.04em
+  text-transform uppercase
+
+.dashboard-intro h1
+  margin 1rem 0 0.75rem
+  font-size clamp(2.1rem, 4vw, 3.5rem)
+  line-height 1.05
+
+.dashboard-copy
+  max-width 46rem
+  color #4b5563
+
+.hero-metrics
+  display grid
+  grid-template-columns repeat(auto-fit, minmax(220px, 1fr))
+  gap 1rem
+  margin-bottom 1rem
+
+.hero-card
+  padding 1.25rem
+  border 1px solid #e5e7eb
+  border-radius 20px
+  background #ffffff
+  box-shadow 0 16px 40px rgba(15, 23, 42, 0.06)
+
+.hero-card--primary
+  background linear-gradient(135deg, #0f766e, #0ea5a4)
+  color #ffffff
+  border-color transparent
+
+.hero-card--primary p
+  color rgba(255, 255, 255, 0.85)
+
+.hero-label
+  display block
+  font-size 0.85rem
+  text-transform uppercase
+  letter-spacing 0.04em
+  margin-bottom 0.5rem
+
+.hero-card strong
+  display block
+  font-size 2rem
+  line-height 1.1
+  margin-bottom 0.35rem
+
+.hero-card p
+  margin 0
+  color #6b7280
+
+.metric-grid
+  display grid
+  grid-template-columns repeat(auto-fit, minmax(220px, 1fr))
+  gap 1rem
+  margin-bottom 1.5rem
+
+.metric-card
+  padding 1.1rem 1.2rem
+  border-radius 18px
+  background #f8fafc
+  border 1px solid #e2e8f0
+
+.metric-title
+  display block
+  margin-bottom 0.5rem
+  font-size 0.95rem
+  color #475569
+
+.metric-card strong
+  display block
+  font-size 1.35rem
+  line-height 1.2
+  margin-bottom 0.35rem
+
+.metric-card p
+  margin 0
+  color #64748b
+
+.chart-grid
+  display grid
+  grid-template-columns repeat(auto-fit, minmax(280px, 1fr))
+  gap 1rem
+  margin-bottom 1.5rem
+
+.chart-card
+  padding 1.2rem
+  border-radius 20px
+  background #ffffff
+  border 1px solid #e5e7eb
+  box-shadow 0 16px 40px rgba(15, 23, 42, 0.05)
+
+.chart-heading
+  display flex
+  align-items flex-end
+  justify-content space-between
+  gap 1rem
+  margin-bottom 0.85rem
+
+.chart-heading h2
+  margin 0
+  font-size 1.1rem
+
+.chart-heading span
+  color #64748b
+  font-size 0.9rem
+
+.chart-card canvas
+  width 100%
+  height 260px !important
+
+.daily-section
+  margin-bottom 1.5rem
+
+.daily-grid
+  display grid
+  grid-template-columns repeat(auto-fit, minmax(260px, 1fr))
+  gap 1rem
+
+.day-card
+  padding 1.1rem 1.2rem
+  border-radius 18px
+  background linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)
+  border 1px solid #e2e8f0
+
+.day-card__header
+  display flex
+  justify-content space-between
+  gap 1rem
+  align-items baseline
+  margin-bottom 0.75rem
+
+.day-card__header h3
+  margin 0
+  font-size 1.05rem
+
+.day-card__header span
+  color #0f766e
+  font-weight 600
+
+.day-card__stats
+  list-style none
+  padding 0
+  margin 0 0 0.9rem
+
+.day-card__stats li
+  display flex
+  justify-content space-between
+  gap 0.75rem
+  margin-bottom 0.35rem
+  color #475569
+
+.day-card__tags
+  display flex
+  flex-wrap wrap
+  gap 0.45rem
+
+.day-card__tags span
+  padding 0.3rem 0.55rem
+  border-radius 999px
+  background #e2e8f0
+  color #334155
+  font-size 0.85rem
+
+.dashboard-empty
+  padding 1.25rem
+  border-radius 18px
+  background #fff7ed
+  color #9a3412
+  border 1px solid #fdba74
+
+@media (max-width: 720px)
+  .dashboard-page
+    margin-top 1.5rem
+
+  .chart-heading
+    align-items flex-start
+    flex-direction column
+
+  .chart-card canvas
+    height 220px !important

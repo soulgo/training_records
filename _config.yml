@@ -1,0 +1,65 @@
+title: 健身训练记录看板
+subtitle: ''
+description: >
+  用 Hexo 与 GitHub Pages 展示训练、体脂和饮食记录的静态看板。
+keywords:
+  - 健身
+  - 训练记录
+  - 体脂
+  - 饮食
+author: soulgo
+language: zh-CN
+timezone: Asia/Shanghai
+
+url: https://soulgo.github.io
+root: /training_records/
+permalink: :year/:month/:day/:title/
+pretty_urls:
+  trailing_index: true
+  trailing_html: true
+
+source_dir: source
+public_dir: public
+tag_dir: tags
+archive_dir: archives
+category_dir: categories
+code_dir: downloads/code
+i18n_dir: :lang
+skip_render:
+
+theme: cactus
+
+theme_config:
+  colorscheme: white
+  projects_url: /
+  nav:
+    home: /
+    github: https://github.com/soulgo/training_records
+  posts_overview:
+    show_all_posts: false
+    post_count: 0
+  tags_overview: false
+  social_links:
+    -
+      icon: github
+      label: GitHub 仓库
+      link: https://github.com/soulgo/training_records
+  rss: false
+  copyright:
+    start_year: 2026
+  google_analytics:
+    enabled: false
+  baidu_analytics:
+    enabled: false
+  cloudflare_analytics:
+    enabled: false
+  umami_analytics:
+    enabled: false
+  mathjax:
+    enabled: false
+  local_search:
+    enable: false
+
+marked:
+  prependRoot: true
+  postAsset: false
