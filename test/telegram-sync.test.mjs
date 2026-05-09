@@ -325,3 +325,103 @@ test('processes only allowed chats and advances state to the highest processed u
   assert.match(result.markdown, /2026-05-09 饮食截图记录/);
   assert.match(result.markdown, /19:12 力量训练/);
 });
+
+test('normalizes detected month-day using the telegram message year when AI returns an impossible year', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-13',
+    messages: [
+      {
+        updateId: 520905341,
+        messageId: 13,
+        mediaGroupId: null,
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 9, 8, 56, 29) / 1000,
+        photos: [{ fileId: 'file-workout', fileUniqueId: 'uniq-workout' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 13,
+      imageType: 'workout',
+      detectedDate: '5669-05-06',
+      dateEvidence: 'image only shows month-day',
+      confidence: 0.95,
+      warnings: ['year is unreliable'],
+      records: {
+        activities: [
+          {
+            time: '20:27',
+            type: '力量训练',
+            detail: '总消耗250千卡，时长00:28:48，平均心率125次/分钟',
+          },
+        ],
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-06');
+});
+
+test('fills missing measurement date from telegram message year when month-day is visible in evidence', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-14',
+    messages: [
+      {
+        updateId: 520905342,
+        messageId: 14,
+        mediaGroupId: null,
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 9, 8, 56, 29) / 1000,
+        photos: [{ fileId: 'file-measurement', fileUniqueId: 'uniq-measurement' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 14,
+      imageType: 'measurement',
+      detectedDate: null,
+      dateEvidence: 'image shows 5月6日 but no year',
+      confidence: 0.97,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: null,
+          bodyScore: 77,
+          weightKg: 73.55,
+          bmi: 23.7,
+          bodyFatPct: 22.4,
+          skeletalMuscleKg: 30.9,
+          visceralFatLevel: 9,
+          basalMetabolismKcal: 1609,
+          bodyWaterPct: 50.5,
+          proteinPct: 23,
+          boneMassKg: 2.98,
+          fatFreeMassKg: 57.1,
+          bodyAge: 31,
+          bodyType: '标准型',
+        },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-06');
+  assert.equal(analyzed.measurement?.measuredAt, '2026-05-06');
+});

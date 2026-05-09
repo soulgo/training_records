@@ -64,16 +64,24 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       continue;
     }
 
+    const normalizedDetectedDate = normalizeRecognitionDate(recognition, message);
+
     for (const warning of recognition.warnings ?? []) {
       warnings.push(warning);
     }
 
-    if (recognition.detectedDate) {
-      detectedDates.add(recognition.detectedDate);
+    if (normalizedDetectedDate) {
+      detectedDates.add(normalizedDetectedDate);
     }
 
     if (recognition.imageType === 'measurement' && recognition.records?.measurement) {
-      measurementCandidates.push(recognition.records.measurement);
+      measurementCandidates.push({
+        ...recognition.records.measurement,
+        measuredAt:
+          recognition.records.measurement.measuredAt ??
+          normalizedDetectedDate ??
+          null,
+      });
     }
     if (recognition.imageType === 'workout' && Array.isArray(recognition.records?.activities)) {
       for (const activity of recognition.records.activities) {
@@ -251,6 +259,30 @@ function extractBatchExplicitDate(batch) {
       return explicitDate;
     }
   }
+  return null;
+}
+
+function normalizeRecognitionDate(recognition, message) {
+  const rawDate = recognition.detectedDate?.trim();
+  const messageDate = dateFromUnix(message.dateUnix);
+
+  if (rawDate) {
+    const parsed = parseDateParts(rawDate);
+    if (parsed && isReasonableYear(parsed.year, messageDate.year)) {
+      return formatDateParts(parsed.year, parsed.month, parsed.day);
+    }
+
+    const fallbackMonthDay = parseMonthDay(recognition.dateEvidence) ?? parseMonthDay(rawDate);
+    if (fallbackMonthDay) {
+      return formatDateParts(messageDate.year, fallbackMonthDay.month, fallbackMonthDay.day);
+    }
+  }
+
+  const monthDayFromEvidence = parseMonthDay(recognition.dateEvidence);
+  if (monthDayFromEvidence) {
+    return formatDateParts(messageDate.year, monthDayFromEvidence.month, monthDayFromEvidence.day);
+  }
+
   return null;
 }
 
@@ -571,6 +603,56 @@ function extractDateFromText(text) {
     return null;
   }
   const [year, month, day] = match[1].split('-').map(Number);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function parseDateParts(value) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+  };
+}
+
+function parseMonthDay(value) {
+  if (!value) {
+    return null;
+  }
+  const monthDayMatch = value.match(/(\d{1,2})月(\d{1,2})日/);
+  if (monthDayMatch) {
+    return {
+      month: Number(monthDayMatch[1]),
+      day: Number(monthDayMatch[2]),
+    };
+  }
+  const isoLikeMatch = value.match(/\b\d{4}-(\d{2})-(\d{2})\b/);
+  if (isoLikeMatch) {
+    return {
+      month: Number(isoLikeMatch[1]),
+      day: Number(isoLikeMatch[2]),
+    };
+  }
+  return null;
+}
+
+function isReasonableYear(year, messageYear) {
+  return year >= messageYear - 1 && year <= messageYear + 1;
+}
+
+function dateFromUnix(unixSeconds) {
+  const date = new Date(unixSeconds * 1000);
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+  };
+}
+
+function formatDateParts(year, month, day) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
