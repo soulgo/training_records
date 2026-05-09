@@ -23,7 +23,7 @@ const sampleMarkdown = `
 
 - 08:16 户外骑行：3.18公里，16分49秒，均速11.35公里/小时
 - 08:35 爬楼：4分04秒，总消耗43千卡，记录值144次/分钟
-- 18:25 自由训练：39分44秒，消耗424千卡，平均145次/分钟
+- 18:25 燃脂训练（华为记录显示为“自由训练”）：39分44秒，消耗424千卡，平均145次/分钟
 - 19:12 力量训练：20分49秒，消耗189千卡，平均132次/分钟
 
 #### 2026-05-08 饮食截图记录
@@ -72,6 +72,7 @@ test('aggregates daily workout and nutrition totals for the dashboard', () => {
   assert.equal(day.workoutSummary.cyclingDistanceKm, 3.18);
   assert.equal(day.nutrition.totalCalories, 836);
   assert.equal(day.nutrition.meals.length, 3);
+  assert.equal(day.activities[2].type, '燃脂训练');
 });
 
 test('builds chart series from archived daily measurements', () => {

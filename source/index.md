@@ -1,5 +1,5 @@
 ---
-title: 训练看板
+title: 训练记录
 layout: dashboard
 ---
 

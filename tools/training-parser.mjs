@@ -148,10 +148,12 @@ function parseActivityBlock(content) {
 function parseActivityLine(line) {
   const [, time, type, detail] = line.match(/^- (\d{2}:\d{2})\s+([^：]+)：(.+)$/) ?? [];
   const durationText = detail?.match(/\d+分\d+秒|\d{2}:\d{2}:\d{2}/)?.[0] ?? null;
+  const normalizedType = normalizeActivityType(type);
 
   return {
     time,
-    type,
+    type: normalizedType,
+    rawType: type,
     detail,
     durationText,
     durationSeconds: durationText ? parseDurationSeconds(durationText) : 0,
@@ -186,6 +188,13 @@ function summarizeActivities(activities) {
     cyclingDistanceKm: roundTo(cyclingDistanceKm, 2),
     countsByType,
   };
+}
+
+function normalizeActivityType(type) {
+  if (type === '自由训练' || type.startsWith('燃脂训练')) {
+    return '燃脂训练';
+  }
+  return type;
 }
 
 function parseNutritionBlock(content) {

@@ -13,7 +13,7 @@ timezone: Asia/Shanghai
 
 url: https://soulgo.github.io
 root: /training_records/
-permalink: :year/:month/:day/:title/
+permalink: thoughts/:year/:month/:day/:title/
 pretty_urls:
   trailing_index: true
   trailing_html: true
@@ -33,8 +33,9 @@ theme_config:
   colorscheme: white
   projects_url: /
   nav:
-    home: /
-    github: https://github.com/soulgo/training_records
+    records: /
+    thoughts: /thoughts/
+    about: /about/
   posts_overview:
     show_all_posts: false
     post_count: 0
