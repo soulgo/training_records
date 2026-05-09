@@ -51,19 +51,32 @@ function calculateRatio(current, previous) {
   };
 }
 
-function renderComparison(current, previous) {
+function getComparison(current, previous) {
   const comparison = calculateRatio(current, previous);
 
   if (!comparison) {
-    return '暂无前一日对比';
+    return {
+      direction: 'neutral',
+      arrow: '•',
+      text: '暂无前一日对比',
+    };
   }
 
   if (comparison.delta === 0) {
-    return '较前一日持平';
+    return {
+      direction: 'flat',
+      arrow: '→',
+      text: '较前一日持平',
+    };
   }
 
-  const direction = comparison.delta > 0 ? '新增' : '下降';
-  return `较前一日${direction} ${formatNumber(comparison.ratio, 2)}%`;
+  const isUp = comparison.delta > 0;
+
+  return {
+    direction: isUp ? 'up' : 'down',
+    arrow: isUp ? '↑' : '↓',
+    text: `较前一日${isUp ? '新增' : '下降'} ${formatNumber(comparison.ratio, 2)}%`,
+  };
 }
 %>
 
@@ -94,19 +107,22 @@ function renderComparison(current, previous) {
         <span class="hero-label">体重</span>
         <strong><%= formatNumber(latestMeasurement.weightKg) %> kg</strong>
         <p>BMI <%= formatNumber(latestMeasurement.bmi, 1) %></p>
-        <p class="hero-card__comparison"><%= renderComparison(latestMeasurement.weightKg, previousDay?.measurement?.weightKg) %></p>
+        <% const weightComparison = getComparison(latestMeasurement.weightKg, previousDay?.measurement?.weightKg); %>
+        <p class="hero-card__comparison comparison-pill comparison-pill--<%= weightComparison.direction %>"><span class="comparison-pill__arrow"><%= weightComparison.arrow %></span><span><%= weightComparison.text %></span></p>
       </article>
       <article class="hero-card">
         <span class="hero-label">体脂率</span>
         <strong><%= formatNumber(latestMeasurement.bodyFatPct, 1) %>%</strong>
         <p>骨骼肌量 <%= formatNumber(latestMeasurement.skeletalMuscleKg) %> kg</p>
-        <p class="hero-card__comparison"><%= renderComparison(latestMeasurement.bodyFatPct, previousDay?.measurement?.bodyFatPct) %></p>
+        <% const bodyFatComparison = getComparison(latestMeasurement.bodyFatPct, previousDay?.measurement?.bodyFatPct); %>
+        <p class="hero-card__comparison comparison-pill comparison-pill--<%= bodyFatComparison.direction %>"><span class="comparison-pill__arrow"><%= bodyFatComparison.arrow %></span><span><%= bodyFatComparison.text %></span></p>
       </article>
       <article class="hero-card">
         <span class="hero-label">训练消耗</span>
         <strong><%= formatNumber(latestDay?.workoutSummary?.trainingCalories || 0, 0) %> kcal</strong>
         <p>饮食摄入 <%= formatNumber(latestDay?.nutrition?.totalCalories, 0) %> kcal</p>
-        <p class="hero-card__comparison"><%= renderComparison(latestDay?.workoutSummary?.trainingCalories || 0, previousDay?.workoutSummary?.trainingCalories) %></p>
+        <% const trainingComparison = getComparison(latestDay?.workoutSummary?.trainingCalories || 0, previousDay?.workoutSummary?.trainingCalories); %>
+        <p class="hero-card__comparison comparison-pill comparison-pill--<%= trainingComparison.direction %>"><span class="comparison-pill__arrow"><%= trainingComparison.arrow %></span><span><%= trainingComparison.text %></span></p>
       </article>
     </section>
 
@@ -115,25 +131,29 @@ function renderComparison(current, previous) {
         <span class="metric-title">基础代谢</span>
         <strong><%= formatNumber(latestMeasurement.basalMetabolismKcal, 0) %> kcal/日</strong>
         <p>内脏脂肪等级 <%= formatNumber(latestMeasurement.visceralFatLevel, 1) %></p>
-        <p class="metric-card__comparison"><%= renderComparison(latestMeasurement.basalMetabolismKcal, previousDay?.measurement?.basalMetabolismKcal) %></p>
+        <% const metabolismComparison = getComparison(latestMeasurement.basalMetabolismKcal, previousDay?.measurement?.basalMetabolismKcal); %>
+        <p class="metric-card__comparison comparison-pill comparison-pill--<%= metabolismComparison.direction %>"><span class="comparison-pill__arrow"><%= metabolismComparison.arrow %></span><span><%= metabolismComparison.text %></span></p>
       </article>
       <article class="metric-card">
         <span class="metric-title">水分与蛋白质</span>
         <strong><%= formatNumber(latestMeasurement.bodyWaterPct, 1) %>% / <%= formatNumber(latestMeasurement.proteinPct, 1) %>%</strong>
         <p>身体年龄 <%= formatNumber(latestMeasurement.bodyAge, 0) %> 岁</p>
-        <p class="metric-card__comparison"><%= renderComparison(latestMeasurement.bodyWaterPct, previousDay?.measurement?.bodyWaterPct) %></p>
+        <% const waterComparison = getComparison(latestMeasurement.bodyWaterPct, previousDay?.measurement?.bodyWaterPct); %>
+        <p class="metric-card__comparison comparison-pill comparison-pill--<%= waterComparison.direction %>"><span class="comparison-pill__arrow"><%= waterComparison.arrow %></span><span><%= waterComparison.text %></span></p>
       </article>
       <article class="metric-card">
         <span class="metric-title">骑行里程</span>
         <strong><%= formatNumber(latestDay?.workoutSummary?.cyclingDistanceKm || 0) %> km</strong>
         <p>当日活动 <%= formatNumber(latestDay?.workoutSummary?.totalActivities || 0, 0) %> 次</p>
-        <p class="metric-card__comparison"><%= renderComparison(latestDay?.workoutSummary?.cyclingDistanceKm || 0, previousDay?.workoutSummary?.cyclingDistanceKm) %></p>
+        <% const cyclingComparison = getComparison(latestDay?.workoutSummary?.cyclingDistanceKm || 0, previousDay?.workoutSummary?.cyclingDistanceKm); %>
+        <p class="metric-card__comparison comparison-pill comparison-pill--<%= cyclingComparison.direction %>"><span class="comparison-pill__arrow"><%= cyclingComparison.arrow %></span><span><%= cyclingComparison.text %></span></p>
       </article>
       <article class="metric-card">
         <span class="metric-title">活动总时长</span>
         <strong><%= formatDuration(latestDay?.workoutSummary?.totalDurationSeconds || 0) %></strong>
         <p>身体类型 <%= latestMeasurement.bodyType || '—' %></p>
-        <p class="metric-card__comparison"><%= renderComparison(latestDay?.workoutSummary?.totalDurationSeconds || 0, previousDay?.workoutSummary?.totalDurationSeconds) %></p>
+        <% const durationComparison = getComparison(latestDay?.workoutSummary?.totalDurationSeconds || 0, previousDay?.workoutSummary?.totalDurationSeconds); %>
+        <p class="metric-card__comparison comparison-pill comparison-pill--<%= durationComparison.direction %>"><span class="comparison-pill__arrow"><%= durationComparison.arrow %></span><span><%= durationComparison.text %></span></p>
       </article>
     </section>
 

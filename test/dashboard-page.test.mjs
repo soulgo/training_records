@@ -23,4 +23,8 @@ test('dashboard shows day-over-day comparison for key metrics', () => {
   assert.match(homepage, /较前一日下降 0\.95%/);
   assert.match(homepage, /较前一日新增 18\.64%/);
   assert.match(homepage, /较前一日下降 1\.37%/);
+  assert.match(homepage, /comparison-pill comparison-pill--down/);
+  assert.match(homepage, /comparison-pill comparison-pill--up/);
+  assert.match(homepage, /comparison-pill__arrow">↓<\/span><span>较前一日下降 0\.95%/);
+  assert.match(homepage, /comparison-pill__arrow">↑<\/span><span>较前一日新增 18\.64%/);
 });
