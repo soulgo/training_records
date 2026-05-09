@@ -4,6 +4,10 @@ const latestMeasurement = dashboard.latest?.measurement || null;
 const latestDay = latestMeasurement
   ? dashboard.daily.find((entry) => entry.date === latestMeasurement.archivedDate) || dashboard.latest?.daily || null
   : dashboard.latest?.daily || null;
+const latestDayIndex = latestDay
+  ? dashboard.daily.findIndex((entry) => entry.date === latestDay.date)
+  : -1;
+const previousDay = latestDayIndex > 0 ? dashboard.daily[latestDayIndex - 1] : null;
 const recentDays = [...(dashboard.daily || [])].reverse();
 
 function formatNumber(value, digits = 2) {
@@ -28,6 +32,39 @@ function formatDuration(seconds) {
 function formatDateLabel(value) {
   return value ? value.slice(5) : '—';
 }
+
+function calculateRatio(current, previous) {
+  if (
+    current === null || current === undefined || Number.isNaN(current) ||
+    previous === null || previous === undefined || Number.isNaN(previous) ||
+    previous === 0
+  ) {
+    return null;
+  }
+
+  const delta = current - previous;
+  const ratio = Math.abs(delta / previous) * 100;
+
+  return {
+    delta,
+    ratio,
+  };
+}
+
+function renderComparison(current, previous) {
+  const comparison = calculateRatio(current, previous);
+
+  if (!comparison) {
+    return '暂无前一日对比';
+  }
+
+  if (comparison.delta === 0) {
+    return '较前一日持平';
+  }
+
+  const direction = comparison.delta > 0 ? '新增' : '下降';
+  return `较前一日${direction} ${formatNumber(comparison.ratio, 2)}%`;
+}
 %>
 
 <section class="dashboard-page">
@@ -49,21 +86,27 @@ function formatDateLabel(value) {
         <span class="hero-label">最新归档日期</span>
         <strong><%= latestMeasurement.archivedDate %></strong>
         <p>真实测量时间：<%= latestMeasurement.measuredAt %></p>
+        <p class="hero-card__comparison">
+          对比日期：<%= previousDay?.date || '暂无前一日' %>
+        </p>
       </article>
       <article class="hero-card">
         <span class="hero-label">体重</span>
         <strong><%= formatNumber(latestMeasurement.weightKg) %> kg</strong>
         <p>BMI <%= formatNumber(latestMeasurement.bmi, 1) %></p>
+        <p class="hero-card__comparison"><%= renderComparison(latestMeasurement.weightKg, previousDay?.measurement?.weightKg) %></p>
       </article>
       <article class="hero-card">
         <span class="hero-label">体脂率</span>
         <strong><%= formatNumber(latestMeasurement.bodyFatPct, 1) %>%</strong>
         <p>骨骼肌量 <%= formatNumber(latestMeasurement.skeletalMuscleKg) %> kg</p>
+        <p class="hero-card__comparison"><%= renderComparison(latestMeasurement.bodyFatPct, previousDay?.measurement?.bodyFatPct) %></p>
       </article>
       <article class="hero-card">
         <span class="hero-label">训练消耗</span>
         <strong><%= formatNumber(latestDay?.workoutSummary?.trainingCalories || 0, 0) %> kcal</strong>
         <p>饮食摄入 <%= formatNumber(latestDay?.nutrition?.totalCalories, 0) %> kcal</p>
+        <p class="hero-card__comparison"><%= renderComparison(latestDay?.workoutSummary?.trainingCalories || 0, previousDay?.workoutSummary?.trainingCalories) %></p>
       </article>
     </section>
 
@@ -72,21 +115,25 @@ function formatDateLabel(value) {
         <span class="metric-title">基础代谢</span>
         <strong><%= formatNumber(latestMeasurement.basalMetabolismKcal, 0) %> kcal/日</strong>
         <p>内脏脂肪等级 <%= formatNumber(latestMeasurement.visceralFatLevel, 1) %></p>
+        <p class="metric-card__comparison"><%= renderComparison(latestMeasurement.basalMetabolismKcal, previousDay?.measurement?.basalMetabolismKcal) %></p>
       </article>
       <article class="metric-card">
         <span class="metric-title">水分与蛋白质</span>
         <strong><%= formatNumber(latestMeasurement.bodyWaterPct, 1) %>% / <%= formatNumber(latestMeasurement.proteinPct, 1) %>%</strong>
         <p>身体年龄 <%= formatNumber(latestMeasurement.bodyAge, 0) %> 岁</p>
+        <p class="metric-card__comparison"><%= renderComparison(latestMeasurement.bodyWaterPct, previousDay?.measurement?.bodyWaterPct) %></p>
       </article>
       <article class="metric-card">
         <span class="metric-title">骑行里程</span>
         <strong><%= formatNumber(latestDay?.workoutSummary?.cyclingDistanceKm || 0) %> km</strong>
         <p>当日活动 <%= formatNumber(latestDay?.workoutSummary?.totalActivities || 0, 0) %> 次</p>
+        <p class="metric-card__comparison"><%= renderComparison(latestDay?.workoutSummary?.cyclingDistanceKm || 0, previousDay?.workoutSummary?.cyclingDistanceKm) %></p>
       </article>
       <article class="metric-card">
         <span class="metric-title">活动总时长</span>
         <strong><%= formatDuration(latestDay?.workoutSummary?.totalDurationSeconds || 0) %></strong>
         <p>身体类型 <%= latestMeasurement.bodyType || '—' %></p>
+        <p class="metric-card__comparison"><%= renderComparison(latestDay?.workoutSummary?.totalDurationSeconds || 0, previousDay?.workoutSummary?.totalDurationSeconds) %></p>
       </article>
     </section>
 
