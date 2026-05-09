@@ -1,0 +1,82 @@
+name: Telegram Sync
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: telegram-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync Telegram updates
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_BASE_URL: ${{ vars.AI_BASE_URL }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
+          TELEGRAM_ALLOWED_CHAT_IDS: ${{ vars.TELEGRAM_ALLOWED_CHAT_IDS }}
+          TELEGRAM_POLL_LIMIT: ${{ vars.TELEGRAM_POLL_LIMIT }}
+        run: npm run telegram:sync
+
+      - name: Detect changes
+        id: changes
+        run: |
+          if git diff --quiet -- 训练记录.md telegram; then
+            echo "repo_changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "repo_changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          if git diff --quiet -- 训练记录.md; then
+            echo "content_changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "content_changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run tests
+        if: steps.changes.outputs.content_changed == 'true'
+        run: npm test
+
+      - name: Build site data and static files
+        if: steps.changes.outputs.content_changed == 'true'
+        run: npm run build
+
+      - name: Commit sync results
+        if: steps.changes.outputs.repo_changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 训练记录.md telegram
+          git commit -m "chore: sync Telegram training updates"
+
+      - name: Rebase on latest main
+        if: steps.changes.outputs.repo_changed == 'true'
+        run: |
+          git fetch origin main
+          git pull --rebase origin main
+
+      - name: Push changes
+        if: steps.changes.outputs.repo_changed == 'true'
+        run: git push origin HEAD:main

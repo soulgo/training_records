@@ -270,6 +270,9 @@ npm run server
 - `npm run server`
   本地启动 Hexo 预览。
 
+- `npm run telegram:sync`
+  轮询 Telegram Bot 消息、调用 AI 识别截图、回写 `训练记录.md`、并更新 `telegram/` 下的状态与日志。
+
 GitHub Actions 发布流程如下：
 
 1. checkout 仓库
@@ -282,6 +285,44 @@ GitHub Actions 发布流程如下：
 因此，线上页面展示的数据始终来自：
 
 `训练记录.md -> training.json -> Hexo 模板 -> public/ -> GitHub Pages`
+
+## 8.1 Telegram 自动同步
+
+仓库现在支持两种更新模式：
+
+- 本地模式：直接编辑 `训练记录.md`，推送到 `main`
+- Telegram 模式：由 `.github/workflows/telegram-sync.yml` 定时轮询 Bot 消息并自动回写
+
+### 需要配置的 GitHub Secrets
+
+- `TELEGRAM_BOT_TOKEN`
+- `AI_API_KEY`
+
+### 需要配置的 GitHub Variables
+
+- `AI_BASE_URL`
+- `AI_MODEL`
+- `TELEGRAM_ALLOWED_CHAT_IDS`
+- `TELEGRAM_POLL_LIMIT`
+
+### Telegram 同步规则
+
+- 同一个 `media_group_id` 相册会作为一个同步批次处理
+- 如果一组图片里有一张或 caption 能明确日期，则整组默认归到该日期
+- 支持 `体脂秤`、`运动`、`饮食` 三类截图
+- 原始图片不入库，只记录消息元数据、识别摘要和处理日志
+- 同步结果会直接回写 `训练记录.md`
+
+### Telegram 持久化目录
+
+- `telegram/state.json`
+  保存上次成功推进到的 `update_id`
+
+- `telegram/inbox/*.ndjson`
+  保存每批入站消息元数据和 AI 识别摘要
+
+- `telegram/process-log.ndjson`
+  保存每次轮询的处理结果、跳过原因和回写摘要
 
 ## 9. 当前前端结构
 

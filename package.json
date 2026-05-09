@@ -9,7 +9,8 @@
     "build:site": "node tools/run-hexo-command.mjs generate",
     "build": "npm run build:data && npm run build:site",
     "clean": "node tools/run-hexo-command.mjs clean",
-    "server": "npm run build:data && node tools/run-hexo-command.mjs server"
+    "server": "npm run build:data && node tools/run-hexo-command.mjs server",
+    "telegram:sync": "node tools/telegram-sync.mjs"
   },
   "dependencies": {
     "hexo": "^7.3.0",
