@@ -296,7 +296,7 @@ function resolveDetectedDate(detectedDates) {
 function normalizeActivities(activities) {
   const deduped = new Map();
   for (const activity of activities) {
-    const time = activity.time?.trim();
+    const time = normalizeActivityTime(activity.time);
     const type = activity.type?.trim();
     const detail = activity.detail?.trim();
     if (!time || !type || !detail) {
@@ -426,7 +426,7 @@ function renderMeasurementBlock(batchResult) {
     '',
     TELEGRAM_SECTION_TAG,
     fingerprintComment(batchResult.fingerprints.measurement[0]),
-    `- 测量时间：${measurement.measuredAt}`,
+    `- 测量时间：${measurement.measuredAt ?? batchResult.archivedDate}`,
   ];
 
   appendMetric(lines, '身体得分', measurement.bodyScore, '分');
@@ -454,7 +454,7 @@ function renderActivitiesBlock(batchResult) {
     const activity = batchResult.activities[index];
     const fingerprint = batchResult.fingerprints.activities[index];
     lines.push(fingerprintComment(fingerprint));
-    lines.push(`- ${activity.time} ${activity.type}：${activity.detail}`);
+    lines.push(`- ${normalizeActivityTime(activity.time)} ${activity.type}：${activity.detail}`);
   }
   return lines.join('\n');
 }
@@ -541,6 +541,10 @@ function mergeBlock(existingBlock, nextBlock) {
     return existingBlock;
   }
 
+  if (existingBlock.startsWith('#### ') && existingBlock.includes('饮食截图记录')) {
+    return mergeNutritionBlock(existingBlock, nextBlock);
+  }
+
   if (!existingBlock.includes(TELEGRAM_SECTION_TAG)) {
     return `${existingBlock.trim()}\n${nextBlock
       .split(/\r?\n/)
@@ -583,6 +587,185 @@ function appendMetric(lines, label, value, suffix = '') {
     return;
   }
   lines.push(`- ${label}：${formatValue(value)}${suffix}`);
+}
+
+function normalizeActivityTime(value) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const match = trimmed.match(/(\d{2}:\d{2})$/);
+  return match ? match[1] : trimmed;
+}
+
+function mergeNutritionBlock(existingBlock, nextBlock) {
+  const heading = existingBlock.split(/\r?\n/)[0];
+  const existingSummarySection = extractSubsection(existingBlock, '##### 餐次汇总');
+  const existingDetailSection = extractSubsection(existingBlock, '##### 餐次明细');
+  const incomingSummarySection = extractSubsection(nextBlock, '##### 餐次汇总');
+  const incomingDetailSection = extractSubsection(nextBlock, '##### 餐次明细');
+
+  const existingFingerprints = new Set(
+    [...existingBlock.matchAll(/<!-- telegram-fingerprint: ([^ ]+) -->/g)].map((match) => match[1]),
+  );
+
+  const mergedSummaryLines = mergeSectionLines(
+    existingSummarySection.lines,
+    incomingSummarySection.lines,
+    existingFingerprints,
+  );
+  const mergedDetailLines = mergeSectionLines(
+    existingDetailSection.lines,
+    incomingDetailSection.lines,
+    existingFingerprints,
+  );
+
+  if (
+    arraysEqual(mergedSummaryLines, existingSummarySection.lines) &&
+    arraysEqual(mergedDetailLines, existingDetailSection.lines)
+  ) {
+    return existingBlock;
+  }
+
+  const parts = [
+    heading,
+    TELEGRAM_SECTION_TAG,
+    '##### 餐次汇总',
+    '',
+    ...mergedSummaryLines,
+  ];
+
+  if (mergedDetailLines.length) {
+    parts.push('');
+    parts.push('##### 餐次明细');
+    parts.push('');
+    parts.push(...mergedDetailLines);
+  }
+
+  return parts.join('\n').trim();
+}
+
+function extractSubsection(block, heading) {
+  const lines = block.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === heading);
+  if (start === -1) {
+    return { lines: [] };
+  }
+
+  const collected = [];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.startsWith('##### ') && line.trim() !== heading) {
+      break;
+    }
+    if (line.startsWith('#### ')) {
+      break;
+    }
+    if (line === TELEGRAM_SECTION_TAG) {
+      continue;
+    }
+    if (collected.length === 0 && line.trim() === '') {
+      continue;
+    }
+    collected.push(line);
+  }
+
+  return { lines: trimTrailingBlankLines(collected) };
+}
+
+function mergeSectionLines(existingLines, incomingLines, existingFingerprints) {
+  const result = [...existingLines];
+  const incomingFingerprints = [...incomingLines.join('\n').matchAll(/<!-- telegram-fingerprint: ([^ ]+) -->/g)].map(
+    (match) => match[1],
+  );
+
+  if (incomingFingerprints.length && incomingFingerprints.every((fingerprint) => existingFingerprints.has(fingerprint))) {
+    return result;
+  }
+
+  for (let index = 0; index < incomingLines.length; index += 1) {
+    const line = incomingLines[index];
+    if (!line.trim()) {
+      continue;
+    }
+
+    if (line.startsWith('<!-- telegram-fingerprint: ')) {
+      const fingerprint = line.match(/<!-- telegram-fingerprint: ([^ ]+) -->/)?.[1];
+      if (!fingerprint || existingFingerprints.has(fingerprint)) {
+        index += 1;
+        continue;
+      }
+      existingFingerprints.add(fingerprint);
+      result.push(line);
+      if (index + 1 < incomingLines.length && incomingLines[index + 1].trim()) {
+        result.push(incomingLines[index + 1]);
+        index += 1;
+      }
+      continue;
+    }
+
+    if (line.startsWith('- 当日截图内已记录总热量：')) {
+      const existingTotalIndex = result.findIndex((item) => item.startsWith('- 当日截图内已记录总热量：'));
+      if (existingTotalIndex === -1) {
+        result.push(line);
+      } else {
+        result[existingTotalIndex] = line;
+      }
+      continue;
+    }
+
+    if (!result.includes(line)) {
+      if (line.startsWith('- ') && result.some((existing) => areEquivalentNutritionLines(existing, line))) {
+        continue;
+      }
+      result.push(line);
+    }
+  }
+
+  return trimTrailingBlankLines(result);
+}
+
+function areEquivalentNutritionLines(left, right) {
+  const leftParsed = parseNutritionLine(left);
+  const rightParsed = parseNutritionLine(right);
+  if (!leftParsed || !rightParsed) {
+    return false;
+  }
+  return (
+    leftParsed.calories === rightParsed.calories &&
+    leftParsed.recommendedMin === rightParsed.recommendedMin &&
+    leftParsed.recommendedMax === rightParsed.recommendedMax &&
+    normalizeMealName(leftParsed.name) === normalizeMealName(rightParsed.name)
+  );
+}
+
+function parseNutritionLine(line) {
+  const match = line.match(/^- (.+)：(\d+(?:\.\d+)?)千卡，建议范围(\d+)[–-](\d+)千卡$/);
+  if (!match) {
+    return null;
+  }
+  return {
+    name: match[1],
+    calories: Number(match[2]),
+    recommendedMin: Number(match[3]),
+    recommendedMax: Number(match[4]),
+  };
+}
+
+function normalizeMealName(name) {
+  return name.replace(/（.*?）/g, '').trim();
+}
+
+function trimTrailingBlankLines(lines) {
+  const result = [...lines];
+  while (result.length && result.at(-1).trim() === '') {
+    result.pop();
+  }
+  return result;
+}
+
+function arraysEqual(left, right) {
+  return left.length === right.length && left.every((line, index) => line === right[index]);
 }
 
 function formatValue(value) {

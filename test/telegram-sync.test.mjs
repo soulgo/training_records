@@ -425,3 +425,112 @@ test('fills missing measurement date from telegram message year when month-day i
   assert.equal(analyzed.archivedDate, '2026-05-06');
   assert.equal(analyzed.measurement?.measuredAt, '2026-05-06');
 });
+
+test('merges into existing 2026-05-06 blocks without duplicating headings or null timestamps', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.applyTelegramSyncToMarkdown, 'applyTelegramSyncToMarkdown export missing');
+
+  const markdown = `
+### 2026-05-06
+
+#### 2026-05-06 饮食截图记录
+<!-- telegram-sync-section -->
+##### 餐次汇总
+
+<!-- telegram-fingerprint: n-2026-05-06-凉粉（早餐，1碗）-114 -->
+- 凉粉（早餐，1碗）：114千卡，建议范围527–949千卡
+<!-- telegram-fingerprint: n-2026-05-06-扯面（午餐，400克）-452 -->
+- 扯面（午餐，400克）：452千卡，建议范围633–1054千卡
+<!-- telegram-fingerprint: n-2026-05-06-兰州拉面（晚餐，1碗）-510 -->
+- 兰州拉面（晚餐，1碗）：510千卡，建议范围317–738千卡
+- 当日截图内已记录总热量：1076千卡
+
+##### 餐次明细
+
+- 早餐 114千卡
+- 午餐 452千卡
+- 晚餐 510千卡
+
+#### 当日运动截图记录
+<!-- telegram-sync-section -->
+<!-- telegram-fingerprint: a-2026-05-06-07:15-自由训练-565 -->
+- 07:15 自由训练：总消耗565千卡，时长00:53:22，平均心率141次/分钟
+
+### 2026-05-07
+
+- 占位
+`;
+
+  const batchResult = {
+    batchId: 'album-56',
+    archivedDate: '2026-05-06',
+    measurement: {
+      measuredAt: '2026-05-06',
+      bodyScore: 77,
+      weightKg: 73.55,
+      bmi: 23.7,
+      bodyFatPct: 22.4,
+      skeletalMuscleKg: 30.9,
+      visceralFatLevel: 9,
+      basalMetabolismKcal: 1609,
+      bodyWaterPct: 50.5,
+      proteinPct: 23,
+      boneMassKg: 2.985,
+      fatFreeMassKg: 57.1,
+      bodyAge: 31,
+      bodyType: '标准型',
+    },
+    activities: [
+      {
+        time: '5月6日 07:15',
+        type: '自由训练',
+        detail: '总消耗 565 千卡，时长 00:53:22，平均心率 141 次/分钟',
+      },
+      {
+        time: '5月6日 20:04',
+        type: '自由训练',
+        detail: '总消耗 162 千卡，时长 00:19:43，平均心率 124 次/分钟',
+      },
+      {
+        time: '5月6日 20:27',
+        type: '力量训练',
+        detail: '总消耗 250 千卡，时长 00:28:48，平均心率 125 次/分钟',
+      },
+    ],
+    nutrition: {
+      meals: [
+        { name: '凉粉', calories: 114, recommendedMin: 527, recommendedMax: 949 },
+        { name: '扯面', calories: 452, recommendedMin: 633, recommendedMax: 1054 },
+        { name: '兰州拉面', calories: 510, recommendedMin: 317, recommendedMax: 738 },
+      ],
+      totalCalories: 1076,
+      details: [
+        '早餐 114 千卡，建议范围 527-949 千卡',
+        '午餐 452 千卡，建议范围 633-1054 千卡',
+        '晚餐 510 千卡，建议范围 317-738 千卡',
+      ],
+    },
+    fingerprints: {
+      measurement: ['m-2026-05-06-2026-05-06-73.55-22.4'],
+      activities: [
+        'a-2026-05-06-07:15-自由训练-565',
+        'a-2026-05-06-20:04-自由训练-162',
+        'a-2026-05-06-20:27-力量训练-250',
+      ],
+      nutrition: [
+        'n-2026-05-06-凉粉-114',
+        'n-2026-05-06-扯面-452',
+        'n-2026-05-06-兰州拉面-510',
+      ],
+    },
+  };
+
+  const result = lib.applyTelegramSyncToMarkdown(markdown, batchResult);
+
+  assert.equal((result.markdown.match(/##### 餐次汇总/g) ?? []).length, 1);
+  assert.equal((result.markdown.match(/5月6日 20:27/g) ?? []).length, 0);
+  assert.equal((result.markdown.match(/- 20:27 力量训练：/g) ?? []).length, 1);
+  assert.equal(result.markdown.includes('测量时间：null'), false);
+  assert.equal(result.markdown.includes('测量时间：2026-05-06'), true);
+});
