@@ -8,7 +8,14 @@ const latestDayIndex = latestDay
   ? dashboard.daily.findIndex((entry) => entry.date === latestDay.date)
   : -1;
 const previousDay = latestDayIndex > 0 ? dashboard.daily[latestDayIndex - 1] : null;
-const recentDays = [...(dashboard.daily || [])].reverse();
+const latestDashboardDate = latestMeasurement?.archivedDate || latestDay?.date || dashboard.daily.at(-1)?.date || null;
+const chartWindowDays = 30;
+const dailyCardLimit = 4;
+const chartStartDate = latestDashboardDate ? addDays(latestDashboardDate, -(chartWindowDays - 1)) : null;
+const recentDays = [...(dashboard.daily || [])].reverse().slice(0, dailyCardLimit);
+const chartPayload = {
+  charts: filterChartsByDate(dashboard.charts || {}, chartStartDate),
+};
 
 function formatNumber(value, digits = 2) {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -31,6 +38,25 @@ function formatDuration(seconds) {
 
 function formatDateLabel(value) {
   return value ? value.slice(5) : '—';
+}
+
+function addDays(dateString, offset) {
+  const date = new Date(`${dateString}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+function filterChartsByDate(charts, startDate) {
+  if (!startDate) {
+    return charts;
+  }
+
+  return Object.fromEntries(
+    Object.entries(charts).map(([key, points]) => [
+      key,
+      (points || []).filter((point) => point.date >= startDate),
+    ]),
+  );
 }
 
 function calculateRatio(current, previous) {
@@ -222,7 +248,7 @@ function getComparison(current, previous) {
       </div>
     </section>
 
-    <script id="training-dashboard-data" type="application/json"><%- JSON.stringify(dashboard) %></script>
+    <script id="training-dashboard-data" type="application/json"><%- JSON.stringify(chartPayload) %></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script>
       (() => {
