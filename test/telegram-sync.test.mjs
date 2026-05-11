@@ -748,3 +748,83 @@ test('applies the only dated screenshot date to undated images in the same album
   assert.equal(analyzed.activities.length, 1);
   assert.equal(analyzed.nutrition.totalCalories, 1593);
 });
+
+test('replaces telegram-managed blocks when a same-day screenshot is uploaded again', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.applyTelegramSyncToMarkdown, 'applyTelegramSyncToMarkdown export missing');
+
+  const markdown = `
+### 2026-05-09
+
+#### 当日运动截图记录
+<!-- telegram-sync-section -->
+<!-- telegram-fingerprint: a-2026-05-09-06:45-自由训练-180 -->
+- 06:45 自由训练：总消耗180千卡，时长00:20:04，平均心率132次/分钟
+
+#### 2026-05-09 饮食截图记录
+<!-- telegram-sync-section -->
+##### 餐次汇总
+
+<!-- telegram-fingerprint: n-2026-05-09-晚餐-1065 -->
+- 晚餐：1065千卡，建议范围317–740千卡
+- 当日截图内已记录总热量：1593千卡
+
+##### 餐次明细
+
+- 旧晚餐 1065 千卡
+`;
+
+  const batchResult = {
+    batchId: 'album-reupload',
+    archivedDate: '2026-05-09',
+    measurement: null,
+    activities: [
+      {
+        time: '19:13',
+        type: '力量训练',
+        detail: '总消耗241千卡，时长00:27:50，平均心率129次/分钟',
+      },
+    ],
+    nutrition: {
+      meals: [
+        { name: '晚餐', calories: 900, recommendedMin: 317, recommendedMax: 740 },
+      ],
+      totalCalories: 1428,
+      details: ['新晚餐 900 千卡'],
+    },
+    fingerprints: {
+      measurement: [],
+      activities: ['a-2026-05-09-19:13-力量训练-241'],
+      nutrition: ['n-2026-05-09-晚餐-900'],
+    },
+  };
+
+  const result = lib.applyTelegramSyncToMarkdown(markdown, batchResult);
+
+  assert.equal(result.changed, true);
+  assert.equal(result.markdown.includes('06:45 自由训练'), false);
+  assert.equal(result.markdown.includes('旧晚餐'), false);
+  assert.equal(result.markdown.includes('19:13 力量训练'), true);
+  assert.equal(result.markdown.includes('新晚餐 900 千卡'), true);
+  assert.equal(result.markdown.includes('当日截图内已记录总热量：1428千卡'), true);
+});
+
+test('runs async work with a bounded concurrency limit while preserving result order', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.mapWithConcurrency, 'mapWithConcurrency export missing');
+
+  let active = 0;
+  let maxActive = 0;
+  const result = await lib.mapWithConcurrency([1, 2, 3, 4, 5], 2, async (value) => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    active -= 1;
+    return value * 10;
+  });
+
+  assert.deepEqual(result, [10, 20, 30, 40, 50]);
+  assert.equal(maxActive, 2);
+});

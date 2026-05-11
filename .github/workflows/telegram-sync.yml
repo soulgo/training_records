@@ -26,10 +26,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
 
       - name: Sync Telegram updates
         env:
@@ -37,9 +33,10 @@ jobs:
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_BASE_URL: ${{ vars.AI_BASE_URL }}
           AI_MODEL: ${{ vars.AI_MODEL }}
+          AI_CONCURRENCY: ${{ vars.AI_CONCURRENCY }}
           TELEGRAM_ALLOWED_CHAT_IDS: ${{ vars.TELEGRAM_ALLOWED_CHAT_IDS }}
           TELEGRAM_POLL_LIMIT: ${{ vars.TELEGRAM_POLL_LIMIT }}
-        run: npm run telegram:sync
+        run: node tools/telegram-sync.mjs
 
       - name: Detect changes
         id: changes
@@ -57,7 +54,9 @@ jobs:
 
       - name: Run tests
         if: steps.changes.outputs.content_changed == 'true'
-        run: npm test
+        run: |
+          npm ci
+          npm test
 
       - name: Build site data and static files
         if: steps.changes.outputs.content_changed == 'true'

@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { processTelegramUpdates } from './telegram-sync-lib.mjs';
+import { mapWithConcurrency, processTelegramUpdates } from './telegram-sync-lib.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -88,6 +88,7 @@ function loadRequiredEnv() {
   const model = process.env.AI_MODEL;
   const allowedChatIdsRaw = process.env.TELEGRAM_ALLOWED_CHAT_IDS;
   const pollLimit = Number(process.env.TELEGRAM_POLL_LIMIT ?? 20);
+  const aiConcurrency = Number(process.env.AI_CONCURRENCY ?? 3);
 
   for (const [name, value] of [
     ['TELEGRAM_BOT_TOKEN', botToken],
@@ -107,6 +108,7 @@ function loadRequiredEnv() {
     baseUrl: baseUrl.replace(/\/+$/, ''),
     model,
     pollLimit: Number.isFinite(pollLimit) && pollLimit > 0 ? pollLimit : 20,
+    aiConcurrency: Number.isFinite(aiConcurrency) && aiConcurrency > 0 ? aiConcurrency : 3,
     allowedChatIds: new Set(
       allowedChatIdsRaw
         .split(',')
@@ -159,18 +161,16 @@ async function fetchTelegramUpdates({ botToken, offset, limit }) {
 }
 
 async function recognizeBatch(batch, env) {
-  const recognitions = [];
-
-  for (const message of batch.messages) {
+  const recognitions = await mapWithConcurrency(batch.messages, env.aiConcurrency, async (message) => {
     const fileId = message.photos.at(-1)?.fileId;
     if (!fileId) {
-      continue;
+      return null;
     }
     const imageUrl = await resolveTelegramFileUrl(env.botToken, fileId);
-    recognitions.push(await recognizeImageMessage(message, imageUrl, env));
-  }
+    return recognizeImageMessage(message, imageUrl, env);
+  });
 
-  return recognitions;
+  return recognitions.filter(Boolean);
 }
 
 async function resolveTelegramFileUrl(botToken, fileId) {
