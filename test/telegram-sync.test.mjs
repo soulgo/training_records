@@ -131,17 +131,19 @@ test('skips writeback when a batch has conflicting detected dates without captio
   const analyzed = lib.analyzeTelegramBatch(batch, [
     {
       messageId: 21,
-      imageType: 'measurement',
+      imageType: 'workout',
       detectedDate: '2026-05-08',
       dateEvidence: 'ocr',
       confidence: 0.92,
       warnings: [],
       records: {
-        measurement: {
-          measuredAt: '2026-05-08 07:10',
-          weightKg: 72.8,
-          bodyFatPct: 22.4,
-        },
+        activities: [
+          {
+            time: '07:10',
+            type: '自由训练',
+            detail: '总消耗180千卡，时长00:20:04，平均心率132次/分钟',
+          },
+        ],
       },
     },
     {
@@ -533,4 +535,111 @@ test('merges into existing 2026-05-06 blocks without duplicating headings or nul
   assert.equal((result.markdown.match(/- 20:27 力量训练：/g) ?? []).length, 1);
   assert.equal(result.markdown.includes('测量时间：null'), false);
   assert.equal(result.markdown.includes('测量时间：2026-05-06'), true);
+});
+
+test('uses the shared workout date for the whole album when measurement is next-morning data', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'album-shared-date',
+    messages: [
+      {
+        updateId: 401,
+        messageId: 41,
+        mediaGroupId: 'album-shared-date',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 10, 2, 0, 0) / 1000,
+        photos: [{ fileId: 'w-1', fileUniqueId: 'wu-1' }],
+      },
+      {
+        updateId: 402,
+        messageId: 42,
+        mediaGroupId: 'album-shared-date',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 10, 2, 0, 0) / 1000,
+        photos: [{ fileId: 'n-1', fileUniqueId: 'nu-1' }],
+      },
+      {
+        updateId: 403,
+        messageId: 43,
+        mediaGroupId: 'album-shared-date',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 10, 2, 0, 0) / 1000,
+        photos: [{ fileId: 'm-1', fileUniqueId: 'mu-1' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 41,
+      imageType: 'workout',
+      detectedDate: '5099-05-09',
+      dateEvidence: 'activity rows show 5月9日',
+      confidence: 0.96,
+      warnings: [],
+      records: {
+        activities: [
+          { time: '19:13', type: '力量训练', detail: '总消耗241千卡，时长00:27:50，平均心率129次/分钟' },
+        ],
+      },
+    },
+    {
+      messageId: 42,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no visible date',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        meals: [
+          { name: '晚餐-方便面 1块', calories: 473, recommendedMin: 317, recommendedMax: 740 },
+          { name: '晚餐-尖椒炒腊肉 1盘', calories: 592, recommendedMin: 317, recommendedMax: 740 },
+        ],
+        totalCalories: 1593,
+        details: ['晚餐 1065 千卡（建议范围 317-740 千卡）'],
+      },
+    },
+    {
+      messageId: 43,
+      imageType: 'measurement',
+      detectedDate: '2026-05-10',
+      dateEvidence: 'body scale screenshot top-right shows 2026年5月10日 06:14',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: '06:14',
+          bodyScore: 74,
+          weightKg: 73.45,
+          bmi: 23.7,
+          bodyFatPct: 22.9,
+          skeletalMuscleKg: 30.6,
+          visceralFatLevel: 9,
+          basalMetabolismKcal: 1596,
+          bodyWaterPct: 49.7,
+          proteinPct: 23.3,
+          boneMassKg: 2.955,
+          fatFreeMassKg: 56.6,
+          bodyAge: 32,
+          bodyType: '肥胖型',
+        },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-09');
+  assert.equal(analyzed.measurement?.measuredAt, '2026-05-10 06:14');
+  assert.deepEqual(analyzed.nutrition.meals, [
+    { name: '晚餐', calories: 1065, recommendedMin: 317, recommendedMax: 740 },
+  ]);
 });

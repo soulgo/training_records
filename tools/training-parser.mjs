@@ -138,11 +138,23 @@ function parseBulletFields(content) {
 }
 
 function parseActivityBlock(content) {
-  return content
+  const activities = content
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => /^- \d{2}:\d{2}\s+/.test(line))
     .map(parseActivityLine);
+  const deduped = new Map();
+  for (const activity of activities) {
+    const key = [
+      activity.time,
+      activity.type,
+      activity.calories ?? 'na',
+      activity.durationSeconds,
+      activity.distanceKm ?? 'na',
+    ].join('|');
+    deduped.set(key, activity);
+  }
+  return [...deduped.values()];
 }
 
 function parseActivityLine(line) {
@@ -157,10 +169,10 @@ function parseActivityLine(line) {
     detail,
     durationText,
     durationSeconds: durationText ? parseDurationSeconds(durationText) : 0,
-    calories: parseFirstMatch(detail, /(?:总)?消耗(\d+(?:\.\d+)?)千卡/),
-    distanceKm: parseFirstMatch(detail, /(\d+(?:\.\d+)?)公里/),
-    avgSpeedKmh: parseFirstMatch(detail, /均速(\d+(?:\.\d+)?)公里\/小时/),
-    heartRate: parseFirstMatch(detail, /(?:平均|记录值)(\d+)次\/分钟/),
+    calories: parseFirstMatch(detail, /(?:总)?消耗\s*(\d+(?:\.\d+)?)\s*千卡/),
+    distanceKm: parseFirstMatch(detail, /(\d+(?:\.\d+)?)\s*公里/),
+    avgSpeedKmh: parseFirstMatch(detail, /(?:均速|平均速度)\s*(\d+(?:\.\d+)?)\s*公里\/小时/),
+    heartRate: parseFirstMatch(detail, /(?:平均(?:心率)?|记录值|心率)\s*(\d+)\s*次\/分钟/),
   };
 }
 
@@ -199,21 +211,27 @@ function normalizeActivityType(type) {
 
 function parseNutritionBlock(content) {
   const summaryBody = extractSubBlock(content, '##### 餐次汇总') ?? '';
-  const meals = [];
+  const mealsByName = new Map();
   let totalCalories = null;
 
   for (const rawLine of summaryBody.split(/\r?\n/)) {
     const line = rawLine.trim();
-    const mealMatch = line.match(
-      /^- (早餐|午餐|晚餐|加餐)：(\d+(?:\.\d+)?)千卡，建议范围(\d+)[–-](\d+)千卡$/,
-    );
-    if (mealMatch) {
-      meals.push({
-        name: mealMatch[1],
-        calories: Number(mealMatch[2]),
-        recommendedMin: Number(mealMatch[3]),
-        recommendedMax: Number(mealMatch[4]),
-      });
+    const meal = parseNutritionSummaryLine(line);
+    if (meal) {
+      const existing = mealsByName.get(meal.name);
+      if (!existing || meal.isSummary) {
+        mealsByName.set(meal.name, {
+          name: meal.name,
+          calories: meal.calories,
+          recommendedMin: meal.recommendedMin,
+          recommendedMax: meal.recommendedMax,
+          isSummary: meal.isSummary,
+        });
+      } else if (!existing.isSummary) {
+        existing.calories = roundTo(existing.calories + meal.calories, 2);
+        existing.recommendedMin = meal.recommendedMin;
+        existing.recommendedMax = meal.recommendedMax;
+      }
       continue;
     }
 
@@ -224,9 +242,50 @@ function parseNutritionBlock(content) {
   }
 
   return {
-    meals,
+    meals: ['早餐', '午餐', '晚餐', '加餐']
+      .map((name) => mealsByName.get(name))
+      .filter(Boolean)
+      .map(({ isSummary, ...meal }) => meal),
     totalCalories,
   };
+}
+
+function parseNutritionSummaryLine(line) {
+  const match = line.match(/^- (.+)：\s*(\d+(?:\.\d+)?)\s*千卡，建议范围\s*(\d+)[–-](\d+)\s*千卡$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, rawName, calories, recommendedMin, recommendedMax] = match;
+  const mealName = inferMealName(rawName);
+  if (!mealName) {
+    return null;
+  }
+
+  return {
+    name: mealName,
+    calories: Number(calories),
+    recommendedMin: Number(recommendedMin),
+    recommendedMax: Number(recommendedMax),
+    isSummary: rawName.trim() === mealName,
+  };
+}
+
+function inferMealName(value) {
+  const trimmed = value.trim();
+  if (/^(早餐|午餐|晚餐|加餐)$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const parenthetical = trimmed.match(/[（(]([^）)]+)[）)]/);
+  if (parenthetical) {
+    const fromParentheses = parenthetical[1].match(/早餐|午餐|晚餐|加餐/)?.[0];
+    if (fromParentheses) {
+      return fromParentheses;
+    }
+  }
+
+  return trimmed.match(/早餐|午餐|晚餐|加餐/)?.[0] ?? null;
 }
 
 function emptyNutrition() {

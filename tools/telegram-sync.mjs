@@ -30,6 +30,10 @@ const result = await processTelegramUpdates({
   minConfidence: 0.75,
   recognizeBatch: async (batch) => recognizeBatch(batch, env),
 });
+const nextLastProcessedUpdateId = Math.max(
+  currentState.lastProcessedUpdateId ?? 0,
+  result.lastProcessedUpdateId ?? 0,
+);
 
 await persistInboxEntries(result.inboxEntries);
 await appendProcessLog({
@@ -54,7 +58,7 @@ await writeFile(
   statePath,
   `${JSON.stringify(
     {
-      lastProcessedUpdateId: result.lastProcessedUpdateId,
+      lastProcessedUpdateId: nextLastProcessedUpdateId,
       updatedAt: new Date().toISOString(),
     },
     null,
@@ -68,7 +72,7 @@ process.stdout.write(
     {
       changed: result.changed,
       updatesFetched: updates.length,
-      lastProcessedUpdateId: result.lastProcessedUpdateId,
+      lastProcessedUpdateId: nextLastProcessedUpdateId,
       readyBatches: result.batchResults.filter((batch) => batch.status === 'ready').length,
     },
     null,

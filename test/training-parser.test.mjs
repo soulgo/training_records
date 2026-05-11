@@ -87,3 +87,55 @@ test('builds chart series from archived daily measurements', () => {
     { date: '2026-05-08', value: 22.8 },
   ]);
 });
+
+test('parses telegram-written workout and nutrition formats into dashboard-friendly summaries', () => {
+  const telegramMarkdown = `
+### 2026-05-06
+
+#### 2026-05-06 饮食截图记录
+<!-- telegram-sync-section -->
+##### 餐次汇总
+
+- 凉粉（早餐，1碗）：114千卡，建议范围527–949千卡
+- 扯面（午餐，400克）：452千卡，建议范围633–1054千卡
+- 兰州拉面（晚餐，1碗）：510千卡，建议范围317–738千卡
+- 当日截图内已记录总热量：1076千卡
+- 凉粉：114千卡，建议范围527–949千卡
+- 扯面：452千卡，建议范围633–1054千卡
+- 兰州拉面：510千卡，建议范围317–738千卡
+
+##### 餐次明细
+
+- 早餐 114千卡
+- 午餐 452千卡
+- 晚餐 510千卡
+
+#### 当日运动截图记录
+<!-- telegram-sync-section -->
+- 07:15 自由训练：总消耗 565 千卡，时长 00:53:22，平均心率 141 次/分钟
+- 20:04 自由训练：总消耗 162 千卡，时长 00:19:43，平均心率 124 次/分钟
+- 20:27 力量训练：总消耗 250 千卡，时长 00:28:48，平均心率 125 次/分钟
+- 07:15 自由训练：总消耗565千卡，时长00:53:22，平均心率141次/分钟
+- 20:04 自由训练：总消耗162千卡，时长00:19:43，平均心率124次/分钟
+- 20:27 力量训练：总消耗250千卡，时长00:28:48，平均心率125次/分钟
+`;
+
+  const parsed = parseTrainingRecord(telegramMarkdown);
+  const day = parsed.daily.find((entry) => entry.date === '2026-05-06');
+
+  assert.ok(day);
+  assert.equal(day.activities.length, 3);
+  assert.equal(day.workoutSummary.totalActivities, 3);
+  assert.equal(day.workoutSummary.trainingCalories, 977);
+  assert.deepEqual(day.workoutSummary.countsByType, {
+    燃脂训练: 2,
+    力量训练: 1,
+  });
+  assert.equal(day.activities[0].heartRate, 141);
+  assert.equal(day.nutrition.totalCalories, 1076);
+  assert.deepEqual(day.nutrition.meals, [
+    { name: '早餐', calories: 114, recommendedMin: 527, recommendedMax: 949 },
+    { name: '午餐', calories: 452, recommendedMin: 633, recommendedMax: 1054 },
+    { name: '晚餐', calories: 510, recommendedMin: 317, recommendedMax: 738 },
+  ]);
+});

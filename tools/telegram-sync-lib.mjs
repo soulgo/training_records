@@ -44,7 +44,8 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const minConfidence = options.minConfidence ?? 0.75;
   const recognitionMap = new Map(recognitions.map((item) => [item.messageId, item]));
   const explicitDate = extractBatchExplicitDate(batch);
-  const detectedDates = new Set();
+  const primaryDetectedDates = new Set();
+  const measurementDates = new Set();
   const warnings = [];
   const issues = [];
   const measurementCandidates = [];
@@ -71,12 +72,17 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     }
 
     if (normalizedDetectedDate) {
-      detectedDates.add(normalizedDetectedDate);
+      if (recognition.imageType === 'measurement') {
+        measurementDates.add(normalizedDetectedDate);
+      } else {
+        primaryDetectedDates.add(normalizedDetectedDate);
+      }
     }
 
     if (recognition.imageType === 'measurement' && recognition.records?.measurement) {
       measurementCandidates.push({
         ...recognition.records.measurement,
+        detectedDate: normalizedDetectedDate,
         measuredAt:
           recognition.records.measurement.measuredAt ??
           normalizedDetectedDate ??
@@ -101,16 +107,19 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     }
   }
 
-  if (!explicitDate && detectedDates.size > 1) {
+  if (!explicitDate && primaryDetectedDates.size > 1) {
     return {
       status: 'skipped',
-      reason: `conflicting detected dates: ${[...detectedDates].join(', ')}`,
+      reason: `conflicting detected dates: ${[...primaryDetectedDates].join(', ')}`,
       warnings,
       issues,
     };
   }
 
-  const archivedDate = explicitDate ?? resolveDetectedDate(detectedDates);
+  const archivedDate =
+    explicitDate ??
+    resolveDetectedDate(primaryDetectedDates) ??
+    resolveDetectedDate(measurementDates);
   if (!archivedDate) {
     return {
       status: 'skipped',
@@ -120,7 +129,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     };
   }
 
-  const measurement = measurementCandidates.at(-1) ?? null;
+  const measurement = normalizeMeasurementForArchive(measurementCandidates.at(-1) ?? null, archivedDate);
   const normalizedActivities = normalizeActivities(activities);
   const normalizedNutrition = normalizeNutrition(nutritionMeals, nutritionTotalCalories, nutritionDetails);
 
@@ -309,27 +318,59 @@ function normalizeActivities(activities) {
 }
 
 function normalizeNutrition(meals, totalCalories, details) {
-  const normalizedMeals = [];
-  const seen = new Set();
+  const mealMap = new Map();
   for (const meal of meals) {
-    const key = `${meal.name}|${meal.calories}|${meal.recommendedMin}|${meal.recommendedMax}`;
-    if (seen.has(key)) {
+    const mealName = inferMealSlot(meal.name);
+    if (!mealName) {
       continue;
     }
-    seen.add(key);
-    normalizedMeals.push({
-      name: meal.name,
-      calories: Number(meal.calories),
+    const existing = mealMap.get(mealName);
+    const next = {
+      name: mealName,
+      calories: Number(meal.calories ?? 0),
       recommendedMin: Number(meal.recommendedMin),
       recommendedMax: Number(meal.recommendedMax),
-    });
+    };
+    if (!existing) {
+      mealMap.set(mealName, next);
+      continue;
+    }
+    existing.calories += next.calories;
+    existing.recommendedMin = next.recommendedMin;
+    existing.recommendedMax = next.recommendedMax;
   }
   const normalizedDetails = [...new Set((details ?? []).map((item) => item.trim()).filter(Boolean))];
   return {
-    meals: normalizedMeals,
+    meals: ['早餐', '午餐', '晚餐', '加餐']
+      .map((name) => mealMap.get(name))
+      .filter(Boolean)
+      .map((meal) => ({
+        ...meal,
+        calories: roundTo(meal.calories, 2),
+      })),
     totalCalories: totalCalories === null || totalCalories === undefined ? null : Number(totalCalories),
     details: normalizedDetails,
   };
+}
+
+function inferMealSlot(value) {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (/^(早餐|午餐|晚餐|加餐)$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const parenthetical = trimmed.match(/[（(]([^）)]+)[）)]/);
+  if (parenthetical) {
+    const fromParentheses = parenthetical[1].match(/早餐|午餐|晚餐|加餐/)?.[0];
+    if (fromParentheses) {
+      return fromParentheses;
+    }
+  }
+
+  return trimmed.match(/早餐|午餐|晚餐|加餐/)?.[0] ?? null;
 }
 
 function calculateBatchConfidence(recognitions) {
@@ -457,6 +498,31 @@ function renderActivitiesBlock(batchResult) {
     lines.push(`- ${normalizeActivityTime(activity.time)} ${activity.type}：${activity.detail}`);
   }
   return lines.join('\n');
+}
+
+function normalizeMeasurementForArchive(measurement, archivedDate) {
+  if (!measurement) {
+    return null;
+  }
+
+  const measuredAt = measurement.measuredAt?.trim();
+  if (!measuredAt) {
+    return {
+      ...measurement,
+      measuredAt: archivedDate,
+    };
+  }
+
+  if (/^\d{2}:\d{2}$/.test(measuredAt)) {
+    const { detectedDate, ...rest } = measurement;
+    return {
+      ...rest,
+      measuredAt: `${measurement.detectedDate ?? archivedDate} ${measuredAt}`,
+    };
+  }
+
+  const { detectedDate, ...normalized } = measurement;
+  return normalized;
 }
 
 function renderNutritionBlock(batchResult) {
@@ -773,6 +839,11 @@ function formatValue(value) {
     return String(value);
   }
   return Number.isInteger(value) ? String(value) : String(value);
+}
+
+function roundTo(value, precision) {
+  const factor = 10 ** precision;
+  return Math.round(value * factor) / factor;
 }
 
 function fingerprintComment(value) {
