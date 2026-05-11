@@ -643,3 +643,108 @@ test('uses the shared workout date for the whole album when measurement is next-
     { name: '晚餐', calories: 1065, recommendedMin: 317, recommendedMax: 740 },
   ]);
 });
+
+test('applies the only dated screenshot date to undated images in the same album', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'album-one-date',
+    messages: [
+      {
+        updateId: 501,
+        messageId: 51,
+        mediaGroupId: 'album-one-date',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 10, 2, 0, 0) / 1000,
+        photos: [{ fileId: 'dated-workout', fileUniqueId: 'dated-workout-u' }],
+      },
+      {
+        updateId: 502,
+        messageId: 52,
+        mediaGroupId: 'album-one-date',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 10, 2, 0, 0) / 1000,
+        photos: [{ fileId: 'undated-nutrition', fileUniqueId: 'undated-nutrition-u' }],
+      },
+      {
+        updateId: 503,
+        messageId: 53,
+        mediaGroupId: 'album-one-date',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 10, 2, 0, 0) / 1000,
+        photos: [{ fileId: 'undated-measurement', fileUniqueId: 'undated-measurement-u' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 51,
+      imageType: 'workout',
+      detectedDate: '2026-05-09',
+      dateEvidence: 'workout list shows 2026-05-09',
+      confidence: 0.96,
+      warnings: [],
+      records: {
+        activities: [
+          { time: '19:13', type: '力量训练', detail: '总消耗241千卡，时长00:27:50，平均心率129次/分钟' },
+        ],
+      },
+    },
+    {
+      messageId: 52,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no visible date',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        meals: [
+          { name: '晚餐', calories: 1065, recommendedMin: 317, recommendedMax: 740 },
+        ],
+        totalCalories: 1593,
+        details: ['晚餐 1065 千卡'],
+      },
+    },
+    {
+      messageId: 53,
+      imageType: 'measurement',
+      detectedDate: null,
+      dateEvidence: 'no visible date',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: null,
+          bodyScore: 74,
+          weightKg: 73.45,
+          bmi: 23.7,
+          bodyFatPct: 22.9,
+          skeletalMuscleKg: 30.6,
+          visceralFatLevel: 9,
+          basalMetabolismKcal: 1596,
+          bodyWaterPct: 49.7,
+          proteinPct: 23.3,
+          boneMassKg: 2.955,
+          fatFreeMassKg: 56.6,
+          bodyAge: 32,
+          bodyType: '肥胖型',
+        },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-09');
+  assert.equal(analyzed.measurement?.measuredAt, '2026-05-09');
+  assert.equal(analyzed.activities.length, 1);
+  assert.equal(analyzed.nutrition.totalCalories, 1593);
+});
