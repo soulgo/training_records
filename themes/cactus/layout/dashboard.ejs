@@ -130,9 +130,6 @@ function getComparison(current, previous) {
   <div class="dashboard-intro">
     <span class="dashboard-kicker">Markdown · Hexo · GitHub Pages</span>
     <h1>训练记录可视化看板</h1>
-    <% if (page.content) { %>
-      <div class="dashboard-copy"><%- page.content %></div>
-    <% } %>
   </div>
 
   <% if (!latestMeasurement) { %>
@@ -268,6 +265,10 @@ function getComparison(current, previous) {
         <% }) %>
       </div>
     </section>
+
+    <% if (page.content) { %>
+      <div class="dashboard-note"><%- page.content %></div>
+    <% } %>
 
     <script id="training-dashboard-data" type="application/json"><%- JSON.stringify(chartPayload) %></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>

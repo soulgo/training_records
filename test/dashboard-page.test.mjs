@@ -65,6 +65,29 @@ test('dashboard defaults charts to the latest 30 days and daily cards to the lat
   }
 });
 
+test('homepage keeps the introduction at the bottom and uses a smaller header nav', () => {
+  execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+    cwd: rootDir,
+    stdio: 'pipe',
+  });
+  execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+    cwd: rootDir,
+    stdio: 'pipe',
+  });
+
+  const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+  const noteIndex = homepage.indexOf('<div class="dashboard-note">');
+  const dailyIndex = homepage.indexOf('<section class="daily-section">');
+  const heroIndex = homepage.indexOf('<section class="hero-metrics">');
+
+  assert.equal(homepage.includes('<div class="dashboard-copy">'), false);
+  assert.ok(noteIndex > dailyIndex, 'expected note to be below the daily section');
+  assert.ok(noteIndex > heroIndex, 'expected note to be below the metrics section');
+  assert.match(homepage, /<div class="dashboard-note">/);
+  assert.match(homepage, /这里展示的是基于仓库中/);
+  assert.match(homepage, /<div id="nav">[\s\S]*<a href="\/training_records\/">训练记录<\/a>/);
+});
+
 function buildSyntheticDashboard({ startDate, days }) {
   const daily = [];
   const charts = {
