@@ -206,7 +206,7 @@ async function recognizeImageMessage(message, imageUrl, env) {
         {
           role: 'system',
           content:
-            '你是训练记录截图结构化助手。只能输出符合 schema 的 JSON。识别类型只允许 measurement、workout、nutrition、unknown。日期优先从用户 caption/text 提取，其次再看图片。若日期不可靠则 detectedDate 返回 null，并在 warnings 中说明。',
+            '你是训练记录截图结构化助手。只能输出符合 schema 的 JSON。识别类型只允许 measurement、workout、nutrition、unknown。workout 既可能是逐条活动明细截图，也可能是当日活动总览截图；总览图请提取活动热量、锻炼时长、活动小时数到 dailyWorkoutSummary。日期优先从用户 caption/text 提取，其次再看图片。若日期不可靠则 detectedDate 返回 null，并在 warnings 中说明。',
         },
         {
           role: 'user',
@@ -275,7 +275,7 @@ function buildRecognitionSchema() {
       records: {
         type: 'object',
         additionalProperties: false,
-        required: ['measurement', 'activities', 'meals', 'totalCalories', 'details'],
+        required: ['measurement', 'activities', 'meals', 'totalCalories', 'details', 'dailyWorkoutSummary'],
         properties: {
           measurement: {
             type: ['object', 'null'],
@@ -346,6 +346,16 @@ function buildRecognitionSchema() {
           details: {
             type: 'array',
             items: { type: 'string' },
+          },
+          dailyWorkoutSummary: {
+            type: ['object', 'null'],
+            additionalProperties: false,
+            required: ['activityCaloriesKcal', 'workoutDurationMinutes', 'activeHours'],
+            properties: {
+              activityCaloriesKcal: { type: ['number', 'null'] },
+              workoutDurationMinutes: { type: ['number', 'null'] },
+              activeHours: { type: ['number', 'null'] },
+            },
           },
         },
       },

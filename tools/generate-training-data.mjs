@@ -48,6 +48,8 @@ function renderTrainingDebugMarkdown(parsed) {
     lines.push('');
     lines.push(`- 活动次数：${day.workoutSummary.totalActivities}`);
     lines.push(`- 训练消耗：${day.workoutSummary.trainingCalories} kcal`);
+    lines.push(`- 锻炼时长：${day.workoutSummary.workoutDurationMinutes ?? '无'} 分钟`);
+    lines.push(`- 活动小时数：${day.workoutSummary.activeHours ?? '无'} 小时`);
     lines.push(`- 骑行里程：${day.workoutSummary.cyclingDistanceKm} km`);
     for (const activity of day.activities) {
       lines.push(

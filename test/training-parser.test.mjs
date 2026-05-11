@@ -139,3 +139,33 @@ test('parses telegram-written workout and nutrition formats into dashboard-frien
     { name: '晚餐', calories: 510, recommendedMin: 317, recommendedMax: 738 },
   ]);
 });
+
+test('uses daily activity overview screenshots to override training calories and expose workout duration', () => {
+  const markdown = `
+### 2026-05-10
+
+#### 当日运动截图记录
+<!-- telegram-sync-section -->
+##### 当日活动总览
+
+- 活动热量：643千卡
+- 锻炼时长：78分钟
+- 活动小时数：12小时
+
+##### 活动明细
+
+- 08:15 户外骑行：1.65公里，时长00:23:58，平均速度4.13公里/小时
+- 08:49 户外骑行：8.49公里，时长00:36:04，平均速度14.12公里/小时
+`;
+
+  const parsed = parseTrainingRecord(markdown);
+  const day = parsed.daily.find((entry) => entry.date === '2026-05-10');
+
+  assert.ok(day);
+  assert.equal(day.workoutSummary.totalActivities, 2);
+  assert.equal(day.workoutSummary.trainingCalories, 643);
+  assert.equal(day.workoutSummary.workoutDurationMinutes, 78);
+  assert.equal(day.workoutSummary.activeHours, 12);
+  assert.equal(day.workoutSummary.totalDurationSeconds, 3602);
+  assert.equal(day.workoutSummary.cyclingDistanceKm, 10.14);
+});

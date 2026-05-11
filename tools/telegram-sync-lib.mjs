@@ -50,6 +50,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const issues = [];
   const measurementCandidates = [];
   const activities = [];
+  let workoutDailySummary = null;
   const nutritionMeals = [];
   const nutritionDetails = [];
   let nutritionTotalCalories = null;
@@ -93,6 +94,12 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       for (const activity of recognition.records.activities) {
         activities.push(activity);
       }
+    }
+    if (recognition.imageType === 'workout' && recognition.records?.dailyWorkoutSummary) {
+      workoutDailySummary = mergeWorkoutDailySummary(
+        workoutDailySummary,
+        recognition.records.dailyWorkoutSummary,
+      );
     }
     if (recognition.imageType === 'nutrition') {
       for (const meal of recognition.records?.meals ?? []) {
@@ -139,6 +146,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     archivedDate,
     measurement,
     activities: normalizedActivities,
+    workoutDailySummary: normalizeWorkoutDailySummary(workoutDailySummary),
     nutrition: normalizedNutrition,
     warnings,
     issues,
@@ -147,6 +155,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       archivedDate,
       measurement,
       activities: normalizedActivities,
+      workoutDailySummary: normalizeWorkoutDailySummary(workoutDailySummary),
       nutrition: normalizedNutrition,
     }),
   };
@@ -335,6 +344,37 @@ function normalizeActivities(activities) {
   return [...deduped.values()].sort((left, right) => left.time.localeCompare(right.time));
 }
 
+function mergeWorkoutDailySummary(current, incoming) {
+  if (!incoming) {
+    return current;
+  }
+  return {
+    activityCaloriesKcal:
+      incoming.activityCaloriesKcal ?? current?.activityCaloriesKcal ?? null,
+    workoutDurationMinutes:
+      incoming.workoutDurationMinutes ?? current?.workoutDurationMinutes ?? null,
+    activeHours: incoming.activeHours ?? current?.activeHours ?? null,
+  };
+}
+
+function normalizeWorkoutDailySummary(summary) {
+  if (!summary) {
+    return null;
+  }
+
+  const normalized = {
+    activityCaloriesKcal: toNullableNumber(summary.activityCaloriesKcal),
+    workoutDurationMinutes: toNullableNumber(summary.workoutDurationMinutes),
+    activeHours: toNullableNumber(summary.activeHours),
+  };
+
+  return normalized.activityCaloriesKcal === null &&
+    normalized.workoutDurationMinutes === null &&
+    normalized.activeHours === null
+    ? null
+    : normalized;
+}
+
 function normalizeNutrition(meals, totalCalories, details) {
   const mealMap = new Map();
   for (const meal of meals) {
@@ -399,7 +439,7 @@ function calculateBatchConfidence(recognitions) {
   return Math.round((total / recognitions.length) * 1000) / 1000;
 }
 
-function buildFingerprints({ archivedDate, measurement, activities, nutrition }) {
+function buildFingerprints({ archivedDate, measurement, activities, workoutDailySummary, nutrition }) {
   return {
     measurement: measurement
       ? [
@@ -415,6 +455,17 @@ function buildFingerprints({ archivedDate, measurement, activities, nutrition })
     activities: activities.map((activity) =>
       ['a', archivedDate, activity.time, activity.type, extractCaloriesToken(activity.detail)].join('-'),
     ),
+    workoutDailySummary: workoutDailySummary
+      ? [
+          [
+            'ws',
+            archivedDate,
+            workoutDailySummary.activityCaloriesKcal ?? 'na',
+            workoutDailySummary.workoutDurationMinutes ?? 'na',
+            workoutDailySummary.activeHours ?? 'na',
+          ].join('-'),
+        ]
+      : [],
     nutrition: nutrition.meals.map((meal) =>
       ['n', archivedDate, meal.name, meal.calories].join('-'),
     ),
@@ -452,7 +503,7 @@ function mergeDateSection(body, batchResult) {
   if (batchResult.measurement) {
     nextBody = upsertBlock(nextBody, /#### .*体脂秤.*(?:\n|$)/, renderMeasurementBlock(batchResult));
   }
-  if (batchResult.activities?.length) {
+  if (batchResult.activities?.length || batchResult.workoutDailySummary) {
     nextBody = upsertBlock(nextBody, /#### .*运动截图记录(?:\n|$)/, renderActivitiesBlock(batchResult));
   }
   if (batchResult.nutrition?.meals?.length || batchResult.nutrition?.totalCalories !== null) {
@@ -468,7 +519,7 @@ function renderDateSection(batchResult) {
   if (batchResult.measurement) {
     parts.push(renderMeasurementBlock(batchResult));
   }
-  if (batchResult.activities?.length) {
+  if (batchResult.activities?.length || batchResult.workoutDailySummary) {
     parts.push(renderActivitiesBlock(batchResult));
   }
   if (batchResult.nutrition?.meals?.length || batchResult.nutrition?.totalCalories !== null) {
@@ -509,6 +560,22 @@ function renderMeasurementBlock(batchResult) {
 
 function renderActivitiesBlock(batchResult) {
   const lines = ['#### 当日运动截图记录', '', TELEGRAM_SECTION_TAG];
+
+  if (batchResult.workoutDailySummary) {
+    lines.push(fingerprintComment(batchResult.fingerprints.workoutDailySummary[0]));
+    lines.push('##### 当日活动总览');
+    lines.push('');
+    appendMetric(lines, '活动热量', batchResult.workoutDailySummary.activityCaloriesKcal, '千卡');
+    appendMetric(lines, '锻炼时长', batchResult.workoutDailySummary.workoutDurationMinutes, '分钟');
+    appendMetric(lines, '活动小时数', batchResult.workoutDailySummary.activeHours, '小时');
+  }
+
+  if (batchResult.activities.length) {
+    lines.push('');
+    lines.push('##### 活动明细');
+    lines.push('');
+  }
+
   for (let index = 0; index < batchResult.activities.length; index += 1) {
     const activity = batchResult.activities[index];
     const fingerprint = batchResult.fingerprints.activities[index];
@@ -680,6 +747,14 @@ function formatValue(value) {
     return String(value);
   }
   return Number.isInteger(value) ? String(value) : String(value);
+}
+
+function toNullableNumber(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
 function roundTo(value, precision) {

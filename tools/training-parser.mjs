@@ -66,9 +66,14 @@ function parseDateSection(date, content) {
     .map((block) => parseMeasurementBlock(block, date))
     .filter(Boolean);
 
-  const activities = blocks
+  const workoutBlocks = blocks
     .filter((block) => block.heading.includes('运动截图记录'))
-    .flatMap((block) => parseActivityBlock(block.body));
+    .map((block) => parseWorkoutBlock(block.body));
+  const activities = workoutBlocks.flatMap((block) => block.activities);
+  const workoutDailySummary = workoutBlocks
+    .map((block) => block.workoutDailySummary)
+    .filter(Boolean)
+    .at(-1) ?? null;
 
   const nutritionBlock = blocks.find((block) => block.heading.includes('饮食截图记录'));
   const nutrition = nutritionBlock ? parseNutritionBlock(nutritionBlock.body) : emptyNutrition();
@@ -78,7 +83,7 @@ function parseDateSection(date, content) {
     measurement: measurementBlocks.at(-1) ?? null,
     measurements: measurementBlocks,
     activities,
-    workoutSummary: summarizeActivities(activities),
+    workoutSummary: summarizeActivities(activities, workoutDailySummary),
     nutrition,
   };
 }
@@ -157,6 +162,37 @@ function parseActivityBlock(content) {
   return [...deduped.values()];
 }
 
+function parseWorkoutBlock(content) {
+  return {
+    activities: parseActivityBlock(content),
+    workoutDailySummary: parseWorkoutDailySummary(content),
+  };
+}
+
+function parseWorkoutDailySummary(content) {
+  const summary = {};
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const match = line.match(/^- (活动热量|锻炼时长|活动小时数)：\s*(.+)$/);
+    if (!match) {
+      continue;
+    }
+
+    if (match[1] === '活动热量') {
+      summary.activityCaloriesKcal = parseNumber(match[2]);
+    }
+    if (match[1] === '锻炼时长') {
+      summary.workoutDurationMinutes = parseNumber(match[2]);
+    }
+    if (match[1] === '活动小时数') {
+      summary.activeHours = parseNumber(match[2]);
+    }
+  }
+
+  return Object.keys(summary).length ? summary : null;
+}
+
 function parseActivityLine(line) {
   const [, time, type, detail] = line.match(/^- (\d{2}:\d{2})\s+([^：]+)：(.+)$/) ?? [];
   const durationText = detail?.match(/\d+分\d+秒|\d{2}:\d{2}:\d{2}/)?.[0] ?? null;
@@ -176,17 +212,17 @@ function parseActivityLine(line) {
   };
 }
 
-function summarizeActivities(activities) {
+function summarizeActivities(activities, workoutDailySummary = null) {
   const countsByType = {};
   let totalDurationSeconds = 0;
-  let trainingCalories = 0;
+  let explicitTrainingCalories = 0;
   let cyclingDistanceKm = 0;
 
   for (const activity of activities) {
     countsByType[activity.type] = (countsByType[activity.type] ?? 0) + 1;
     totalDurationSeconds += activity.durationSeconds;
     if (activity.calories !== null) {
-      trainingCalories += activity.calories;
+      explicitTrainingCalories += activity.calories;
     }
     if (activity.distanceKm !== null && activity.type.includes('骑行')) {
       cyclingDistanceKm += activity.distanceKm;
@@ -196,7 +232,12 @@ function summarizeActivities(activities) {
   return {
     totalActivities: activities.length,
     totalDurationSeconds,
-    trainingCalories: roundTo(trainingCalories, 2),
+    trainingCalories: roundTo(
+      workoutDailySummary?.activityCaloriesKcal ?? explicitTrainingCalories,
+      2,
+    ),
+    workoutDurationMinutes: workoutDailySummary?.workoutDurationMinutes ?? null,
+    activeHours: workoutDailySummary?.activeHours ?? null,
     cyclingDistanceKm: roundTo(cyclingDistanceKm, 2),
     countsByType,
   };

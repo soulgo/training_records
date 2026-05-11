@@ -36,6 +36,26 @@ function formatDuration(seconds) {
   return `${minutes}分`;
 }
 
+function formatWorkoutDuration(day) {
+  const workoutDurationMinutes = day?.workoutSummary?.workoutDurationMinutes;
+  if (workoutDurationMinutes !== null && workoutDurationMinutes !== undefined) {
+    return `${formatNumber(workoutDurationMinutes, 0)} 分钟`;
+  }
+  return formatDuration(day?.workoutSummary?.totalDurationSeconds || 0);
+}
+
+function getWorkoutDurationValue(day) {
+  const workoutDurationMinutes = day?.workoutSummary?.workoutDurationMinutes;
+  if (workoutDurationMinutes !== null && workoutDurationMinutes !== undefined) {
+    return workoutDurationMinutes;
+  }
+  const totalDurationSeconds = day?.workoutSummary?.totalDurationSeconds;
+  if (!totalDurationSeconds) {
+    return null;
+  }
+  return Number((totalDurationSeconds / 60).toFixed(2));
+}
+
 function formatDateLabel(value) {
   return value ? value.slice(5) : '—';
 }
@@ -175,10 +195,10 @@ function getComparison(current, previous) {
         <p class="metric-card__comparison comparison-pill comparison-pill--<%= cyclingComparison.direction %>"><span class="comparison-pill__arrow"><%= cyclingComparison.arrow %></span><span><%= cyclingComparison.text %></span></p>
       </article>
       <article class="metric-card">
-        <span class="metric-title">活动总时长</span>
-        <strong><%= formatDuration(latestDay?.workoutSummary?.totalDurationSeconds || 0) %></strong>
-        <p>身体类型 <%= latestMeasurement.bodyType || '—' %></p>
-        <% const durationComparison = getComparison(latestDay?.workoutSummary?.totalDurationSeconds || 0, previousDay?.workoutSummary?.totalDurationSeconds); %>
+        <span class="metric-title">锻炼时长</span>
+        <strong><%= formatWorkoutDuration(latestDay) %></strong>
+        <p><%= latestDay?.workoutSummary?.activeHours !== null && latestDay?.workoutSummary?.activeHours !== undefined ? `活动小时数 ${formatNumber(latestDay.workoutSummary.activeHours, 0)} 小时` : `身体类型 ${latestMeasurement.bodyType || '—'}` %></p>
+        <% const durationComparison = getComparison(getWorkoutDurationValue(latestDay), getWorkoutDurationValue(previousDay)); %>
         <p class="metric-card__comparison comparison-pill comparison-pill--<%= durationComparison.direction %>"><span class="comparison-pill__arrow"><%= durationComparison.arrow %></span><span><%= durationComparison.text %></span></p>
       </article>
     </section>
@@ -233,6 +253,7 @@ function getComparison(current, previous) {
             <ul class="day-card__stats">
               <li>活动次数：<strong><%= formatNumber(day.workoutSummary.totalActivities, 0) %></strong></li>
               <li>训练消耗：<strong><%= formatNumber(day.workoutSummary.trainingCalories, 0) %> kcal</strong></li>
+              <li>锻炼时长：<strong><%= formatWorkoutDuration(day) %></strong></li>
               <li>骑行里程：<strong><%= formatNumber(day.workoutSummary.cyclingDistanceKm) %> km</strong></li>
               <li>饮食热量：<strong><%= day.nutrition.totalCalories === null ? '—' : `${formatNumber(day.nutrition.totalCalories, 0)} kcal` %></strong></li>
             </ul>

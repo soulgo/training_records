@@ -810,6 +810,112 @@ test('replaces telegram-managed blocks when a same-day screenshot is uploaded ag
   assert.equal(result.markdown.includes('当日截图内已记录总热量：1428千卡'), true);
 });
 
+test('merges a daily activity overview screenshot into the same workout block', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+  assert.ok(lib?.applyTelegramSyncToMarkdown, 'applyTelegramSyncToMarkdown export missing');
+
+  const batch = {
+    batchId: 'album-activity-overview',
+    messages: [
+      {
+        updateId: 601,
+        messageId: 61,
+        mediaGroupId: 'album-activity-overview',
+        caption: '归档到 2026-05-10',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 11, 7, 50, 0) / 1000,
+        photos: [{ fileId: 'overview-file', fileUniqueId: 'overview-uniq' }],
+      },
+      {
+        updateId: 602,
+        messageId: 62,
+        mediaGroupId: 'album-activity-overview',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 11, 7, 50, 0) / 1000,
+        photos: [{ fileId: 'workout-file', fileUniqueId: 'workout-uniq' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 61,
+      imageType: 'workout',
+      detectedDate: '2026-05-10',
+      dateEvidence: 'activity overview shows 2026年5月10日',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        measurement: null,
+        dailyWorkoutSummary: {
+          activityCaloriesKcal: 643,
+          workoutDurationMinutes: 78,
+          activeHours: 12,
+        },
+      },
+    },
+    {
+      messageId: 62,
+      imageType: 'workout',
+      detectedDate: '2026-05-10',
+      dateEvidence: 'activity rows show 5月10日',
+      confidence: 0.96,
+      warnings: [],
+      records: {
+        activities: [
+          {
+            time: '08:15',
+            type: '户外骑行',
+            detail: '1.65公里，时长00:23:58，平均速度4.13公里/小时',
+          },
+          {
+            time: '08:49',
+            type: '户外骑行',
+            detail: '8.49公里，时长00:36:04，平均速度14.12公里/小时',
+          },
+        ],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        measurement: null,
+        dailyWorkoutSummary: null,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.deepEqual(analyzed.workoutDailySummary, {
+    activityCaloriesKcal: 643,
+    workoutDurationMinutes: 78,
+    activeHours: 12,
+  });
+
+  const markdown = `
+### 2026-05-10
+
+- 占位
+`;
+
+  const applied = lib.applyTelegramSyncToMarkdown(markdown, analyzed);
+
+  assert.equal(applied.changed, true);
+  assert.match(applied.markdown, /##### 当日活动总览/);
+  assert.match(applied.markdown, /活动热量：643千卡/);
+  assert.match(applied.markdown, /锻炼时长：78分钟/);
+  assert.match(applied.markdown, /活动小时数：12小时/);
+  assert.match(applied.markdown, /##### 活动明细/);
+  assert.match(applied.markdown, /08:49 户外骑行：8.49公里/);
+});
+
 test('runs async work with a bounded concurrency limit while preserving result order', async () => {
   const lib = await importTelegramSyncLib();
 
