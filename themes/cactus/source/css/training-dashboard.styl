@@ -166,6 +166,55 @@
 .daily-section
   margin-bottom 1.5rem
 
+.daily-section__heading
+  align-items center
+
+.daily-section__meta
+  display flex
+  align-items center
+  gap 0.7rem
+  flex-wrap wrap
+  justify-content flex-end
+
+.daily-section__status
+  padding 0.28rem 0.72rem
+  border-radius 999px
+  background #f8fafc
+  border 1px solid #e2e8f0
+  color #64748b
+  font-size 0.84rem
+  line-height 1.2
+
+.daily-section__pager
+  display inline-flex
+  align-items center
+  padding 0.2rem
+  border-radius 999px
+  border 1px solid #e2e8f0
+  background rgba(248, 250, 252, 0.96)
+  box-shadow 0 10px 24px rgba(15, 23, 42, 0.05)
+
+.daily-section__nav
+  border 0
+  border-radius 999px
+  padding 0.42rem 0.9rem
+  background transparent
+  color #475569
+  font-size 0.86rem
+  font-weight 600
+  line-height 1
+  cursor pointer
+  transition background-color 0.2s ease, color 0.2s ease, transform 0.2s ease
+
+.daily-section__nav:hover:not(:disabled)
+  background #e2e8f0
+  color #0f172a
+  transform translateY(-1px)
+
+.daily-section__nav:disabled
+  color #94a3b8
+  cursor default
+
 .daily-grid
   display grid
   grid-template-columns repeat(auto-fit, minmax(260px, 1fr))
@@ -230,6 +279,20 @@
   .chart-heading
     align-items flex-start
     flex-direction column
+
+  .daily-section__heading
+    align-items flex-start
+
+  .daily-section__meta
+    width 100%
+    justify-content space-between
+
+  .daily-section__pager
+    width 100%
+    justify-content space-between
+
+  .daily-section__nav
+    flex 1
 
   .chart-card canvas
     height 220px !important

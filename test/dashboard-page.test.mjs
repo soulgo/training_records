@@ -55,11 +55,38 @@ test('dashboard defaults charts to the latest 30 days and daily cards to the lat
     assert.ok(payload.charts.trainingCalories.every((point) => point.date >= '2026-03-16'));
     assert.ok(payload.charts.cyclingDistanceKm.every((point) => point.date >= '2026-03-16'));
 
-    const renderedDayCards = homepage.match(/<article class="day-card">/g) ?? [];
+    const firstDailyGridMatch = homepage.match(/<div class="daily-grid"[^>]*>([\s\S]*?)<\/div>\s*<\/section>/);
+    assert.ok(firstDailyGridMatch, 'expected rendered daily grid');
+
+    const renderedDayCards = firstDailyGridMatch[1].match(/<article class="day-card">/g) ?? [];
     assert.equal(renderedDayCards.length, 4);
     assert.match(homepage, /<h3>2026-04-14<\/h3>/);
     assert.match(homepage, /<h3>2026-04-11<\/h3>/);
     assert.doesNotMatch(homepage, /<h3>2026-04-10<\/h3>/);
+  } finally {
+    writeFileSync(trainingDataPath, originalTrainingData);
+  }
+});
+
+test('dashboard embeds daily overview pagination controls without changing the default latest 4-day view', () => {
+  const originalTrainingData = readFileSync(trainingDataPath, 'utf8');
+  const syntheticDashboard = buildSyntheticDashboard({ startDate: '2026-03-01', days: 9 });
+
+  try {
+    writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
+    execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+      cwd: rootDir,
+      stdio: 'pipe',
+    });
+
+    const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+
+    assert.match(homepage, /class="daily-section__status"[^>]*>1-4 \/ 共 9 天<\/span>/);
+    assert.match(homepage, /class="daily-section__pager"[^>]*>/);
+    assert.match(homepage, /<button[^>]*data-daily-nav="prev"[^>]*disabled[^>]*>较新<\/button>/);
+    assert.match(homepage, /<button[^>]*data-daily-nav="next"[^>]*>较早<\/button>/);
+    assert.match(homepage, /<div class="daily-grid" data-daily-grid><article class="day-card">/);
+    assert.match(homepage, /<script id="daily-overview-data" type="application\/json"[^>]*>/);
   } finally {
     writeFileSync(trainingDataPath, originalTrainingData);
   }

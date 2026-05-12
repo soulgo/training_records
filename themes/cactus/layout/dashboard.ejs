@@ -12,7 +12,21 @@ const latestDashboardDate = latestMeasurement?.archivedDate || latestDay?.date |
 const chartWindowDays = 30;
 const dailyCardLimit = 4;
 const chartStartDate = latestDashboardDate ? addDays(latestDashboardDate, -(chartWindowDays - 1)) : null;
-const recentDays = [...(dashboard.daily || [])].reverse().slice(0, dailyCardLimit);
+const dailyOverviewEntries = [...(dashboard.daily || [])].reverse().map((day) => ({
+  date: day.date,
+  weightLabel: day.measurement ? `${formatNumber(day.measurement.weightKg)} kg` : '无体脂数据',
+  activityCount: formatNumber(day.workoutSummary.totalActivities, 0),
+  trainingCaloriesLabel: `${formatNumber(day.workoutSummary.trainingCalories, 0)} kcal`,
+  workoutDurationLabel: formatWorkoutDuration(day),
+  cyclingDistanceLabel: `${formatNumber(day.workoutSummary.cyclingDistanceKm)} km`,
+  nutritionCaloriesLabel:
+    day.nutrition.totalCalories === null ? '—' : `${formatNumber(day.nutrition.totalCalories, 0)} kcal`,
+  tags: Object.entries(day.workoutSummary.countsByType || {})
+    .filter(([, count]) => count > 0)
+    .map(([type, count]) => `${type} × ${count}`),
+}));
+const recentDays = dailyOverviewEntries.slice(0, dailyCardLimit);
+const dailyOverviewTotal = dailyOverviewEntries.length;
 const trainedDays = (dashboard.daily || []).filter((entry) => (entry.workoutSummary?.trainingCalories || 0) > 0).length;
 const chartPayload = {
   charts: filterChartsByDate(dashboard.charts || {}, chartStartDate),
@@ -125,6 +139,47 @@ function getComparison(current, previous) {
     text: `较前一日${isUp ? '新增' : '下降'} ${formatNumber(comparison.ratio, 2)}%`,
   };
 }
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderDayCard(day) {
+  const tags = (day.tags || []).length
+    ? `<div class="day-card__tags">${day.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>`
+    : '';
+
+  return `<article class="day-card">
+    <div class="day-card__header">
+      <h3>${escapeHtml(day.date)}</h3>
+      <span>${escapeHtml(day.weightLabel)}</span>
+    </div>
+    <ul class="day-card__stats">
+      <li>活动次数：<strong>${escapeHtml(day.activityCount)}</strong></li>
+      <li>训练消耗：<strong>${escapeHtml(day.trainingCaloriesLabel)}</strong></li>
+      <li>锻炼时长：<strong>${escapeHtml(day.workoutDurationLabel)}</strong></li>
+      <li>骑行里程：<strong>${escapeHtml(day.cyclingDistanceLabel)}</strong></li>
+      <li>饮食热量：<strong>${escapeHtml(day.nutritionCaloriesLabel)}</strong></li>
+    </ul>
+    ${tags}
+  </article>`;
+}
+
+function formatDailyRange(pageIndex, pageSize, total) {
+  if (!total) {
+    return '0 / 共 0 天';
+  }
+
+  const start = pageIndex * pageSize + 1;
+  const end = Math.min(start + pageSize - 1, total);
+
+  return `${start}-${end} / 共 ${total} 天`;
+}
 %>
 
 <section class="dashboard-page">
@@ -234,38 +289,25 @@ function getComparison(current, previous) {
     </section>
 
     <section class="daily-section">
-      <div class="chart-heading">
-        <h2>每日记录速览</h2>
-        <span>最近记录优先显示</span>
+      <div class="chart-heading daily-section__heading">
+        <div>
+          <h2>每日记录速览</h2>
+          <span>最近记录优先显示</span>
+        </div>
+        <div class="daily-section__meta">
+          <span class="daily-section__status" data-daily-status><%= formatDailyRange(0, dailyCardLimit, dailyOverviewTotal) %></span>
+          <div class="daily-section__pager">
+            <button type="button" class="daily-section__nav" data-daily-nav="prev" disabled>较新</button>
+            <button
+              type="button"
+              class="daily-section__nav"
+              data-daily-nav="next"
+              <%= dailyOverviewTotal > dailyCardLimit ? '' : 'disabled' %>
+            >较早</button>
+          </div>
+        </div>
       </div>
-      <div class="daily-grid">
-        <% recentDays.forEach((day) => { %>
-          <article class="day-card">
-            <div class="day-card__header">
-              <h3><%= day.date %></h3>
-              <% if (day.measurement) { %>
-                <span><%= formatNumber(day.measurement.weightKg) %> kg</span>
-              <% } else { %>
-                <span>无体脂数据</span>
-              <% } %>
-            </div>
-            <ul class="day-card__stats">
-              <li>活动次数：<strong><%= formatNumber(day.workoutSummary.totalActivities, 0) %></strong></li>
-              <li>训练消耗：<strong><%= formatNumber(day.workoutSummary.trainingCalories, 0) %> kcal</strong></li>
-              <li>锻炼时长：<strong><%= formatWorkoutDuration(day) %></strong></li>
-              <li>骑行里程：<strong><%= formatNumber(day.workoutSummary.cyclingDistanceKm) %> km</strong></li>
-              <li>饮食热量：<strong><%= day.nutrition.totalCalories === null ? '—' : `${formatNumber(day.nutrition.totalCalories, 0)} kcal` %></strong></li>
-            </ul>
-            <% if (day.activities.length) { %>
-              <div class="day-card__tags">
-                <% Object.entries(day.workoutSummary.countsByType).forEach(([type, count]) => { %>
-                  <span><%= type %> × <%= count %></span>
-                <% }) %>
-              </div>
-            <% } %>
-          </article>
-        <% }) %>
-      </div>
+      <div class="daily-grid" data-daily-grid><%- recentDays.map(renderDayCard).join('') %></div>
     </section>
 
     <% if (page.content) { %>
@@ -273,126 +315,207 @@ function getComparison(current, previous) {
     <% } %>
 
     <script id="training-dashboard-data" type="application/json"><%- JSON.stringify(chartPayload) %></script>
+    <script id="daily-overview-data" type="application/json" data-page-size="<%= dailyCardLimit %>"><%- JSON.stringify(dailyOverviewEntries) %></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script>
       (() => {
         const payload = document.getElementById('training-dashboard-data');
-        if (!payload || typeof Chart === 'undefined') {
-          return;
-        }
+        if (payload && typeof Chart !== 'undefined') {
+          const data = JSON.parse(payload.textContent);
+          const charts = data.charts || {};
 
-        const data = JSON.parse(payload.textContent);
-        const charts = data.charts || {};
+          const labels = (charts.weightKg || []).map((point) => point.date.slice(5));
+          const weightValues = (charts.weightKg || []).map((point) => point.value);
+          const bodyFatValues = (charts.bodyFatPct || []).map((point) => point.value);
+          const muscleValues = (charts.skeletalMuscleKg || []).map((point) => point.value);
+          const intakeValues = (charts.intakeCalories || []).map((point) => point.value);
+          const trainingValues = (charts.trainingCalories || []).map((point) => point.value);
+          const cyclingLabels = (charts.cyclingDistanceKm || []).map((point) => point.date.slice(5));
+          const cyclingValues = (charts.cyclingDistanceKm || []).map((point) => point.value);
 
-        const labels = (charts.weightKg || []).map((point) => point.date.slice(5));
-        const weightValues = (charts.weightKg || []).map((point) => point.value);
-        const bodyFatValues = (charts.bodyFatPct || []).map((point) => point.value);
-        const muscleValues = (charts.skeletalMuscleKg || []).map((point) => point.value);
-        const intakeValues = (charts.intakeCalories || []).map((point) => point.value);
-        const trainingValues = (charts.trainingCalories || []).map((point) => point.value);
-        const cyclingLabels = (charts.cyclingDistanceKm || []).map((point) => point.date.slice(5));
-        const cyclingValues = (charts.cyclingDistanceKm || []).map((point) => point.value);
-
-        const commonOptions = {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              labels: {
-                usePointStyle: true,
-                boxWidth: 10
-              }
-            }
-          },
-          scales: {
-            x: {
-              grid: {
-                display: false
+          const commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                labels: {
+                  usePointStyle: true,
+                  boxWidth: 10
+                }
               }
             },
-            y: {
-              ticks: {
-                precision: 0
+            scales: {
+              x: {
+                grid: {
+                  display: false
+                }
+              },
+              y: {
+                ticks: {
+                  precision: 0
+                }
               }
             }
+          };
+
+          new Chart(document.getElementById('weight-chart'), {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [{
+                label: '体重 (kg)',
+                data: weightValues,
+                borderColor: '#0f766e',
+                backgroundColor: 'rgba(15, 118, 110, 0.12)',
+                tension: 0.35,
+                fill: true,
+                pointRadius: 3
+              }]
+            },
+            options: commonOptions
+          });
+
+          new Chart(document.getElementById('composition-chart'), {
+            type: 'line',
+            data: {
+              labels,
+              datasets: [{
+                label: '体脂率 (%)',
+                data: bodyFatValues,
+                borderColor: '#ea580c',
+                backgroundColor: 'rgba(234, 88, 12, 0.12)',
+                tension: 0.35,
+                fill: false,
+                pointRadius: 3
+              }, {
+                label: '骨骼肌量 (kg)',
+                data: muscleValues,
+                borderColor: '#2563eb',
+                backgroundColor: 'rgba(37, 99, 235, 0.12)',
+                tension: 0.35,
+                fill: false,
+                pointRadius: 3
+              }]
+            },
+            options: commonOptions
+          });
+
+          new Chart(document.getElementById('calorie-chart'), {
+            type: 'bar',
+            data: {
+              labels: (charts.intakeCalories || []).map((point) => point.date.slice(5)),
+              datasets: [{
+                label: '饮食摄入 (kcal)',
+                data: intakeValues,
+                backgroundColor: '#f97316'
+              }, {
+                label: '训练消耗 (kcal)',
+                data: trainingValues,
+                backgroundColor: '#14b8a6'
+              }]
+            },
+            options: commonOptions
+          });
+
+          new Chart(document.getElementById('cycling-chart'), {
+            type: 'line',
+            data: {
+              labels: cyclingLabels,
+              datasets: [{
+                label: '骑行里程 (km)',
+                data: cyclingValues,
+                borderColor: '#7c3aed',
+                backgroundColor: 'rgba(124, 58, 237, 0.12)',
+                tension: 0.35,
+                fill: true,
+                pointRadius: 3
+              }]
+            },
+            options: commonOptions
+          });
+        }
+
+        const dailyPayload = document.getElementById('daily-overview-data');
+        const dailyGrid = document.querySelector('[data-daily-grid]');
+        const dailyStatus = document.querySelector('[data-daily-status]');
+        const newerButton = document.querySelector('[data-daily-nav="prev"]');
+        const olderButton = document.querySelector('[data-daily-nav="next"]');
+
+        function renderDailyRange(pageIndex, pageSize, total) {
+          if (!total) {
+            return '0 / 共 0 天';
           }
-        };
 
-        new Chart(document.getElementById('weight-chart'), {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [{
-              label: '体重 (kg)',
-              data: weightValues,
-              borderColor: '#0f766e',
-              backgroundColor: 'rgba(15, 118, 110, 0.12)',
-              tension: 0.35,
-              fill: true,
-              pointRadius: 3
-            }]
-          },
-          options: commonOptions
-        });
+          const start = pageIndex * pageSize + 1;
+          const end = Math.min(start + pageSize, total);
 
-        new Chart(document.getElementById('composition-chart'), {
-          type: 'line',
-          data: {
-            labels,
-            datasets: [{
-              label: '体脂率 (%)',
-              data: bodyFatValues,
-              borderColor: '#ea580c',
-              backgroundColor: 'rgba(234, 88, 12, 0.12)',
-              tension: 0.35,
-              fill: false,
-              pointRadius: 3
-            }, {
-              label: '骨骼肌量 (kg)',
-              data: muscleValues,
-              borderColor: '#2563eb',
-              backgroundColor: 'rgba(37, 99, 235, 0.12)',
-              tension: 0.35,
-              fill: false,
-              pointRadius: 3
-            }]
-          },
-          options: commonOptions
-        });
+          return `${start}-${end} / 共 ${total} 天`;
+        }
 
-        new Chart(document.getElementById('calorie-chart'), {
-          type: 'bar',
-          data: {
-            labels: (charts.intakeCalories || []).map((point) => point.date.slice(5)),
-            datasets: [{
-              label: '饮食摄入 (kcal)',
-              data: intakeValues,
-              backgroundColor: '#f97316'
-            }, {
-              label: '训练消耗 (kcal)',
-              data: trainingValues,
-              backgroundColor: '#14b8a6'
-            }]
-          },
-          options: commonOptions
-        });
+        function escapeHtml(value) {
+          return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        }
 
-        new Chart(document.getElementById('cycling-chart'), {
-          type: 'line',
-          data: {
-            labels: cyclingLabels,
-            datasets: [{
-              label: '骑行里程 (km)',
-              data: cyclingValues,
-              borderColor: '#7c3aed',
-              backgroundColor: 'rgba(124, 58, 237, 0.12)',
-              tension: 0.35,
-              fill: true,
-              pointRadius: 3
-            }]
-          },
-          options: commonOptions
-        });
+        function renderDailyCard(day) {
+          const tags = (day.tags || []).length
+            ? `<div class="day-card__tags">${day.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>`
+            : '';
+
+          return `<article class="day-card">
+            <div class="day-card__header">
+              <h3>${escapeHtml(day.date)}</h3>
+              <span>${escapeHtml(day.weightLabel)}</span>
+            </div>
+            <ul class="day-card__stats">
+              <li>活动次数：<strong>${escapeHtml(day.activityCount)}</strong></li>
+              <li>训练消耗：<strong>${escapeHtml(day.trainingCaloriesLabel)}</strong></li>
+              <li>锻炼时长：<strong>${escapeHtml(day.workoutDurationLabel)}</strong></li>
+              <li>骑行里程：<strong>${escapeHtml(day.cyclingDistanceLabel)}</strong></li>
+              <li>饮食热量：<strong>${escapeHtml(day.nutritionCaloriesLabel)}</strong></li>
+            </ul>
+            ${tags}
+          </article>`;
+        }
+
+        if (dailyPayload && dailyGrid && dailyStatus && newerButton && olderButton) {
+          const entries = JSON.parse(dailyPayload.textContent || '[]');
+          const pageSize = Number(dailyPayload.dataset.pageSize || '4');
+          const maxPage = Math.max(Math.ceil(entries.length / pageSize) - 1, 0);
+          let pageIndex = 0;
+
+          function syncDailyOverview() {
+            const start = pageIndex * pageSize;
+            const visibleEntries = entries.slice(start, start + pageSize);
+
+            dailyGrid.innerHTML = visibleEntries.map(renderDailyCard).join('');
+            dailyStatus.textContent = renderDailyRange(pageIndex, pageSize, entries.length);
+            newerButton.disabled = pageIndex === 0;
+            olderButton.disabled = pageIndex >= maxPage;
+          }
+
+          newerButton.addEventListener('click', () => {
+            if (pageIndex === 0) {
+              return;
+            }
+            pageIndex -= 1;
+            syncDailyOverview();
+          });
+
+          olderButton.addEventListener('click', () => {
+            if (pageIndex >= maxPage) {
+              return;
+            }
+            pageIndex += 1;
+            syncDailyOverview();
+          });
+
+          syncDailyOverview();
+        }
       })();
     </script>
   <% } %>
