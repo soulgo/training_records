@@ -12,74 +12,105 @@ const recordPath = path.join(rootDir, '训练记录.md');
 const statePath = path.join(telegramDir, 'state.json');
 const processLogPath = path.join(telegramDir, 'process-log.ndjson');
 
-const env = loadRequiredEnv();
-await ensureTelegramFiles();
+export async function main() {
+  const env = loadRequiredEnv();
+  await ensureTelegramFiles();
 
-const currentState = await readJson(statePath, { lastProcessedUpdateId: 0 });
-const markdown = await readFile(recordPath, 'utf8');
-const updates = await fetchTelegramUpdates({
-  botToken: env.botToken,
-  offset: currentState.lastProcessedUpdateId + 1,
-  limit: env.pollLimit,
-});
+  const currentState = await readJson(statePath, { lastProcessedUpdateId: 0 });
+  const markdown = await readFile(recordPath, 'utf8');
+  const updates = await fetchTelegramUpdates({
+    botToken: env.botToken,
+    offset: currentState.lastProcessedUpdateId + 1,
+    limit: env.pollLimit,
+  });
 
-const result = await processTelegramUpdates({
-  markdown,
-  updates,
-  allowedChatIds: env.allowedChatIds,
-  minConfidence: 0.75,
-  recognizeBatch: async (batch) => recognizeBatch(batch, env),
-});
-const nextLastProcessedUpdateId = Math.max(
-  currentState.lastProcessedUpdateId ?? 0,
-  result.lastProcessedUpdateId ?? 0,
-);
+  const result = await processTelegramUpdates({
+    markdown,
+    updates,
+    allowedChatIds: env.allowedChatIds,
+    minConfidence: 0.75,
+    recognizeBatch: async (batch) => recognizeBatch(batch, env),
+  });
+  const previousLastProcessedUpdateId = currentState.lastProcessedUpdateId ?? 0;
+  const nextLastProcessedUpdateId = Math.max(
+    previousLastProcessedUpdateId,
+    result.lastProcessedUpdateId ?? 0,
+  );
 
-await persistInboxEntries(result.inboxEntries);
-await appendProcessLog({
-  processedAt: new Date().toISOString(),
-  updatesFetched: updates.length,
-  changed: result.changed,
-  lastProcessedUpdateId: result.lastProcessedUpdateId,
-  batches: result.batchResults.map((batch) => ({
-    batchId: batch.batchId,
-    status: batch.status,
-    archivedDate: batch.archivedDate ?? null,
-    reason: batch.reason ?? null,
-    updateIds: batch.updateIds ?? [],
-  })),
-});
+  const shouldPersistArtifacts = shouldPersistTelegramArtifacts({
+    updatesFetched: updates.length,
+    changed: result.changed,
+    previousLastProcessedUpdateId,
+    nextLastProcessedUpdateId,
+  });
 
-if (result.changed) {
-  await writeFile(recordPath, result.markdown, 'utf8');
+  if (shouldPersistArtifacts) {
+    await persistInboxEntries(result.inboxEntries);
+    await appendProcessLog({
+      processedAt: new Date().toISOString(),
+      updatesFetched: updates.length,
+      changed: result.changed,
+      lastProcessedUpdateId: result.lastProcessedUpdateId,
+      batches: result.batchResults.map((batch) => ({
+        batchId: batch.batchId,
+        status: batch.status,
+        archivedDate: batch.archivedDate ?? null,
+        reason: batch.reason ?? null,
+        updateIds: batch.updateIds ?? [],
+      })),
+    });
+  }
+
+  if (result.changed) {
+    await writeFile(recordPath, result.markdown, 'utf8');
+  }
+
+  if (shouldPersistArtifacts) {
+    await writeFile(
+      statePath,
+      `${JSON.stringify(
+        {
+          lastProcessedUpdateId: nextLastProcessedUpdateId,
+          updatedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+  }
+
+  process.stdout.write(
+    JSON.stringify(
+      {
+        changed: result.changed,
+        updatesFetched: updates.length,
+        lastProcessedUpdateId: nextLastProcessedUpdateId,
+        readyBatches: result.batchResults.filter((batch) => batch.status === 'ready').length,
+      },
+      null,
+      2,
+    ),
+  );
+  process.stdout.write('\n');
 }
 
-await writeFile(
-  statePath,
-  `${JSON.stringify(
-    {
-      lastProcessedUpdateId: nextLastProcessedUpdateId,
-      updatedAt: new Date().toISOString(),
-    },
-    null,
-    2,
-  )}\n`,
-  'utf8',
-);
+export function shouldPersistTelegramArtifacts({
+  updatesFetched,
+  changed,
+  previousLastProcessedUpdateId,
+  nextLastProcessedUpdateId,
+}) {
+  return (
+    changed ||
+    updatesFetched > 0 ||
+    nextLastProcessedUpdateId > previousLastProcessedUpdateId
+  );
+}
 
-process.stdout.write(
-  JSON.stringify(
-    {
-      changed: result.changed,
-      updatesFetched: updates.length,
-      lastProcessedUpdateId: nextLastProcessedUpdateId,
-      readyBatches: result.batchResults.filter((batch) => batch.status === 'ready').length,
-    },
-    null,
-    2,
-  ),
-);
-process.stdout.write('\n');
+if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {
+  await main();
+}
 
 function loadRequiredEnv() {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
