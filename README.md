@@ -297,13 +297,20 @@ GitHub Actions 发布流程如下：
 
 - `TELEGRAM_BOT_TOKEN`
 - `AI_API_KEY`
+- `TRAINING_DB_URL`
 
 ### 需要配置的 GitHub Variables
 
 - `AI_BASE_URL`
 - `AI_MODEL`
+- `AI_CONCURRENCY`
 - `TELEGRAM_ALLOWED_CHAT_IDS`
 - `TELEGRAM_POLL_LIMIT`
+- `TRAINING_DB_ENABLED`
+- `TRAINING_DB_TIMEOUT_MS`
+- `TRAINING_DB_APP_NAME`
+
+完整的 GitHub Settings 维护清单、字段用途、推荐值和上线顺序统一记录在 [docs/github-settings.md](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/github-settings.md)。
 
 ### Telegram 同步规则
 

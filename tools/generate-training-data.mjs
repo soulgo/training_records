@@ -2,26 +2,78 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  appendTrainingArchiveFailureLog,
+  persistTrainingArchive,
+  resolveTrainingArchiveRuntimeContext,
+} from './training-db-archive.mjs';
 import { parseTrainingRecord } from './training-parser.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const rootDir = path.resolve(__dirname, '..');
-const recordPath = path.join(rootDir, '训练记录.md');
-const outputDir = path.join(rootDir, 'source', '_data');
-const outputPath = path.join(outputDir, 'training.json');
-const debugOutputPath = path.join(rootDir, '训练数据解析.md');
+const defaultRootDir = path.resolve(__dirname, '..');
 
-const markdown = await readFile(recordPath, 'utf8');
-const parsed = parseTrainingRecord(markdown);
+export async function generateTrainingData(options = {}) {
+  const rootDir = options.rootDir ?? defaultRootDir;
+  const env = options.env ?? process.env;
+  const argv = options.argv ?? process.argv.slice(2);
+  const stdout = options.stdout ?? process.stdout;
+  const stderr = options.stderr ?? process.stderr;
+  const persistArchive = options.persistArchive ?? persistTrainingArchive;
+  const appendArchiveFailureLog =
+    options.appendArchiveFailureLog ?? appendTrainingArchiveFailureLog;
+  const runStartedAt = options.runStartedAt ?? new Date();
 
-await mkdir(outputDir, { recursive: true });
-await writeFile(outputPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
-await writeFile(debugOutputPath, renderTrainingDebugMarkdown(parsed), 'utf8');
+  const recordPath = path.join(rootDir, '训练记录.md');
+  const outputDir = path.join(rootDir, 'source', '_data');
+  const outputPath = path.join(outputDir, 'training.json');
+  const debugOutputPath = path.join(rootDir, '训练数据解析.md');
 
-process.stdout.write(`Generated ${path.relative(rootDir, outputPath)}\n`);
-process.stdout.write(`Generated ${path.relative(rootDir, debugOutputPath)}\n`);
+  const markdown = await readFile(recordPath, 'utf8');
+  const parsed = parseTrainingRecord(markdown);
 
-function renderTrainingDebugMarkdown(parsed) {
+  await mkdir(outputDir, { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+  await writeFile(debugOutputPath, renderTrainingDebugMarkdown(parsed), 'utf8');
+
+  stdout.write(`Generated ${path.relative(rootDir, outputPath)}\n`);
+  stdout.write(`Generated ${path.relative(rootDir, debugOutputPath)}\n`);
+
+  const runtimeContext = resolveTrainingArchiveRuntimeContext({ env, argv });
+  const runFinishedAt = options.runFinishedAt ?? new Date();
+
+  try {
+    await persistArchive({
+      markdownRaw: markdown,
+      parsed,
+      env,
+      runtimeContext,
+      runStartedAt,
+      runFinishedAt,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    stderr.write(`[training-db-archive] ${message}\n`);
+    await appendArchiveFailureLog({
+      rootDir,
+      env,
+      runtimeContext,
+      error,
+      runStartedAt,
+      runFinishedAt,
+      parsed,
+    });
+  }
+
+  return {
+    rootDir,
+    recordPath,
+    outputPath,
+    debugOutputPath,
+    parsed,
+  };
+}
+
+export function renderTrainingDebugMarkdown(parsed) {
   const lines = [
     '# 训练数据解析排查',
     '',
@@ -74,4 +126,8 @@ function renderTrainingDebugMarkdown(parsed) {
 
 function formatDebugValue(value) {
   return value === null || value === undefined ? '无' : value;
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  await generateTrainingData();
 }
