@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -137,9 +137,81 @@ test('persistTrainingArchive writes snapshot and run rows in one transaction', a
   assert.equal(calls[0][0], 'connect');
   assert.equal(calls[1][0], 'BEGIN');
   assert.match(calls[2][0], /insert into archive\.training_parse_snapshot/i);
-  assert.match(calls[3][0], /insert into archive\.training_parse_run/i);
-  assert.equal(calls[4][0], 'COMMIT');
-  assert.equal(calls[5][0], 'end');
+  assert.match(calls[3][0], /insert into archive\.training_day/i);
+  assert.match(calls[4][0], /insert into archive\.training_measurement/i);
+  assert.match(calls[5][0], /insert into archive\.training_parse_run/i);
+  assert.equal(calls[6][0], 'COMMIT');
+  assert.equal(calls[7][0], 'end');
+});
+
+test('persistTrainingArchive writes activity and meal rows when parsed data contains them', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  await persistTrainingArchive({
+    markdownRaw: sampleMarkdown,
+    parsed: {
+      ...sampleParsed,
+      daily: [
+        {
+          ...sampleParsed.daily[0],
+          activities: [
+            {
+              time: '08:30',
+              type: '燃脂训练',
+              rawType: '自由训练',
+              detail: '总消耗120千卡，时长00:15:00',
+              calories: 120,
+              heartRate: 135,
+              distanceKm: null,
+              avgSpeedKmh: null,
+              durationText: '00:15:00',
+              durationSeconds: 900,
+            },
+          ],
+          nutrition: {
+            totalCalories: 500,
+            meals: [
+              {
+                name: '早餐',
+                calories: 500,
+                recommendedMin: 300,
+                recommendedMax: 600,
+              },
+            ],
+          },
+        },
+      ],
+    },
+    runStartedAt: new Date('2026-05-12T00:00:00.000Z'),
+    runFinishedAt: new Date('2026-05-12T00:00:02.000Z'),
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    runtimeContext: {
+      triggerName: 'local-build-data',
+      runtimeEnv: 'local',
+      actorName: 'tester',
+    },
+    createClient() {
+      return fakeClient;
+    },
+  });
+
+  const executedSql = calls.map(([sql]) => sql).filter((sql) => typeof sql === 'string');
+  assert.ok(executedSql.some((sql) => /insert into archive\.training_activity/i.test(sql)));
+  assert.ok(executedSql.some((sql) => /insert into archive\.training_meal/i.test(sql)));
 });
 
 test('generateTrainingData keeps main outputs when archive sync fails', async () => {
@@ -209,4 +281,9 @@ test('appendTrainingArchiveFailureLog writes ndjson entries to the configured ru
   assert.equal(entry.actorName, 'octocat');
   assert.equal(entry.error, 'connection timeout');
   assert.equal(entry.latestArchivedDate, '2026-05-11');
+});
+
+test('pgsql init schema lives under sql directory', async () => {
+  const initSqlPath = path.resolve(process.cwd(), 'sql', 'pgsql17.sql');
+  await access(initSqlPath);
 });

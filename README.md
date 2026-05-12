@@ -312,6 +312,18 @@ GitHub Actions 发布流程如下：
 
 完整的 GitHub Settings 维护清单、字段用途、推荐值和上线顺序统一记录在 [docs/github-settings.md](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/github-settings.md)。
 
+### PostgreSQL 初始化与升级
+
+- 初始化新库：执行 [sql/pgsql17.sql](/C:/Users/ljq90/Desktop/project_test/健身锻炼/sql/pgsql17.sql)
+- 升级现有库：执行 [sql/update.sql](/C:/Users/ljq90/Desktop/project_test/健身锻炼/sql/update.sql)
+
+当前数据库设计分为两层：
+
+- `archive.training_parse_snapshot` / `archive.training_parse_run`
+  保留原始快照和运行留痕
+- `archive.training_day` / `archive.training_activity` / `archive.training_measurement` / `archive.training_meal`
+  作为主查询和后期维护使用的结构化归档表
+
 ### Telegram 同步规则
 
 - 同一个 `media_group_id` 相册会作为一个同步批次处理

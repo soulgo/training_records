@@ -360,11 +360,20 @@ npm run build:data
   - 如果 `训练记录.md` 内容没变，不会新增很多重复快照，只会更新已有快照的 `last_seen_at`
 - `archive.training_parse_run`
   - 每次构建成功都会新增 1 条运行记录
+- `archive.training_day`
+  - 按日期做 upsert，供日维度查询和趋势汇总使用
+- `archive.training_activity`
+  - 按活动幂等哈希做 upsert，保存每次运动明细
+- `archive.training_measurement`
+  - 按体测幂等哈希做 upsert，保存每次体测记录
+- `archive.training_meal`
+  - 按餐次幂等哈希做 upsert，保存饮食明细
 
 这意味着：
 
 - 相同内容不会无限重复堆积整份大 JSON
 - 但运行留痕表会随每次部署逐步增长
+- 页面和统计后续应优先读取结构化表，而不是直接查询整份 JSON
 
 按你现在这个项目的体量，数据库压力通常很小，原因是：
 
@@ -379,3 +388,14 @@ npm run build:data
 - 查询最新同步结果的 SQL
 - 查看最近失败记录的方法
 - 定期清理 `training_parse_run` 的 SQL
+
+## SQL 文件约定
+
+- 新库初始化脚本：[sql/pgsql17.sql](/C:/Users/ljq90/Desktop/project_test/健身锻炼/sql/pgsql17.sql)
+- 现有库升级脚本：[sql/update.sql](/C:/Users/ljq90/Desktop/project_test/健身锻炼/sql/update.sql)
+
+建议顺序：
+
+1. 新环境直接执行 `sql/pgsql17.sql`
+2. 已有环境执行 `sql/update.sql`
+3. 执行一次 `npm run build:data`，确认结构化表和快照表都能正常写入

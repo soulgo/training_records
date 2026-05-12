@@ -70,6 +70,7 @@ export async function persistTrainingArchive(options) {
 
   const client = createClient(config);
   let transactionStarted = false;
+  const updatedAtIso = options.runFinishedAt.toISOString();
 
   try {
     await client.connect();
@@ -104,10 +105,49 @@ export async function persistTrainingArchive(options) {
         dailyCount,
         latestArchivedDate,
         options.parsed.generatedAt,
-        options.runFinishedAt.toISOString(),
-        options.runFinishedAt.toISOString(),
+        updatedAtIso,
+        updatedAtIso,
       ],
     );
+
+    for (const day of options.parsed.daily) {
+      await upsertTrainingDay({
+        client,
+        sourceHash,
+        day,
+        updatedAtIso,
+      });
+
+      for (const measurement of resolveMeasurements(day)) {
+        await upsertTrainingMeasurement({
+          client,
+          sourceHash,
+          archivedDate: day.date,
+          measurement,
+          updatedAtIso,
+        });
+      }
+
+      for (const activity of day.activities ?? []) {
+        await upsertTrainingActivity({
+          client,
+          sourceHash,
+          archivedDate: day.date,
+          activity,
+          updatedAtIso,
+        });
+      }
+
+      for (const meal of day.nutrition?.meals ?? []) {
+        await upsertTrainingMeal({
+          client,
+          sourceHash,
+          archivedDate: day.date,
+          meal,
+          updatedAtIso,
+        });
+      }
+    }
 
     await client.query(
       `
@@ -188,6 +228,254 @@ export async function appendTrainingArchiveFailureLog(options) {
 function parsePositiveInteger(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+async function upsertTrainingDay({ client, sourceHash, day, updatedAtIso }) {
+  await client.query(
+    `
+      insert into archive.training_day (
+        archived_date,
+        source_hash,
+        total_activities,
+        total_duration_seconds,
+        training_calories,
+        workout_duration_minutes,
+        active_hours,
+        cycling_distance_km,
+        intake_calories,
+        measurement_count,
+        meal_count,
+        updated_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      on conflict (archived_date) do update set
+        source_hash = excluded.source_hash,
+        total_activities = excluded.total_activities,
+        total_duration_seconds = excluded.total_duration_seconds,
+        training_calories = excluded.training_calories,
+        workout_duration_minutes = excluded.workout_duration_minutes,
+        active_hours = excluded.active_hours,
+        cycling_distance_km = excluded.cycling_distance_km,
+        intake_calories = excluded.intake_calories,
+        measurement_count = excluded.measurement_count,
+        meal_count = excluded.meal_count,
+        updated_at = excluded.updated_at
+    `,
+    [
+      day.date,
+      sourceHash,
+      day.workoutSummary?.totalActivities ?? 0,
+      day.workoutSummary?.totalDurationSeconds ?? 0,
+      day.workoutSummary?.trainingCalories ?? null,
+      day.workoutSummary?.workoutDurationMinutes ?? null,
+      day.workoutSummary?.activeHours ?? null,
+      day.workoutSummary?.cyclingDistanceKm ?? null,
+      day.nutrition?.totalCalories ?? null,
+      resolveMeasurements(day).length,
+      day.nutrition?.meals?.length ?? 0,
+      updatedAtIso,
+    ],
+  );
+}
+
+async function upsertTrainingActivity({ client, sourceHash, archivedDate, activity, updatedAtIso }) {
+  const activityHash = createHash('md5')
+    .update(
+      [
+        archivedDate,
+        activity.time ?? '',
+        activity.type ?? '',
+        activity.detail ?? '',
+        activity.durationSeconds ?? '',
+      ].join('|'),
+      'utf8',
+    )
+    .digest('hex');
+
+  await client.query(
+    `
+      insert into archive.training_activity (
+        activity_hash,
+        archived_date,
+        source_hash,
+        activity_time,
+        activity_type,
+        raw_type,
+        detail,
+        calories,
+        heart_rate,
+        distance_km,
+        avg_speed_kmh,
+        duration_text,
+        duration_seconds,
+        updated_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      on conflict (activity_hash) do update set
+        source_hash = excluded.source_hash,
+        activity_time = excluded.activity_time,
+        activity_type = excluded.activity_type,
+        raw_type = excluded.raw_type,
+        detail = excluded.detail,
+        calories = excluded.calories,
+        heart_rate = excluded.heart_rate,
+        distance_km = excluded.distance_km,
+        avg_speed_kmh = excluded.avg_speed_kmh,
+        duration_text = excluded.duration_text,
+        duration_seconds = excluded.duration_seconds,
+        updated_at = excluded.updated_at
+    `,
+    [
+      activityHash,
+      archivedDate,
+      sourceHash,
+      activity.time ?? null,
+      activity.type ?? '未知活动',
+      activity.rawType ?? null,
+      activity.detail ?? null,
+      activity.calories ?? null,
+      activity.heartRate ?? null,
+      activity.distanceKm ?? null,
+      activity.avgSpeedKmh ?? null,
+      activity.durationText ?? null,
+      activity.durationSeconds ?? null,
+      updatedAtIso,
+    ],
+  );
+}
+
+async function upsertTrainingMeasurement({
+  client,
+  sourceHash,
+  archivedDate,
+  measurement,
+  updatedAtIso,
+}) {
+  const measurementHash = createHash('md5')
+    .update(
+      [
+        archivedDate,
+        measurement.measuredAt ?? '',
+        measurement.weightKg ?? '',
+        measurement.bodyFatPct ?? '',
+      ].join('|'),
+      'utf8',
+    )
+    .digest('hex');
+
+  await client.query(
+    `
+      insert into archive.training_measurement (
+        measurement_hash,
+        archived_date,
+        source_hash,
+        measured_at,
+        weight_kg,
+        bmi,
+        body_fat_pct,
+        skeletal_muscle_kg,
+        body_water_pct,
+        protein_pct,
+        bone_mass_kg,
+        visceral_fat_level,
+        basal_metabolism_kcal,
+        body_age,
+        body_score,
+        body_type,
+        fat_free_mass_kg,
+        updated_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      on conflict (measurement_hash) do update set
+        source_hash = excluded.source_hash,
+        measured_at = excluded.measured_at,
+        weight_kg = excluded.weight_kg,
+        bmi = excluded.bmi,
+        body_fat_pct = excluded.body_fat_pct,
+        skeletal_muscle_kg = excluded.skeletal_muscle_kg,
+        body_water_pct = excluded.body_water_pct,
+        protein_pct = excluded.protein_pct,
+        bone_mass_kg = excluded.bone_mass_kg,
+        visceral_fat_level = excluded.visceral_fat_level,
+        basal_metabolism_kcal = excluded.basal_metabolism_kcal,
+        body_age = excluded.body_age,
+        body_score = excluded.body_score,
+        body_type = excluded.body_type,
+        fat_free_mass_kg = excluded.fat_free_mass_kg,
+        updated_at = excluded.updated_at
+    `,
+    [
+      measurementHash,
+      archivedDate,
+      sourceHash,
+      measurement.measuredAt ?? null,
+      measurement.weightKg ?? null,
+      measurement.bmi ?? null,
+      measurement.bodyFatPct ?? null,
+      measurement.skeletalMuscleKg ?? null,
+      measurement.bodyWaterPct ?? null,
+      measurement.proteinPct ?? null,
+      measurement.boneMassKg ?? null,
+      measurement.visceralFatLevel ?? null,
+      measurement.basalMetabolismKcal ?? null,
+      measurement.bodyAge ?? null,
+      measurement.bodyScore ?? null,
+      measurement.bodyType ?? null,
+      measurement.fatFreeMassKg ?? null,
+      updatedAtIso,
+    ],
+  );
+}
+
+async function upsertTrainingMeal({ client, sourceHash, archivedDate, meal, updatedAtIso }) {
+  const mealHash = createHash('md5')
+    .update([archivedDate, meal.name ?? '', meal.calories ?? ''].join('|'), 'utf8')
+    .digest('hex');
+
+  await client.query(
+    `
+      insert into archive.training_meal (
+        meal_hash,
+        archived_date,
+        source_hash,
+        meal_name,
+        calories,
+        recommended_min,
+        recommended_max,
+        updated_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8)
+      on conflict (meal_hash) do update set
+        source_hash = excluded.source_hash,
+        meal_name = excluded.meal_name,
+        calories = excluded.calories,
+        recommended_min = excluded.recommended_min,
+        recommended_max = excluded.recommended_max,
+        updated_at = excluded.updated_at
+    `,
+    [
+      mealHash,
+      archivedDate,
+      sourceHash,
+      meal.name ?? '未命名餐次',
+      meal.calories ?? null,
+      meal.recommendedMin ?? null,
+      meal.recommendedMax ?? null,
+      updatedAtIso,
+    ],
+  );
+}
+
+function resolveMeasurements(day) {
+  if (Array.isArray(day.measurements) && day.measurements.length > 0) {
+    return day.measurements;
+  }
+
+  if (day.measurement) {
+    return [day.measurement];
+  }
+
+  return [];
 }
 
 function resolveLocalActorName() {
