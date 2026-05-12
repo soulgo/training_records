@@ -13,6 +13,7 @@ const chartWindowDays = 30;
 const dailyCardLimit = 4;
 const chartStartDate = latestDashboardDate ? addDays(latestDashboardDate, -(chartWindowDays - 1)) : null;
 const recentDays = [...(dashboard.daily || [])].reverse().slice(0, dailyCardLimit);
+const trainedDays = (dashboard.daily || []).filter((entry) => (entry.workoutSummary?.trainingCalories || 0) > 0).length;
 const chartPayload = {
   charts: filterChartsByDate(dashboard.charts || {}, chartStartDate),
 };
@@ -127,11 +128,6 @@ function getComparison(current, previous) {
 %>
 
 <section class="dashboard-page">
-  <div class="dashboard-intro">
-    <span class="dashboard-kicker">Markdown · Hexo · GitHub Pages</span>
-    <h1>训练记录可视化看板</h1>
-  </div>
-
   <% if (!latestMeasurement) { %>
     <div class="dashboard-empty">
       <p>还没有可展示的数据。先在仓库里补充 `训练记录.md`，然后重新构建站点。</p>
@@ -197,6 +193,12 @@ function getComparison(current, previous) {
         <p><%= latestDay?.workoutSummary?.activeHours !== null && latestDay?.workoutSummary?.activeHours !== undefined ? `活动小时数 ${formatNumber(latestDay.workoutSummary.activeHours, 0)} 小时` : `身体类型 ${latestMeasurement.bodyType || '—'}` %></p>
         <% const durationComparison = getComparison(getWorkoutDurationValue(latestDay), getWorkoutDurationValue(previousDay)); %>
         <p class="metric-card__comparison comparison-pill comparison-pill--<%= durationComparison.direction %>"><span class="comparison-pill__arrow"><%= durationComparison.arrow %></span><span><%= durationComparison.text %></span></p>
+      </article>
+      <article class="metric-card metric-card--accent">
+        <span class="metric-title">已训练天数</span>
+        <strong><%= formatNumber(trainedDays, 0) %> 天</strong>
+        <p>按当前训练记录中有训练消耗的日期统计</p>
+        <p class="metric-card__comparison">累计完成训练归档 <%= formatNumber(dashboard.daily?.length || 0, 0) %> 天</p>
       </article>
     </section>
 

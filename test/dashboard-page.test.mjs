@@ -88,6 +88,24 @@ test('homepage keeps the introduction at the bottom and uses a smaller header na
   assert.match(homepage, /<div id="nav">[\s\S]*<a href="\/training_records\/">训练记录<\/a>/);
 });
 
+test('homepage removes the dashboard hero intro and shows trained day count card', () => {
+  execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+    cwd: rootDir,
+    stdio: 'pipe',
+  });
+  execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+    cwd: rootDir,
+    stdio: 'pipe',
+  });
+
+  const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+
+  assert.doesNotMatch(homepage, /Markdown · Hexo · GitHub Pages/);
+  assert.doesNotMatch(homepage, /<h1>训练记录可视化看板<\/h1>/);
+  assert.match(homepage, /<span class="metric-title">已训练天数<\/span>/);
+  assert.match(homepage, /<strong>\d+ 天<\/strong>/);
+});
+
 function buildSyntheticDashboard({ startDate, days }) {
   const daily = [];
   const charts = {
