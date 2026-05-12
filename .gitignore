@@ -1,6 +1,8 @@
 .alma-snapshots
+.playwright-mcp/
 node_modules/
 public/
 db.json
 .deploy_git/
 source/_data/training.json
+训练数据解析.md
