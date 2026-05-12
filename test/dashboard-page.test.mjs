@@ -129,8 +129,32 @@ test('homepage removes the dashboard hero intro and shows trained day count card
 
   assert.doesNotMatch(homepage, /Markdown · Hexo · GitHub Pages/);
   assert.doesNotMatch(homepage, /<h1>训练记录可视化看板<\/h1>/);
-  assert.match(homepage, /<span class="metric-title">已训练天数<\/span>/);
+  assert.match(homepage, /已训练天数/);
   assert.match(homepage, /<strong>\d+ 天<\/strong>/);
+});
+
+test('homepage places workout duration and trained days directly after training calories in the top metrics area', () => {
+  execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+    cwd: rootDir,
+    stdio: 'pipe',
+  });
+  execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+    cwd: rootDir,
+    stdio: 'pipe',
+  });
+
+  const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+  const heroSectionMatch = homepage.match(/<section class="hero-metrics">([\s\S]*?)<\/section>/);
+  const metricGridMatch = homepage.match(/<section class="metric-grid">([\s\S]*?)<\/section>/);
+
+  assert.ok(heroSectionMatch, 'expected hero metrics section');
+  assert.ok(metricGridMatch, 'expected metric grid section');
+  assert.match(
+    heroSectionMatch[1],
+    /训练消耗[\s\S]*锻炼时长[\s\S]*已训练天数/,
+  );
+  assert.doesNotMatch(metricGridMatch[1], /锻炼时长/);
+  assert.doesNotMatch(metricGridMatch[1], /已训练天数/);
 });
 
 function buildSyntheticDashboard({ startDate, days }) {
