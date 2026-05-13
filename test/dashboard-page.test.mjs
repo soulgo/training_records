@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,10 +23,11 @@ test('dashboard renders comparison pills for the latest metrics without relying 
 });
 
 test('dashboard defaults charts to the latest 30 days and daily cards to the latest 4 days', () => {
-  const originalTrainingData = readFileSync(trainingDataPath, 'utf8');
+  const originalTrainingData = readOptionalFile(trainingDataPath);
   const syntheticDashboard = buildSyntheticDashboard({ startDate: '2026-03-01', days: 45 });
 
   try {
+    ensureDataDir();
     writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
     execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
       cwd: rootDir,
@@ -58,15 +59,16 @@ test('dashboard defaults charts to the latest 30 days and daily cards to the lat
     assert.match(homepage, /<h3>2026-04-11<\/h3>/);
     assert.doesNotMatch(homepage, /<h3>2026-04-10<\/h3>/);
   } finally {
-    writeFileSync(trainingDataPath, originalTrainingData);
+    restoreOptionalFile(trainingDataPath, originalTrainingData);
   }
 });
 
 test('dashboard embeds daily overview pagination controls without changing the default latest 4-day view', () => {
-  const originalTrainingData = readFileSync(trainingDataPath, 'utf8');
+  const originalTrainingData = readOptionalFile(trainingDataPath);
   const syntheticDashboard = buildSyntheticDashboard({ startDate: '2026-03-01', days: 9 });
 
   try {
+    ensureDataDir();
     writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
     execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
       cwd: rootDir,
@@ -82,7 +84,7 @@ test('dashboard embeds daily overview pagination controls without changing the d
     assert.match(homepage, /<div class="daily-grid" data-daily-grid><article class="day-card">/);
     assert.match(homepage, /<script id="daily-overview-data" type="application\/json"[^>]*>/);
   } finally {
-    writeFileSync(trainingDataPath, originalTrainingData);
+    restoreOptionalFile(trainingDataPath, originalTrainingData);
   }
 });
 
@@ -288,10 +290,11 @@ function buildHomepageDashboard() {
 }
 
 function renderHomepageWithDashboard(snapshot) {
-  const originalTrainingData = readFileSync(trainingDataPath, 'utf8');
-  const originalDashboardView = readFileSync(dashboardViewPath, 'utf8');
+  const originalTrainingData = readOptionalFile(trainingDataPath);
+  const originalDashboardView = readOptionalFile(dashboardViewPath);
 
   try {
+    ensureDataDir();
     writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
     writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
     execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
@@ -300,7 +303,25 @@ function renderHomepageWithDashboard(snapshot) {
     });
     return readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
   } finally {
-    writeFileSync(trainingDataPath, originalTrainingData);
-    writeFileSync(dashboardViewPath, originalDashboardView);
+    restoreOptionalFile(trainingDataPath, originalTrainingData);
+    restoreOptionalFile(dashboardViewPath, originalDashboardView);
   }
+}
+
+function ensureDataDir() {
+  mkdirSync(path.dirname(trainingDataPath), { recursive: true });
+}
+
+function readOptionalFile(filePath) {
+  return existsSync(filePath) ? readFileSync(filePath, 'utf8') : null;
+}
+
+function restoreOptionalFile(filePath, originalContent) {
+  if (originalContent === null) {
+    if (existsSync(filePath)) {
+      rmSync(filePath, { force: true });
+    }
+    return;
+  }
+  writeFileSync(filePath, originalContent);
 }
