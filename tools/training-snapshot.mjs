@@ -19,7 +19,7 @@ export async function buildTrainingSnapshot(options = {}) {
         createClient: options.createClient,
         now: options.now,
       });
-      if ((snapshot.daily?.length ?? 0) > 0) {
+      if (isRenderableSnapshot(snapshot)) {
         return snapshot;
       }
     } catch {}
@@ -43,4 +43,8 @@ async function readTrainingSnapshotFromMarkdown(rootDir, now) {
     ...snapshot,
     generatedAt: now.toISOString(),
   };
+}
+
+function isRenderableSnapshot(snapshot) {
+  return (snapshot?.daily?.length ?? 0) > 0 && snapshot?.latest?.measurement;
 }
