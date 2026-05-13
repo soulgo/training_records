@@ -306,8 +306,7 @@ export function exportTrainingMarkdown(snapshot) {
 }
 
 async function readTrainingSnapshotFromDatabaseClient(client, now) {
-  const [dayResult, measurementResult, activityResult, mealResult] = await Promise.all([
-    client.query(`
+  const dayResult = await client.query(`
       select
         archived_date,
         total_activities,
@@ -320,8 +319,8 @@ async function readTrainingSnapshotFromDatabaseClient(client, now) {
         nutrition_details_json
       from core.training_day
       order by archived_date asc
-    `),
-    client.query(`
+    `);
+  const measurementResult = await client.query(`
       select
         archived_date,
         measured_at,
@@ -340,8 +339,8 @@ async function readTrainingSnapshotFromDatabaseClient(client, now) {
         body_type
       from core.measurement
       order by archived_date asc, measured_at asc nulls last
-    `),
-    client.query(`
+    `);
+  const activityResult = await client.query(`
       select
         archived_date,
         activity_time,
@@ -356,8 +355,8 @@ async function readTrainingSnapshotFromDatabaseClient(client, now) {
         duration_seconds
       from core.activity
       order by archived_date asc, activity_time asc nulls last
-    `),
-    client.query(`
+    `);
+  const mealResult = await client.query(`
       select
         archived_date,
         meal_name,
@@ -366,8 +365,7 @@ async function readTrainingSnapshotFromDatabaseClient(client, now) {
         recommended_max
       from core.meal
       order by archived_date asc, meal_name asc
-    `),
-  ]);
+    `);
 
   const measurementsByDate = groupBy(measurementResult.rows, 'archived_date');
   const activitiesByDate = groupBy(activityResult.rows, 'archived_date');
