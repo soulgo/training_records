@@ -4,7 +4,11 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { runTelegramSync, shouldPersistTelegramArtifacts } from '../tools/telegram-sync.mjs';
+import {
+  buildTelegramSyncReport,
+  runTelegramSync,
+  shouldPersistTelegramArtifacts,
+} from '../tools/telegram-sync.mjs';
 
 test('does not persist telegram artifacts when no updates were fetched and nothing changed', () => {
   assert.equal(
@@ -194,11 +198,54 @@ test('runTelegramSync falls back to markdown when database persistence fails', a
   assert.equal(result.changed, true);
   assert.equal(result.fallbackUsed, true);
   assert.equal(fallbackMarkdown.length, 1);
+  assert.equal(result.batchResults[0].persistenceStatus, 'fallback_markdown');
+  assert.equal(result.batchResults[0].persistenceError, 'database unavailable');
   assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /晚餐：1065千卡/);
   assert.match(
     await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
     /album-1/,
   );
+});
+
+test('buildTelegramSyncReport exposes fallback and archived date details for logs', () => {
+  const report = buildTelegramSyncReport({
+    changed: true,
+    fallbackUsed: true,
+    updatesFetched: 1,
+    lastProcessedUpdateId: 520905402,
+    readyBatches: 1,
+    batchResults: [
+      {
+        batchId: 'album-1',
+        status: 'ready',
+        archivedDate: '2026-04-06',
+        persistenceStatus: 'fallback_markdown',
+        persistenceError: 'database unavailable',
+        warnings: [],
+        issues: [],
+      },
+    ],
+  });
+
+  assert.deepEqual(report, {
+    changed: true,
+    fallbackUsed: true,
+    updatesFetched: 1,
+    lastProcessedUpdateId: 520905402,
+    readyBatches: 1,
+    batches: [
+      {
+        batchId: 'album-1',
+        status: 'ready',
+        archivedDate: '2026-04-06',
+        persistenceStatus: 'fallback_markdown',
+        persistenceError: 'database unavailable',
+        warnings: [],
+        issues: [],
+        reason: null,
+      },
+    ],
+  });
 });
 
 test('runTelegramSync replays pending fallback batches into the database before new updates', async () => {

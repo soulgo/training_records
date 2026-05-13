@@ -20,18 +20,7 @@ const rootDir = path.resolve(__dirname, '..');
 
 export async function main() {
   const result = await runTelegramSync();
-  process.stdout.write(
-    JSON.stringify(
-      {
-        changed: result.changed,
-        updatesFetched: result.updatesFetched,
-        lastProcessedUpdateId: result.lastProcessedUpdateId,
-        readyBatches: result.readyBatches,
-      },
-      null,
-      2,
-    ),
-  );
+  process.stdout.write(JSON.stringify(buildTelegramSyncReport(result), null, 2));
   process.stdout.write('\n');
 }
 
@@ -150,20 +139,25 @@ export async function runTelegramSync(options = {}) {
         ...persistedBatch,
         persistenceStatus: persistResult.status,
       });
-    } catch (error) {
+      } catch (error) {
       if (analyzed.status === 'ready') {
         const applied = applyTelegramSyncToMarkdown(fallbackMarkdown, persistedBatch);
         fallbackMarkdown = applied.markdown;
         changed ||= applied.changed;
         fallbackUsed = true;
+        const errorMessage = error instanceof Error ? error.message : String(error);
         await appendPendingFallbackBatch(pendingQueuePath, {
           batch: persistedBatch,
           failedAt: now.toISOString(),
-          error: error instanceof Error ? error.message : String(error),
+          error: errorMessage,
         });
+        process.stderr.write(
+          `[telegram-sync] fallback to markdown for ${persistedBatch.batchId} (${persistedBatch.archivedDate ?? 'unknown date'}): ${errorMessage}\n`,
+        );
         batchResults.push({
           ...persistedBatch,
           persistenceStatus: 'fallback_markdown',
+          persistenceError: errorMessage,
         });
         continue;
       }
@@ -211,6 +205,26 @@ export function shouldPersistTelegramArtifacts({
     updatesFetched > 0 ||
     nextLastProcessedUpdateId > previousLastProcessedUpdateId
   );
+}
+
+export function buildTelegramSyncReport(result) {
+  return {
+    changed: result.changed,
+    fallbackUsed: result.fallbackUsed,
+    updatesFetched: result.updatesFetched,
+    lastProcessedUpdateId: result.lastProcessedUpdateId,
+    readyBatches: result.readyBatches,
+    batches: (result.batchResults ?? []).map((batch) => ({
+      batchId: batch.batchId,
+      status: batch.status,
+      archivedDate: batch.archivedDate ?? null,
+      persistenceStatus: batch.persistenceStatus ?? null,
+      persistenceError: batch.persistenceError ?? null,
+      warnings: batch.warnings ?? [],
+      issues: batch.issues ?? [],
+      reason: batch.reason ?? null,
+    })),
+  };
 }
 
 if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {

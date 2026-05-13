@@ -9,6 +9,7 @@
     "backfill:core": "node tools/backfill-training-core-from-archive.mjs",
     "export:markdown": "node tools/export-training-markdown.mjs",
     "import:markdown": "node tools/import-training-markdown.mjs",
+    "reconcile:markdown": "node tools/reconcile-training-markdown-to-core.mjs",
     "build:site": "node tools/run-hexo-command.mjs generate",
     "build": "npm run build:data && npm run build:site",
     "clean": "node tools/run-hexo-command.mjs clean",
