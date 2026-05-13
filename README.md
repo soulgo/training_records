@@ -259,7 +259,7 @@ npm run build
   测试、构建并发布 Pages
 
 - `.github/workflows/telegram-sync.yml`
-  定时轮询 Telegram，同步数据并提交派生 Markdown
+  手动触发 Telegram 同步，并提交派生 Markdown
 
 页面展示数据来源取决于 `TRAINING_SNAPSHOT_SOURCE`：
 
