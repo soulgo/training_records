@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  backfillCoreFromLatestArchiveSnapshot,
   exportTrainingMarkdown,
   getLastProcessedTelegramUpdateId,
   persistNormalizedBatch,
@@ -138,6 +139,109 @@ test('getLastProcessedTelegramUpdateId reads the max update id from ingest recor
   });
 
   assert.equal(updateId, 903);
+});
+
+test('backfillCoreFromLatestArchiveSnapshot writes only archive dates missing from core', async () => {
+  const calls = [];
+  const archiveSnapshot = {
+    generatedAt: '2026-05-13T00:00:00.000Z',
+    latest: {
+      measurement: null,
+      daily: { date: '2026-04-13' },
+    },
+    daily: [
+      {
+        date: '2026-04-03',
+        measurement: null,
+        measurements: [],
+        activities: [],
+        workoutSummary: {
+          totalActivities: 0,
+          totalDurationSeconds: 0,
+          trainingCalories: 459,
+          workoutDurationMinutes: 32,
+          activeHours: 13,
+          cyclingDistanceKm: 0,
+          countsByType: {},
+        },
+        nutrition: {
+          meals: [],
+          totalCalories: null,
+          details: [],
+        },
+      },
+      {
+        date: '2026-04-13',
+        measurement: null,
+        measurements: [],
+        activities: [],
+        workoutSummary: {
+          totalActivities: 0,
+          totalDurationSeconds: 0,
+          trainingCalories: 779,
+          workoutDurationMinutes: 55,
+          activeHours: 14,
+          cyclingDistanceKm: 0,
+          countsByType: {},
+        },
+        nutrition: {
+          meals: [],
+          totalCalories: null,
+          details: [],
+        },
+      },
+    ],
+    charts: {
+      weightKg: [],
+      bodyFatPct: [],
+      skeletalMuscleKg: [],
+      basalMetabolism: [],
+      visceralFatLevel: [],
+      intakeCalories: [],
+      trainingCalories: [],
+      cyclingDistanceKm: [],
+    },
+  };
+
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from archive\.training_parse_snapshot/i.test(sql)) {
+        return { rows: [{ payload_json: archiveSnapshot }] };
+      }
+      if (/select\s+archived_date\s+from core\.training_day/i.test(sql)) {
+        return { rows: [{ archived_date: '2026-04-13' }] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await backfillCoreFromLatestArchiveSnapshot({
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.equal(result.daysBackfilled, 1);
+
+  const dayInserts = calls.filter(
+    ([sql]) => typeof sql === 'string' && /insert into core\.training_day/i.test(sql),
+  );
+  assert.equal(dayInserts.length, 1);
+  assert.equal(dayInserts[0][1][0], '2026-04-03');
+  assert.equal(dayInserts[0][1][1], 'archive_backfill');
 });
 
 test('exportTrainingMarkdown renders a readable markdown view from the canonical snapshot', async () => {

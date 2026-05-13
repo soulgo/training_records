@@ -6,6 +6,7 @@
   "scripts": {
     "test": "node --test",
     "build:data": "node tools/generate-training-data.mjs",
+    "backfill:core": "node tools/backfill-training-core-from-archive.mjs",
     "export:markdown": "node tools/export-training-markdown.mjs",
     "import:markdown": "node tools/import-training-markdown.mjs",
     "build:site": "node tools/run-hexo-command.mjs generate",

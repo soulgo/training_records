@@ -210,6 +210,93 @@ export async function persistTrainingSnapshotToCore(options) {
   }
 }
 
+export async function backfillCoreFromLatestArchiveSnapshot(options = {}) {
+  const config = resolveTrainingCoreConfig(options.env);
+  if (!config.enabled || !config.url) {
+    return {
+      status: 'skipped',
+      reason: !config.enabled ? 'disabled' : 'missing_url',
+      daysBackfilled: 0,
+    };
+  }
+
+  const createClient =
+    options.createClient ??
+    ((dbConfig) =>
+      new Client({
+        connectionString: dbConfig.url,
+        connectionTimeoutMillis: dbConfig.timeoutMs,
+        application_name: dbConfig.appName,
+      }));
+  const client = createClient(config);
+  const processedAt = options.processedAt ?? new Date();
+
+  try {
+    await client.connect();
+
+    const archiveSnapshotResult = await client.query(`
+      select payload_json
+      from archive.training_parse_snapshot
+      order by last_seen_at desc
+      limit 1
+    `);
+    const snapshot = normalizeArchiveSnapshotPayload(archiveSnapshotResult.rows[0]?.payload_json);
+    if (!snapshot) {
+      return {
+        status: 'skipped',
+        reason: 'missing_archive_snapshot',
+        daysBackfilled: 0,
+      };
+    }
+
+    const coreDayResult = await client.query(`
+      select archived_date
+      from core.training_day
+    `);
+    const existingDates = new Set(
+      coreDayResult.rows.map((row) => String(row.archived_date)).filter(Boolean),
+    );
+    const missingDays = (snapshot.daily ?? []).filter((day) => day?.date && !existingDates.has(day.date));
+
+    if (missingDays.length === 0) {
+      return {
+        status: 'unchanged',
+        reason: 'no_missing_days',
+        daysBackfilled: 0,
+      };
+    }
+
+    await client.query('BEGIN');
+
+    for (const day of missingDays) {
+      await replaceCoreDay(
+        client,
+        {
+          ...day,
+          date: day.date,
+        },
+        options.batchId ?? `archive-backfill-${day.date}`,
+        processedAt,
+        options.sourceChannel ?? 'archive_backfill',
+      );
+    }
+
+    await client.query('COMMIT');
+
+    return {
+      status: 'stored',
+      daysBackfilled: missingDays.length,
+    };
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {}
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
 export async function importTrainingMarkdownToDatabase(options) {
   const snapshot = parseTrainingRecord(options.markdown);
   return persistTrainingSnapshotToCore({
@@ -952,6 +1039,16 @@ function groupBy(rows, key) {
     map.set(value, items);
   }
   return map;
+}
+
+function normalizeArchiveSnapshotPayload(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+  if (!Array.isArray(payload.daily)) {
+    return null;
+  }
+  return payload;
 }
 
 function appendMetric(lines, label, value, suffix = '') {

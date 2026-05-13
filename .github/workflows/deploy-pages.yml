@@ -34,6 +34,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Backfill core from archive snapshot
+        env:
+          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
+          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
+          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
+          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
+        run: npm run backfill:core
+
       - name: Run tests
         run: npm test
 
