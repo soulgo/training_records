@@ -143,74 +143,75 @@ test('getLastProcessedTelegramUpdateId reads the max update id from ingest recor
 
 test('backfillCoreFromLatestArchiveSnapshot writes only archive dates missing from core', async () => {
   const calls = [];
-  const archiveSnapshot = {
-    generatedAt: '2026-05-13T00:00:00.000Z',
-    latest: {
-      measurement: null,
-      daily: { date: '2026-04-13' },
-    },
-    daily: [
-      {
-        date: '2026-04-03',
-        measurement: null,
-        measurements: [],
-        activities: [],
-        workoutSummary: {
-          totalActivities: 0,
-          totalDurationSeconds: 0,
-          trainingCalories: 459,
-          workoutDurationMinutes: 32,
-          activeHours: 13,
-          cyclingDistanceKm: 0,
-          countsByType: {},
-        },
-        nutrition: {
-          meals: [],
-          totalCalories: null,
-          details: [],
-        },
-      },
-      {
-        date: '2026-04-13',
-        measurement: null,
-        measurements: [],
-        activities: [],
-        workoutSummary: {
-          totalActivities: 0,
-          totalDurationSeconds: 0,
-          trainingCalories: 779,
-          workoutDurationMinutes: 55,
-          activeHours: 14,
-          cyclingDistanceKm: 0,
-          countsByType: {},
-        },
-        nutrition: {
-          meals: [],
-          totalCalories: null,
-          details: [],
-        },
-      },
-    ],
-    charts: {
-      weightKg: [],
-      bodyFatPct: [],
-      skeletalMuscleKg: [],
-      basalMetabolism: [],
-      visceralFatLevel: [],
-      intakeCalories: [],
-      trainingCalories: [],
-      cyclingDistanceKm: [],
-    },
-  };
-
   const fakeClient = {
     async connect() {
       calls.push(['connect']);
     },
     async query(sql, params) {
       calls.push([sql, params]);
-      if (/from archive\.training_parse_snapshot/i.test(sql)) {
-        return { rows: [{ payload_json: archiveSnapshot }] };
+      if (/from archive\.training_day/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-04-03',
+              total_activities: 1,
+              total_duration_seconds: 1920,
+              training_calories: 459,
+              workout_duration_minutes: 32,
+              active_hours: 13,
+              cycling_distance_km: 0,
+              intake_calories: null,
+            },
+            {
+              archived_date: '2026-04-13',
+              total_activities: 1,
+              total_duration_seconds: 3300,
+              training_calories: 779,
+              workout_duration_minutes: 55,
+              active_hours: 14,
+              cycling_distance_km: 0,
+              intake_calories: null,
+            },
+          ],
+        };
+      }
+      if (/from archive\.training_measurement/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from archive\.training_activity/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-04-03',
+              activity_time: '20:18',
+              activity_type: 'traditional_strength_training',
+              raw_type: 'traditional_strength_training',
+              detail: '总消耗459千卡，时长00:32:00',
+              calories: 459,
+              heart_rate: null,
+              distance_km: null,
+              avg_speed_kmh: null,
+              duration_text: '00:32:00',
+              duration_seconds: 1920,
+            },
+            {
+              archived_date: '2026-04-13',
+              activity_time: '20:12',
+              activity_type: 'mixed_cardio',
+              raw_type: 'mixed_cardio',
+              detail: '总消耗779千卡，时长00:55:00',
+              calories: 779,
+              heart_rate: null,
+              distance_km: null,
+              avg_speed_kmh: null,
+              duration_text: '00:55:00',
+              duration_seconds: 3300,
+            },
+          ],
+        };
+      }
+      if (/from archive\.training_meal/i.test(sql)) {
+        return { rows: [] };
       }
       if (/select\s+archived_date\s+from core\.training_day/i.test(sql)) {
         return { rows: [{ archived_date: '2026-04-13' }] };

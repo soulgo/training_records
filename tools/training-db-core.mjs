@@ -233,18 +233,11 @@ export async function backfillCoreFromLatestArchiveSnapshot(options = {}) {
 
   try {
     await client.connect();
-
-    const archiveSnapshotResult = await client.query(`
-      select payload_json
-      from archive.training_parse_snapshot
-      order by last_seen_at desc
-      limit 1
-    `);
-    const snapshot = normalizeArchiveSnapshotPayload(archiveSnapshotResult.rows[0]?.payload_json);
-    if (!snapshot) {
+    const snapshot = await readArchiveTrainingSnapshotFromDatabaseClient(client, processedAt);
+    if ((snapshot.daily?.length ?? 0) === 0) {
       return {
         status: 'skipped',
-        reason: 'missing_archive_snapshot',
+        reason: 'missing_archive_days',
         daysBackfilled: 0,
       };
     }
@@ -393,7 +386,8 @@ export function exportTrainingMarkdown(snapshot) {
 }
 
 async function readTrainingSnapshotFromDatabaseClient(client, now) {
-  const dayResult = await client.query(`
+  const [dayResult, measurementResult, activityResult, mealResult] = await Promise.all([
+    client.query(`
       select
         archived_date,
         total_activities,
@@ -406,8 +400,8 @@ async function readTrainingSnapshotFromDatabaseClient(client, now) {
         nutrition_details_json
       from core.training_day
       order by archived_date asc
-    `);
-  const measurementResult = await client.query(`
+    `),
+    client.query(`
       select
         archived_date,
         measured_at,
@@ -426,8 +420,8 @@ async function readTrainingSnapshotFromDatabaseClient(client, now) {
         body_type
       from core.measurement
       order by archived_date asc, measured_at asc nulls last
-    `);
-  const activityResult = await client.query(`
+    `),
+    client.query(`
       select
         archived_date,
         activity_time,
@@ -442,8 +436,8 @@ async function readTrainingSnapshotFromDatabaseClient(client, now) {
         duration_seconds
       from core.activity
       order by archived_date asc, activity_time asc nulls last
-    `);
-  const mealResult = await client.query(`
+    `),
+    client.query(`
       select
         archived_date,
         meal_name,
@@ -452,13 +446,102 @@ async function readTrainingSnapshotFromDatabaseClient(client, now) {
         recommended_max
       from core.meal
       order by archived_date asc, meal_name asc
-    `);
+    `),
+  ]);
 
-  const measurementsByDate = groupBy(measurementResult.rows, 'archived_date');
-  const activitiesByDate = groupBy(activityResult.rows, 'archived_date');
-  const mealsByDate = groupBy(mealResult.rows, 'archived_date');
+  return buildTrainingSnapshotFromRows({
+    dayRows: dayResult.rows,
+    measurementRows: measurementResult.rows,
+    activityRows: activityResult.rows,
+    mealRows: mealResult.rows,
+    now,
+  });
+}
 
-  const daily = dayResult.rows.map((row) => {
+async function readArchiveTrainingSnapshotFromDatabaseClient(client, now) {
+  const [dayResult, measurementResult, activityResult, mealResult] = await Promise.all([
+    client.query(`
+      select
+        archived_date,
+        total_activities,
+        total_duration_seconds,
+        training_calories,
+        workout_duration_minutes,
+        active_hours,
+        cycling_distance_km,
+        intake_calories
+      from archive.training_day
+      order by archived_date asc
+    `),
+    client.query(`
+      select
+        archived_date,
+        measured_at,
+        body_score,
+        weight_kg,
+        bmi,
+        body_fat_pct,
+        skeletal_muscle_kg,
+        visceral_fat_level,
+        basal_metabolism_kcal,
+        body_water_pct,
+        protein_pct,
+        bone_mass_kg,
+        fat_free_mass_kg,
+        body_age,
+        body_type
+      from archive.training_measurement
+      order by archived_date asc, measured_at asc nulls last
+    `),
+    client.query(`
+      select
+        archived_date,
+        activity_time,
+        activity_type,
+        raw_type,
+        detail,
+        calories,
+        heart_rate,
+        distance_km,
+        avg_speed_kmh,
+        duration_text,
+        duration_seconds
+      from archive.training_activity
+      order by archived_date asc, activity_time asc nulls last
+    `),
+    client.query(`
+      select
+        archived_date,
+        meal_name,
+        calories,
+        recommended_min,
+        recommended_max
+      from archive.training_meal
+      order by archived_date asc, meal_name asc
+    `),
+  ]);
+
+  return buildTrainingSnapshotFromRows({
+    dayRows: dayResult.rows,
+    measurementRows: measurementResult.rows,
+    activityRows: activityResult.rows,
+    mealRows: mealResult.rows,
+    now,
+  });
+}
+
+function buildTrainingSnapshotFromRows({
+  dayRows,
+  measurementRows,
+  activityRows,
+  mealRows,
+  now,
+}) {
+  const measurementsByDate = groupBy(measurementRows, 'archived_date');
+  const activitiesByDate = groupBy(activityRows, 'archived_date');
+  const mealsByDate = groupBy(mealRows, 'archived_date');
+
+  const daily = dayRows.map((row) => {
     const archivedDate = row.archived_date;
     const measurements = (measurementsByDate.get(archivedDate) ?? []).map((measurement) => ({
       archivedDate,
@@ -1039,16 +1122,6 @@ function groupBy(rows, key) {
     map.set(value, items);
   }
   return map;
-}
-
-function normalizeArchiveSnapshotPayload(payload) {
-  if (!payload || typeof payload !== 'object') {
-    return null;
-  }
-  if (!Array.isArray(payload.daily)) {
-    return null;
-  }
-  return payload;
 }
 
 function appendMetric(lines, label, value, suffix = '') {
