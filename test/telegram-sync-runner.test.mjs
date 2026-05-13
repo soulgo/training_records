@@ -137,6 +137,125 @@ test('runTelegramSync persists ready batches to the database and exports derived
   assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /2026-05-09/);
 });
 
+test('runTelegramSync writes the ready batch back into markdown when the rebuilt database snapshot misses the new archived date', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-stale-db-snapshot-'));
+
+  await import('node:fs/promises').then(({ writeFile }) =>
+    writeFile(
+      path.join(tempRoot, '训练记录.md'),
+      '# 训练记录\n\n### 2026-05-09\n\n#### 当日运动截图记录\n\n##### 当日活动总览\n\n- 活动热量：643千卡\n',
+      'utf8',
+    ),
+  );
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 76,
+          date: 1775433600,
+          chat: { id: 42 },
+          caption: '归档到 2026-04-06',
+          photo: [{ file_id: 'file-a', file_unique_id: 'uniq-a' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 76,
+        imageType: 'workout',
+        detectedDate: '2026-04-06',
+        dateEvidence: 'caption',
+        confidence: 0.97,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [],
+          totalCalories: null,
+          details: [],
+          dailyWorkoutSummary: {
+            activityCaloriesKcal: 402,
+            workoutDurationMinutes: 30,
+            activeHours: 16,
+          },
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    buildTrainingSnapshot: async () => ({
+      generatedAt: '2026-05-13T00:00:00.000Z',
+      latest: {
+        measurement: {
+          archivedDate: '2026-05-09',
+          measuredAt: '2026-05-09 06:42',
+          weightKg: 72.85,
+        },
+        daily: { date: '2026-05-09' },
+      },
+      daily: [
+        {
+          date: '2026-05-09',
+          measurement: {
+            archivedDate: '2026-05-09',
+            measuredAt: '2026-05-09 06:42',
+            weightKg: 72.85,
+          },
+          measurements: [
+            {
+              archivedDate: '2026-05-09',
+              measuredAt: '2026-05-09 06:42',
+              weightKg: 72.85,
+            },
+          ],
+          activities: [],
+          workoutSummary: {
+            totalActivities: 0,
+            totalDurationSeconds: 0,
+            trainingCalories: 643,
+            workoutDurationMinutes: 78,
+            activeHours: 12,
+            cyclingDistanceKm: 0,
+            countsByType: {},
+          },
+          nutrition: {
+            meals: [],
+            totalCalories: null,
+            details: [],
+          },
+        },
+      ],
+      charts: {
+        weightKg: [],
+        bodyFatPct: [],
+        skeletalMuscleKg: [],
+        basalMetabolism: [],
+        visceralFatLevel: [],
+        intakeCalories: [],
+        trainingCalories: [],
+        cyclingDistanceKm: [],
+      },
+    }),
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.fallbackUsed, false);
+  assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /### 2026-04-06/);
+  assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /活动热量：402千卡/);
+});
+
 test('runTelegramSync falls back to markdown when database persistence fails', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-fallback-'));
   const fallbackMarkdown = [];

@@ -180,7 +180,12 @@ export async function runTelegramSync(options = {}) {
       env: options.env ?? process.env,
       now,
     });
-    const markdown = exportMarkdown(snapshot);
+    const readyPersistedBatches = batchResults.filter(
+      (batch) => batch.status === 'ready' && batch.persistenceStatus === 'stored',
+    );
+    const markdown = snapshotCoversPersistedBatches(snapshot, readyPersistedBatches)
+      ? exportMarkdown(snapshot)
+      : rebuildMarkdownFromPersistedBatches(fallbackMarkdown, readyPersistedBatches);
     await writeFile(recordPath, markdown, 'utf8');
   }
 
@@ -225,6 +230,18 @@ export function buildTelegramSyncReport(result) {
       reason: batch.reason ?? null,
     })),
   };
+}
+
+function snapshotCoversPersistedBatches(snapshot, batches) {
+  const snapshotDates = new Set((snapshot?.daily ?? []).map((day) => String(day?.date ?? '')));
+  return batches.every((batch) => !batch.archivedDate || snapshotDates.has(batch.archivedDate));
+}
+
+function rebuildMarkdownFromPersistedBatches(markdown, batches) {
+  return batches.reduce((currentMarkdown, batch) => {
+    const applied = applyTelegramSyncToMarkdown(currentMarkdown, batch);
+    return applied.markdown;
+  }, markdown);
 }
 
 if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {
