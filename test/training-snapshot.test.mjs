@@ -181,6 +181,104 @@ test('buildTrainingSnapshot can hydrate the canonical snapshot from core tables'
   assert.ok(queryLog.some((sql) => /from core\.training_day/i.test(sql)));
 });
 
+test('buildTrainingSnapshot can read database rows when the client rejects concurrent queries', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'training-snapshot-serial-db-'));
+  await mkdir(path.join(rootDir, 'source', '_data'), { recursive: true });
+  await writeFile(path.join(rootDir, '训练记录.md'), sampleMarkdown, 'utf8');
+
+  let busy = false;
+  const fakeClient = {
+    async connect() {},
+    async end() {},
+    async query(sql) {
+      if (busy) {
+        throw new Error('concurrent query not allowed');
+      }
+      busy = true;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      try {
+        if (/from core\.training_day/i.test(sql)) {
+          return {
+            rows: [
+              {
+                archived_date: '2026-04-06',
+                total_activities: 0,
+                total_duration_seconds: 0,
+                training_calories: 402,
+                workout_duration_minutes: 30,
+                active_hours: 16,
+                cycling_distance_km: '0',
+                intake_calories: null,
+              },
+              {
+                archived_date: '2026-05-09',
+                total_activities: 2,
+                total_duration_seconds: 3112,
+                training_calories: 643,
+                workout_duration_minutes: 78,
+                active_hours: 12,
+                cycling_distance_km: '1.65',
+                intake_calories: 1593,
+              },
+            ],
+          };
+        }
+        if (/from core\.measurement/i.test(sql)) {
+          return {
+            rows: [
+              {
+                archived_date: '2026-05-09',
+                measured_at: '2026-05-09 06:42',
+                body_score: 74,
+                weight_kg: '72.85',
+                bmi: '23.5',
+                body_fat_pct: '22.8',
+                skeletal_muscle_kg: '30.45',
+                visceral_fat_level: '8',
+                basal_metabolism_kcal: 1587,
+                body_water_pct: null,
+                protein_pct: null,
+                bone_mass_kg: null,
+                fat_free_mass_kg: null,
+                body_age: null,
+                body_type: null,
+              },
+            ],
+          };
+        }
+        if (/from core\.activity/i.test(sql)) {
+          return { rows: [] };
+        }
+        if (/from core\.meal/i.test(sql)) {
+          return { rows: [] };
+        }
+        throw new Error(`Unexpected SQL: ${sql}`);
+      } finally {
+        busy = false;
+      }
+    },
+  };
+
+  const snapshot = await buildTrainingSnapshot({
+    source: 'database',
+    rootDir,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    now: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  assert.deepEqual(
+    snapshot.daily.map((day) => day.date),
+    ['2026-04-06', '2026-05-09'],
+  );
+  assert.equal(snapshot.daily[0].workoutSummary.trainingCalories, 402);
+});
+
 test('buildTrainingSnapshot falls back to markdown when database snapshot is empty', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'training-snapshot-empty-db-'));
   await mkdir(path.join(rootDir, 'source', '_data'), { recursive: true });
