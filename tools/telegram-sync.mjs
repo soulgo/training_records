@@ -106,10 +106,12 @@ export async function runTelegramSync(options = {}) {
   });
   const updates =
     dispatchUpdates ??
-    (await fetchUpdates({
-      offset: previousLastProcessedUpdateId + 1,
-      limit: env.pollLimit,
-    }));
+    (env.syncTransport === 'webhook'
+      ? []
+      : await fetchUpdates({
+          offset: previousLastProcessedUpdateId + 1,
+          limit: env.pollLimit,
+        }));
   const grouped = groupTelegramUpdates(updates);
   const batchResults = [];
   let changed = replayStoredAny;
