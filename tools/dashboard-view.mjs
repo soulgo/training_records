@@ -1,20 +1,26 @@
 export function buildDashboardViewModel(snapshot) {
   const dashboard = snapshot || { daily: [], charts: {}, latest: {} };
+  const dailyEntries = Array.isArray(dashboard.daily) ? dashboard.daily : [];
   const latestMeasurement = dashboard.latest?.measurement || null;
+  const latestMeasurementDate = normalizeDateValue(latestMeasurement?.archivedDate);
   const latestDay = latestMeasurement
-    ? dashboard.daily.find((entry) => entry.date === latestMeasurement.archivedDate) || dashboard.latest?.daily || null
+    ? dailyEntries.find((entry) => normalizeDateValue(entry.date) === latestMeasurementDate) || dashboard.latest?.daily || null
     : dashboard.latest?.daily || null;
+  const latestDayDate = normalizeDateValue(latestDay?.date);
   const latestDayIndex = latestDay
-    ? dashboard.daily.findIndex((entry) => entry.date === latestDay.date)
+    ? dailyEntries.findIndex((entry) => normalizeDateValue(entry.date) === latestDayDate)
     : -1;
-  const previousDay = latestDayIndex > 0 ? dashboard.daily[latestDayIndex - 1] : null;
-  const latestDashboardDate =
-    latestMeasurement?.archivedDate || latestDay?.date || dashboard.daily.at(-1)?.date || null;
+  const previousDay = latestDayIndex > 0 ? dailyEntries[latestDayIndex - 1] : null;
+  const latestDashboardDate = findLatestDashboardDate({
+    latestMeasurement,
+    latestDay,
+    daily: dailyEntries,
+  });
   const chartWindowDays = 30;
   const dailyCardLimit = 4;
   const chartStartDate = latestDashboardDate ? addDays(latestDashboardDate, -(chartWindowDays - 1)) : null;
-  const dailyOverviewEntries = [...(dashboard.daily || [])].reverse().map((day) => ({
-    date: day.date,
+  const dailyOverviewEntries = [...dailyEntries].reverse().map((day) => ({
+    date: normalizeDateValue(day.date) || String(day.date ?? '—'),
     weightLabel: day.measurement ? `${formatNumber(day.measurement.weightKg)} kg` : '无体脂数据',
     activityCount: formatNumber(day.workoutSummary.totalActivities, 0),
     trainingCaloriesLabel: `${formatNumber(day.workoutSummary.trainingCalories, 0)} kcal`,
@@ -28,13 +34,13 @@ export function buildDashboardViewModel(snapshot) {
   }));
   const recentDays = dailyOverviewEntries.slice(0, dailyCardLimit);
   const dailyOverviewTotal = dailyOverviewEntries.length;
-  const trainedDays = (dashboard.daily || []).filter((entry) => (entry.workoutSummary?.trainingCalories || 0) > 0).length;
+  const trainedDays = dailyEntries.filter((entry) => (entry.workoutSummary?.trainingCalories || 0) > 0).length;
 
   return {
     generatedAt: dashboard.generatedAt ?? null,
-    latestMeasurement,
-    latestDay,
-    previousDay,
+    latestMeasurement: normalizeMeasurementDate(latestMeasurement),
+    latestDay: normalizeDayDate(latestDay),
+    previousDay: normalizeDayDate(previousDay),
     latestDashboardDate,
     chartWindowDays,
     dailyCardLimit,
@@ -76,20 +82,78 @@ function formatWorkoutDuration(day) {
 }
 
 function addDays(dateString, offset) {
-  const date = new Date(`${dateString}T00:00:00Z`);
+  const normalizedDate = normalizeDateValue(dateString);
+  if (!normalizedDate) {
+    return null;
+  }
+  const date = new Date(`${normalizedDate}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + offset);
   return date.toISOString().slice(0, 10);
 }
 
 function filterChartsByDate(charts, startDate) {
-  if (!startDate) {
-    return charts;
-  }
-
   return Object.fromEntries(
     Object.entries(charts).map(([key, points]) => [
       key,
-      (points || []).filter((point) => point.date >= startDate),
+      (points || [])
+        .map((point) => {
+          const normalizedDate = normalizeDateValue(point?.date);
+          return normalizedDate ? { ...point, date: normalizedDate } : point;
+        })
+        .filter((point) => {
+          const normalizedDate = normalizeDateValue(point?.date);
+          return !startDate || (normalizedDate && normalizedDate >= startDate);
+        }),
     ]),
   );
+}
+
+function findLatestDashboardDate({ latestMeasurement, latestDay, daily }) {
+  return (
+    normalizeDateValue(latestMeasurement?.archivedDate) ||
+    normalizeDateValue(latestDay?.date) ||
+    [...(daily || [])].reverse().map((entry) => normalizeDateValue(entry?.date)).find(Boolean) ||
+    null
+  );
+}
+
+function normalizeDateValue(value) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10);
+  }
+
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const match = value.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+  if (!match) {
+    return null;
+  }
+
+  const date = new Date(`${match[1]}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== match[1] ? null : match[1];
+}
+
+function normalizeMeasurementDate(measurement) {
+  if (!measurement) {
+    return measurement;
+  }
+
+  const archivedDate = normalizeDateValue(measurement.archivedDate);
+  return archivedDate ? { ...measurement, archivedDate } : measurement;
+}
+
+function normalizeDayDate(day) {
+  if (!day) {
+    return day;
+  }
+
+  const date = normalizeDateValue(day.date);
+  return {
+    ...day,
+    date: date || day.date,
+    measurement: normalizeMeasurementDate(day.measurement),
+    measurements: (day.measurements || []).map(normalizeMeasurementDate),
+  };
 }

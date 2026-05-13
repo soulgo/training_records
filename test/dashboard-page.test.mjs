@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildDashboardViewModel } from '../tools/dashboard-view.mjs';
+import { withSharedSiteFixture } from './shared-site-fixture.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -23,69 +24,107 @@ test('dashboard renders comparison pills for the latest metrics without relying 
 });
 
 test('dashboard defaults charts to the latest 30 days and daily cards to the latest 4 days', () => {
-  const originalTrainingData = readOptionalFile(trainingDataPath);
-  const syntheticDashboard = buildSyntheticDashboard({ startDate: '2026-03-01', days: 45 });
+  withSharedSiteFixture(() => {
+    const originalTrainingData = readOptionalFile(trainingDataPath);
+    const syntheticDashboard = buildSyntheticDashboard({ startDate: '2026-03-01', days: 45 });
 
-  try {
-    ensureDataDir();
-    writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
-    execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
-      cwd: rootDir,
-      stdio: 'pipe',
-    });
+    try {
+      ensureDataDir();
+      writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
 
-    const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
-    const payloadMatch = homepage.match(
-      /<script id="training-dashboard-data" type="application\/json">([\s\S]*?)<\/script>/,
-    );
+      const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+      const payloadMatch = homepage.match(
+        /<script id="training-dashboard-data" type="application\/json">([\s\S]*?)<\/script>/,
+      );
 
-    assert.ok(payloadMatch, 'expected embedded dashboard payload');
+      assert.ok(payloadMatch, 'expected embedded dashboard payload');
 
-    const payload = JSON.parse(payloadMatch[1]);
+      const payload = JSON.parse(payloadMatch[1]);
 
-    assert.equal(payload.charts.weightKg.length, 30);
-    assert.equal(payload.charts.weightKg[0].date, '2026-03-16');
-    assert.equal(payload.charts.weightKg.at(-1).date, '2026-04-14');
-    assert.equal(payload.charts.bodyFatPct.length, 30);
-    assert.ok(payload.charts.trainingCalories.every((point) => point.date >= '2026-03-16'));
-    assert.ok(payload.charts.cyclingDistanceKm.every((point) => point.date >= '2026-03-16'));
+      assert.equal(payload.charts.weightKg.length, 30);
+      assert.equal(payload.charts.weightKg[0].date, '2026-03-16');
+      assert.equal(payload.charts.weightKg.at(-1).date, '2026-04-14');
+      assert.equal(payload.charts.bodyFatPct.length, 30);
+      assert.ok(payload.charts.trainingCalories.every((point) => point.date >= '2026-03-16'));
+      assert.ok(payload.charts.cyclingDistanceKm.every((point) => point.date >= '2026-03-16'));
 
-    const firstDailyGridMatch = homepage.match(/<div class="daily-grid"[^>]*>([\s\S]*?)<\/div>\s*<\/section>/);
-    assert.ok(firstDailyGridMatch, 'expected rendered daily grid');
+      const firstDailyGridMatch = homepage.match(/<div class="daily-grid"[^>]*>([\s\S]*?)<\/div>\s*<\/section>/);
+      assert.ok(firstDailyGridMatch, 'expected rendered daily grid');
 
-    const renderedDayCards = firstDailyGridMatch[1].match(/<article class="day-card">/g) ?? [];
-    assert.equal(renderedDayCards.length, 4);
-    assert.match(homepage, /<h3>2026-04-14<\/h3>/);
-    assert.match(homepage, /<h3>2026-04-11<\/h3>/);
-    assert.doesNotMatch(homepage, /<h3>2026-04-10<\/h3>/);
-  } finally {
-    restoreOptionalFile(trainingDataPath, originalTrainingData);
-  }
+      const renderedDayCards = firstDailyGridMatch[1].match(/<article class="day-card">/g) ?? [];
+      assert.equal(renderedDayCards.length, 4);
+      assert.match(homepage, /<h3>2026-04-14<\/h3>/);
+      assert.match(homepage, /<h3>2026-04-11<\/h3>/);
+      assert.doesNotMatch(homepage, /<h3>2026-04-10<\/h3>/);
+    } finally {
+      restoreOptionalFile(trainingDataPath, originalTrainingData);
+    }
+  });
 });
 
 test('dashboard embeds daily overview pagination controls without changing the default latest 4-day view', () => {
-  const originalTrainingData = readOptionalFile(trainingDataPath);
-  const syntheticDashboard = buildSyntheticDashboard({ startDate: '2026-03-01', days: 9 });
+  withSharedSiteFixture(() => {
+    const originalTrainingData = readOptionalFile(trainingDataPath);
+    const syntheticDashboard = buildSyntheticDashboard({ startDate: '2026-03-01', days: 9 });
 
-  try {
-    ensureDataDir();
-    writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
-    execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
-      cwd: rootDir,
-      stdio: 'pipe',
-    });
+    try {
+      ensureDataDir();
+      writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
 
-    const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+      const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
 
-    assert.match(homepage, /class="daily-section__status"[^>]*>1-4 \/ 共 9 天<\/span>/);
-    assert.match(homepage, /class="daily-section__pager"[^>]*>/);
-    assert.match(homepage, /<button[^>]*data-daily-nav="prev"[^>]*disabled[^>]*>较新<\/button>/);
-    assert.match(homepage, /<button[^>]*data-daily-nav="next"[^>]*>较早<\/button>/);
-    assert.match(homepage, /<div class="daily-grid" data-daily-grid><article class="day-card">/);
-    assert.match(homepage, /<script id="daily-overview-data" type="application\/json"[^>]*>/);
-  } finally {
-    restoreOptionalFile(trainingDataPath, originalTrainingData);
-  }
+      assert.match(homepage, /class="daily-section__status"[^>]*>1-4 \/ 共 9 天<\/span>/);
+      assert.match(homepage, /class="daily-section__pager"[^>]*>/);
+      assert.match(homepage, /<button[^>]*data-daily-nav="prev"[^>]*disabled[^>]*>较新<\/button>/);
+      assert.match(homepage, /<button[^>]*data-daily-nav="next"[^>]*>较早<\/button>/);
+      assert.match(homepage, /<div class="daily-grid" data-daily-grid><article class="day-card">/);
+      assert.match(homepage, /<script id="daily-overview-data" type="application\/json"[^>]*>/);
+    } finally {
+      restoreOptionalFile(trainingDataPath, originalTrainingData);
+    }
+  });
+});
+
+test('dashboard fallback view handles ISO datetime dates from generated data', () => {
+  withSharedSiteFixture(() => {
+    const originalTrainingData = readOptionalFile(trainingDataPath);
+    const originalDashboardView = readOptionalFile(dashboardViewPath);
+    const syntheticDashboard = buildSyntheticDashboard({ startDate: '2026-03-01', days: 3 });
+    const latestDay = syntheticDashboard.daily.at(-1);
+
+    latestDay.date = `${latestDay.date}T00:00:00.000Z`;
+    latestDay.measurement.archivedDate = latestDay.date;
+    syntheticDashboard.latest = {
+      measurement: latestDay.measurement,
+      daily: latestDay,
+    };
+
+    try {
+      ensureDataDir();
+      writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
+      writeFileSync(dashboardViewPath, JSON.stringify({ generatedAt: 'stale' }, null, 2));
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+
+      const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+
+      assert.match(homepage, /最新归档日期/);
+      assert.match(homepage, /2026-03-03/);
+    } finally {
+      restoreOptionalFile(trainingDataPath, originalTrainingData);
+      restoreOptionalFile(dashboardViewPath, originalDashboardView);
+    }
+  });
 });
 
 test('homepage keeps the introduction at the bottom and uses a smaller header nav', () => {
@@ -290,22 +329,24 @@ function buildHomepageDashboard() {
 }
 
 function renderHomepageWithDashboard(snapshot) {
-  const originalTrainingData = readOptionalFile(trainingDataPath);
-  const originalDashboardView = readOptionalFile(dashboardViewPath);
+  return withSharedSiteFixture(() => {
+    const originalTrainingData = readOptionalFile(trainingDataPath);
+    const originalDashboardView = readOptionalFile(dashboardViewPath);
 
-  try {
-    ensureDataDir();
-    writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
-    writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
-    execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
-      cwd: rootDir,
-      stdio: 'pipe',
-    });
-    return readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
-  } finally {
-    restoreOptionalFile(trainingDataPath, originalTrainingData);
-    restoreOptionalFile(dashboardViewPath, originalDashboardView);
-  }
+    try {
+      ensureDataDir();
+      writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
+      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      return readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+    } finally {
+      restoreOptionalFile(trainingDataPath, originalTrainingData);
+      restoreOptionalFile(dashboardViewPath, originalDashboardView);
+    }
+  });
 }
 
 function ensureDataDir() {
