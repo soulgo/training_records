@@ -4,13 +4,26 @@ import { fileURLToPath } from 'node:url';
 import { backfillCoreFromLatestArchiveSnapshot } from './training-db-core.mjs';
 
 export async function backfillTrainingCoreFromArchive(options = {}) {
-  return backfillCoreFromLatestArchiveSnapshot({
-    env: options.env ?? process.env,
-    createClient: options.createClient,
-    processedAt: options.processedAt,
-    sourceChannel: options.sourceChannel,
-    batchId: options.batchId,
-  });
+  const stderr = options.stderr ?? process.stderr;
+  const backfill =
+    options.backfillCoreFromLatestArchiveSnapshot ?? backfillCoreFromLatestArchiveSnapshot;
+
+  try {
+    return await backfill({
+      env: options.env ?? process.env,
+      createClient: options.createClient,
+      processedAt: options.processedAt,
+      sourceChannel: options.sourceChannel,
+      batchId: options.batchId,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    stderr.write(`[backfill-training-core-from-archive] ${message}\n`);
+    return {
+      status: 'deferred',
+      error: message,
+    };
+  }
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
