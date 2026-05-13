@@ -5,21 +5,15 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { buildDashboardViewModel } from '../tools/dashboard-view.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const trainingDataPath = path.join(rootDir, 'source', '_data', 'training.json');
+const dashboardViewPath = path.join(rootDir, 'source', '_data', 'dashboardView.json');
 
 test('dashboard renders comparison pills for the latest metrics without relying on fixed values', () => {
-  execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
-    cwd: rootDir,
-    stdio: 'pipe',
-  });
-  execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
-    cwd: rootDir,
-    stdio: 'pipe',
-  });
-
-  const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+  const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
 
   assert.match(homepage, /较前一日(?:下降|新增) [\d.]+%/);
   assert.match(homepage, /comparison-pill comparison-pill--down/);
@@ -93,16 +87,7 @@ test('dashboard embeds daily overview pagination controls without changing the d
 });
 
 test('homepage keeps the introduction at the bottom and uses a smaller header nav', () => {
-  execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
-    cwd: rootDir,
-    stdio: 'pipe',
-  });
-  execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
-    cwd: rootDir,
-    stdio: 'pipe',
-  });
-
-  const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+  const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
   const noteIndex = homepage.indexOf('<div class="dashboard-note">');
   const dailyIndex = homepage.indexOf('<section class="daily-section">');
   const heroIndex = homepage.indexOf('<section class="hero-metrics">');
@@ -116,16 +101,7 @@ test('homepage keeps the introduction at the bottom and uses a smaller header na
 });
 
 test('homepage removes the dashboard hero intro and shows trained day count card', () => {
-  execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
-    cwd: rootDir,
-    stdio: 'pipe',
-  });
-  execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
-    cwd: rootDir,
-    stdio: 'pipe',
-  });
-
-  const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+  const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
 
   assert.doesNotMatch(homepage, /Markdown · Hexo · GitHub Pages/);
   assert.doesNotMatch(homepage, /<h1>训练记录可视化看板<\/h1>/);
@@ -134,16 +110,7 @@ test('homepage removes the dashboard hero intro and shows trained day count card
 });
 
 test('homepage places workout duration and trained days directly after training calories in the top metrics area', () => {
-  execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
-    cwd: rootDir,
-    stdio: 'pipe',
-  });
-  execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
-    cwd: rootDir,
-    stdio: 'pipe',
-  });
-
-  const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+  const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
   const heroSectionMatch = homepage.match(/<section class="hero-metrics">([\s\S]*?)<\/section>/);
   const metricGridMatch = homepage.match(/<section class="metric-grid">([\s\S]*?)<\/section>/);
 
@@ -244,4 +211,96 @@ function addDays(startDate, offset) {
   const date = new Date(`${startDate}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + offset);
   return date.toISOString().slice(0, 10);
+}
+
+function buildHomepageDashboard() {
+  const snapshot = buildSyntheticDashboard({ startDate: '2026-04-01', days: 6 });
+  const previousDay = snapshot.daily.at(-2);
+  const latestDay = snapshot.daily.at(-1);
+
+  previousDay.measurement.weightKg = 72.6;
+  previousDay.measurement.bodyFatPct = 22.1;
+  previousDay.measurement.bodyWaterPct = 50.2;
+  previousDay.measurement.proteinPct = 23.2;
+  previousDay.measurement.basalMetabolismKcal = 1586;
+  previousDay.measurement.visceralFatLevel = 8;
+  previousDay.measurement.skeletalMuscleKg = 30.4;
+  previousDay.measurement.bodyAge = 31;
+  previousDay.nutrition.totalCalories = 1604;
+  previousDay.workoutSummary.trainingCalories = 640;
+  previousDay.workoutSummary.workoutDurationMinutes = 58;
+  previousDay.workoutSummary.totalDurationSeconds = 3480;
+  previousDay.workoutSummary.activeHours = 11;
+  previousDay.workoutSummary.cyclingDistanceKm = 6.2;
+  previousDay.workoutSummary.totalActivities = 3;
+  previousDay.workoutSummary.countsByType = {
+    户外骑行: 1,
+    力量训练: 1,
+    燃脂训练: 1,
+  };
+
+  latestDay.measurement.weightKg = 72.2;
+  latestDay.measurement.bodyFatPct = 22.6;
+  latestDay.measurement.bodyWaterPct = 49.8;
+  latestDay.measurement.proteinPct = 23.5;
+  latestDay.measurement.basalMetabolismKcal = 1581;
+  latestDay.measurement.visceralFatLevel = 8;
+  latestDay.measurement.skeletalMuscleKg = 30.35;
+  latestDay.measurement.bodyAge = 32;
+  latestDay.nutrition.totalCalories = 1588;
+  latestDay.workoutSummary.trainingCalories = 780;
+  latestDay.workoutSummary.workoutDurationMinutes = 72;
+  latestDay.workoutSummary.totalDurationSeconds = 4320;
+  latestDay.workoutSummary.activeHours = 13;
+  latestDay.workoutSummary.cyclingDistanceKm = 4.8;
+  latestDay.workoutSummary.totalActivities = 4;
+  latestDay.workoutSummary.countsByType = {
+    户外骑行: 2,
+    力量训练: 1,
+    爬楼: 1,
+  };
+
+  snapshot.latest = {
+    measurement: latestDay.measurement,
+    daily: latestDay,
+  };
+
+  const lastIndex = snapshot.charts.weightKg.length - 1;
+  const previousIndex = lastIndex - 1;
+  snapshot.charts.weightKg[previousIndex].value = previousDay.measurement.weightKg;
+  snapshot.charts.weightKg[lastIndex].value = latestDay.measurement.weightKg;
+  snapshot.charts.bodyFatPct[previousIndex].value = previousDay.measurement.bodyFatPct;
+  snapshot.charts.bodyFatPct[lastIndex].value = latestDay.measurement.bodyFatPct;
+  snapshot.charts.skeletalMuscleKg[previousIndex].value = previousDay.measurement.skeletalMuscleKg;
+  snapshot.charts.skeletalMuscleKg[lastIndex].value = latestDay.measurement.skeletalMuscleKg;
+  snapshot.charts.basalMetabolism[previousIndex].value = previousDay.measurement.basalMetabolismKcal;
+  snapshot.charts.basalMetabolism[lastIndex].value = latestDay.measurement.basalMetabolismKcal;
+  snapshot.charts.visceralFatLevel[previousIndex].value = previousDay.measurement.visceralFatLevel;
+  snapshot.charts.visceralFatLevel[lastIndex].value = latestDay.measurement.visceralFatLevel;
+  snapshot.charts.intakeCalories[previousIndex].value = previousDay.nutrition.totalCalories;
+  snapshot.charts.intakeCalories[lastIndex].value = latestDay.nutrition.totalCalories;
+  snapshot.charts.trainingCalories[snapshot.charts.trainingCalories.length - 2].value = previousDay.workoutSummary.trainingCalories;
+  snapshot.charts.trainingCalories[snapshot.charts.trainingCalories.length - 1].value = latestDay.workoutSummary.trainingCalories;
+  snapshot.charts.cyclingDistanceKm[snapshot.charts.cyclingDistanceKm.length - 2].value = previousDay.workoutSummary.cyclingDistanceKm;
+  snapshot.charts.cyclingDistanceKm[snapshot.charts.cyclingDistanceKm.length - 1].value = latestDay.workoutSummary.cyclingDistanceKm;
+
+  return snapshot;
+}
+
+function renderHomepageWithDashboard(snapshot) {
+  const originalTrainingData = readFileSync(trainingDataPath, 'utf8');
+  const originalDashboardView = readFileSync(dashboardViewPath, 'utf8');
+
+  try {
+    writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
+    writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
+    execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+      cwd: rootDir,
+      stdio: 'pipe',
+    });
+    return readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+  } finally {
+    writeFileSync(trainingDataPath, originalTrainingData);
+    writeFileSync(dashboardViewPath, originalDashboardView);
+  }
 }
