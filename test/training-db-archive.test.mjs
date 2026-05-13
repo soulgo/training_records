@@ -252,6 +252,51 @@ test('generateTrainingData keeps main outputs when archive sync fails', async ()
   assert.match(stderrChunks.join(''), /database unavailable/);
 });
 
+test('generateTrainingData can write outputs from the shared snapshot builder', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-build-snapshot-'));
+  const recordPath = path.join(tempRoot, '训练记录.md');
+  const syntheticSnapshot = {
+    generatedAt: '2026-05-13T00:00:00.000Z',
+    latest: {
+      measurement: {
+        archivedDate: '2026-05-12',
+        measuredAt: '2026-05-12 07:00',
+        weightKg: 71.8,
+        bodyFatPct: 21.1,
+      },
+      daily: {
+        date: '2026-05-12',
+      },
+    },
+    daily: [],
+    charts: {
+      weightKg: [],
+      bodyFatPct: [],
+      skeletalMuscleKg: [],
+      basalMetabolism: [],
+      visceralFatLevel: [],
+      intakeCalories: [],
+      trainingCalories: [],
+      cyclingDistanceKm: [],
+    },
+  };
+
+  await writeFile(recordPath, sampleMarkdown, 'utf8');
+
+  await generateTrainingData({
+    rootDir: tempRoot,
+    stdout: { write() {} },
+    stderr: { write() {} },
+    buildSnapshot: async () => syntheticSnapshot,
+    persistArchive: async () => ({ status: 'skipped', reason: 'disabled' }),
+  });
+
+  const outputPath = path.join(tempRoot, 'source', '_data', 'training.json');
+  const output = JSON.parse(await readFile(outputPath, 'utf8'));
+  assert.equal(output.generatedAt, syntheticSnapshot.generatedAt);
+  assert.equal(output.latest.measurement.weightKg, 71.8);
+});
+
 test('appendTrainingArchiveFailureLog writes ndjson entries to the configured runtime path', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-db-log-'));
 

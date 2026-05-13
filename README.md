@@ -1,58 +1,56 @@
 # training_records
 
-这是一个围绕 `训练记录.md` 运转的静态记录系统，用来持续维护训练、饮食、体脂、恢复状态与主观反馈，并自动同步到 GitHub Pages 站点。
+这是一个围绕 `训练记录.md`、PostgreSQL 和 GitHub Pages 运转的训练记录系统。
 
-这份文档的目标不是记录某一次改了什么，而是说明整个系统现在如何工作、维护者平时该怎么操作，以及后续架构师可以从哪些位置继续迭代。
+当前系统的核心思路是：
+
+- `TrainingSnapshot` 作为统一中间层
+- `markdown` 与 `database` 两种数据来源并存
+- Telegram 自动同步优先写 PostgreSQL，失败时回退写 Markdown，恢复后自动补偿入库
 
 ## 1. 系统目标
 
-- 用 `训练记录.md` 作为唯一主数据源，集中保存每日训练与身体状态。
-- 接收体脂秤截图、训练截图、饮食截图和文字反馈，并将其整理成结构化 Markdown。
-- 通过脚本把 Markdown 解析成站点数据，再由 Hexo 生成 GitHub Pages 页面。
-- 让维护者只需要维护内容，不需要手动改前端页面里的数值。
+- 用截图、文字反馈和手工补充持续维护训练、饮食、体脂与恢复记录
+- 用 PostgreSQL `core.*` 作为自动同步后的主结构化数据层
+- 用 `训练记录.md` 作为人工可读、人工修订和故障回退层
+- 用 Hexo + GitHub Pages 持续生成可浏览的静态站点
 
-## 2. 当前系统边界
+## 2. 当前能力边界
 
-当前仓库里已经实现的是：
+当前仓库已经实现：
 
-- `训练记录.md` 到结构化 JSON 的解析。
-- JSON 到 Hexo 页面展示的转换。
-- GitHub Actions 自动测试、构建和发布 GitHub Pages。
+- `训练记录.md` 到 canonical snapshot 的解析
+- PostgreSQL `core.*` 到 canonical snapshot 的读取
+- Telegram 图片识别结果优先写 PostgreSQL，失败时回退写 Markdown
+- PostgreSQL 恢复后自动重放待补偿批次
+- snapshot 到 Hexo 页面展示的转换
+- GitHub Actions 自动测试、构建和发布 GitHub Pages
 
-当前仓库里还没有实现的是：
+当前仓库仍然没有实现：
 
-- 截图上传接口。
-- OCR 服务或图片自动识别后端。
-- 管理后台。
-
-因此，“上传训练截图、饮食截图、体脂秤截图进行识别”在当前阶段的真实含义是：
-
-- 由维护者提供截图。
-- 由人工或 AI 辅助识别截图内容。
-- 按既定口径把识别结果更新到 `训练记录.md`。
-- 提交到 GitHub 后，由现有构建链路自动刷新站点。
-
-这点很重要，后续迭代时不要把“截图识别规则”误认为“仓库里已经内建 OCR 自动化能力”。
+- 独立截图上传后台
+- 专门的 OCR 服务后端
+- 管理后台
 
 ## 3. 整体流程
 
 ```mermaid
 flowchart TD
-    A["训练截图 / 饮食截图 / 体脂秤截图 / 文字反馈"] --> B["人工或 AI 辅助识别"]
-    B --> C["按归档规则更新 训练记录.md"]
-    C --> D["tools/training-parser.mjs 解析 Markdown"]
-    D --> E["source/_data/training.json"]
-    E --> F["Hexo + Cactus 模板生成 public/"]
-    F --> G["推送到 GitHub main"]
-    G --> H["GitHub Actions: 测试 + 构建 + 发布"]
-    H --> I["GitHub Pages 站点更新"]
+    A["训练截图 / 饮食截图 / 体脂秤截图 / 文字反馈"] --> B["Telegram Bot / 人工录入 / AI 识别"]
+    B --> C["写入 PostgreSQL core.*"]
+    C --> D["tools/training-snapshot.mjs 构建 TrainingSnapshot"]
+    D --> E["source/_data/training.json + dashboardView.json"]
+    E --> F["Hexo 生成 public/"]
+    F --> G["GitHub Pages"]
+    C -. PG 临时失败 .-> H["回退写 训练记录.md"]
+    H -. PG 恢复后自动补偿 .-> C
 ```
 
 ## 4. 输入类型与归档口径
 
 ### 4.1 体脂秤截图
 
-维护者需要从截图中优先提取：
+优先提取：
 
 - 测量时间
 - 身体得分
@@ -67,17 +65,17 @@ flowchart TD
 - 骨盐量
 - 去脂体重
 - 身体年龄
-- 身体类型（如果截图中有）
+- 身体类型
 
 归档规则：
 
-- 默认归入截图对应日期。
-- 如果用户明确说明“次日清晨称重用于记录前一日状态收尾”，则归档到前一日。
-- 即使归档到前一日，也必须保留真实测量时间。
+- 默认归入截图对应日期
+- 如果明确说明“次日清晨称重用于前一日状态收尾”，则归档到前一日
+- 即使归档到前一日，也必须保留真实测量时间
 
 ### 4.2 运动截图
 
-维护者需要从截图中优先提取：
+优先提取：
 
 - 训练日期与时间
 - 训练类型
@@ -87,7 +85,7 @@ flowchart TD
 - 均速
 - 心率等关键指标
 
-当前已知常见类型：
+当前常见类型：
 
 - 燃脂训练
 - 力量训练
@@ -96,13 +94,13 @@ flowchart TD
 
 归档规则：
 
-- 按当天时间顺序写入。
-- 同一天多次训练要全部保留。
-- 华为运动健康中的“自由训练”当前统一归为“燃脂训练”，必要时保留原始名称备注。
+- 按当天时间顺序写入
+- 同一天多次训练全部保留
+- 华为运动健康中的“自由训练”统一归为“燃脂训练”，必要时保留原始类型
 
 ### 4.3 饮食截图
 
-维护者需要从截图中优先提取：
+优先提取：
 
 - 记录日期
 - 餐次
@@ -115,12 +113,12 @@ flowchart TD
 
 归档规则：
 
-- 先写餐次汇总，再写明细。
-- 若某餐明显超出建议范围，可单独标记，便于后续分析体脂和恢复变化。
+- 先写餐次汇总，再写明细
+- 超出建议范围的餐次可以额外标记
 
 ### 4.4 文字反馈
 
-文字反馈通常来自用户对当天状态的补充，例如：
+常见内容：
 
 - 疼痛、酸胀、疲劳
 - 恢复情况
@@ -128,277 +126,198 @@ flowchart TD
 - 补剂使用
 - 对训练强度的主观感受
 
-这部分应一并归入对应日期，不要散落在站点文案里。
+这部分应归到对应日期，不要散落在页面文案里。
 
-## 5. 主数据源设计
+## 5. 数据源设计
 
-当前系统使用 `训练记录.md` 作为唯一主数据源。
+当前系统分为两层事实源：
 
-推荐维护思路：
+- `core.*`
+  Telegram 自动同步后的主结构化数据层
+- `训练记录.md`
+  人工可读、人工修订、以及 PostgreSQL 失败时的回退落地点
 
-- 每天一个 `### YYYY-MM-DD` 顶级日期块。
-- 同一天内部按主题拆成 `####` 子块。
-- 结构优先稳定，便于脚本解析。
+Markdown 推荐结构：
 
-当前解析器会重点识别：
+- 每天一个 `### YYYY-MM-DD`
+- 同一天内部按主题拆成 `####`
+- 标题和字段口径尽量保持稳定，便于解析
+
+当前 Markdown 解析重点识别：
 
 - 包含“体脂秤”的 `####` 区块
 - 包含“运动截图记录”的 `####` 区块
 - 包含“饮食截图记录”的 `####` 区块
 
-这意味着：
-
-- `训练记录.md` 既是“内容文档”，也是“半结构化数据源”。
-- 改标题层级、字段名称、行格式时，需要考虑是否会影响解析器。
-
 ## 6. 核心文件职责
 
 - `训练记录.md`
-  训练主记录文档，也是系统唯一主数据源。
+  人工主文档，也是 PostgreSQL 失败时的回退落地点
 
 - `source/_data/training.json`
-  由脚本生成的结构化数据，供 Hexo 模板直接读取。
+  统一 snapshot 数据
+
+- `source/_data/dashboardView.json`
+  仪表盘视图模型
+
+- `tools/training-domain.mjs`
+  共享领域工具，供解析器、Telegram 同步和快照构建复用
 
 - `tools/training-parser.mjs`
-  负责把 `训练记录.md` 解析为每日记录、最新记录和图表数据。
+  把 Markdown 解析为 canonical snapshot
+
+- `tools/training-snapshot.mjs`
+  从 `markdown` 或 `database` source 构建统一 `TrainingSnapshot`
+
+- `tools/training-db-core.mjs`
+  负责 `ingest.* / core.*` 的持久化、读取和 Markdown 导出
 
 - `tools/generate-training-data.mjs`
-  调用解析器并生成 `source/_data/training.json`。
+  生成 `training.json` 与 `dashboardView.json`
 
-- `tools/run-hexo-command.mjs`
-  用 Node 程序化调用 Hexo，执行 `generate`、`server`、`clean` 等命令。
+- `tools/import-training-markdown.mjs`
+  把 Markdown 回填到 PostgreSQL `core.*`
 
-- `source/index.md`
-  首页内容入口，使用 `dashboard` 布局。
+- `tools/export-training-markdown.mjs`
+  从 PostgreSQL 导出派生 `训练记录.md`
 
-- `source/_posts/`
-  存放“锻炼随想”文章，按时间倒序展示。
-
-- `source/about/index.md`
-  About 页面内容，说明作者背景、记录目的和站点定位。
+- `tools/telegram-sync.mjs`
+  处理 Telegram 同步、DB 优先写入、Markdown 回退和待补偿重放
 
 - `themes/cactus/layout/dashboard.ejs`
-  首页数据看板模板。
+  首页模板
 
-- `.github/workflows/deploy-pages.yml`
-  GitHub Pages 自动部署工作流。
+- `themes/cactus/source/js/training-dashboard.js`
+  首页图表和分页脚本
 
-## 7. 维护者日常操作流程
+## 7. 日常维护流程
 
-### 7.1 收集输入
+### 7.1 本地手工维护
 
-维护者收到以下任意输入后开始更新：
+如果你是直接编辑内容：
 
-- 体脂秤截图
-- 训练截图
-- 饮食截图
-- 口述或文字反馈
-
-### 7.2 识别并标准化
-
-先把截图内容转成结构化文本，再写入 `训练记录.md`。
-
-当前建议原则：
-
-- 不直接把图片信息散写到多个页面。
-- 所有结构化数据最终都回收进 `训练记录.md`。
-- 页面层只负责展示，不直接承担数据录入。
-
-### 7.3 更新主记录
-
-维护者更新 `训练记录.md` 时需要注意：
-
-- 日期归档要一致。
-- 测量时间和归档日期要区分清楚。
-- 同一天多条活动要按时间顺序写。
-- 饮食先汇总后明细。
-- 异常情况单独说明。
-
-### 7.4 如有主观感受，补充锻炼随想
-
-如果有更偏感受型、判断型、反思型的内容，可以单独新增到：
-
-- `source/_posts/*.md`
-
-例如：
-
-- 训练后哪里酸痛
-- 当前阶段判断
-- 某个动作的体会
-- 恢复是否正常
-
-### 7.5 本地验证
-
-提交前建议至少执行：
+1. 更新 [训练记录.md](/C:/Users/ljq90/Desktop/project_test/健身锻炼/训练记录.md)
+2. 如需同步到数据库，执行 `npm run import:markdown`
+3. 本地检查：
 
 ```bash
 npm test
 npm run build
 ```
 
-如需本地预览：
+### 7.2 Telegram 自动同步
 
-```bash
-npm run server
-```
+`npm run sync:telegram` 的行为是：
 
-### 7.6 提交与发布
+1. 拉 Telegram 消息
+2. 调用 AI 识别截图
+3. 优先写 PostgreSQL
+4. 如果 PostgreSQL 失败，则先回退写 Markdown
+5. 把失败批次写入 `runtime/telegram-sync-pending.ndjson`
+6. PostgreSQL 恢复后，下次同步会先重放待补偿批次
 
-当内容确认无误后：
+### 7.3 页面构建
 
-1. 提交到 Git。
-2. 推送到 `main`。
-3. GitHub Actions 自动执行测试、构建与发布。
-4. GitHub Pages 页面刷新。
+`TRAINING_SNAPSHOT_SOURCE` 决定页面构建数据来源：
 
-## 8. 构建与发布流程
+- `markdown`
+  站点从 `训练记录.md` 构建
+- `database`
+  站点从 PostgreSQL `core.*` 构建
 
-当前 `package.json` 中的关键命令：
+## 8. 关键命令
 
 - `npm test`
-  运行 Node 原生测试，覆盖解析器和页面构建关键行为。
+  运行全部测试
 
 - `npm run build:data`
-  从 `训练记录.md` 生成 `source/_data/training.json`。
+  生成 `training.json` 和 `dashboardView.json`
 
 - `npm run build:site`
-  调用 Hexo 生成静态站点。
+  调用 Hexo 生成静态站点
 
 - `npm run build`
-  先生成数据，再生成站点。
+  先构建数据，再构建站点
 
 - `npm run server`
-  本地启动 Hexo 预览。
+  本地启动预览
 
-- `npm run telegram:sync`
-  轮询 Telegram Bot 消息、调用 AI 识别截图、回写 `训练记录.md`、并更新 `telegram/` 下的状态与日志。
+- `npm run import:markdown`
+  把当前 Markdown 回填到 PostgreSQL
 
-GitHub Actions 发布流程如下：
+- `npm run export:markdown`
+  从 PostgreSQL 导出 Markdown
 
-1. checkout 仓库
-2. 安装 Node.js 与依赖
-3. 执行 `npm test`
-4. 执行 `npm run build`
-5. 上传 `public/` 产物
-6. 发布到 GitHub Pages
+- `npm run sync:telegram`
+  轮询 Telegram、识别截图、同步到 PostgreSQL，必要时回退写 Markdown
 
-因此，线上页面展示的数据始终来自：
+## 9. GitHub Actions
 
-`训练记录.md -> training.json -> Hexo 模板 -> public/ -> GitHub Pages`
+当前工作流：
 
-## 8.1 Telegram 自动同步
+- `.github/workflows/deploy-pages.yml`
+  测试、构建并发布 Pages
 
-仓库现在支持两种更新模式：
+- `.github/workflows/telegram-sync.yml`
+  定时轮询 Telegram，同步数据并提交派生 Markdown
 
-- 本地模式：直接编辑 `训练记录.md`，推送到 `main`
-- Telegram 模式：由 `.github/workflows/telegram-sync.yml` 定时轮询 Bot 消息并自动回写
+页面展示数据来源取决于 `TRAINING_SNAPSHOT_SOURCE`：
 
-### 需要配置的 GitHub Secrets
+- `markdown`
+  `训练记录.md -> TrainingSnapshot -> training.json -> Hexo -> public/`
+- `database`
+  `core.* -> TrainingSnapshot -> training.json -> Hexo -> public/`
+
+## 10. GitHub Settings 是否需要配置
+
+需要。
+
+至少 Telegram 自动同步和数据库链路都依赖 GitHub Settings 配置：
+
+### Secrets
 
 - `TELEGRAM_BOT_TOKEN`
 - `AI_API_KEY`
 - `TRAINING_DB_URL`
 
-### 需要配置的 GitHub Variables
+### Variables
 
 - `AI_BASE_URL`
 - `AI_MODEL`
 - `AI_CONCURRENCY`
 - `TELEGRAM_ALLOWED_CHAT_IDS`
 - `TELEGRAM_POLL_LIMIT`
+- `TRAINING_SNAPSHOT_SOURCE`
 - `TRAINING_DB_ENABLED`
 - `TRAINING_DB_TIMEOUT_MS`
 - `TRAINING_DB_APP_NAME`
 
-完整的 GitHub Settings 维护清单、字段用途、推荐值和上线顺序统一记录在 [docs/github-settings.md](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/github-settings.md)。
+详细说明见 [docs/github-settings.md](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/github-settings.md)。
 
-### PostgreSQL 初始化与升级
+## 11. PostgreSQL 初始化
 
-- 初始化新库：执行 [sql/pgsql17.sql](/C:/Users/ljq90/Desktop/project_test/健身锻炼/sql/pgsql17.sql)
-- 升级现有库：执行 [sql/update.sql](/C:/Users/ljq90/Desktop/project_test/健身锻炼/sql/update.sql)
+- 新库初始化：执行 [sql/pgsql17.sql](/C:/Users/ljq90/Desktop/project_test/健身锻炼/sql/pgsql17.sql)
+- 已有库升级：请保留你已经执行过的数据库升级结果；仓库内不再维护单独的 `update.sql`
 
-当前数据库设计分为两层：
+当前数据库分为三层：
 
-- `archive.training_parse_snapshot` / `archive.training_parse_run`
-  保留原始快照和运行留痕
-- `archive.training_day` / `archive.training_activity` / `archive.training_measurement` / `archive.training_meal`
-  作为主查询和后期维护使用的结构化归档表
+- `archive.*`
+  构建快照与运行留痕
+- `ingest.*`
+  Telegram 原始批次、消息元数据、识别结果
+- `core.*`
+  主结构化数据层
 
-### Telegram 同步规则
+## 12. 维护注意事项
 
-- 同一个 `media_group_id` 相册会作为一个同步批次处理
-- 如果一组图片里有一张或 caption 能明确日期，则整组默认归到该日期
-- 支持 `体脂秤`、`运动`、`饮食` 三类截图
-- 原始图片不入库，只记录消息元数据、识别摘要和处理日志
-- 同步结果会直接回写 `训练记录.md`
+- 不要随意更改 `训练记录.md` 中解析器依赖的标题层级和字段命名
+- 如果页面继续走 `markdown` source，PG 故障不会影响页面构建
+- 如果页面切到 `database` source，PG 就会变成页面构建依赖
+- PostgreSQL 失败时，Telegram 批次会先写 Markdown，再进入待补偿队列，不会直接丢
+- 如果你在 PG 故障期间又手工改了同一天的 Markdown，后续补偿入库时要注意冲突口径
 
-### Telegram 持久化目录
+## 13. 一句话总结
 
-- `telegram/state.json`
-  保存上次成功推进到的 `update_id`
+这个仓库现在的本质是：
 
-- `telegram/inbox/*.ndjson`
-  保存每批入站消息元数据和 AI 识别摘要
-
-- `telegram/process-log.ndjson`
-  保存每次轮询的处理结果、跳过原因和回写摘要
-
-## 9. 当前前端结构
-
-站点目前包含三个主要模块：
-
-- `训练记录`
-  首页数据看板，展示最新归档数据、趋势图、每日速览与前一日对比。
-
-- `锻炼随想`
-  展示 `source/_posts/` 中的 Markdown 文章。
-
-- `关于`
-  展示作者背景与站点说明。
-
-## 10. 对架构师的迭代建议
-
-后续如果要把这个系统从“可维护的静态记录系统”升级成“半自动或全自动的数据采集系统”，建议优先考虑以下演进点：
-
-### 10.1 截图接入层
-
-- 增加统一截图上传入口。
-- 为每类截图建立元数据结构，例如来源、截图时间、设备、用户备注。
-- 把原始截图与识别结果做关联保存。
-
-### 10.2 识别层
-
-- 增加 OCR / 多模态识别服务。
-- 为体脂秤、运动、饮食截图分别建立识别模板。
-- 引入“识别结果待确认”状态，避免错误直接落库。
-
-### 10.3 结构化数据层
-
-- 不再只依赖 Markdown 作为唯一数据存储。
-- 可以引入 JSON Schema、数据库或版本化记录模型。
-- 保留 Markdown 作为可读导出层，而不是唯一事实源。
-
-### 10.4 审核与回写层
-
-- 建立“识别结果 -> 人工确认 -> 正式入库/回写 Markdown”的流程。
-- 保留修改历史，便于排错和追踪。
-
-### 10.5 展示层
-
-- 扩展趋势图、异常提醒、周期对比、阶段总结。
-- 增加更多健康指标，例如睡眠、步数、心率区间、围度等。
-
-## 11. 维护注意事项
-
-- 不要随意更改 `训练记录.md` 中解析器依赖的标题层级和字段命名。
-- 新增截图类型前，先确认解析器和展示层是否需要同步扩展。
-- 页面样式可以改，但数据口径必须先稳定。
-- 如果要把截图识别自动化，优先补“识别结果校验”能力，而不是直接替换人工确认环节。
-
-## 12. 一句话总结
-
-这个仓库当前的本质是：
-
-一个以 `训练记录.md` 为核心、通过脚本生成数据并自动发布到 GitHub Pages 的训练记录静态系统。
-
-截图是输入来源，Markdown 是当前事实源，GitHub Actions 是发布链路，README 则是维护者和后续架构师理解整套系统的入口。
+一个以 `TrainingSnapshot` 为统一中间层、支持 Markdown 与 PostgreSQL 双来源、并自动发布到 GitHub Pages 的训练记录系统。

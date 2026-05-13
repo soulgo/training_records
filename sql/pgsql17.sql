@@ -267,3 +267,139 @@ grant select, insert, update, delete on tables to training_writer;
 
 alter default privileges in schema archive
 grant usage, select on sequences to training_writer;
+
+-- 15. 创建 ingest schema
+create schema if not exists ingest authorization training_writer;
+
+comment on schema ingest is 'Telegram 等外部输入的原始接入与识别留痕';
+
+create table if not exists ingest.telegram_batch (
+  batch_id text primary key,
+  status text not null,
+  archived_date date null,
+  reason text null,
+  confidence numeric(10, 4) null,
+  warnings_json jsonb not null default '[]'::jsonb,
+  issues_json jsonb not null default '[]'::jsonb,
+  update_ids_json jsonb not null default '[]'::jsonb,
+  payload_hash text not null,
+  batch_payload_json jsonb not null,
+  processed_at timestamptz not null,
+  updated_at timestamptz not null
+);
+
+create table if not exists ingest.telegram_message (
+  message_id bigint primary key,
+  batch_id text not null references ingest.telegram_batch(batch_id) on delete cascade,
+  update_id bigint not null,
+  media_group_id text null,
+  chat_id bigint null,
+  caption text null,
+  text text null,
+  date_unix bigint null,
+  photo_file_ids_json jsonb not null default '[]'::jsonb,
+  photo_file_unique_ids_json jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null
+);
+
+create table if not exists ingest.telegram_recognition (
+  message_id bigint primary key references ingest.telegram_message(message_id) on delete cascade,
+  batch_id text not null references ingest.telegram_batch(batch_id) on delete cascade,
+  recognition_json jsonb not null,
+  updated_at timestamptz not null
+);
+
+create index if not exists idx_ingest_telegram_message_update_id
+on ingest.telegram_message (update_id desc);
+
+-- 16. 创建 core schema
+create schema if not exists core authorization training_writer;
+
+comment on schema core is '训练记录系统业务主数据层';
+
+create table if not exists core.training_day (
+  archived_date date primary key,
+  source_channel text not null,
+  source_batch_id text null,
+  total_activities integer not null default 0,
+  total_duration_seconds integer not null default 0,
+  training_calories numeric(10, 2) not null default 0,
+  workout_duration_minutes integer null,
+  active_hours integer null,
+  cycling_distance_km numeric(10, 2) null,
+  intake_calories integer null,
+  nutrition_details_json jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null
+);
+
+create table if not exists core.measurement (
+  measurement_key text primary key,
+  archived_date date not null references core.training_day(archived_date) on delete cascade,
+  source_channel text not null,
+  source_batch_id text null,
+  measured_at text null,
+  body_score integer null,
+  weight_kg numeric(10, 3) null,
+  bmi numeric(10, 2) null,
+  body_fat_pct numeric(10, 2) null,
+  skeletal_muscle_kg numeric(10, 3) null,
+  visceral_fat_level numeric(10, 2) null,
+  basal_metabolism_kcal integer null,
+  body_water_pct numeric(10, 2) null,
+  protein_pct numeric(10, 2) null,
+  bone_mass_kg numeric(10, 3) null,
+  fat_free_mass_kg numeric(10, 3) null,
+  body_age integer null,
+  body_type text null,
+  updated_at timestamptz not null
+);
+
+create table if not exists core.activity (
+  activity_key text primary key,
+  archived_date date not null references core.training_day(archived_date) on delete cascade,
+  source_channel text not null,
+  source_batch_id text null,
+  activity_time text null,
+  activity_type text not null,
+  raw_type text null,
+  detail text null,
+  calories integer null,
+  heart_rate integer null,
+  distance_km numeric(10, 2) null,
+  avg_speed_kmh numeric(10, 2) null,
+  duration_text text null,
+  duration_seconds integer null,
+  updated_at timestamptz not null
+);
+
+create table if not exists core.meal (
+  meal_key text primary key,
+  archived_date date not null references core.training_day(archived_date) on delete cascade,
+  source_channel text not null,
+  source_batch_id text null,
+  meal_name text not null,
+  calories integer null,
+  recommended_min integer null,
+  recommended_max integer null,
+  updated_at timestamptz not null
+);
+
+create index if not exists idx_core_measurement_archived_date
+on core.measurement (archived_date);
+
+create index if not exists idx_core_activity_archived_date
+on core.activity (archived_date);
+
+create index if not exists idx_core_meal_archived_date
+on core.meal (archived_date);
+
+grant usage on schema ingest to training_writer;
+grant usage on schema core to training_writer;
+grant select, insert, update, delete on all tables in schema ingest to training_writer;
+grant select, insert, update, delete on all tables in schema core to training_writer;
+
+alter default privileges in schema ingest
+grant select, insert, update, delete on tables to training_writer;
+
+alter default privileges in schema core
+grant select, insert, update, delete on tables to training_writer;

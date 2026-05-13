@@ -1,6 +1,14 @@
-const DATE_HEADING_RE = /^### (\d{4}-\d{2}-\d{2})\s*$/gm;
 const FINGERPRINT_RE = /^<!-- telegram-fingerprint: ([^ ]+) -->$/m;
 const TELEGRAM_SECTION_TAG = '<!-- telegram-sync-section -->';
+
+import {
+  inferMealSlot,
+  normalizeActivityTime,
+  roundTo,
+  splitDateSections,
+  splitLevel4Blocks,
+  toNullableNumber,
+} from './training-domain.mjs';
 
 export function groupTelegramUpdates(updates) {
   const batches = [];
@@ -159,6 +167,10 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       nutrition: normalizedNutrition,
     }),
   };
+}
+
+export function processTelegramBatch(batch, recognitions, options = {}) {
+  return analyzeTelegramBatch(batch, recognitions, options);
 }
 
 export function applyTelegramSyncToMarkdown(markdown, batchResult) {
@@ -411,26 +423,6 @@ function normalizeNutrition(meals, totalCalories, details) {
   };
 }
 
-function inferMealSlot(value) {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    return null;
-  }
-  if (/^(早餐|午餐|晚餐|加餐)$/.test(trimmed)) {
-    return trimmed;
-  }
-
-  const parenthetical = trimmed.match(/[（(]([^）)]+)[）)]/);
-  if (parenthetical) {
-    const fromParentheses = parenthetical[1].match(/早餐|午餐|晚餐|加餐/)?.[0];
-    if (fromParentheses) {
-      return fromParentheses;
-    }
-  }
-
-  return trimmed.match(/早餐|午餐|晚餐|加餐/)?.[0] ?? null;
-}
-
 function calculateBatchConfidence(recognitions) {
   if (!recognitions.length) {
     return 0;
@@ -470,22 +462,6 @@ function buildFingerprints({ archivedDate, measurement, activities, workoutDaily
       ['n', archivedDate, meal.name, meal.calories].join('-'),
     ),
   };
-}
-
-function splitDateSections(markdown) {
-  const matches = [...markdown.matchAll(DATE_HEADING_RE)];
-  if (!matches.length) {
-    return [];
-  }
-
-  return matches.map((match, index) => {
-    const start = match.index + match[0].length;
-    const end = index + 1 < matches.length ? matches[index + 1].index : markdown.length;
-    return {
-      date: match[1],
-      body: markdown.slice(start, end).trim(),
-    };
-  });
 }
 
 function stitchSections(originalMarkdown, sections) {
@@ -647,37 +623,21 @@ function renderNutritionBlock(batchResult) {
 
 function upsertBlock(sectionBody, headingPattern, nextBlock) {
   const blocks = splitLevel4Blocks(sectionBody);
-  const targetIndex = blocks.findIndex((block) => headingPattern.test(`${block.heading}\n`));
+  const targetIndex = blocks.findIndex((block) => headingPattern.test(`${block.headingLine}\n`));
   if (targetIndex === -1) {
     return `${sectionBody.trim()}\n\n${nextBlock}`.trim();
   }
 
-  const existingBlock = `${blocks[targetIndex].heading}\n${blocks[targetIndex].body}`.trim();
+  const existingBlock = `${blocks[targetIndex].headingLine}\n${blocks[targetIndex].body}`.trim();
   const mergedBlock = mergeBlock(existingBlock, nextBlock);
   if (mergedBlock === existingBlock) {
     return sectionBody;
   }
 
   const rebuiltBlocks = blocks.map((block, index) =>
-    index === targetIndex ? mergedBlock : `${block.heading}\n${block.body}`.trim(),
+    index === targetIndex ? mergedBlock : `${block.headingLine}\n${block.body}`.trim(),
   );
   return rebuiltBlocks.join('\n\n').trim();
-}
-
-function splitLevel4Blocks(content) {
-  const regex = /^#### .+$/gm;
-  const matches = [...content.matchAll(regex)];
-  if (!matches.length) {
-    return [];
-  }
-  return matches.map((match, index) => {
-    const start = match.index + match[0].length;
-    const end = index + 1 < matches.length ? matches[index + 1].index : content.length;
-    return {
-      heading: match[0],
-      body: content.slice(start, end).trim(),
-    };
-  });
 }
 
 function mergeBlock(existingBlock, nextBlock) {
@@ -733,33 +693,11 @@ function appendMetric(lines, label, value, suffix = '') {
   lines.push(`- ${label}：${formatValue(value)}${suffix}`);
 }
 
-function normalizeActivityTime(value) {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const match = trimmed.match(/(\d{2}:\d{2})$/);
-  return match ? match[1] : trimmed;
-}
-
 function formatValue(value) {
   if (typeof value !== 'number') {
     return String(value);
   }
   return Number.isInteger(value) ? String(value) : String(value);
-}
-
-function toNullableNumber(value) {
-  if (value === null || value === undefined || value === '') {
-    return null;
-  }
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-}
-
-function roundTo(value, precision) {
-  const factor = 10 ** precision;
-  return Math.round(value * factor) / factor;
 }
 
 function fingerprintComment(value) {

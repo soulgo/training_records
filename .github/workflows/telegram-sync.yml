@@ -26,6 +26,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Sync Telegram updates
         env:
@@ -36,27 +40,26 @@ jobs:
           AI_CONCURRENCY: ${{ vars.AI_CONCURRENCY }}
           TELEGRAM_ALLOWED_CHAT_IDS: ${{ vars.TELEGRAM_ALLOWED_CHAT_IDS }}
           TELEGRAM_POLL_LIMIT: ${{ vars.TELEGRAM_POLL_LIMIT }}
-        run: node tools/telegram-sync.mjs
+          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
+          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
+          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
+          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
+        run: npm run sync:telegram
 
       - name: Detect changes
         id: changes
         run: |
-          if git diff --quiet -- 训练记录.md telegram; then
-            echo "repo_changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "repo_changed=true" >> "$GITHUB_OUTPUT"
-          fi
           if git diff --quiet -- 训练记录.md; then
+            echo "repo_changed=false" >> "$GITHUB_OUTPUT"
             echo "content_changed=false" >> "$GITHUB_OUTPUT"
           else
+            echo "repo_changed=true" >> "$GITHUB_OUTPUT"
             echo "content_changed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run tests
         if: steps.changes.outputs.content_changed == 'true'
-        run: |
-          npm ci
-          npm test
+        run: npm test
 
       - name: Build site data and static files
         if: steps.changes.outputs.content_changed == 'true'
@@ -67,7 +70,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add 训练记录.md telegram
+          git add 训练记录.md
           git commit -m "chore: sync Telegram training updates"
 
       - name: Rebase on latest main

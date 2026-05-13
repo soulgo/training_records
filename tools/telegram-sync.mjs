@@ -1,85 +1,25 @@
-import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { mapWithConcurrency, processTelegramUpdates } from './telegram-sync-lib.mjs';
+import {
+  applyTelegramSyncToMarkdown,
+  analyzeTelegramBatch,
+  groupTelegramUpdates,
+  mapWithConcurrency,
+} from './telegram-sync-lib.mjs';
+import {
+  exportTrainingMarkdown as exportTrainingMarkdownFromSnapshot,
+  getLastProcessedTelegramUpdateId,
+  persistNormalizedBatch as persistNormalizedBatchToDatabase,
+} from './training-db-core.mjs';
+import { buildTrainingSnapshot as buildTrainingSnapshotFromSource } from './training-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
-const telegramDir = path.join(rootDir, 'telegram');
-const inboxDir = path.join(telegramDir, 'inbox');
-const recordPath = path.join(rootDir, '训练记录.md');
-const statePath = path.join(telegramDir, 'state.json');
-const processLogPath = path.join(telegramDir, 'process-log.ndjson');
 
 export async function main() {
-  const env = loadRequiredEnv();
-  await ensureTelegramFiles();
-
-  const currentState = await readJson(statePath, { lastProcessedUpdateId: 0 });
-  const markdown = await readFile(recordPath, 'utf8');
-  const updates = await fetchTelegramUpdates({
-    botToken: env.botToken,
-    offset: currentState.lastProcessedUpdateId + 1,
-    limit: env.pollLimit,
-  });
-
-  const result = await processTelegramUpdates({
-    markdown,
-    updates,
-    allowedChatIds: env.allowedChatIds,
-    minConfidence: 0.75,
-    recognizeBatch: async (batch) => recognizeBatch(batch, env),
-  });
-  const previousLastProcessedUpdateId = currentState.lastProcessedUpdateId ?? 0;
-  const nextLastProcessedUpdateId = Math.max(
-    previousLastProcessedUpdateId,
-    result.lastProcessedUpdateId ?? 0,
-  );
-
-  const shouldPersistArtifacts = shouldPersistTelegramArtifacts({
-    updatesFetched: updates.length,
-    changed: result.changed,
-    previousLastProcessedUpdateId,
-    nextLastProcessedUpdateId,
-  });
-
-  if (shouldPersistArtifacts) {
-    await persistInboxEntries(result.inboxEntries);
-    await appendProcessLog({
-      processedAt: new Date().toISOString(),
-      updatesFetched: updates.length,
-      changed: result.changed,
-      lastProcessedUpdateId: result.lastProcessedUpdateId,
-      batches: result.batchResults.map((batch) => ({
-        batchId: batch.batchId,
-        status: batch.status,
-        archivedDate: batch.archivedDate ?? null,
-        reason: batch.reason ?? null,
-        updateIds: batch.updateIds ?? [],
-      })),
-    });
-  }
-
-  if (result.changed) {
-    await writeFile(recordPath, result.markdown, 'utf8');
-  }
-
-  if (shouldPersistArtifacts) {
-    await writeFile(
-      statePath,
-      `${JSON.stringify(
-        {
-          lastProcessedUpdateId: nextLastProcessedUpdateId,
-          updatedAt: new Date().toISOString(),
-        },
-        null,
-        2,
-      )}\n`,
-      'utf8',
-    );
-  }
-
+  const result = await runTelegramSync();
   process.stdout.write(
     JSON.stringify(
       {
@@ -93,6 +33,162 @@ export async function main() {
     ),
   );
   process.stdout.write('\n');
+}
+
+export async function runTelegramSync(options = {}) {
+  const env = loadRequiredEnv(options.env ?? process.env);
+  const activeRootDir = options.rootDir ?? rootDir;
+  const recordPath = path.join(activeRootDir, '训练记录.md');
+  const runtimeDir = path.join(activeRootDir, 'runtime');
+  const pendingQueuePath = path.join(runtimeDir, 'telegram-sync-pending.ndjson');
+  const now = options.now ?? new Date();
+  const readLastProcessedUpdateId =
+    options.getLastProcessedUpdateId ??
+    (() => getLastProcessedTelegramUpdateId({ env: options.env ?? process.env }));
+  const fetchUpdates =
+    options.fetchTelegramUpdates ??
+    ((input) =>
+      fetchTelegramUpdates({
+        botToken: env.botToken,
+        offset: input.offset,
+        limit: input.limit,
+      }));
+  const recognizeBatchRunner =
+    options.recognizeBatch ??
+    ((batch) => recognizeBatch(batch, env));
+  const persistBatch =
+    options.persistNormalizedBatch ??
+    ((input) =>
+      persistNormalizedBatchToDatabase({
+        ...input,
+        env: options.env ?? process.env,
+      }));
+  const buildSnapshot =
+    options.buildTrainingSnapshot ??
+    ((input) =>
+      buildTrainingSnapshotFromSource({
+        ...input,
+        rootDir: activeRootDir,
+        env: options.env ?? process.env,
+      }));
+  const exportMarkdown = options.exportTrainingMarkdown ?? exportTrainingMarkdownFromSnapshot;
+  const onFallbackMarkdownWritten = options.onFallbackMarkdownWritten ?? null;
+
+  const previousLastProcessedUpdateId = await readLastProcessedUpdateId();
+  const pendingBatches = await readPendingFallbackBatches(pendingQueuePath);
+  let replayStoredAny = false;
+
+  for (const pending of pendingBatches) {
+    try {
+      const replayResult = await persistBatch({
+        batch: pending.batch,
+        processedAt: now,
+        env: options.env ?? process.env,
+      });
+      if (replayResult.status === 'stored' || replayResult.status === 'unchanged') {
+        replayStoredAny = replayStoredAny || replayResult.status === 'stored';
+        pending.replayed = true;
+      }
+    } catch {
+      pending.replayed = false;
+    }
+  }
+
+  await writePendingFallbackBatches(
+    pendingQueuePath,
+    pendingBatches.filter((pending) => !pending.replayed),
+  );
+
+  const updates = await fetchUpdates({
+    offset: previousLastProcessedUpdateId + 1,
+    limit: env.pollLimit,
+  });
+  const grouped = groupTelegramUpdates(updates);
+  const batchResults = [];
+  let changed = replayStoredAny;
+  let fallbackUsed = false;
+  let fallbackMarkdown = await readMarkdownOrDefault(recordPath);
+
+  for (const batch of grouped) {
+    const isAllowed = batch.messages.every((message) => env.allowedChatIds.has(message.chatId));
+    if (!isAllowed) {
+      batchResults.push({
+        batchId: batch.batchId,
+        status: 'ignored',
+        reason: 'unauthorized chat',
+        updateIds: batch.messages.map((message) => message.updateId),
+      });
+      continue;
+    }
+
+    const recognitions = (await recognizeBatchRunner(batch, env)).filter(Boolean);
+    const analyzed = analyzeTelegramBatch(batch, recognitions, { minConfidence: 0.75 });
+    const persistedBatch = {
+      ...analyzed,
+      updateIds: batch.messages.map((message) => message.updateId),
+      messages: batch.messages,
+      recognitions,
+    };
+    try {
+      const persistResult = await persistBatch({
+        batch: persistedBatch,
+        processedAt: now,
+        env: options.env ?? process.env,
+      });
+
+      changed ||= analyzed.status === 'ready' && persistResult.status === 'stored';
+      batchResults.push({
+        ...persistedBatch,
+        persistenceStatus: persistResult.status,
+      });
+    } catch (error) {
+      if (analyzed.status === 'ready') {
+        const applied = applyTelegramSyncToMarkdown(fallbackMarkdown, persistedBatch);
+        fallbackMarkdown = applied.markdown;
+        changed ||= applied.changed;
+        fallbackUsed = true;
+        await appendPendingFallbackBatch(pendingQueuePath, {
+          batch: persistedBatch,
+          failedAt: now.toISOString(),
+          error: error instanceof Error ? error.message : String(error),
+        });
+        batchResults.push({
+          ...persistedBatch,
+          persistenceStatus: 'fallback_markdown',
+        });
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  const nextLastProcessedUpdateId = Math.max(
+    previousLastProcessedUpdateId,
+    updates.reduce((max, update) => Math.max(max, update.update_id ?? 0), 0),
+  );
+
+  if (fallbackUsed) {
+    await writeFile(recordPath, fallbackMarkdown, 'utf8');
+    onFallbackMarkdownWritten?.(fallbackMarkdown);
+  } else if (changed) {
+    const snapshot = await buildSnapshot({
+      source: 'database',
+      rootDir: activeRootDir,
+      env: options.env ?? process.env,
+      now,
+    });
+    const markdown = exportMarkdown(snapshot);
+    await writeFile(recordPath, markdown, 'utf8');
+  }
+
+  return {
+    changed,
+    fallbackUsed,
+    updatesFetched: updates.length,
+    lastProcessedUpdateId: nextLastProcessedUpdateId,
+    readyBatches: batchResults.filter((batch) => batch.status === 'ready').length,
+    batchResults,
+  };
 }
 
 export function shouldPersistTelegramArtifacts({
@@ -112,14 +208,16 @@ if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {
   await main();
 }
 
-function loadRequiredEnv() {
-  const botToken = process.env.TELEGRAM_BOT_TOKEN;
-  const apiKey = process.env.AI_API_KEY;
-  const baseUrl = process.env.AI_BASE_URL;
-  const model = process.env.AI_MODEL;
-  const allowedChatIdsRaw = process.env.TELEGRAM_ALLOWED_CHAT_IDS;
-  const pollLimit = Number(process.env.TELEGRAM_POLL_LIMIT ?? 20);
-  const aiConcurrency = Number(process.env.AI_CONCURRENCY ?? 3);
+function loadRequiredEnv(env = process.env) {
+  const botToken = env.TELEGRAM_BOT_TOKEN;
+  const apiKey = env.AI_API_KEY;
+  const baseUrl = env.AI_BASE_URL;
+  const model = env.AI_MODEL;
+  const allowedChatIdsRaw = env.TELEGRAM_ALLOWED_CHAT_IDS;
+  const dbEnabled = env.TRAINING_DB_ENABLED;
+  const dbUrl = env.TRAINING_DB_URL;
+  const pollLimit = Number(env.TELEGRAM_POLL_LIMIT ?? 20);
+  const aiConcurrency = Number(env.AI_CONCURRENCY ?? 3);
 
   for (const [name, value] of [
     ['TELEGRAM_BOT_TOKEN', botToken],
@@ -127,6 +225,8 @@ function loadRequiredEnv() {
     ['AI_BASE_URL', baseUrl],
     ['AI_MODEL', model],
     ['TELEGRAM_ALLOWED_CHAT_IDS', allowedChatIdsRaw],
+    ['TRAINING_DB_ENABLED', dbEnabled],
+    ['TRAINING_DB_URL', dbUrl],
   ]) {
     if (!value) {
       throw new Error(`Missing required environment variable: ${name}`);
@@ -148,29 +248,6 @@ function loadRequiredEnv() {
         .map(Number),
     ),
   };
-}
-
-async function ensureTelegramFiles() {
-  await mkdir(inboxDir, { recursive: true });
-  await ensureFile(statePath, `${JSON.stringify({ lastProcessedUpdateId: 0 }, null, 2)}\n`);
-  await ensureFile(processLogPath, '');
-}
-
-async function ensureFile(targetPath, initialValue) {
-  try {
-    await readFile(targetPath, 'utf8');
-  } catch {
-    await writeFile(targetPath, initialValue, 'utf8');
-  }
-}
-
-async function readJson(targetPath, fallback) {
-  try {
-    const raw = await readFile(targetPath, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return fallback;
-  }
 }
 
 async function fetchTelegramUpdates({ botToken, offset, limit }) {
@@ -202,6 +279,37 @@ async function recognizeBatch(batch, env) {
   });
 
   return recognitions.filter(Boolean);
+}
+
+async function readMarkdownOrDefault(recordPath) {
+  try {
+    return await readFile(recordPath, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+async function readPendingFallbackBatches(queuePath) {
+  try {
+    const raw = await readFile(queuePath, 'utf8');
+    return raw
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  } catch {
+    return [];
+  }
+}
+
+async function appendPendingFallbackBatch(queuePath, payload) {
+  await mkdir(path.dirname(queuePath), { recursive: true });
+  await appendFile(queuePath, `${JSON.stringify(payload)}\n`, 'utf8');
+}
+
+async function writePendingFallbackBatches(queuePath, entries) {
+  await mkdir(path.dirname(queuePath), { recursive: true });
+  const content = entries.map((entry) => JSON.stringify(entry)).join('\n');
+  await writeFile(queuePath, content ? `${content}\n` : '', 'utf8');
 }
 
 async function resolveTelegramFileUrl(botToken, fileId) {
@@ -392,15 +500,4 @@ function buildRecognitionSchema() {
       },
     },
   };
-}
-
-async function persistInboxEntries(entries) {
-  for (const entry of entries) {
-    const targetPath = path.join(inboxDir, `${entry.batchId}.ndjson`);
-    await appendFile(targetPath, `${JSON.stringify(entry)}\n`, 'utf8');
-  }
-}
-
-async function appendProcessLog(entry) {
-  await appendFile(processLogPath, `${JSON.stringify(entry)}\n`, 'utf8');
 }

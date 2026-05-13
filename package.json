@@ -6,11 +6,14 @@
   "scripts": {
     "test": "node --test",
     "build:data": "node tools/generate-training-data.mjs",
+    "export:markdown": "node tools/export-training-markdown.mjs",
+    "import:markdown": "node tools/import-training-markdown.mjs",
     "build:site": "node tools/run-hexo-command.mjs generate",
     "build": "npm run build:data && npm run build:site",
     "clean": "node tools/run-hexo-command.mjs clean",
     "server": "npm run build:data && node tools/run-hexo-command.mjs server",
-    "telegram:sync": "node tools/telegram-sync.mjs"
+    "sync:telegram": "node tools/telegram-sync.mjs",
+    "telegram:sync": "npm run sync:telegram"
   },
   "dependencies": {
     "hexo": "^7.3.0",

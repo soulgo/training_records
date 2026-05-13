@@ -7,7 +7,8 @@ import {
   persistTrainingArchive,
   resolveTrainingArchiveRuntimeContext,
 } from './training-db-archive.mjs';
-import { parseTrainingRecord } from './training-parser.mjs';
+import { buildDashboardViewModel } from './dashboard-view.mjs';
+import { buildTrainingSnapshot } from './training-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..');
@@ -21,21 +22,34 @@ export async function generateTrainingData(options = {}) {
   const persistArchive = options.persistArchive ?? persistTrainingArchive;
   const appendArchiveFailureLog =
     options.appendArchiveFailureLog ?? appendTrainingArchiveFailureLog;
+  const buildSnapshot = options.buildSnapshot ?? buildTrainingSnapshot;
   const runStartedAt = options.runStartedAt ?? new Date();
 
   const recordPath = path.join(rootDir, '训练记录.md');
   const outputDir = path.join(rootDir, 'source', '_data');
   const outputPath = path.join(outputDir, 'training.json');
+  const dashboardViewPath = path.join(outputDir, 'dashboardView.json');
   const debugOutputPath = path.join(rootDir, '训练数据解析.md');
 
   const markdown = await readFile(recordPath, 'utf8');
-  const parsed = parseTrainingRecord(markdown);
+  const parsed = await buildSnapshot({
+    source: resolveSnapshotSource(argv, env),
+    rootDir,
+    env,
+    now: runStartedAt,
+  });
 
   await mkdir(outputDir, { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
+  await writeFile(
+    dashboardViewPath,
+    `${JSON.stringify(buildDashboardViewModel(parsed), null, 2)}\n`,
+    'utf8',
+  );
   await writeFile(debugOutputPath, renderTrainingDebugMarkdown(parsed), 'utf8');
 
   stdout.write(`Generated ${path.relative(rootDir, outputPath)}\n`);
+  stdout.write(`Generated ${path.relative(rootDir, dashboardViewPath)}\n`);
   stdout.write(`Generated ${path.relative(rootDir, debugOutputPath)}\n`);
 
   const runtimeContext = resolveTrainingArchiveRuntimeContext({ env, argv });
@@ -68,6 +82,7 @@ export async function generateTrainingData(options = {}) {
     rootDir,
     recordPath,
     outputPath,
+    dashboardViewPath,
     debugOutputPath,
     parsed,
   };
@@ -130,4 +145,13 @@ function formatDebugValue(value) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   await generateTrainingData();
+}
+
+function resolveSnapshotSource(argv, env) {
+  const explicit = argv.find((arg) => arg.startsWith('--source='))?.slice('--source='.length);
+  if (explicit === 'database' || explicit === 'markdown') {
+    return explicit;
+  }
+  const configured = String(env.TRAINING_SNAPSHOT_SOURCE ?? 'markdown').trim().toLowerCase();
+  return configured === 'database' ? 'database' : 'markdown';
 }

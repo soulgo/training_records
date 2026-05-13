@@ -1,62 +1,24 @@
-const DATE_HEADING_RE = /^### (\d{4}-\d{2}-\d{2})\s*$/gm;
-const LEVEL4_HEADING_RE = /^#### (.+)$/gm;
+import {
+  buildTrainingDay,
+  buildTrainingSnapshotFromDaily,
+  emptyNutrition,
+  extractSubBlock,
+  inferMealSlot,
+  normalizeActivityType,
+  parseDurationSeconds,
+  parseFirstMatch,
+  parseNumber,
+  parseWeightKg,
+  roundTo,
+  splitDateSections,
+  splitLevel4Blocks,
+} from './training-domain.mjs';
 
 export function parseTrainingRecord(markdown) {
-  const daily = splitDateSections(markdown).map(({ date, content }) =>
-    parseDateSection(date, content),
+  const daily = splitDateSections(markdown).map(({ date, body }) =>
+    parseDateSection(date, body),
   );
-
-  const measurements = daily
-    .map((entry) => entry.measurement)
-    .filter(Boolean);
-
-  const charts = {
-    weightKg: measurements.map((entry) => ({ date: entry.archivedDate, value: entry.weightKg })),
-    bodyFatPct: measurements.map((entry) => ({ date: entry.archivedDate, value: entry.bodyFatPct })),
-    skeletalMuscleKg: measurements.map((entry) => ({
-      date: entry.archivedDate,
-      value: entry.skeletalMuscleKg,
-    })),
-    basalMetabolism: measurements.map((entry) => ({
-      date: entry.archivedDate,
-      value: entry.basalMetabolismKcal,
-    })),
-    visceralFatLevel: measurements.map((entry) => ({
-      date: entry.archivedDate,
-      value: entry.visceralFatLevel,
-    })),
-    intakeCalories: daily
-      .filter((entry) => entry.nutrition.totalCalories !== null)
-      .map((entry) => ({ date: entry.date, value: entry.nutrition.totalCalories })),
-    trainingCalories: daily
-      .filter((entry) => entry.workoutSummary.trainingCalories > 0)
-      .map((entry) => ({ date: entry.date, value: entry.workoutSummary.trainingCalories })),
-    cyclingDistanceKm: daily
-      .filter((entry) => entry.workoutSummary.cyclingDistanceKm > 0)
-      .map((entry) => ({ date: entry.date, value: entry.workoutSummary.cyclingDistanceKm })),
-  };
-
-  return {
-    generatedAt: new Date().toISOString(),
-    latest: {
-      measurement: measurements.at(-1) ?? null,
-      daily: daily.at(-1) ?? null,
-    },
-    daily,
-    charts,
-  };
-}
-
-function splitDateSections(markdown) {
-  const matches = [...markdown.matchAll(DATE_HEADING_RE)];
-  return matches.map((match, index) => {
-    const start = match.index + match[0].length;
-    const end = index + 1 < matches.length ? matches[index + 1].index : markdown.length;
-    return {
-      date: match[1],
-      content: markdown.slice(start, end).trim(),
-    };
-  });
+  return buildTrainingSnapshotFromDaily(daily);
 }
 
 function parseDateSection(date, content) {
@@ -78,25 +40,12 @@ function parseDateSection(date, content) {
   const nutritionBlock = blocks.find((block) => block.heading.includes('饮食截图记录'));
   const nutrition = nutritionBlock ? parseNutritionBlock(nutritionBlock.body) : emptyNutrition();
 
-  return {
+  return buildTrainingDay({
     date,
-    measurement: measurementBlocks.at(-1) ?? null,
     measurements: measurementBlocks,
     activities,
-    workoutSummary: summarizeActivities(activities, workoutDailySummary),
     nutrition,
-  };
-}
-
-function splitLevel4Blocks(content) {
-  const matches = [...content.matchAll(LEVEL4_HEADING_RE)];
-  return matches.map((match, index) => {
-    const start = match.index + match[0].length;
-    const end = index + 1 < matches.length ? matches[index + 1].index : content.length;
-    return {
-      heading: match[1].trim(),
-      body: content.slice(start, end).trim(),
-    };
+    workoutDailySummary,
   });
 }
 
@@ -212,44 +161,6 @@ function parseActivityLine(line) {
   };
 }
 
-function summarizeActivities(activities, workoutDailySummary = null) {
-  const countsByType = {};
-  let totalDurationSeconds = 0;
-  let explicitTrainingCalories = 0;
-  let cyclingDistanceKm = 0;
-
-  for (const activity of activities) {
-    countsByType[activity.type] = (countsByType[activity.type] ?? 0) + 1;
-    totalDurationSeconds += activity.durationSeconds;
-    if (activity.calories !== null) {
-      explicitTrainingCalories += activity.calories;
-    }
-    if (activity.distanceKm !== null && activity.type.includes('骑行')) {
-      cyclingDistanceKm += activity.distanceKm;
-    }
-  }
-
-  return {
-    totalActivities: activities.length,
-    totalDurationSeconds,
-    trainingCalories: roundTo(
-      workoutDailySummary?.activityCaloriesKcal ?? explicitTrainingCalories,
-      2,
-    ),
-    workoutDurationMinutes: workoutDailySummary?.workoutDurationMinutes ?? null,
-    activeHours: workoutDailySummary?.activeHours ?? null,
-    cyclingDistanceKm: roundTo(cyclingDistanceKm, 2),
-    countsByType,
-  };
-}
-
-function normalizeActivityType(type) {
-  if (type === '自由训练' || type.startsWith('燃脂训练')) {
-    return '燃脂训练';
-  }
-  return type;
-}
-
 function parseNutritionBlock(content) {
   const summaryBody = extractSubBlock(content, '##### 餐次汇总') ?? '';
   const mealsByName = new Map();
@@ -298,7 +209,7 @@ function parseNutritionSummaryLine(line) {
   }
 
   const [, rawName, calories, recommendedMin, recommendedMax] = match;
-  const mealName = inferMealName(rawName);
+  const mealName = inferMealSlot(rawName);
   if (!mealName) {
     return null;
   }
@@ -310,89 +221,4 @@ function parseNutritionSummaryLine(line) {
     recommendedMax: Number(recommendedMax),
     isSummary: rawName.trim() === mealName,
   };
-}
-
-function inferMealName(value) {
-  const trimmed = value.trim();
-  if (/^(早餐|午餐|晚餐|加餐)$/.test(trimmed)) {
-    return trimmed;
-  }
-
-  const parenthetical = trimmed.match(/[（(]([^）)]+)[）)]/);
-  if (parenthetical) {
-    const fromParentheses = parenthetical[1].match(/早餐|午餐|晚餐|加餐/)?.[0];
-    if (fromParentheses) {
-      return fromParentheses;
-    }
-  }
-
-  return trimmed.match(/早餐|午餐|晚餐|加餐/)?.[0] ?? null;
-}
-
-function emptyNutrition() {
-  return {
-    meals: [],
-    totalCalories: null,
-  };
-}
-
-function extractSubBlock(content, heading) {
-  const start = content.indexOf(heading);
-  if (start === -1) {
-    return null;
-  }
-  const bodyStart = start + heading.length;
-  const remainder = content.slice(bodyStart);
-  const nextHeadingOffset = remainder.search(/\n##### /);
-  const body = nextHeadingOffset === -1 ? remainder : remainder.slice(0, nextHeadingOffset);
-  return body.trim();
-}
-
-function parseWeightKg(value) {
-  if (!value) {
-    return null;
-  }
-  const approxKg = value.match(/约\s*(\d+(?:\.\d+)?)\s*kg/i);
-  if (approxKg) {
-    return Number(approxKg[1]);
-  }
-  const kg = value.match(/(\d+(?:\.\d+)?)\s*kg/i);
-  if (kg) {
-    return Number(kg[1]);
-  }
-  const jin = value.match(/(\d+(?:\.\d+)?)斤/);
-  if (jin) {
-    return roundTo(Number(jin[1]) * 0.5, 2);
-  }
-  return null;
-}
-
-function parseNumber(value) {
-  if (!value) {
-    return null;
-  }
-  const match = value.match(/-?\d+(?:\.\d+)?/);
-  return match ? Number(match[0]) : null;
-}
-
-function parseDurationSeconds(value) {
-  if (value.includes(':')) {
-    const [hours, minutes, seconds] = value.split(':').map(Number);
-    return hours * 3600 + minutes * 60 + seconds;
-  }
-  const match = value.match(/(\d+)分(\d+)秒/);
-  if (!match) {
-    return 0;
-  }
-  return Number(match[1]) * 60 + Number(match[2]);
-}
-
-function parseFirstMatch(value, regex) {
-  const match = value?.match(regex);
-  return match ? Number(match[1]) : null;
-}
-
-function roundTo(value, precision) {
-  const factor = 10 ** precision;
-  return Math.round(value * factor) / factor;
 }

@@ -5,5 +5,9 @@ public/
 db.json
 .deploy_git/
 source/_data/training.json
+source/_data/dashboardView.json
 训练数据解析.md
 runtime/
+telegram/state.json
+telegram/process-log.ndjson
+telegram/inbox/
