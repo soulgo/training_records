@@ -2,6 +2,12 @@ name: Telegram Sync
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+  repository_dispatch:
+    types:
+      - telegram_update
 
 permissions:
   contents: write
@@ -38,6 +44,7 @@ jobs:
           AI_CONCURRENCY: ${{ vars.AI_CONCURRENCY }}
           TELEGRAM_ALLOWED_CHAT_IDS: ${{ vars.TELEGRAM_ALLOWED_CHAT_IDS }}
           TELEGRAM_POLL_LIMIT: ${{ vars.TELEGRAM_POLL_LIMIT }}
+          TELEGRAM_SYNC_TRANSPORT: webhook
           TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
           TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
           TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}

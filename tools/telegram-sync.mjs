@@ -24,9 +24,9 @@ export async function main() {
     JSON.stringify(
       {
         changed: result.changed,
-        updatesFetched: updates.length,
-        lastProcessedUpdateId: nextLastProcessedUpdateId,
-        readyBatches: result.batchResults.filter((batch) => batch.status === 'ready').length,
+        updatesFetched: result.updatesFetched,
+        lastProcessedUpdateId: result.lastProcessedUpdateId,
+        readyBatches: result.readyBatches,
       },
       null,
       2,
@@ -99,10 +99,19 @@ export async function runTelegramSync(options = {}) {
     pendingBatches.filter((pending) => !pending.replayed),
   );
 
-  const updates = await fetchUpdates({
-    offset: previousLastProcessedUpdateId + 1,
-    limit: env.pollLimit,
+  const dispatchUpdates = await resolveDispatchTelegramUpdates({
+    repositoryDispatchEvent: options.repositoryDispatchEvent,
+    githubEventName: env.githubEventName,
+    githubEventPath: env.githubEventPath,
   });
+  const updates =
+    dispatchUpdates ??
+    (env.syncTransport === 'webhook'
+      ? []
+      : await fetchUpdates({
+          offset: previousLastProcessedUpdateId + 1,
+          limit: env.pollLimit,
+        }));
   const grouped = groupTelegramUpdates(updates);
   const batchResults = [];
   let changed = replayStoredAny;
@@ -238,6 +247,12 @@ function loadRequiredEnv(env = process.env) {
     apiKey,
     baseUrl: baseUrl.replace(/\/+$/, ''),
     model,
+    syncTransport:
+      String(env.TELEGRAM_SYNC_TRANSPORT ?? 'poll').toLowerCase() === 'webhook'
+        ? 'webhook'
+        : 'poll',
+    githubEventName: env.GITHUB_EVENT_NAME?.trim() || '',
+    githubEventPath: env.GITHUB_EVENT_PATH?.trim() || '',
     pollLimit: Number.isFinite(pollLimit) && pollLimit > 0 ? pollLimit : 20,
     aiConcurrency: Number.isFinite(aiConcurrency) && aiConcurrency > 0 ? aiConcurrency : 3,
     allowedChatIds: new Set(
@@ -266,6 +281,40 @@ async function fetchTelegramUpdates({ botToken, offset, limit }) {
     throw new Error(`Telegram getUpdates failed: ${payload.description ?? 'unknown error'}`);
   }
   return payload.result ?? [];
+}
+
+async function resolveDispatchTelegramUpdates({
+  repositoryDispatchEvent,
+  githubEventName,
+  githubEventPath,
+}) {
+  const eventPayload =
+    repositoryDispatchEvent ??
+    (githubEventName === 'repository_dispatch' && githubEventPath
+      ? await readGithubEventFile(githubEventPath)
+      : null);
+
+  if (!eventPayload) {
+    return null;
+  }
+
+  const clientPayload = eventPayload.client_payload ?? {};
+  if (clientPayload.telegram_update) {
+    return [clientPayload.telegram_update];
+  }
+  if (Array.isArray(clientPayload.telegram_updates)) {
+    return clientPayload.telegram_updates;
+  }
+  return [];
+}
+
+async function readGithubEventFile(eventPath) {
+  try {
+    const raw = await readFile(eventPath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 async function recognizeBatch(batch, env) {
