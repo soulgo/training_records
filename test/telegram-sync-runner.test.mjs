@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import {
   buildTelegramSyncReport,
+  loadRecognitionSystemPrompt,
   runTelegramSync,
   shouldPersistTelegramArtifacts,
 } from '../tools/telegram-sync.mjs';
@@ -31,6 +32,28 @@ test('persists telegram artifacts when new updates advance the processed offset'
       nextLastProcessedUpdateId: 520905383,
     }),
     true,
+  );
+});
+
+test('loadRecognitionSystemPrompt reads the versioned Telegram image prompt', async () => {
+  const prompt = await loadRecognitionSystemPrompt();
+
+  assert.match(prompt, /只能输出符合 schema 的 JSON/);
+  assert.match(prompt, /次日清晨体脂秤是否归入前一日，只能由 caption\/text 明确说明/);
+  assert.match(prompt, /records\.dailyWorkoutSummary/);
+  assert.match(prompt, /kg = 斤 \* 0\.5/);
+});
+
+test('loadRecognitionSystemPrompt can be overridden for prompt experiments', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-recognition-prompt-'));
+  const promptPath = path.join(tempRoot, 'prompt.md');
+  await writeFile(promptPath, 'custom prompt', 'utf8');
+
+  assert.equal(
+    await loadRecognitionSystemPrompt({
+      TELEGRAM_RECOGNITION_PROMPT_PATH: promptPath,
+    }),
+    'custom prompt',
   );
 });
 
