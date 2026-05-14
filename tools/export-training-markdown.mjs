@@ -6,6 +6,7 @@ import { exportTrainingMarkdown, resolveTrainingCoreConfig } from './training-db
 import {
   buildTrainingSnapshot,
   isIncompleteDatabaseSnapshotError,
+  isUnavailableDatabaseSnapshotError,
 } from './training-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,7 +35,7 @@ export async function exportDerivedTrainingMarkdown(options = {}) {
   try {
     snapshot = await buildSnapshot(snapshotOptions);
   } catch (error) {
-    if (canFallbackFromDatabase && isIncompleteDatabaseSnapshotError(error)) {
+    if (canFallbackFromDatabase && canUseMarkdownFallback(error)) {
       stderr.write(
         `[export-training-markdown] ${error.message}; falling back to markdown\n`,
       );
@@ -69,4 +70,8 @@ async function hasPendingTelegramFallbackBatches(rootDir) {
   } catch {
     return false;
   }
+}
+
+function canUseMarkdownFallback(error) {
+  return isIncompleteDatabaseSnapshotError(error) || isUnavailableDatabaseSnapshotError(error);
 }

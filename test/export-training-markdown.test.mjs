@@ -138,6 +138,57 @@ test('exportDerivedTrainingMarkdown falls back to markdown when database snapsho
   assert.match(stderrChunks.join(''), /falling back to markdown/i);
 });
 
+test('exportDerivedTrainingMarkdown falls back to markdown when database snapshot is unavailable', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
+  const recordPath = path.join(tempRoot, '训练记录.md');
+  const observedSources = [];
+  const stderrChunks = [];
+
+  await writeFile(recordPath, '# 训练记录\n\n### 2026-05-14\n', 'utf8');
+
+  await exportDerivedTrainingMarkdown({
+    rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    stderr: {
+      write(chunk) {
+        stderrChunks.push(String(chunk));
+      },
+    },
+    buildTrainingSnapshot: async ({ source }) => {
+      observedSources.push(source);
+      if (source === 'database') {
+        throw new Error('database snapshot unavailable: timeout expired');
+      }
+      return {
+        generatedAt: '2026-05-14T00:00:00.000Z',
+        latest: {
+          measurement: null,
+          daily: { date: '2026-05-14' },
+        },
+        daily: [],
+        charts: {
+          weightKg: [],
+          bodyFatPct: [],
+          skeletalMuscleKg: [],
+          basalMetabolism: [],
+          visceralFatLevel: [],
+          intakeCalories: [],
+          trainingCalories: [],
+          cyclingDistanceKm: [],
+        },
+      };
+    },
+    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-05-14\n',
+  });
+
+  assert.deepEqual(observedSources, ['database', 'markdown']);
+  assert.match(await readFile(recordPath, 'utf8'), /2026-05-14/);
+  assert.match(stderrChunks.join(''), /timeout expired; falling back to markdown/i);
+});
+
 test('exportDerivedTrainingMarkdown does not hide incomplete database snapshots when database is not configured', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const recordPath = path.join(tempRoot, '训练记录.md');

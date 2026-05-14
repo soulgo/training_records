@@ -17,7 +17,9 @@ import {
 import {
   buildTrainingSnapshot as buildTrainingSnapshotFromSource,
   isIncompleteDatabaseSnapshotError,
+  isUnavailableDatabaseSnapshotError,
 } from './training-snapshot.mjs';
+import { parseTrainingRecord } from './training-parser.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -68,7 +70,15 @@ export async function runTelegramSync(options = {}) {
   const onFallbackMarkdownWritten = options.onFallbackMarkdownWritten ?? null;
   const trainingDbConfig = resolveTrainingCoreConfig(options.env ?? process.env);
 
-  const previousLastProcessedUpdateId = await readLastProcessedUpdateId();
+  const dispatchUpdates = await resolveDispatchTelegramUpdates({
+    repositoryDispatchEvent: options.repositoryDispatchEvent,
+    githubEventName: env.githubEventName,
+    githubEventPath: env.githubEventPath,
+  });
+  const previousLastProcessedUpdateId = await readLastProcessedUpdateIdForRun({
+    readLastProcessedUpdateId,
+    dispatchUpdates,
+  });
   const pendingBatches = await readPendingFallbackBatches(pendingQueuePath);
   let replayStoredAny = false;
 
@@ -93,11 +103,6 @@ export async function runTelegramSync(options = {}) {
     pendingBatches.filter((pending) => !pending.replayed),
   );
 
-  const dispatchUpdates = await resolveDispatchTelegramUpdates({
-    repositoryDispatchEvent: options.repositoryDispatchEvent,
-    githubEventName: env.githubEventName,
-    githubEventPath: env.githubEventPath,
-  });
   const updates =
     dispatchUpdates ??
     (env.syncTransport === 'webhook'
@@ -111,6 +116,7 @@ export async function runTelegramSync(options = {}) {
   let changed = replayStoredAny;
   let fallbackUsed = false;
   let fallbackMarkdown = await readMarkdownOrDefault(recordPath);
+  const latestMarkdownDate = resolveLatestMarkdownDate(fallbackMarkdown);
 
   for (const batch of grouped) {
     const isAllowed = batch.messages.every((message) => env.allowedChatIds.has(message.chatId));
@@ -125,7 +131,14 @@ export async function runTelegramSync(options = {}) {
     }
 
     const recognitions = (await recognizeBatchRunner(batch, env)).filter(Boolean);
-    const analyzed = analyzeTelegramBatch(batch, recognitions, { minConfidence: 0.75 });
+    const analyzed = analyzeTelegramBatch(batch, recognitions, {
+      minConfidence: 0.75,
+      fallbackArchivedDate: resolveFallbackArchivedDateForBatch({
+        batch,
+        recognitions,
+        latestMarkdownDate,
+      }),
+    });
     const persistedBatch = {
       ...analyzed,
       updateIds: batch.messages.map((message) => message.updateId),
@@ -204,7 +217,7 @@ export async function runTelegramSync(options = {}) {
     } catch (error) {
       const canFallbackFromDatabase =
         trainingDbConfig.enabled && Boolean(trainingDbConfig.url);
-      if (canFallbackFromDatabase && isIncompleteDatabaseSnapshotError(error)) {
+      if (canFallbackFromDatabase && canRebuildMarkdownFromPersistedBatches(error)) {
         process.stderr.write(
           `[telegram-sync] ${error.message}; rebuilding markdown from persisted batches\n`,
         );
@@ -270,6 +283,79 @@ function rebuildMarkdownFromPersistedBatches(markdown, batches) {
     const applied = applyTelegramSyncToMarkdown(currentMarkdown, batch);
     return applied.markdown;
   }, markdown);
+}
+
+async function readLastProcessedUpdateIdForRun({
+  readLastProcessedUpdateId,
+  dispatchUpdates,
+}) {
+  try {
+    return await readLastProcessedUpdateId();
+  } catch (error) {
+    if (!dispatchUpdates) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(
+      `[telegram-sync] could not read last processed update id: ${message}; continuing with repository dispatch payload\n`,
+    );
+    return 0;
+  }
+}
+
+function canRebuildMarkdownFromPersistedBatches(error) {
+  return isIncompleteDatabaseSnapshotError(error) || isUnavailableDatabaseSnapshotError(error);
+}
+
+function resolveLatestMarkdownDate(markdown) {
+  try {
+    return parseTrainingRecord(markdown).latest.daily?.date ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveFallbackArchivedDateForBatch({ batch, recognitions, latestMarkdownDate }) {
+  if (!latestMarkdownDate || !hasRecognizedTrainingPayload(recognitions)) {
+    return null;
+  }
+  const messageDates = new Set(
+    batch.messages
+      .map((message) => dateFromUnixInShanghai(message.dateUnix))
+      .filter(Boolean),
+  );
+  return messageDates.size === 1 && messageDates.has(latestMarkdownDate)
+    ? latestMarkdownDate
+    : null;
+}
+
+function hasRecognizedTrainingPayload(recognitions) {
+  return recognitions.some((recognition) => {
+    if (recognition.imageType === 'measurement') {
+      return Boolean(recognition.records?.measurement);
+    }
+    if (recognition.imageType === 'workout') {
+      return (
+        (recognition.records?.activities?.length ?? 0) > 0 ||
+        Boolean(recognition.records?.dailyWorkoutSummary)
+      );
+    }
+    if (recognition.imageType === 'nutrition') {
+      return (
+        (recognition.records?.meals?.length ?? 0) > 0 ||
+        recognition.records?.totalCalories != null ||
+        (recognition.records?.details?.length ?? 0) > 0
+      );
+    }
+    return false;
+  });
+}
+
+function dateFromUnixInShanghai(unixSeconds) {
+  if (!Number.isFinite(unixSeconds)) {
+    return null;
+  }
+  return new Date((unixSeconds + 8 * 60 * 60) * 1000).toISOString().slice(0, 10);
 }
 
 if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {

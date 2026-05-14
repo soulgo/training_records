@@ -50,6 +50,7 @@ export function groupTelegramUpdates(updates) {
 
 export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const minConfidence = options.minConfidence ?? 0.75;
+  const fallbackArchivedDate = normalizeFallbackArchivedDate(options.fallbackArchivedDate);
   const recognitionMap = new Map(recognitions.map((item) => [item.messageId, item]));
   const explicitDate = extractBatchExplicitDate(batch);
   const primaryDetectedDates = new Set();
@@ -138,13 +139,22 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const archivedDate =
     explicitDate ??
     resolveDetectedDate(primaryDetectedDates) ??
-    resolveDetectedDate(measurementDates);
+    resolveDetectedDate(measurementDates) ??
+    fallbackArchivedDate;
   if (!archivedDate) {
     return buildSkippedBatchResult(batch, {
       reason: issues.length > 0 ? issues.join('; ') : 'no reliable archived date',
       warnings,
       issues,
     });
+  }
+  if (
+    fallbackArchivedDate === archivedDate &&
+    !explicitDate &&
+    primaryDetectedDates.size === 0 &&
+    measurementDates.size === 0
+  ) {
+    warnings.push(`Using latest same-day archived date ${fallbackArchivedDate} for undated Telegram batch.`);
   }
 
   const measurement = normalizeMeasurementForArchive(measurementCandidates.at(-1) ?? null, archivedDate);
@@ -376,6 +386,16 @@ function resolveDetectedDate(detectedDates) {
     return [...detectedDates][0];
   }
   return null;
+}
+
+function normalizeFallbackArchivedDate(value) {
+  if (!value) {
+    return null;
+  }
+  const parsed = parseDateParts(value);
+  return parsed && isValidDateParts(parsed.year, parsed.month, parsed.day)
+    ? formatDateParts(parsed.year, parsed.month, parsed.day)
+    : null;
 }
 
 function buildSkippedBatchResult(batch, { reason, warnings = [], issues = [] }) {
