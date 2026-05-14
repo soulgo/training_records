@@ -7,6 +7,7 @@ import { readTrainingSnapshotFromDatabase } from './training-db-core.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..');
+const incompleteDatabaseSnapshotPattern = /database snapshot is empty or missing measurements/i;
 
 export async function buildTrainingSnapshot(options = {}) {
   const rootDir = options.rootDir ?? defaultRootDir;
@@ -24,7 +25,7 @@ export async function buildTrainingSnapshot(options = {}) {
       }
       throw new Error('database snapshot is empty or missing measurements');
     } catch (error) {
-      if (error instanceof Error && /database snapshot is empty or missing measurements/i.test(error.message)) {
+      if (isIncompleteDatabaseSnapshotError(error)) {
         throw error;
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -38,6 +39,10 @@ export async function buildTrainingSnapshot(options = {}) {
 export function resolveSnapshotSource(env = process.env) {
   const configured = String(env?.TRAINING_SNAPSHOT_SOURCE ?? 'markdown').trim().toLowerCase();
   return configured === 'database' ? 'database' : 'markdown';
+}
+
+export function isIncompleteDatabaseSnapshotError(error) {
+  return error instanceof Error && incompleteDatabaseSnapshotPattern.test(error.message);
 }
 
 async function readTrainingSnapshotFromMarkdown(rootDir, now) {

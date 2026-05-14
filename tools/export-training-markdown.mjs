@@ -2,8 +2,11 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { exportTrainingMarkdown } from './training-db-core.mjs';
-import { buildTrainingSnapshot } from './training-snapshot.mjs';
+import { exportTrainingMarkdown, resolveTrainingCoreConfig } from './training-db-core.mjs';
+import {
+  buildTrainingSnapshot,
+  isIncompleteDatabaseSnapshotError,
+} from './training-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -11,16 +14,39 @@ const rootDir = path.resolve(__dirname, '..');
 export async function exportDerivedTrainingMarkdown(options = {}) {
   const activeRootDir = options.rootDir ?? rootDir;
   const outputPath = options.outputPath ?? path.join(activeRootDir, '训练记录.md');
+  const stderr = options.stderr ?? process.stderr;
   const snapshotSource =
     options.source ??
     ((await hasPendingTelegramFallbackBatches(activeRootDir)) ? 'markdown' : 'database');
-  const snapshot = await (options.buildTrainingSnapshot ?? buildTrainingSnapshot)({
+  const buildSnapshot = options.buildTrainingSnapshot ?? buildTrainingSnapshot;
+  const trainingDbConfig = resolveTrainingCoreConfig(options.env ?? process.env);
+  const canFallbackFromDatabase =
+    snapshotSource === 'database' && trainingDbConfig.enabled && Boolean(trainingDbConfig.url);
+  const snapshotOptions = {
     source: snapshotSource,
     rootDir: activeRootDir,
     env: options.env ?? process.env,
     createClient: options.createClient,
     now: options.now,
-  });
+  };
+  let snapshot;
+
+  try {
+    snapshot = await buildSnapshot(snapshotOptions);
+  } catch (error) {
+    if (canFallbackFromDatabase && isIncompleteDatabaseSnapshotError(error)) {
+      stderr.write(
+        `[export-training-markdown] ${error.message}; falling back to markdown\n`,
+      );
+      snapshot = await buildSnapshot({
+        ...snapshotOptions,
+        source: 'markdown',
+      });
+    } else {
+      throw error;
+    }
+  }
+
   const markdown = (options.exportTrainingMarkdown ?? exportTrainingMarkdown)(snapshot);
   await writeFile(outputPath, markdown, 'utf8');
   return {

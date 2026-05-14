@@ -297,6 +297,72 @@ test('generateTrainingData can write outputs from the shared snapshot builder', 
   assert.equal(output.latest.measurement.weightKg, 71.8);
 });
 
+test('generateTrainingData falls back to markdown when database snapshot lacks measurements', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-build-snapshot-fallback-'));
+  const recordPath = path.join(tempRoot, '训练记录.md');
+  const outputPath = path.join(tempRoot, 'source', '_data', 'training.json');
+  const observedSources = [];
+  const stderrChunks = [];
+
+  await writeFile(recordPath, sampleMarkdown, 'utf8');
+
+  await generateTrainingData({
+    rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    argv: ['--source=database', '--trigger=github-actions-build'],
+    stdout: { write() {} },
+    stderr: {
+      write(chunk) {
+        stderrChunks.push(String(chunk));
+      },
+    },
+    buildSnapshot: async ({ source }) => {
+      observedSources.push(source);
+      if (source === 'database') {
+        throw new Error('database snapshot is empty or missing measurements');
+      }
+      return sampleParsed;
+    },
+    persistArchive: async () => ({ status: 'skipped', reason: 'disabled' }),
+  });
+
+  const output = JSON.parse(await readFile(outputPath, 'utf8'));
+  assert.deepEqual(observedSources, ['database', 'markdown']);
+  assert.equal(output.latest.measurement.weightKg, 72.1);
+  assert.match(stderrChunks.join(''), /falling back to markdown/i);
+});
+
+test('generateTrainingData does not hide incomplete database snapshots when database is not configured', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-build-snapshot-no-db-'));
+  const recordPath = path.join(tempRoot, '训练记录.md');
+  const observedSources = [];
+
+  await writeFile(recordPath, sampleMarkdown, 'utf8');
+
+  await assert.rejects(
+    generateTrainingData({
+      rootDir: tempRoot,
+      env: {
+        TRAINING_DB_ENABLED: 'false',
+      },
+      argv: ['--source=database', '--trigger=github-actions-build'],
+      stdout: { write() {} },
+      stderr: { write() {} },
+      buildSnapshot: async ({ source }) => {
+        observedSources.push(source);
+        throw new Error('database snapshot is empty or missing measurements');
+      },
+      persistArchive: async () => ({ status: 'skipped', reason: 'disabled' }),
+    }),
+    /database snapshot is empty or missing measurements/i,
+  );
+
+  assert.deepEqual(observedSources, ['database']);
+});
+
 test('appendTrainingArchiveFailureLog writes ndjson entries to the configured runtime path', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-db-log-'));
 

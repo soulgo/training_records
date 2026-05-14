@@ -8,7 +8,11 @@ import {
   resolveTrainingArchiveRuntimeContext,
 } from './training-db-archive.mjs';
 import { buildDashboardViewModel } from './dashboard-view.mjs';
-import { buildTrainingSnapshot } from './training-snapshot.mjs';
+import { resolveTrainingCoreConfig } from './training-db-core.mjs';
+import {
+  buildTrainingSnapshot,
+  isIncompleteDatabaseSnapshotError,
+} from './training-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..');
@@ -30,14 +34,35 @@ export async function generateTrainingData(options = {}) {
   const outputPath = path.join(outputDir, 'training.json');
   const dashboardViewPath = path.join(outputDir, 'dashboardView.json');
   const debugOutputPath = path.join(rootDir, '训练数据解析.md');
+  const snapshotSource = resolveSnapshotSource(argv, env);
+  const trainingDbConfig = resolveTrainingCoreConfig(env);
+  const canFallbackFromDatabase =
+    snapshotSource === 'database' && trainingDbConfig.enabled && Boolean(trainingDbConfig.url);
 
   const markdown = await readFile(recordPath, 'utf8');
-  const parsed = await buildSnapshot({
-    source: resolveSnapshotSource(argv, env),
+  const snapshotOptions = {
+    source: snapshotSource,
     rootDir,
     env,
     now: runStartedAt,
-  });
+  };
+  let parsed;
+
+  try {
+    parsed = await buildSnapshot(snapshotOptions);
+  } catch (error) {
+    if (canFallbackFromDatabase && isIncompleteDatabaseSnapshotError(error)) {
+      stderr.write(
+        `[generate-training-data] ${error.message}; falling back to markdown\n`,
+      );
+      parsed = await buildSnapshot({
+        ...snapshotOptions,
+        source: 'markdown',
+      });
+    } else {
+      throw error;
+    }
+  }
 
   await mkdir(outputDir, { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');

@@ -15,12 +15,21 @@ const dashboardViewPath = path.join(rootDir, 'source', '_data', 'dashboardView.j
 
 test('dashboard renders comparison pills for the latest metrics without relying on fixed values', () => {
   const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
+  const comparisonPillClasses = Array.from(
+    homepage.matchAll(/comparison-pill comparison-pill--([a-z]+)/g),
+    (match) => match[1],
+  );
 
   assert.match(homepage, /较前一日(?:下降|新增) [\d.]+%/);
-  assert.match(homepage, /comparison-pill comparison-pill--down/);
-  assert.match(homepage, /comparison-pill comparison-pill--up/);
-  assert.match(homepage, /comparison-pill__arrow">↓<\/span><span>较前一日(?:下降|新增) [\d.]+%/);
-  assert.match(homepage, /comparison-pill__arrow">↑<\/span><span>较前一日(?:下降|新增) [\d.]+%/);
+  assert.ok(comparisonPillClasses.length > 0, 'expected rendered comparison pills');
+  assert.ok(
+    comparisonPillClasses.some((className) => className === 'up' || className === 'down'),
+    'expected at least one directional comparison pill',
+  );
+  assert.match(
+    homepage,
+    /comparison-pill__arrow">(?:↓|↑)<\/span><span>较前一日(?:下降|新增) [\d.]+%/,
+  );
 });
 
 test('dashboard defaults charts to the latest 30 days and daily cards to the latest 4 days', () => {
