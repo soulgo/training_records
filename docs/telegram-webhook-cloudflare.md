@@ -10,6 +10,7 @@
 - Secret: `TELEGRAM_SECRET_TOKEN`
 - Variable: `GITHUB_OWNER`
 - Variable: `GITHUB_REPO`
+- Durable Object binding: `TELEGRAM_ALBUM_BUFFER`
 
 当前仓库对应值：
 
@@ -31,24 +32,55 @@
 它会：
 
 1. 校验 Telegram webhook 请求头 `X-Telegram-Bot-Api-Secret-Token`
-2. 把原始 Telegram update 原样转发为 GitHub `repository_dispatch`
-3. 触发类型固定为 `telegram_update`
+2. 普通单条消息立即转发为 GitHub `repository_dispatch`
+3. 相册消息按 `chat_id + media_group_id` 进入 `TelegramAlbumBuffer`，缓冲 3 秒后再合并派发
+4. 触发类型固定为 `telegram_update`，payload 使用 `client_payload.telegram_updates`
 
-## 3. GitHub Actions 行为
+如果没有配置 `TELEGRAM_ALBUM_BUFFER` 绑定，Worker 仍然会继续工作，但相册不会聚合，行为会退回为逐条 dispatch。
+
+## 3. Durable Object 绑定说明
+
+建议在 Worker 配置里把 Durable Object class 绑定到 `TELEGRAM_ALBUM_BUFFER`，class 名称使用：
+
+- `TelegramAlbumBuffer`
+
+如果你使用 `wrangler.toml`，核心绑定会长这样：
+
+```toml
+[[durable_objects.bindings]]
+name = "TELEGRAM_ALBUM_BUFFER"
+class_name = "TelegramAlbumBuffer"
+```
+
+并在迁移里声明新 class：
+
+```toml
+[[migrations]]
+tag = "v1"
+new_classes = ["TelegramAlbumBuffer"]
+```
+
+## 4. GitHub Actions 行为
 
 [`telegram-sync.yml`](/C:/Users/ljq90/Desktop/project_test/健身锻炼/.github/workflows/telegram-sync.yml) 现在支持：
 
 - `repository_dispatch`
-- `push` 到 `main`
+- `push` 到 `main` 且仅限 `训练记录.md`
 - 手动 `workflow_dispatch`
 
 并且运行时使用 `TELEGRAM_SYNC_TRANSPORT=webhook`：
 
 - `repository_dispatch` 时直接消费 webhook payload
 - `push` / 手动触发时不会再调用 `getUpdates`
+- 由 `github-actions[bot]` 推送出来的同步提交会跳过二次 `Telegram Sync`
 - 仍然会重放待补偿批次并在需要时刷新 Markdown
 
-## 4. 设置 Telegram webhook
+[`deploy-pages.yml`](/C:/Users/ljq90/Desktop/project_test/健身锻炼/.github/workflows/deploy-pages.yml) 现在改为：
+
+- 在 `main` 的站点相关文件真正发生 push 后再部署
+- 不再因为一次 `Telegram Sync` 完成就无条件额外跑一次 Pages workflow
+
+## 5. 设置 Telegram webhook
 
 在仓库代码和 Worker 都部署完成后，再执行：
 
@@ -69,9 +101,10 @@ Invoke-RestMethod `
   } | ConvertTo-Json)
 ```
 
-## 5. 验证方法
+## 6. 验证方法
 
-1. 给 Bot 发一张新的训练/饮食/体脂截图
-2. 在 Cloudflare Worker 请求日志确认收到了 `POST`
-3. 在 GitHub Actions 确认 `Telegram Sync` 被 `repository_dispatch` 触发
-4. 检查是否产生新的 `训练记录.md` 同步提交
+1. 给 Bot 发一张新的训练/饮食/体脂截图，应触发 1 次 `Telegram Sync`
+2. 给 Bot 发 2 张相册截图，应只触发 1 次 `Telegram Sync`
+3. 在 Cloudflare Worker 请求日志确认收到了 `POST`
+4. 在 GitHub Actions 确认 `Telegram Sync` 被 `repository_dispatch` 触发
+5. 检查是否产生新的 `训练记录.md` 同步提交

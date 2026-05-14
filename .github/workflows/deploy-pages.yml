@@ -2,11 +2,17 @@ name: Deploy GitHub Pages
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows:
-      - Telegram Sync
-    types:
-      - completed
+  push:
+    branches:
+      - main
+    paths:
+      - 训练记录.md
+      - _config.yml
+      - source/**
+      - themes/**
+      - tools/**
+      - package.json
+      - package-lock.json
 
 permissions:
   contents: read
@@ -19,13 +25,12 @@ concurrency:
 
 jobs:
   build:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && format('refs/heads/{0}', github.event.workflow_run.head_branch) || github.ref }}
+          ref: ${{ github.ref }}
           fetch-depth: 0
 
       - name: Setup Node.js
@@ -68,7 +73,6 @@ jobs:
           path: ./public
 
   deploy:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

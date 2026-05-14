@@ -1,11 +1,70 @@
 const GITHUB_API_BASE_URL = 'https://api.github.com';
 const TELEGRAM_SECRET_HEADER = 'X-Telegram-Bot-Api-Secret-Token';
+const ALBUM_BUFFER_DELAY_MS = 3_000;
 
 export default {
   async fetch(request, env) {
     return handleTelegramWebhook(request, env);
   },
 };
+
+export class TelegramAlbumBuffer {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    if (request.method !== 'POST') {
+      return jsonResponse(405, { ok: false, error: 'method_not_allowed' });
+    }
+
+    let payload;
+    try {
+      payload = await request.json();
+    } catch {
+      return jsonResponse(400, { ok: false, error: 'invalid_json' });
+    }
+
+    const update = payload?.update;
+    if (!update) {
+      return jsonResponse(400, { ok: false, error: 'missing_update' });
+    }
+
+    const updates = await readBufferedUpdates(this.state);
+    if (!updates.some((item) => item?.update_id === update?.update_id)) {
+      updates.push(update);
+      updates.sort((left, right) => (left?.update_id ?? 0) - (right?.update_id ?? 0));
+      await this.state.storage.put('updates', updates);
+    }
+
+    const existingAlarm = await getStateAlarm(this.state);
+    if (!existingAlarm) {
+      await setStateAlarm(this.state, Date.now() + ALBUM_BUFFER_DELAY_MS);
+    }
+
+    return jsonResponse(202, {
+      ok: true,
+      buffered: true,
+      updateCount: updates.length,
+    });
+  }
+
+  async alarm() {
+    const updates = await readBufferedUpdates(this.state);
+    if (!updates.length) {
+      return;
+    }
+
+    await dispatchTelegramUpdates({
+      fetchImpl: this.env.__dispatchFetchImpl ?? fetch,
+      env: this.env,
+      updates,
+    });
+
+    await this.state.storage.delete('updates');
+  }
+}
 
 export async function handleTelegramWebhook(request, env, options = {}) {
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -32,24 +91,42 @@ export async function handleTelegramWebhook(request, env, options = {}) {
     return jsonResponse(400, { ok: false, error: 'invalid_json' });
   }
 
-  const response = await fetchImpl(
-    `${env.GITHUB_API_BASE_URL?.trim() || GITHUB_API_BASE_URL}/repos/${encodeURIComponent(env.GITHUB_OWNER)}/${encodeURIComponent(env.GITHUB_REPO)}/dispatches`,
-    {
-      method: 'POST',
-      headers: {
-        accept: 'application/vnd.github+json',
-        authorization: `Bearer ${env.GITHUB_TOKEN}`,
-        'content-type': 'application/json',
-        'user-agent': 'telegram-sync-dispatch-worker',
-      },
-      body: JSON.stringify({
-        event_type: 'telegram_update',
-        client_payload: {
-          telegram_update: update,
+  const albumKey = getAlbumBufferKey(update);
+  if (albumKey && env?.TELEGRAM_ALBUM_BUFFER) {
+    const stubId = env.TELEGRAM_ALBUM_BUFFER.idFromName(albumKey);
+    const stub = env.TELEGRAM_ALBUM_BUFFER.get(stubId);
+    const response = await stub.fetch(
+      new Request('https://telegram-album-buffer.internal/enqueue', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
         },
+        body: JSON.stringify({ update }),
       }),
-    },
-  );
+    );
+
+    if (!response.ok) {
+      return jsonResponse(502, {
+        ok: false,
+        error: 'album_buffer_failed',
+        status: response.status,
+        body: await safeReadText(response),
+      });
+    }
+
+    return jsonResponse(202, {
+      ok: true,
+      buffered: true,
+      updateId: update?.update_id ?? null,
+      albumKey,
+    });
+  }
+
+  const response = await dispatchTelegramUpdates({
+    fetchImpl,
+    env,
+    updates: [update],
+  });
 
   if (!response.ok) {
     return jsonResponse(502, {
@@ -82,6 +159,61 @@ async function safeReadText(response) {
   } catch {
     return '';
   }
+}
+
+async function dispatchTelegramUpdates({ fetchImpl, env, updates }) {
+  return fetchImpl(
+    `${env.GITHUB_API_BASE_URL?.trim() || GITHUB_API_BASE_URL}/repos/${encodeURIComponent(env.GITHUB_OWNER)}/${encodeURIComponent(env.GITHUB_REPO)}/dispatches`,
+    {
+      method: 'POST',
+      headers: {
+        accept: 'application/vnd.github+json',
+        authorization: `Bearer ${env.GITHUB_TOKEN}`,
+        'content-type': 'application/json',
+        'user-agent': 'telegram-sync-dispatch-worker',
+      },
+      body: JSON.stringify({
+        event_type: 'telegram_update',
+        client_payload: {
+          telegram_updates: updates,
+        },
+      }),
+    },
+  );
+}
+
+function getAlbumBufferKey(update) {
+  const message = update?.message ?? update?.edited_message ?? null;
+  const chatId = message?.chat?.id;
+  const mediaGroupId = message?.media_group_id;
+  if (chatId == null || !mediaGroupId) {
+    return null;
+  }
+  return `${chatId}:${mediaGroupId}`;
+}
+
+async function readBufferedUpdates(state) {
+  return (await state.storage.get('updates')) ?? [];
+}
+
+async function getStateAlarm(state) {
+  if (typeof state.storage?.getAlarm === 'function') {
+    return state.storage.getAlarm();
+  }
+  if (typeof state.getAlarm === 'function') {
+    return state.getAlarm();
+  }
+  return null;
+}
+
+async function setStateAlarm(state, value) {
+  if (typeof state.storage?.setAlarm === 'function') {
+    return state.storage.setAlarm(value);
+  }
+  if (typeof state.setAlarm === 'function') {
+    return state.setAlarm(value);
+  }
+  return null;
 }
 
 function jsonResponse(status, payload) {

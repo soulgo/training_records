@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { handleTelegramWebhook } from '../cloudflare/telegram-sync-dispatch-worker.mjs';
+import {
+  TelegramAlbumBuffer,
+  handleTelegramWebhook,
+} from '../cloudflare/telegram-sync-dispatch-worker.mjs';
 
 function createEnv() {
   return {
@@ -12,7 +15,7 @@ function createEnv() {
   };
 }
 
-test('handleTelegramWebhook dispatches telegram updates to GitHub', async () => {
+test('handleTelegramWebhook dispatches non-album telegram updates to GitHub immediately', async () => {
   const calls = [];
   const request = new Request('https://worker.example.com', {
     method: 'POST',
@@ -41,12 +44,142 @@ test('handleTelegramWebhook dispatches telegram updates to GitHub', async () => 
   assert.deepEqual(JSON.parse(calls[0].init.body), {
     event_type: 'telegram_update',
     client_payload: {
-      telegram_update: {
-        update_id: 123,
-        message: {
-          message_id: 1,
+      telegram_updates: [
+        {
+          update_id: 123,
+          message: {
+            message_id: 1,
+          },
         },
+      ],
+    },
+  });
+});
+
+test('handleTelegramWebhook buffers album updates and dispatches them together after the alarm fires', async () => {
+  const calls = [];
+  const env = createEnv();
+  const namespace = createAlbumBufferNamespace(env, {
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return new Response(null, { status: 204 });
+    },
+  });
+
+  const firstResponse = await handleTelegramWebhook(
+    createTelegramRequest({
+      update_id: 201,
+      message: {
+        message_id: 21,
+        media_group_id: 'album-1',
+        chat: { id: 42 },
       },
+    }),
+    {
+      ...env,
+      TELEGRAM_ALBUM_BUFFER: namespace,
+    },
+  );
+
+  const secondResponse = await handleTelegramWebhook(
+    createTelegramRequest({
+      update_id: 202,
+      message: {
+        message_id: 22,
+        media_group_id: 'album-1',
+        chat: { id: 42 },
+      },
+    }),
+    {
+      ...env,
+      TELEGRAM_ALBUM_BUFFER: namespace,
+    },
+  );
+
+  assert.equal(firstResponse.status, 202);
+  assert.equal(secondResponse.status, 202);
+  assert.equal(calls.length, 0);
+
+  await namespace.flush('42:album-1');
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    event_type: 'telegram_update',
+    client_payload: {
+      telegram_updates: [
+        {
+          update_id: 201,
+          message: {
+            message_id: 21,
+            media_group_id: 'album-1',
+            chat: { id: 42 },
+          },
+        },
+        {
+          update_id: 202,
+          message: {
+            message_id: 22,
+            media_group_id: 'album-1',
+            chat: { id: 42 },
+          },
+        },
+      ],
+    },
+  });
+});
+
+test('TelegramAlbumBuffer deduplicates repeated updates inside the same album batch', async () => {
+  const calls = [];
+  const env = {
+    ...createEnv(),
+    __dispatchFetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return new Response(null, { status: 204 });
+    },
+  };
+  const state = createDurableObjectState();
+  const buffer = new TelegramAlbumBuffer(state, env);
+  const requestBody = {
+    update: {
+      update_id: 301,
+      message: {
+        message_id: 31,
+        media_group_id: 'album-dup',
+        chat: { id: 7 },
+      },
+    },
+  };
+
+  await buffer.fetch(
+    new Request('https://worker.example.com/buffer', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    }),
+  );
+  await buffer.fetch(
+    new Request('https://worker.example.com/buffer', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    }),
+  );
+  await buffer.alarm();
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    event_type: 'telegram_update',
+    client_payload: {
+      telegram_updates: [
+        {
+          update_id: 301,
+          message: {
+            message_id: 31,
+            media_group_id: 'album-dup',
+            chat: { id: 7 },
+          },
+        },
+      ],
     },
   });
 });
@@ -73,3 +206,71 @@ test('handleTelegramWebhook rejects requests with the wrong Telegram secret', as
     error: 'unauthorized',
   });
 });
+
+function createTelegramRequest(update) {
+  return new Request('https://worker.example.com', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'X-Telegram-Bot-Api-Secret-Token': 'secret-token',
+    },
+    body: JSON.stringify(update),
+  });
+}
+
+function createAlbumBufferNamespace(baseEnv, options = {}) {
+  const instances = new Map();
+
+  return {
+    idFromName(name) {
+      return { name };
+    },
+    get(id) {
+      if (!instances.has(id.name)) {
+        const state = createDurableObjectState();
+        const env = {
+          ...baseEnv,
+          __dispatchFetchImpl: options.fetchImpl,
+        };
+        instances.set(id.name, {
+          state,
+          object: new TelegramAlbumBuffer(state, env),
+        });
+      }
+      return instances.get(id.name).object;
+    },
+    async flush(name) {
+      const instance = instances.get(name);
+      assert.ok(instance, `missing buffered album instance for ${name}`);
+      await instance.object.alarm();
+    },
+  };
+}
+
+function createDurableObjectState() {
+  const storageMap = new Map();
+  let alarmAt = null;
+
+  return {
+    storage: {
+      async get(key) {
+        return storageMap.get(key);
+      },
+      async put(key, value) {
+        storageMap.set(key, value);
+      },
+      async delete(key) {
+        storageMap.delete(key);
+      },
+      async deleteAll() {
+        storageMap.clear();
+      },
+    },
+    async getAlarm() {
+      return alarmAt;
+    },
+    async setAlarm(value) {
+      alarmAt = value;
+    },
+  };
+}

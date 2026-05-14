@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 训练记录.md
   repository_dispatch:
     types:
       - telegram_update
@@ -18,6 +20,7 @@ concurrency:
 
 jobs:
   sync:
+    if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -89,10 +92,6 @@ jobs:
       - name: Run tests
         if: steps.changes.outputs.content_changed == 'true'
         run: npm test
-
-      - name: Build site data and static files
-        if: steps.changes.outputs.content_changed == 'true'
-        run: npm run build
 
       - name: Commit sync results
         if: steps.changes.outputs.repo_changed == 'true'

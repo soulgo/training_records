@@ -185,7 +185,7 @@ Markdown 推荐结构：
   处理 Telegram 同步、DB 优先写入、Markdown 回退和待补偿重放
 
 - `cloudflare/telegram-sync-dispatch-worker.mjs`
-  Cloudflare Worker 示例，用于把 Telegram webhook 转发成 GitHub `repository_dispatch`
+  Cloudflare Worker 示例，用于把 Telegram webhook 转发成 GitHub `repository_dispatch`，并把相册消息按 `media_group_id` 聚合后再派发
 
 - `themes/cactus/layout/dashboard.ejs`
   首页模板
@@ -213,6 +213,7 @@ npm run build
 `npm run sync:telegram` 的行为是：
 
 1. 接收 GitHub `repository_dispatch` 传入的 Telegram update，或在轮询模式下拉 Telegram 消息
+   Cloudflare webhook 接入已支持把同一相册的多条 update 聚合后一次 dispatch
 2. 调用 AI 识别截图
 3. 优先写 PostgreSQL
 4. 如果 PostgreSQL 失败，则先回退写 Markdown
@@ -259,10 +260,10 @@ npm run build
 当前工作流：
 
 - `.github/workflows/deploy-pages.yml`
-  在 `Telegram Sync` 成功后自动测试、构建并发布 Pages，也支持手动触发
+  在 `main` 的站点相关变更 push 后自动测试、构建并发布 Pages，也支持手动触发
 
 - `.github/workflows/telegram-sync.yml`
-  在 `main` push、手动触发或 `repository_dispatch` 时运行 Telegram 同步，并提交派生 Markdown
+  在 `repository_dispatch`、手动触发或 `训练记录.md` 的人工 push 时运行 Telegram 同步，并提交派生 Markdown；会跳过自身 bot push 造成的二次空跑
 
 - `docs/telegram-webhook-cloudflare.md`
   Telegram webhook + Cloudflare Worker 的接入说明
