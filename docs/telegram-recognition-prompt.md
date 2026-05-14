@@ -6,6 +6,10 @@ Telegram 图片识别的运行时 prompt 在：
 
 这份文件会被 `tools/telegram-sync.mjs` 在调用 AI 识别图片时读取。也就是说，修改它会影响后续 Telegram 图片解析入库结果。
 
+如果你这次维护涉及“单张/多张图片怎么定归档日期、图片没日期时怎么回退、`photo` 和 `document` 有什么差别”，请先一起阅读：
+
+- [docs/telegram-date-resolution.md](/Users/soulgo/Desktop/training_records/docs/telegram-date-resolution.md)
+
 ## 维护原则
 
 - 先改 prompt，再用测试验证，不要只在代码里临时补一句。

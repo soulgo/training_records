@@ -40,6 +40,7 @@ test('loadRecognitionSystemPrompt reads the versioned Telegram image prompt', as
 
   assert.match(prompt, /只能输出符合 schema 的 JSON/);
   assert.match(prompt, /detectedDate.*只来自截图画面内可见的可靠日期/);
+  assert.match(prompt, /系统相册、文件详情或分享预览页/);
   assert.match(prompt, /不要从 caption\/text 或图片文件名推断/);
   assert.match(prompt, /records\.dailyWorkoutSummary/);
   assert.match(prompt, /kg = 斤 \* 0\.5/);
@@ -1236,6 +1237,7 @@ test('runTelegramSync skips an undated single nutrition screenshot without a fil
   assert.equal(persistedBatches.length, 0);
   assert.equal(result.batchResults[0].status, 'skipped');
   assert.match(result.batchResults[0].reason, /no reliable image or filename date/i);
+  assert.match(result.batchResults[0].warnings.join('\n'), /photo 形式发送/);
   assert.doesNotMatch(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /晚餐：465千卡/);
 });
 

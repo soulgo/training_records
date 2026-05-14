@@ -149,6 +149,11 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   }
 
   if (!archivedDate) {
+    if (filenameDates.size === 0 && batchLikelyLostOriginalFilename(batch)) {
+      warnings.push(
+        '该 Telegram 图片看起来是以 photo 形式发送，Bot API 通常不会保留原始文件名；若要依赖文件名日期回退，请改为以 document/文件 发送。',
+      );
+    }
     return buildSkippedBatchResult(batch, {
       reason: issues.length > 0
         ? `${issues.join('; ')}; no reliable image or filename date`
@@ -443,6 +448,12 @@ function shouldParseDateEvidence(dateEvidence) {
   const externalOnly = /\b(?:caption|text|filename|file\s*name)\b/i.test(dateEvidence);
   const imageEvidence = /\b(?:image|screenshot|ocr|header|screen)\b/i.test(dateEvidence) || /截图|画面|图片/.test(dateEvidence);
   return !externalOnly || imageEvidence;
+}
+
+function batchLikelyLostOriginalFilename(batch) {
+  return (batch.messages ?? []).some((message) =>
+    (message.photos ?? []).some((photo) => photo.source === 'photo' && !photo.fileName),
+  );
 }
 
 function resolveDetectedDate(detectedDates) {

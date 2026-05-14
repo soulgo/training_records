@@ -265,6 +265,9 @@ npm run build
 - `.github/workflows/telegram-sync.yml`
   在 `repository_dispatch`、手动触发或 `训练记录.md` 的人工 push 时运行 Telegram 同步，并提交派生 Markdown；会跳过自身 bot push 造成的二次空跑
 
+- `docs/telegram-date-resolution.md`
+  Telegram 单张/多张图片的日期归档与跳过规则说明，包含 `photo` 与 `document` 的差异
+
 - `docs/telegram-webhook-cloudflare.md`
   Telegram webhook + Cloudflare Worker 的接入说明
 

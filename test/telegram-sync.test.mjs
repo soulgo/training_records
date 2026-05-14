@@ -1238,6 +1238,54 @@ test('uses a filename date from any position when screenshots are undated', asyn
   assert.match(analyzed.warnings.join('\n'), /filename date 2026-05-12/i);
 });
 
+test('accepts a visible gallery filename date from image evidence when Telegram photo has no filename', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-visible-gallery-filename-date',
+    messages: [
+      {
+        updateId: 806,
+        messageId: 806,
+        mediaGroupId: null,
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 12, 0, 0) / 1000,
+        photos: [
+          {
+            fileId: 'file-nutrition',
+            fileUniqueId: 'uniq-nutrition',
+            fileName: null,
+            source: 'photo',
+          },
+        ],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 806,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'image file info panel shows filename 2026-4-03饮食记录.jpg',
+      confidence: 0.96,
+      warnings: [],
+      records: {
+        meals: [{ name: '早餐', calories: 510, recommendedMin: 307, recommendedMax: 712 }],
+        totalCalories: 510,
+        details: ['早餐 510 千卡'],
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-04-03');
+});
+
 test('uses filename month-day with telegram message year when screenshots are undated', async () => {
   const lib = await importTelegramSyncLib();
 
