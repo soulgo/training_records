@@ -63,6 +63,10 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const nutritionDetails = [];
   let nutritionTotalCalories = null;
 
+  if (explicitDate) {
+    primaryDetectedDates.add(explicitDate);
+  }
+
   for (const message of batch.messages) {
     const recognition = recognitionMap.get(message.messageId);
     if (!recognition) {
@@ -122,13 +126,13 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     }
   }
 
-  if (!explicitDate && primaryDetectedDates.size > 1) {
-    return {
-      status: 'skipped',
-      reason: `conflicting detected dates: ${[...primaryDetectedDates].join(', ')}`,
+  const allDetectedDates = new Set([...primaryDetectedDates, ...measurementDates]);
+  if (allDetectedDates.size > 1) {
+    return buildSkippedBatchResult(batch, {
+      reason: `conflicting detected dates: ${[...allDetectedDates].sort().join(', ')}`,
       warnings,
       issues,
-    };
+    });
   }
 
   const archivedDate =
@@ -136,12 +140,11 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     resolveDetectedDate(primaryDetectedDates) ??
     resolveDetectedDate(measurementDates);
   if (!archivedDate) {
-    return {
-      status: 'skipped',
+    return buildSkippedBatchResult(batch, {
       reason: issues.length > 0 ? issues.join('; ') : 'no reliable archived date',
       warnings,
       issues,
-    };
+    });
   }
 
   const measurement = normalizeMeasurementForArchive(measurementCandidates.at(-1) ?? null, archivedDate);
@@ -311,24 +314,58 @@ function extractBatchExplicitDate(batch) {
 }
 
 function normalizeRecognitionDate(recognition, message) {
-  const rawDate = recognition.detectedDate?.trim();
   const messageDate = dateFromUnix(message.dateUnix);
+  const rawDate = recognition.detectedDate?.trim();
 
   if (rawDate) {
-    const parsed = parseDateParts(rawDate);
-    if (parsed && isReasonableYear(parsed.year, messageDate.year)) {
-      return formatDateParts(parsed.year, parsed.month, parsed.day);
-    }
-
-    const fallbackMonthDay = parseMonthDay(recognition.dateEvidence) ?? parseMonthDay(rawDate);
-    if (fallbackMonthDay) {
-      return formatDateParts(messageDate.year, fallbackMonthDay.month, fallbackMonthDay.day);
+    const normalizedRawDate = normalizeDetectedDateValue(rawDate, messageDate.year);
+    if (normalizedRawDate) {
+      return normalizedRawDate;
     }
   }
 
-  const monthDayFromEvidence = parseMonthDay(recognition.dateEvidence);
-  if (monthDayFromEvidence) {
-    return formatDateParts(messageDate.year, monthDayFromEvidence.month, monthDayFromEvidence.day);
+  const measurementDate = normalizeMeasurementRecognitionDate(recognition, messageDate.year);
+  if (measurementDate) {
+    return measurementDate;
+  }
+
+  const evidenceDate = normalizeDetectedDateValue(recognition.dateEvidence, messageDate.year);
+  if (evidenceDate) {
+    return evidenceDate;
+  }
+
+  return null;
+}
+
+function normalizeMeasurementRecognitionDate(recognition, messageYear) {
+  if (recognition.imageType !== 'measurement') {
+    return null;
+  }
+
+  const measuredAt = recognition.records?.measurement?.measuredAt?.trim();
+  if (!measuredAt) {
+    return null;
+  }
+
+  return normalizeDetectedDateValue(measuredAt, messageYear);
+}
+
+function normalizeDetectedDateValue(value, messageYear) {
+  if (!value) {
+    return null;
+  }
+
+  const directDate = extractDateFromText(value);
+  if (directDate) {
+    const parsed = parseDateParts(directDate);
+    if (parsed && isReasonableYear(parsed.year, messageYear)) {
+      return formatDateParts(parsed.year, parsed.month, parsed.day);
+    }
+  }
+
+  const monthDay = parseMonthDay(value);
+  if (monthDay) {
+    return formatDateParts(messageYear, monthDay.month, monthDay.day);
   }
 
   return null;
@@ -339,6 +376,16 @@ function resolveDetectedDate(detectedDates) {
     return [...detectedDates][0];
   }
   return null;
+}
+
+function buildSkippedBatchResult(batch, { reason, warnings = [], issues = [] }) {
+  return {
+    status: 'skipped',
+    batchId: batch.batchId,
+    reason,
+    warnings,
+    issues,
+  };
 }
 
 function normalizeActivities(activities) {

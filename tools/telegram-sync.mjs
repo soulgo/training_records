@@ -127,6 +127,12 @@ export async function runTelegramSync(options = {}) {
       messages: batch.messages,
       recognitions,
     };
+
+    if (analyzed.status !== 'ready') {
+      batchResults.push(persistedBatch);
+      continue;
+    }
+
     try {
       const persistResult = await persistBatch({
         batch: persistedBatch,

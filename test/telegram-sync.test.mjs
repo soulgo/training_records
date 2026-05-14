@@ -11,7 +11,7 @@ async function importTelegramSyncLib() {
   }
 }
 
-test('groups album messages and prefers caption date for the whole batch', async () => {
+test('groups album messages and applies caption date when the other images are undated', async () => {
   const lib = await importTelegramSyncLib();
 
   assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
@@ -75,8 +75,8 @@ test('groups album messages and prefers caption date for the whole batch', async
     {
       messageId: 2,
       imageType: 'workout',
-      detectedDate: '2026-05-08',
-      dateEvidence: 'ocr',
+      detectedDate: null,
+      dateEvidence: 'no visible date',
       confidence: 0.85,
       warnings: [],
       records: {
@@ -289,7 +289,7 @@ test('processes only allowed chats and advances state to the highest processed u
       batch.messages.map((message) => ({
         messageId: message.messageId,
         imageType: message.messageId === 32 ? 'nutrition' : 'workout',
-        detectedDate: message.messageId === 33 ? '2026-05-08' : null,
+        detectedDate: null,
         dateEvidence: message.messageId === 32 ? 'caption' : 'ocr',
         confidence: 0.95,
         warnings: [],
@@ -428,6 +428,271 @@ test('fills missing measurement date from telegram message year when month-day i
   assert.equal(analyzed.measurement?.measuredAt, '2026-05-06');
 });
 
+test('uses measurement measuredAt as fallback archived date for a multi-image album', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'album-measured-at-fallback',
+    messages: [
+      {
+        updateId: 520905409,
+        messageId: 91,
+        mediaGroupId: 'album-measured-at-fallback',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 0, 23, 0) / 1000,
+        photos: [{ fileId: 'file-nutrition', fileUniqueId: 'uniq-nutrition' }],
+      },
+      {
+        updateId: 520905410,
+        messageId: 92,
+        mediaGroupId: 'album-measured-at-fallback',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 0, 23, 0) / 1000,
+        photos: [{ fileId: 'file-measurement', fileUniqueId: 'uniq-measurement' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 91,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no visible date',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [
+          { name: '早餐', calories: 108, recommendedMin: 515, recommendedMax: 927 },
+          { name: '午餐', calories: 396, recommendedMin: 618, recommendedMax: 1030 },
+          { name: '晚餐', calories: 465, recommendedMin: 309, recommendedMax: 721 },
+        ],
+        totalCalories: 969,
+        details: ['早餐 108 千卡', '午餐 396 千卡', '晚餐 465 千卡'],
+        dailyWorkoutSummary: null,
+      },
+    },
+    {
+      messageId: 92,
+      imageType: 'measurement',
+      detectedDate: null,
+      dateEvidence: 'body scale screenshot does not need extra OCR date evidence',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: '2026-05-14 06:23',
+          bodyScore: 73,
+          weightKg: 73.65,
+          bmi: 23.7,
+          bodyFatPct: 24.1,
+          skeletalMuscleKg: 30.7,
+          visceralFatLevel: 9,
+          basalMetabolismKcal: 1601,
+          bodyWaterPct: 48.6,
+          proteinPct: 23.3,
+          boneMassKg: 2.965,
+          fatFreeMassKg: 55.9,
+          bodyAge: 32,
+          bodyType: '肥胖型',
+        },
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: null,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-14');
+  assert.equal(analyzed.measurement?.measuredAt, '2026-05-14 06:23');
+  assert.equal(analyzed.nutrition.totalCalories, 969);
+});
+
+test('skips a multi-image album when every image lacks a reliable date', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'album-no-date',
+    messages: [
+      {
+        updateId: 601,
+        messageId: 61,
+        mediaGroupId: 'album-no-date',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 0, 23, 0) / 1000,
+        photos: [{ fileId: 'file-a', fileUniqueId: 'uniq-a' }],
+      },
+      {
+        updateId: 602,
+        messageId: 62,
+        mediaGroupId: 'album-no-date',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 0, 23, 0) / 1000,
+        photos: [{ fileId: 'file-b', fileUniqueId: 'uniq-b' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 61,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no visible date',
+      confidence: 0.94,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [{ name: '晚餐', calories: 465, recommendedMin: 309, recommendedMax: 721 }],
+        totalCalories: 465,
+        details: ['晚餐 465 千卡'],
+        dailyWorkoutSummary: null,
+      },
+    },
+    {
+      messageId: 62,
+      imageType: 'measurement',
+      detectedDate: null,
+      dateEvidence: 'no visible date',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: null,
+          bodyScore: 73,
+          weightKg: 73.65,
+          bmi: 23.7,
+          bodyFatPct: 24.1,
+          skeletalMuscleKg: 30.7,
+          visceralFatLevel: 9,
+          basalMetabolismKcal: 1601,
+          bodyWaterPct: 48.6,
+          proteinPct: 23.3,
+          boneMassKg: 2.965,
+          fatFreeMassKg: 55.9,
+          bodyAge: 32,
+          bodyType: '肥胖型',
+        },
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: null,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.equal(analyzed.batchId, 'album-no-date');
+  assert.match(analyzed.reason, /no reliable archived date/i);
+});
+
+test('skips a multi-image album when reliable detected dates conflict', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'album-conflicting-dates',
+    messages: [
+      {
+        updateId: 701,
+        messageId: 71,
+        mediaGroupId: 'album-conflicting-dates',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 0, 23, 0) / 1000,
+        photos: [{ fileId: 'file-a', fileUniqueId: 'uniq-a' }],
+      },
+      {
+        updateId: 702,
+        messageId: 72,
+        mediaGroupId: 'album-conflicting-dates',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 0, 23, 0) / 1000,
+        photos: [{ fileId: 'file-b', fileUniqueId: 'uniq-b' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 71,
+      imageType: 'nutrition',
+      detectedDate: '2026-05-14',
+      dateEvidence: 'ocr',
+      confidence: 0.94,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [{ name: '早餐', calories: 108, recommendedMin: 515, recommendedMax: 927 }],
+        totalCalories: 108,
+        details: ['早餐 108 千卡'],
+        dailyWorkoutSummary: null,
+      },
+    },
+    {
+      messageId: 72,
+      imageType: 'measurement',
+      detectedDate: '2026-05-13',
+      dateEvidence: 'ocr',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: '2026-05-13 06:23',
+          bodyScore: 73,
+          weightKg: 73.65,
+          bmi: 23.7,
+          bodyFatPct: 24.1,
+          skeletalMuscleKg: 30.7,
+          visceralFatLevel: 9,
+          basalMetabolismKcal: 1601,
+          bodyWaterPct: 48.6,
+          proteinPct: 23.3,
+          boneMassKg: 2.965,
+          fatFreeMassKg: 55.9,
+          bodyAge: 32,
+          bodyType: '肥胖型',
+        },
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: null,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.equal(analyzed.batchId, 'album-conflicting-dates');
+  assert.match(analyzed.reason, /conflicting detected dates/i);
+  assert.match(analyzed.reason, /2026-05-13/);
+  assert.match(analyzed.reason, /2026-05-14/);
+});
+
 test('merges into existing 2026-05-06 blocks without duplicating headings or null timestamps', async () => {
   const lib = await importTelegramSyncLib();
 
@@ -537,7 +802,7 @@ test('merges into existing 2026-05-06 blocks without duplicating headings or nul
   assert.equal(result.markdown.includes('测量时间：2026-05-06'), true);
 });
 
-test('uses the shared workout date for the whole album when measurement is next-morning data', async () => {
+test('skips an album when workout and next-morning measurement dates conflict', async () => {
   const lib = await importTelegramSyncLib();
 
   assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
@@ -636,12 +901,11 @@ test('uses the shared workout date for the whole album when measurement is next-
     },
   ]);
 
-  assert.equal(analyzed.status, 'ready');
-  assert.equal(analyzed.archivedDate, '2026-05-09');
-  assert.equal(analyzed.measurement?.measuredAt, '2026-05-10 06:14');
-  assert.deepEqual(analyzed.nutrition.meals, [
-    { name: '晚餐', calories: 1065, recommendedMin: 317, recommendedMax: 740 },
-  ]);
+  assert.equal(analyzed.status, 'skipped');
+  assert.equal(analyzed.batchId, 'album-shared-date');
+  assert.match(analyzed.reason, /conflicting detected dates/i);
+  assert.match(analyzed.reason, /2026-05-09/);
+  assert.match(analyzed.reason, /2026-05-10/);
 });
 
 test('applies the only dated screenshot date to undated images in the same album', async () => {
