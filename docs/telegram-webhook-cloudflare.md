@@ -46,7 +46,7 @@
 
 - `TelegramAlbumBuffer`
 
-如果你使用 `wrangler.toml`，核心绑定会长这样：
+仓库根目录已经提供 [`wrangler.toml`](/C:/Users/ljq90/Desktop/project_test/健身锻炼/wrangler.toml)，核心绑定长这样：
 
 ```toml
 [[durable_objects.bindings]]
@@ -59,8 +59,10 @@ class_name = "TelegramAlbumBuffer"
 ```toml
 [[migrations]]
 tag = "v1"
-new_classes = ["TelegramAlbumBuffer"]
+new_sqlite_classes = ["TelegramAlbumBuffer"]
 ```
+
+其中 `compatibility_date` 是 Cloudflare Workers 运行时兼容日期，不是训练记录日期，也不会参与图片日期识别。训练归档日期仍由 Telegram caption/text、截图 OCR 和同步逻辑自动决定。
 
 ## 4. GitHub Actions 行为
 
