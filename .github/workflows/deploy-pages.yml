@@ -11,6 +11,8 @@ on:
       - source/**
       - themes/**
       - tools/**
+      - .github/workflows/deploy-pages.yml
+      - .github/workflows/telegram-sync.yml
       - package.json
       - package-lock.json
 

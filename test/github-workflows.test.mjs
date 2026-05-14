@@ -20,6 +20,8 @@ test('deploy-pages workflow limits automatic deploys to site-relevant paths', as
     'source/**',
     'themes/**',
     'tools/**',
+    '.github/workflows/deploy-pages.yml',
+    '.github/workflows/telegram-sync.yml',
     'package.json',
     'package-lock.json',
   ]) {
