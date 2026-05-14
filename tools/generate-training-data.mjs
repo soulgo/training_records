@@ -12,6 +12,7 @@ import { resolveTrainingCoreConfig } from './training-db-core.mjs';
 import {
   buildTrainingSnapshot,
   isIncompleteDatabaseSnapshotError,
+  isUnavailableDatabaseSnapshotError,
 } from './training-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -51,7 +52,7 @@ export async function generateTrainingData(options = {}) {
   try {
     parsed = await buildSnapshot(snapshotOptions);
   } catch (error) {
-    if (canFallbackFromDatabase && isIncompleteDatabaseSnapshotError(error)) {
+    if (canFallbackFromDatabase && canUseMarkdownFallback(error)) {
       stderr.write(
         `[generate-training-data] ${error.message}; falling back to markdown\n`,
       );
@@ -179,4 +180,8 @@ function resolveSnapshotSource(argv, env) {
   }
   const configured = String(env.TRAINING_SNAPSHOT_SOURCE ?? 'markdown').trim().toLowerCase();
   return configured === 'database' ? 'database' : 'markdown';
+}
+
+function canUseMarkdownFallback(error) {
+  return isIncompleteDatabaseSnapshotError(error) || isUnavailableDatabaseSnapshotError(error);
 }

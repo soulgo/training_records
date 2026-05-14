@@ -8,6 +8,7 @@ import { readTrainingSnapshotFromDatabase } from './training-db-core.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..');
 const incompleteDatabaseSnapshotPattern = /database snapshot is empty or missing measurements/i;
+const unavailableDatabaseSnapshotPattern = /^database snapshot unavailable:/i;
 
 export async function buildTrainingSnapshot(options = {}) {
   const rootDir = options.rootDir ?? defaultRootDir;
@@ -43,6 +44,10 @@ export function resolveSnapshotSource(env = process.env) {
 
 export function isIncompleteDatabaseSnapshotError(error) {
   return error instanceof Error && incompleteDatabaseSnapshotPattern.test(error.message);
+}
+
+export function isUnavailableDatabaseSnapshotError(error) {
+  return error instanceof Error && unavailableDatabaseSnapshotPattern.test(error.message);
 }
 
 async function readTrainingSnapshotFromMarkdown(rootDir, now) {

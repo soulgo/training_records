@@ -335,6 +335,44 @@ test('generateTrainingData falls back to markdown when database snapshot lacks m
   assert.match(stderrChunks.join(''), /falling back to markdown/i);
 });
 
+test('generateTrainingData falls back to markdown when database snapshot is unavailable', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-build-snapshot-db-timeout-'));
+  const recordPath = path.join(tempRoot, '训练记录.md');
+  const outputPath = path.join(tempRoot, 'source', '_data', 'training.json');
+  const observedSources = [];
+  const stderrChunks = [];
+
+  await writeFile(recordPath, sampleMarkdown, 'utf8');
+
+  await generateTrainingData({
+    rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    argv: ['--source=database', '--trigger=github-actions-build'],
+    stdout: { write() {} },
+    stderr: {
+      write(chunk) {
+        stderrChunks.push(String(chunk));
+      },
+    },
+    buildSnapshot: async ({ source }) => {
+      observedSources.push(source);
+      if (source === 'database') {
+        throw new Error('database snapshot unavailable: timeout expired');
+      }
+      return sampleParsed;
+    },
+    persistArchive: async () => ({ status: 'skipped', reason: 'disabled' }),
+  });
+
+  const output = JSON.parse(await readFile(outputPath, 'utf8'));
+  assert.deepEqual(observedSources, ['database', 'markdown']);
+  assert.equal(output.latest.measurement.weightKg, 72.1);
+  assert.match(stderrChunks.join(''), /timeout expired; falling back to markdown/i);
+});
+
 test('generateTrainingData does not hide incomplete database snapshots when database is not configured', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-build-snapshot-no-db-'));
   const recordPath = path.join(tempRoot, '训练记录.md');
