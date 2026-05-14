@@ -138,7 +138,17 @@ test('homepage keeps the introduction at the bottom and uses a smaller header na
   assert.ok(noteIndex > heroIndex, 'expected note to be below the metrics section');
   assert.match(homepage, /<div class="dashboard-note">/);
   assert.match(homepage, /这里展示的是基于仓库中/);
-  assert.match(homepage, /<div id="nav">[\s\S]*<a href="\/training_records\/">训练记录<\/a>/);
+  assert.match(homepage, /<div id="nav">[\s\S]*<a href="\/">训练记录<\/a>/);
+});
+
+test('homepage uses root-relative asset and navigation paths for custom domain deployment', () => {
+  const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
+
+  assert.match(homepage, /<link rel="stylesheet" href="\/css\/style\.css">/);
+  assert.match(homepage, /<link rel="stylesheet" href="\/css\/training-dashboard\.css">/);
+  assert.match(homepage, /<img id="logo" alt class="u-logo" src="\/images\/logo\.png" \/>/);
+  assert.match(homepage, /<a class="u-url u-uid" href="\/">/);
+  assert.doesNotMatch(homepage, /(?:href|src)="\/training_records\//);
 });
 
 test('homepage removes the dashboard hero intro and shows trained day count card', () => {

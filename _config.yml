@@ -11,8 +11,8 @@ author: soulgo
 language: zh-CN
 timezone: Asia/Shanghai
 
-url: https://soulgo.github.io
-root: /training_records/
+url: https://soulgo.chat
+root: /
 permalink: thoughts/:year/:month/:day/:title/
 pretty_urls:
   trailing_index: true
