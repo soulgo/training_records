@@ -279,105 +279,102 @@ test('buildTrainingSnapshot can read database rows when the client rejects concu
   assert.equal(snapshot.daily[0].workoutSummary.trainingCalories, 402);
 });
 
-test('buildTrainingSnapshot falls back to markdown when database snapshot is empty', async () => {
+test('buildTrainingSnapshot throws when database snapshot is empty in database mode', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'training-snapshot-empty-db-'));
   await mkdir(path.join(rootDir, 'source', '_data'), { recursive: true });
   await writeFile(path.join(rootDir, '训练记录.md'), sampleMarkdown, 'utf8');
 
-  const snapshot = await buildTrainingSnapshot({
-    source: 'database',
-    rootDir,
-    env: {
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
-    createClient() {
-      return {
-        async connect() {},
-        async end() {},
-        async query() {
-          return { rows: [] };
-        },
-      };
-    },
-    now: new Date('2026-05-13T00:00:00.000Z'),
-  });
-
-  assert.equal(snapshot.daily.length, 1);
-  assert.equal(snapshot.latest.measurement?.weightKg, 72.85);
-  assert.equal(snapshot.latest.daily?.nutrition.totalCalories, 1593);
+  await assert.rejects(
+    buildTrainingSnapshot({
+      source: 'database',
+      rootDir,
+      env: {
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      createClient() {
+        return {
+          async connect() {},
+          async end() {},
+          async query() {
+            return { rows: [] };
+          },
+        };
+      },
+      now: new Date('2026-05-13T00:00:00.000Z'),
+    }),
+    /database snapshot/i,
+  );
 });
 
-test('buildTrainingSnapshot falls back to markdown when database snapshot lacks measurements', async () => {
+test('buildTrainingSnapshot throws when database snapshot lacks measurements in database mode', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'training-snapshot-partial-db-'));
   await mkdir(path.join(rootDir, 'source', '_data'), { recursive: true });
   await writeFile(path.join(rootDir, '训练记录.md'), sampleMarkdown, 'utf8');
 
-  const snapshot = await buildTrainingSnapshot({
-    source: 'database',
-    rootDir,
-    env: {
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
-    createClient() {
-      return {
-        async connect() {},
-        async end() {},
-        async query(sql) {
-          if (/from core\.training_day/i.test(sql)) {
-            return {
-              rows: [
-                {
-                  archived_date: '2026-05-09',
-                  total_activities: 2,
-                  total_duration_seconds: 3112,
-                  training_calories: 643,
-                  workout_duration_minutes: 78,
-                  active_hours: 12,
-                  cycling_distance_km: '1.65',
-                  intake_calories: 1593,
-                },
-              ],
-            };
-          }
-          return { rows: [] };
-        },
-      };
-    },
-    now: new Date('2026-05-13T00:00:00.000Z'),
-  });
-
-  assert.equal(snapshot.daily.length, 1);
-  assert.equal(snapshot.latest.measurement?.weightKg, 72.85);
-  assert.equal(snapshot.latest.daily?.activities.length, 2);
+  await assert.rejects(
+    buildTrainingSnapshot({
+      source: 'database',
+      rootDir,
+      env: {
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      createClient() {
+        return {
+          async connect() {},
+          async end() {},
+          async query(sql) {
+            if (/from core\.training_day/i.test(sql)) {
+              return {
+                rows: [
+                  {
+                    archived_date: '2026-05-09',
+                    total_activities: 2,
+                    total_duration_seconds: 3112,
+                    training_calories: 643,
+                    workout_duration_minutes: 78,
+                    active_hours: 12,
+                    cycling_distance_km: '1.65',
+                    intake_calories: 1593,
+                  },
+                ],
+              };
+            }
+            return { rows: [] };
+          },
+        };
+      },
+      now: new Date('2026-05-13T00:00:00.000Z'),
+    }),
+    /database snapshot/i,
+  );
 });
 
-test('buildTrainingSnapshot falls back to markdown when database read fails', async () => {
+test('buildTrainingSnapshot throws when database read fails in database mode', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'training-snapshot-db-error-'));
   await mkdir(path.join(rootDir, 'source', '_data'), { recursive: true });
   await writeFile(path.join(rootDir, '训练记录.md'), sampleMarkdown, 'utf8');
 
-  const snapshot = await buildTrainingSnapshot({
-    source: 'database',
-    rootDir,
-    env: {
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
-    createClient() {
-      return {
-        async connect() {},
-        async end() {},
-        async query() {
-          throw new Error('db unavailable');
-        },
-      };
-    },
-    now: new Date('2026-05-13T00:00:00.000Z'),
-  });
-
-  assert.equal(snapshot.daily.length, 1);
-  assert.equal(snapshot.latest.daily?.activities.length, 2);
-  assert.equal(snapshot.latest.daily?.workoutSummary.trainingCalories, 643);
+  await assert.rejects(
+    buildTrainingSnapshot({
+      source: 'database',
+      rootDir,
+      env: {
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      createClient() {
+        return {
+          async connect() {},
+          async end() {},
+          async query() {
+            throw new Error('db unavailable');
+          },
+        };
+      },
+      now: new Date('2026-05-13T00:00:00.000Z'),
+    }),
+    /db unavailable|database snapshot/i,
+  );
 });

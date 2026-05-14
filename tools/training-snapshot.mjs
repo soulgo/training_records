@@ -22,7 +22,14 @@ export async function buildTrainingSnapshot(options = {}) {
       if (isRenderableSnapshot(snapshot)) {
         return snapshot;
       }
-    } catch {}
+      throw new Error('database snapshot is empty or missing measurements');
+    } catch (error) {
+      if (error instanceof Error && /database snapshot is empty or missing measurements/i.test(error.message)) {
+        throw error;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`database snapshot unavailable: ${message}`);
+    }
   }
 
   return readTrainingSnapshotFromMarkdown(rootDir, options.now);
