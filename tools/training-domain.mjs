@@ -67,10 +67,20 @@ export function inferMealSlot(value) {
 }
 
 export function normalizeActivityType(type) {
-  if (type === '自由训练' || type?.startsWith('燃脂训练')) {
+  const normalized = type?.trim();
+  const aliases = {
+    outdoor_cycling: '户外骑行',
+    stair_climbing: '爬楼',
+    traditional_strength_training: '力量训练',
+    mixed_cardio: '燃脂训练',
+  };
+  if (aliases[normalized]) {
+    return aliases[normalized];
+  }
+  if (normalized === '自由训练' || normalized?.startsWith('燃脂训练')) {
     return '燃脂训练';
   }
-  return type;
+  return normalized;
 }
 
 export function normalizeActivityTime(value) {

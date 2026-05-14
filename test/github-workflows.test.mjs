@@ -29,6 +29,15 @@ test('deploy-pages workflow limits automatic deploys to site-relevant paths', as
   }
 });
 
+test('deploy-pages workflow reconciles committed markdown before building the site', async () => {
+  const workflow = await readWorkflow('.github/workflows/deploy-pages.yml');
+
+  assert.match(workflow, /- name: Reconcile committed markdown back to core/);
+  assert.match(workflow, /run:\s*npm run reconcile:markdown/);
+  assert.match(workflow, /TRAINING_DB_ENABLED:\s*\$\{\{\s*vars\.TRAINING_DB_ENABLED\s*\}\}/);
+  assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.TRAINING_DB_URL\s*\}\}/);
+});
+
 test('telegram-sync workflow validates changes and deploys Pages after sync commits', async () => {
   const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
 

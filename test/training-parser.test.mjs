@@ -140,6 +140,26 @@ test('parses telegram-written workout and nutrition formats into dashboard-frien
   ]);
 });
 
+test('normalizes English activity type tokens before building dashboard tags', () => {
+  const markdown = `
+### 2026-05-13
+
+#### 当日运动截图记录
+
+- 08:04 outdoor_cycling：3.18公里，时长00:12:47，平均速度14.93公里/小时
+- 08:17 stair_climbing：总消耗83千卡，时长00:09:07，平均心率134次/分钟
+`;
+
+  const snapshot = parseTrainingRecord(markdown);
+  const day = snapshot.daily[0];
+
+  assert.deepEqual(day.workoutSummary.countsByType, {
+    户外骑行: 1,
+    爬楼: 1,
+  });
+  assert.equal(day.workoutSummary.cyclingDistanceKm, 3.18);
+});
+
 test('uses daily activity overview screenshots to override training calories and expose workout duration', () => {
   const markdown = `
 ### 2026-05-10

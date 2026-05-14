@@ -3,6 +3,7 @@ const TELEGRAM_SECTION_TAG = '<!-- telegram-sync-section -->';
 
 import {
   inferMealSlot,
+  normalizeActivityType,
   normalizeActivityTime,
   roundTo,
   splitDateSections,
@@ -412,7 +413,7 @@ function normalizeActivities(activities) {
   const deduped = new Map();
   for (const activity of activities) {
     const time = normalizeActivityTime(activity.time);
-    const type = activity.type?.trim();
+    const type = normalizeActivityType(activity.type);
     const detail = activity.detail?.trim();
     if (!time || !type || !detail) {
       continue;
@@ -717,13 +718,6 @@ function mergeBlock(existingBlock, nextBlock) {
 
   if (incomingFingerprints.length > 0 && incomingFingerprints.every((fingerprint) => existingFingerprints.has(fingerprint))) {
     return existingBlock;
-  }
-
-  if (!existingBlock.includes(TELEGRAM_SECTION_TAG)) {
-    return `${existingBlock.trim()}\n${nextBlock
-      .split(/\r?\n/)
-      .slice(2)
-      .join('\n')}`.trim();
   }
 
   return nextBlock.trim();

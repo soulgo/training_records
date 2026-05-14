@@ -1209,6 +1209,95 @@ test('replaces telegram-managed blocks when a same-day screenshot is uploaded ag
   assert.equal(result.markdown.includes('当日截图内已记录总热量：1428千卡'), true);
 });
 
+test('replaces legacy same-day screenshot blocks instead of appending duplicates', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.applyTelegramSyncToMarkdown, 'applyTelegramSyncToMarkdown export missing');
+
+  const markdown = `
+### 2026-05-13
+
+#### 当日运动截图记录
+
+##### 当日活动总览
+
+- 活动热量：703千卡
+- 锻炼时长：97分钟
+
+##### 活动明细
+
+- 08:04 户外骑行：3.18公里，14.93公里/小时
+- 11:35 outdoor_cycling：3.04公里，10.95公里/小时
+
+#### 2026-05-13 饮食截图记录
+
+##### 餐次汇总
+
+- 早餐：100千卡，建议范围515–927千卡
+- 当日截图内已记录总热量：100千卡
+`;
+
+  const batchResult = {
+    batchId: 'album-replace-legacy',
+    archivedDate: '2026-05-13',
+    measurement: null,
+    workoutDailySummary: {
+      activityCaloriesKcal: 703,
+      workoutDurationMinutes: 97,
+      activeHours: 21,
+    },
+    activities: [
+      {
+        time: '08:04',
+        type: '户外骑行',
+        detail: '3.18公里，时长00:12:47，平均速度14.93公里/小时',
+      },
+      {
+        time: '08:17',
+        type: '爬楼',
+        detail: '总消耗83千卡，时长00:09:07，平均心率134次/分钟',
+      },
+    ],
+    nutrition: {
+      meals: [
+        { name: '早餐', calories: 108, recommendedMin: 515, recommendedMax: 927 },
+        { name: '午餐', calories: 396, recommendedMin: 618, recommendedMax: 1030 },
+        { name: '晚餐', calories: 465, recommendedMin: 309, recommendedMax: 721 },
+      ],
+      totalCalories: 969,
+      details: [],
+    },
+    fingerprints: {
+      measurement: [],
+      workoutDailySummary: ['ws-2026-05-13-703-97-21'],
+      activities: [
+        'a-2026-05-13-08:04-户外骑行-na',
+        'a-2026-05-13-08:17-爬楼-83',
+      ],
+      nutrition: [
+        'n-2026-05-13-早餐-108',
+        'n-2026-05-13-午餐-396',
+        'n-2026-05-13-晚餐-465',
+      ],
+    },
+  };
+
+  const result = lib.applyTelegramSyncToMarkdown(markdown, batchResult);
+  const parsed = parseTrainingRecord(result.markdown);
+  const day = parsed.daily.find((entry) => entry.date === '2026-05-13');
+
+  assert.equal(result.changed, true);
+  assert.equal(result.markdown.includes('11:35 outdoor_cycling'), false);
+  assert.equal((result.markdown.match(/08:04 户外骑行/g) ?? []).length, 1);
+  assert.equal(day.activities.length, 2);
+  assert.deepEqual(day.workoutSummary.countsByType, {
+    户外骑行: 1,
+    爬楼: 1,
+  });
+  assert.equal(day.nutrition.totalCalories, 969);
+  assert.equal(day.nutrition.meals.length, 3);
+});
+
 test('merges a daily activity overview screenshot into the same workout block', async () => {
   const lib = await importTelegramSyncLib();
 
