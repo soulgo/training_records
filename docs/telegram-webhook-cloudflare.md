@@ -38,6 +38,8 @@
 
 如果没有配置 `TELEGRAM_ALBUM_BUFFER` 绑定，Worker 仍然会继续工作，但相册不会聚合，行为会退回为逐条 dispatch。
 
+排查信号：如果 Cloudflare 对一次“合并发送”的相册显示多条 POST，同时 GitHub Actions 里出现多次 `Telegram Sync`，并且日志里的 `batchId` 相同，通常就是 `TELEGRAM_ALBUM_BUFFER` Durable Object 绑定没有在已部署的 Worker 上生效。
+
 ## 3. Durable Object 绑定说明
 
 建议在 Worker 配置里把 Durable Object class 绑定到 `TELEGRAM_ALBUM_BUFFER`，class 名称使用：
@@ -74,8 +76,9 @@ new_classes = ["TelegramAlbumBuffer"]
 - `push` / 手动触发时不会再调用 `getUpdates`
 - 由 `github-actions[bot]` 推送出来的同步提交会跳过二次 `Telegram Sync`
 - 仍然会重放待补偿批次并在需要时刷新 Markdown
+- 当同步提交了新的 `训练记录.md` 后，会在同一个 workflow 里直接构建并部署 GitHub Pages；不能依赖 bot push 再触发独立的 Pages workflow
 
-[`deploy-pages.yml`](/C:/Users/ljq90/Desktop/project_test/健身锻炼/.github/workflows/deploy-pages.yml) 现在改为：
+[`deploy-pages.yml`](/C:/Users/ljq90/Desktop/project_test/健身锻炼/.github/workflows/deploy-pages.yml) 用于普通人工 push / 手动触发：
 
 - 在 `main` 的站点相关文件真正发生 push 后再部署
 - 不再因为一次 `Telegram Sync` 完成就无条件额外跑一次 Pages workflow
@@ -104,7 +107,7 @@ Invoke-RestMethod `
 ## 6. 验证方法
 
 1. 给 Bot 发一张新的训练/饮食/体脂截图，应触发 1 次 `Telegram Sync`
-2. 给 Bot 发 2 张相册截图，应只触发 1 次 `Telegram Sync`
+2. 给 Bot 发 2 张相册截图，应只触发 1 次 `Telegram Sync`；如果触发多次，先检查 `TELEGRAM_ALBUM_BUFFER` Durable Object 绑定
 3. 在 Cloudflare Worker 请求日志确认收到了 `POST`
 4. 在 GitHub Actions 确认 `Telegram Sync` 被 `repository_dispatch` 触发
 5. 检查是否产生新的 `训练记录.md` 同步提交

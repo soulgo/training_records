@@ -27,11 +27,17 @@ test('deploy-pages workflow limits automatic deploys to site-relevant paths', as
   }
 });
 
-test('telegram-sync workflow keeps test validation but skips duplicate site builds', async () => {
+test('telegram-sync workflow validates changes and deploys Pages after sync commits', async () => {
   const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
 
   assert.match(workflow, /- name: Run tests/);
-  assert.doesNotMatch(workflow, /- name: Build site data and static files/);
+  assert.match(workflow, /pages:\s*write/);
+  assert.match(workflow, /id-token:\s*write/);
+  assert.match(workflow, /repo_changed:\s*\$\{\{\s*steps\.changes\.outputs\.repo_changed\s*\}\}/);
+  assert.match(workflow, /needs:\s*sync/);
+  assert.match(workflow, /- name: Build site data and static files/);
+  assert.match(workflow, /actions\/upload-pages-artifact@v3/);
+  assert.match(workflow, /actions\/deploy-pages@v4/);
 });
 
 async function readWorkflow(relativePath) {
