@@ -19,7 +19,6 @@ import {
   isIncompleteDatabaseSnapshotError,
   isUnavailableDatabaseSnapshotError,
 } from './training-snapshot.mjs';
-import { parseTrainingRecord } from './training-parser.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -29,7 +28,7 @@ const defaultRecognitionPromptPath = path.join(
   'telegram-training-image-recognition.md',
 );
 const fallbackRecognitionSystemPrompt =
-  '你是训练记录截图结构化助手。只能输出符合 schema 的 JSON。识别类型只允许 measurement、workout、nutrition、unknown。workout 既可能是逐条活动明细截图，也可能是当日活动总览截图；总览图请提取活动热量、锻炼时长、活动小时数到 dailyWorkoutSummary。日期优先从用户 caption/text 提取，其次再看图片。若日期不可靠则 detectedDate 返回 null，并在 warnings 中说明。';
+  '你是训练记录截图结构化助手。只能输出符合 schema 的 JSON。识别类型只允许 measurement、workout、nutrition、unknown。workout 既可能是逐条活动明细截图，也可能是当日活动总览截图；总览图请提取活动热量、锻炼时长、活动小时数到 dailyWorkoutSummary。detectedDate 只能来自截图画面里的日期；若截图日期不可靠则 detectedDate 返回 null，并在 warnings 中说明。';
 
 export async function main() {
   const result = await runTelegramSync();
@@ -123,7 +122,6 @@ export async function runTelegramSync(options = {}) {
   let changed = replayStoredAny;
   let fallbackUsed = false;
   let fallbackMarkdown = await readMarkdownOrDefault(recordPath);
-  const latestMarkdownDate = resolveLatestMarkdownDate(fallbackMarkdown);
 
   for (const batch of grouped) {
     const isAllowed = batch.messages.every((message) => env.allowedChatIds.has(message.chatId));
@@ -140,11 +138,6 @@ export async function runTelegramSync(options = {}) {
     const recognitions = (await recognizeBatchRunner(batch, env)).filter(Boolean);
     const analyzed = analyzeTelegramBatch(batch, recognitions, {
       minConfidence: 0.75,
-      fallbackArchivedDate: resolveFallbackArchivedDateForBatch({
-        batch,
-        recognitions,
-        latestMarkdownDate,
-      }),
     });
     const persistedBatch = {
       ...analyzed,
@@ -312,57 +305,6 @@ async function readLastProcessedUpdateIdForRun({
 
 function canRebuildMarkdownFromPersistedBatches(error) {
   return isIncompleteDatabaseSnapshotError(error) || isUnavailableDatabaseSnapshotError(error);
-}
-
-function resolveLatestMarkdownDate(markdown) {
-  try {
-    return parseTrainingRecord(markdown).latest.daily?.date ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function resolveFallbackArchivedDateForBatch({ batch, recognitions, latestMarkdownDate }) {
-  if (!latestMarkdownDate || !hasRecognizedTrainingPayload(recognitions)) {
-    return null;
-  }
-  const messageDates = new Set(
-    batch.messages
-      .map((message) => dateFromUnixInShanghai(message.dateUnix))
-      .filter(Boolean),
-  );
-  return messageDates.size === 1 && messageDates.has(latestMarkdownDate)
-    ? latestMarkdownDate
-    : null;
-}
-
-function hasRecognizedTrainingPayload(recognitions) {
-  return recognitions.some((recognition) => {
-    if (recognition.imageType === 'measurement') {
-      return Boolean(recognition.records?.measurement);
-    }
-    if (recognition.imageType === 'workout') {
-      return (
-        (recognition.records?.activities?.length ?? 0) > 0 ||
-        Boolean(recognition.records?.dailyWorkoutSummary)
-      );
-    }
-    if (recognition.imageType === 'nutrition') {
-      return (
-        (recognition.records?.meals?.length ?? 0) > 0 ||
-        recognition.records?.totalCalories != null ||
-        (recognition.records?.details?.length ?? 0) > 0
-      );
-    }
-    return false;
-  });
-}
-
-function dateFromUnixInShanghai(unixSeconds) {
-  if (!Number.isFinite(unixSeconds)) {
-    return null;
-  }
-  return new Date((unixSeconds + 8 * 60 * 60) * 1000).toISOString().slice(0, 10);
 }
 
 if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {

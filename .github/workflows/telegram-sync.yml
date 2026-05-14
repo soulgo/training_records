@@ -43,6 +43,7 @@ jobs:
         run: npm ci
 
       - name: Backfill core from archive snapshot
+        if: github.event_name != 'repository_dispatch'
         env:
           TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
           TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
@@ -51,6 +52,7 @@ jobs:
         run: npm run backfill:core
 
       - name: Reconcile committed markdown back to core
+        if: github.event_name != 'repository_dispatch'
         env:
           TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
           TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
@@ -75,6 +77,7 @@ jobs:
         run: npm run sync:telegram
 
       - name: Export markdown from database snapshot
+        if: github.event_name != 'repository_dispatch'
         env:
           TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
           TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}

@@ -39,7 +39,8 @@ test('loadRecognitionSystemPrompt reads the versioned Telegram image prompt', as
   const prompt = await loadRecognitionSystemPrompt();
 
   assert.match(prompt, /只能输出符合 schema 的 JSON/);
-  assert.match(prompt, /次日清晨体脂秤是否归入前一日，只能由 caption\/text 明确说明/);
+  assert.match(prompt, /detectedDate.*只来自截图画面内可见的可靠日期/);
+  assert.match(prompt, /不要从 caption\/text 或图片文件名推断/);
   assert.match(prompt, /records\.dailyWorkoutSummary/);
   assert.match(prompt, /kg = 斤 \* 0\.5/);
 });
@@ -92,7 +93,7 @@ test('runTelegramSync persists ready batches to the database and exports derived
         messageId: 71,
         imageType: 'nutrition',
         detectedDate: '2026-05-09',
-        dateEvidence: 'caption',
+        dateEvidence: 'image header',
         confidence: 0.96,
         warnings: [],
         records: {
@@ -200,7 +201,7 @@ test('runTelegramSync writes the ready batch back into markdown when the rebuilt
         messageId: 76,
         imageType: 'workout',
         detectedDate: '2026-04-06',
-        dateEvidence: 'caption',
+        dateEvidence: 'image header',
         confidence: 0.97,
         warnings: [],
         records: {
@@ -319,7 +320,7 @@ test('runTelegramSync falls back to markdown rebuild when database snapshot lack
         messageId: 94,
         imageType: 'nutrition',
         detectedDate: '2026-05-14',
-        dateEvidence: 'caption',
+        dateEvidence: 'image header',
         confidence: 0.97,
         warnings: [],
         records: {
@@ -380,7 +381,7 @@ test('runTelegramSync falls back to markdown when database persistence fails', a
         messageId: 71,
         imageType: 'nutrition',
         detectedDate: '2026-05-09',
-        dateEvidence: 'caption',
+        dateEvidence: 'image header',
         confidence: 0.96,
         warnings: [],
         records: {
@@ -631,7 +632,7 @@ test('runTelegramSync skips conflicting-date batches and continues processing re
               messageId: 93,
               imageType: 'nutrition',
               detectedDate: '2026-05-14',
-              dateEvidence: 'caption',
+              dateEvidence: 'image header',
               confidence: 0.98,
               warnings: [],
               records: {
@@ -888,7 +889,7 @@ test('runTelegramSync processes updates from repository dispatch payload without
         messageId: 71,
         imageType: 'nutrition',
         detectedDate: '2026-05-09',
-        dateEvidence: 'caption',
+        dateEvidence: 'image header',
         confidence: 0.96,
         warnings: [],
         records: {
@@ -995,7 +996,7 @@ test('runTelegramSync processes repository dispatch updates when database offset
         messageId: 71,
         imageType: 'nutrition',
         detectedDate: '2026-05-09',
-        dateEvidence: 'caption',
+        dateEvidence: 'image header',
         confidence: 0.96,
         warnings: [],
         records: {
@@ -1060,7 +1061,113 @@ test('runTelegramSync processes repository dispatch updates when database offset
   assert.equal(persistedBatches.length, 1);
 });
 
-test('runTelegramSync assigns an undated single nutrition screenshot to the latest same-day markdown entry', async () => {
+test('runTelegramSync uses document filename date when recognition has no image date', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-filename-date-'));
+  const persistedBatches = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+      GITHUB_EVENT_PATH: path.join(tempRoot, 'dispatch-event.json'),
+    },
+    getLastProcessedUpdateId: async () => 900,
+    repositoryDispatchEvent: {
+      client_payload: {
+        telegram_update: {
+          update_id: 901,
+          message: {
+            message_id: 81,
+            date: Math.floor(new Date('2026-05-14T07:55:00Z').getTime() / 1000),
+            chat: { id: 42 },
+            document: {
+              file_id: 'file-nutrition',
+              file_unique_id: 'uniq-nutrition',
+              file_name: '饮食记录 2026-05-12.jpg',
+              mime_type: 'image/jpeg',
+            },
+          },
+        },
+      },
+    },
+    recognizeBatch: async () => [
+      {
+        messageId: 81,
+        imageType: 'nutrition',
+        detectedDate: null,
+        dateEvidence: 'no reliable image date',
+        confidence: 0.96,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [{ name: '晚餐', calories: 465, recommendedMin: 309, recommendedMax: 721 }],
+          totalCalories: 1465,
+          details: ['晚餐 465 千卡'],
+          dailyWorkoutSummary: null,
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => ({
+      generatedAt: '2026-05-14T00:00:00.000Z',
+      latest: {
+        measurement: null,
+        daily: { date: '2026-05-12' },
+      },
+      daily: [
+        {
+          date: '2026-05-12',
+          measurement: null,
+          measurements: [],
+          activities: [],
+          workoutSummary: {
+            totalActivities: 0,
+            totalDurationSeconds: 0,
+            trainingCalories: 0,
+            workoutDurationMinutes: null,
+            activeHours: null,
+            cyclingDistanceKm: 0,
+            countsByType: {},
+          },
+          nutrition: {
+            meals: [{ name: '晚餐', calories: 465, recommendedMin: 309, recommendedMax: 721 }],
+            totalCalories: 1465,
+            details: ['晚餐 465 千卡'],
+          },
+        },
+      ],
+      charts: {
+        weightKg: [],
+        bodyFatPct: [],
+        skeletalMuscleKg: [],
+        basalMetabolism: [],
+        visceralFatLevel: [],
+        intakeCalories: [],
+        trainingCalories: [],
+        cyclingDistanceKm: [],
+      },
+    }),
+    exportTrainingMarkdown: () => '### 2026-05-12\n',
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(persistedBatches[0].archivedDate, '2026-05-12');
+  assert.equal(persistedBatches[0].messages[0].photos[0].fileName, '饮食记录 2026-05-12.jpg');
+  assert.equal(result.batchResults[0].status, 'ready');
+});
+
+test('runTelegramSync skips an undated single nutrition screenshot without a filename date', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-undated-same-day-'));
   await import('node:fs/promises').then(({ writeFile }) =>
     writeFile(
@@ -1103,9 +1210,9 @@ test('runTelegramSync assigns an undated single nutrition screenshot to the late
         messageId: 81,
         imageType: 'nutrition',
         detectedDate: null,
-        dateEvidence: 'no visible date',
+        dateEvidence: 'no reliable image date',
         confidence: 0.96,
-        warnings: ['No reliable date found in caption/text or image.'],
+        warnings: ['No reliable image date found.'],
         records: {
           measurement: null,
           activities: [],
@@ -1125,11 +1232,11 @@ test('runTelegramSync assigns an undated single nutrition screenshot to the late
     },
   });
 
-  assert.equal(result.changed, true);
-  assert.equal(persistedBatches[0].archivedDate, '2026-05-14');
-  assert.equal(result.batchResults[0].status, 'ready');
-  assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /晚餐：465千卡/);
-  assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /当日截图内已记录总热量：1465千卡/);
+  assert.equal(result.changed, false);
+  assert.equal(persistedBatches.length, 0);
+  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.match(result.batchResults[0].reason, /no reliable image or filename date/i);
+  assert.doesNotMatch(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /晚餐：465千卡/);
 });
 
 test('runTelegramSync skips polling when webhook mode is enabled without dispatch payload', async () => {

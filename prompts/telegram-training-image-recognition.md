@@ -11,14 +11,14 @@
 
 ## 日期规则
 
-- `detectedDate` 必须是可靠归档日期，格式为 `YYYY-MM-DD`；不可靠就填 `null`。
-- 日期优先级：用户 caption/text 明确写出的归档日期 > 截图中完整可靠日期 > 截图中月日结合 Telegram 消息年份。
-- 如果 caption/text 明确写了“归档到 YYYY-MM-DD”或同等含义，以它为准。
-- 不要猜测跨天归档；如果截图日期和 caption/text 冲突，把 `detectedDate` 设为 caption/text 的日期，并在 `warnings` 说明。
+- `detectedDate` 必须只来自截图画面内可见的可靠日期，格式为 `YYYY-MM-DD`；截图内日期不可靠就填 `null`。
+- 日期识别范围：截图中完整可靠日期 > 截图中月日结合 Telegram 消息年份。
+- 不要从 caption/text 或图片文件名推断 `detectedDate`；这些来源由程序在识别后单独处理。
+- 不要猜测跨天归档；截图只负责提供画面内真实日期。
 - 体脂秤截图的真实测量时间写入 `records.measurement.measuredAt`，不要为了归档日期而改写真实时间。
-- 次日清晨体脂秤是否归入前一日，只能由 caption/text 明确说明；图片本身只负责提供真实测量时间。
+- 次日清晨体脂秤是否归入前一日不由 AI 判断；图片本身只负责提供真实测量时间。
 - 如果图片只显示 `5月13日` 这类月日，可用 Telegram 消息年份补全年份；如果补全后日期不可能，填 `null`。
-- `dateEvidence` 写明日期来源，例如 `caption: 归档到 2026-05-14`、`image header: 2026-05-14`、`image shows 5月14日, year from telegram message`、`no reliable date`。
+- `dateEvidence` 写明截图内日期来源，例如 `image header: 2026-05-14`、`image shows 5月14日, year from telegram message`、`no reliable image date`。
 
 ## 体脂秤 measurement
 

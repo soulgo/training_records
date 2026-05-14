@@ -94,7 +94,9 @@ npx wrangler deploy
 并且运行时使用 `TELEGRAM_SYNC_TRANSPORT=webhook`：
 
 - `repository_dispatch` 时直接消费 webhook payload
+- `repository_dispatch` 使用快速路径：跳过全量 archive backfill、Markdown reconcile 和额外 export，只处理当前 Telegram payload 与 pending fallback
 - `push` / 手动触发时不会再调用 `getUpdates`
+- `push` / 手动触发仍会执行完整 backfill、reconcile 和 export，用于维护或修复主数据
 - 由 `github-actions[bot]` 推送出来的同步提交会跳过二次 `Telegram Sync`
 - 仍然会重放待补偿批次并在需要时刷新 Markdown
 - 当同步提交了新的 `训练记录.md` 后，会在同一个 workflow 里直接构建并部署 GitHub Pages；不能依赖 bot push 再触发独立的 Pages workflow

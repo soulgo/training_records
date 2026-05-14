@@ -17,7 +17,7 @@ export function groupTelegramUpdates(updates) {
 
   for (const update of updates) {
     const message = update.message ?? update.edited_message;
-    if (!message?.photo?.length) {
+    if (!hasRecognizableImage(message)) {
       continue;
     }
 
@@ -51,11 +51,9 @@ export function groupTelegramUpdates(updates) {
 
 export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const minConfidence = options.minConfidence ?? 0.75;
-  const fallbackArchivedDate = normalizeFallbackArchivedDate(options.fallbackArchivedDate);
   const recognitionMap = new Map(recognitions.map((item) => [item.messageId, item]));
-  const explicitDate = extractBatchExplicitDate(batch);
-  const primaryDetectedDates = new Set();
-  const measurementDates = new Set();
+  const imageDates = new Set();
+  const filenameDates = collectFilenameDates(batch);
   const warnings = [];
   const issues = [];
   const measurementCandidates = [];
@@ -64,10 +62,6 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const nutritionMeals = [];
   const nutritionDetails = [];
   let nutritionTotalCalories = null;
-
-  if (explicitDate) {
-    primaryDetectedDates.add(explicitDate);
-  }
 
   for (const message of batch.messages) {
     const recognition = recognitionMap.get(message.messageId);
@@ -87,11 +81,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     }
 
     if (normalizedDetectedDate) {
-      if (recognition.imageType === 'measurement') {
-        measurementDates.add(normalizedDetectedDate);
-      } else {
-        primaryDetectedDates.add(normalizedDetectedDate);
-      }
+      imageDates.add(normalizedDetectedDate);
     }
 
     if (recognition.imageType === 'measurement' && recognition.records?.measurement) {
@@ -128,34 +118,44 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     }
   }
 
-  const allDetectedDates = new Set([...primaryDetectedDates, ...measurementDates]);
-  if (allDetectedDates.size > 1) {
+  if (imageDates.size > 1) {
     return buildSkippedBatchResult(batch, {
-      reason: `conflicting detected dates: ${[...allDetectedDates].sort().join(', ')}`,
+      reason: `conflicting detected dates: ${[...imageDates].sort().join(', ')}`,
       warnings,
       issues,
     });
   }
 
-  const archivedDate =
-    explicitDate ??
-    resolveDetectedDate(primaryDetectedDates) ??
-    resolveDetectedDate(measurementDates) ??
-    fallbackArchivedDate;
-  if (!archivedDate) {
+  let archivedDate = null;
+  if (imageDates.size === 1) {
+    archivedDate = resolveDetectedDate(imageDates);
+    const conflictingFilenameDates = [...filenameDates].filter((date) => date !== archivedDate);
+    if (conflictingFilenameDates.length > 0) {
+      warnings.push(
+        `Filename date(s) ${conflictingFilenameDates.sort().join(', ')} differ from image date ${archivedDate}; using image date.`,
+      );
+    }
+  } else if (filenameDates.size > 1) {
     return buildSkippedBatchResult(batch, {
-      reason: issues.length > 0 ? issues.join('; ') : 'no reliable archived date',
+      reason: `conflicting filename dates: ${[...filenameDates].sort().join(', ')}`,
       warnings,
       issues,
     });
+  } else {
+    archivedDate = resolveDetectedDate(filenameDates);
+    if (archivedDate) {
+      warnings.push(`Using filename date ${archivedDate} for Telegram batch without image dates.`);
+    }
   }
-  if (
-    fallbackArchivedDate === archivedDate &&
-    !explicitDate &&
-    primaryDetectedDates.size === 0 &&
-    measurementDates.size === 0
-  ) {
-    warnings.push(`Using latest same-day archived date ${fallbackArchivedDate} for undated Telegram batch.`);
+
+  if (!archivedDate) {
+    return buildSkippedBatchResult(batch, {
+      reason: issues.length > 0
+        ? `${issues.join('; ')}; no reliable image or filename date`
+        : 'no reliable image or filename date',
+      warnings,
+      issues,
+    });
   }
 
   const measurement = normalizeMeasurementForArchive(measurementCandidates.at(-1) ?? null, archivedDate);
@@ -299,6 +299,18 @@ export async function mapWithConcurrency(items, concurrency, mapper) {
 }
 
 function normalizeTelegramMessage(update, message) {
+  const documentImage = normalizeTelegramImageDocument(message.document);
+  const photos = (message.photo ?? []).map((photo) => ({
+    fileId: photo.file_id,
+    fileUniqueId: photo.file_unique_id,
+    fileName: null,
+    mimeType: null,
+    source: 'photo',
+  }));
+  if (documentImage) {
+    photos.push(documentImage);
+  }
+
   return {
     updateId: update.update_id,
     messageId: message.message_id,
@@ -307,28 +319,41 @@ function normalizeTelegramMessage(update, message) {
     text: message.text ?? '',
     chatId: message.chat?.id ?? null,
     dateUnix: message.date ?? null,
-    photos: (message.photo ?? []).map((photo) => ({
-      fileId: photo.file_id,
-      fileUniqueId: photo.file_unique_id,
-    })),
+    photos,
   };
 }
 
-function extractBatchExplicitDate(batch) {
-  for (const message of batch.messages) {
-    const explicitDate = extractDateFromText(`${message.caption}\n${message.text}`);
-    if (explicitDate) {
-      return explicitDate;
-    }
+function hasRecognizableImage(message) {
+  return Boolean((message?.photo?.length ?? 0) > 0 || normalizeTelegramImageDocument(message?.document));
+}
+
+function normalizeTelegramImageDocument(document) {
+  if (!document?.file_id) {
+    return null;
   }
-  return null;
+
+  const fileName = document.file_name?.trim() || '';
+  const mimeType = document.mime_type?.trim() || '';
+  const isImageMimeType = mimeType.toLowerCase().startsWith('image/');
+  const hasImageExtension = /\.(?:jpe?g|png|webp|gif|bmp|heic|heif|tiff?)$/i.test(fileName);
+  if (!isImageMimeType && !hasImageExtension) {
+    return null;
+  }
+
+  return {
+    fileId: document.file_id,
+    fileUniqueId: document.file_unique_id,
+    fileName: fileName || null,
+    mimeType: mimeType || null,
+    source: 'document',
+  };
 }
 
 function normalizeRecognitionDate(recognition, message) {
   const messageDate = dateFromUnix(message.dateUnix);
   const rawDate = recognition.detectedDate?.trim();
 
-  if (rawDate) {
+  if (rawDate && shouldParseDateEvidence(recognition.dateEvidence)) {
     const normalizedRawDate = normalizeDetectedDateValue(rawDate, messageDate.year);
     if (normalizedRawDate) {
       return normalizedRawDate;
@@ -340,7 +365,9 @@ function normalizeRecognitionDate(recognition, message) {
     return measurementDate;
   }
 
-  const evidenceDate = normalizeDetectedDateValue(recognition.dateEvidence, messageDate.year);
+  const evidenceDate = shouldParseDateEvidence(recognition.dateEvidence)
+    ? normalizeDetectedDateValue(recognition.dateEvidence, messageDate.year)
+    : null;
   if (evidenceDate) {
     return evidenceDate;
   }
@@ -366,20 +393,56 @@ function normalizeDetectedDateValue(value, messageYear) {
     return null;
   }
 
-  const directDate = extractDateFromText(value);
+  const directDate = extractDateFromText(value, {
+    messageYear,
+    reasonableYear: true,
+  });
   if (directDate) {
-    const parsed = parseDateParts(directDate);
-    if (parsed && isReasonableYear(parsed.year, messageYear)) {
-      return formatDateParts(parsed.year, parsed.month, parsed.day);
-    }
+    return directDate;
   }
 
   const monthDay = parseMonthDay(value);
-  if (monthDay && isValidDateParts(messageYear, monthDay.month, monthDay.day)) {
+  if (Number.isInteger(messageYear) && monthDay && isValidDateParts(messageYear, monthDay.month, monthDay.day)) {
     return formatDateParts(messageYear, monthDay.month, monthDay.day);
   }
 
   return null;
+}
+
+function collectFilenameDates(batch) {
+  const dates = new Set();
+  for (const message of batch.messages ?? []) {
+    for (const photo of message.photos ?? []) {
+      const date = extractFilenameDate(photo.fileName, dateFromUnix(message.dateUnix).year);
+      if (date) {
+        dates.add(date);
+      }
+    }
+  }
+  return dates;
+}
+
+function extractFilenameDate(fileName, messageYear) {
+  if (!fileName) {
+    return null;
+  }
+
+  return extractDateFromText(fileName, {
+    messageYear,
+    allowCompact: true,
+    allowMonthDay: true,
+    reasonableYear: true,
+  });
+}
+
+function shouldParseDateEvidence(dateEvidence) {
+  if (!dateEvidence) {
+    return true;
+  }
+
+  const externalOnly = /\b(?:caption|text|filename|file\s*name)\b/i.test(dateEvidence);
+  const imageEvidence = /\b(?:image|screenshot|ocr|header|screen)\b/i.test(dateEvidence) || /截图|画面|图片/.test(dateEvidence);
+  return !externalOnly || imageEvidence;
 }
 
 function resolveDetectedDate(detectedDates) {
@@ -387,16 +450,6 @@ function resolveDetectedDate(detectedDates) {
     return [...detectedDates][0];
   }
   return null;
-}
-
-function normalizeFallbackArchivedDate(value) {
-  if (!value) {
-    return null;
-  }
-  const parsed = parseDateParts(value);
-  return parsed && isValidDateParts(parsed.year, parsed.month, parsed.day)
-    ? formatDateParts(parsed.year, parsed.month, parsed.day)
-    : null;
 }
 
 function buildSkippedBatchResult(batch, { reason, warnings = [], issues = [] }) {
@@ -742,6 +795,7 @@ function buildInboxEntry({ batch, recognitions, analyzed }) {
       dateUnix: message.dateUnix,
       photoFileIds: message.photos.map((photo) => photo.fileId),
       photoFileUniqueIds: message.photos.map((photo) => photo.fileUniqueId),
+      photoFileNames: message.photos.map((photo) => photo.fileName).filter(Boolean),
     })),
     recognitions,
   };
@@ -765,17 +819,67 @@ function fingerprintComment(value) {
   return `<!-- telegram-fingerprint: ${value} -->`;
 }
 
-function extractDateFromText(text) {
-  const normalized = text.replace(/[./年]/g, '-').replace(/[月]/g, '-').replace(/[日]/g, '');
-  const match = normalized.match(/\b(\d{4}-\d{1,2}-\d{1,2})\b/);
-  if (!match) {
+function extractDateFromText(text, options = {}) {
+  if (!text) {
     return null;
   }
-  const [year, month, day] = match[1].split('-').map(Number);
+
+  const messageYear = options.messageYear;
+  const normalized = text.replace(/[./_年]/g, '-').replace(/[月]/g, '-').replace(/[日]/g, '');
+  const directMatch = normalized.match(/(?:^|[^\d])(\d{4})-(\d{1,2})-(\d{1,2})(?=$|[^\d])/);
+  if (directMatch) {
+    return normalizeDateParts({
+      year: Number(directMatch[1]),
+      month: Number(directMatch[2]),
+      day: Number(directMatch[3]),
+      messageYear,
+      reasonableYear: options.reasonableYear,
+    });
+  }
+
+  if (options.allowCompact) {
+    const compactMatch = text.match(/(?:^|[^\d])(\d{4})(\d{2})(\d{2})(?=$|[^\d])/);
+    if (compactMatch) {
+      return normalizeDateParts({
+        year: Number(compactMatch[1]),
+        month: Number(compactMatch[2]),
+        day: Number(compactMatch[3]),
+        messageYear,
+        reasonableYear: options.reasonableYear,
+      });
+    }
+  }
+
+  if (options.allowMonthDay) {
+    const monthDay = parseMonthDay(text);
+    if (Number.isInteger(messageYear) && monthDay) {
+      return normalizeDateParts({
+        year: messageYear,
+        month: monthDay.month,
+        day: monthDay.day,
+        messageYear,
+        reasonableYear: false,
+      });
+    }
+  }
+
+  return null;
+}
+
+function normalizeDateParts({
+  year,
+  month,
+  day,
+  messageYear,
+  reasonableYear = false,
+}) {
   if (!isValidDateParts(year, month, day)) {
     return null;
   }
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  if (reasonableYear && Number.isInteger(messageYear) && !isReasonableYear(year, messageYear)) {
+    return null;
+  }
+  return formatDateParts(year, month, day);
 }
 
 function parseDateParts(value) {
@@ -794,14 +898,18 @@ function parseMonthDay(value) {
   if (!value) {
     return null;
   }
-  const monthDayMatch = value.match(/(\d{1,2})月(\d{1,2})日/);
+  const monthDayMatch = value.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
   if (monthDayMatch) {
     return {
       month: Number(monthDayMatch[1]),
       day: Number(monthDayMatch[2]),
     };
   }
-  const isoLikeMatch = value.match(/\b\d{4}-(\d{2})-(\d{2})\b/);
+  const isoLikeMatch = value
+    .replace(/[./_年]/g, '-')
+    .replace(/[月]/g, '-')
+    .replace(/[日]/g, '')
+    .match(/(?:^|[^\d])\d{4}-(\d{1,2})-(\d{1,2})(?=$|[^\d])/);
   if (isoLikeMatch) {
     return {
       month: Number(isoLikeMatch[1]),
@@ -838,6 +946,14 @@ function isValidDateParts(year, month, day) {
 }
 
 function dateFromUnix(unixSeconds) {
+  if (!Number.isFinite(unixSeconds)) {
+    return {
+      year: null,
+      month: null,
+      day: null,
+    };
+  }
+
   const date = new Date(unixSeconds * 1000);
   return {
     year: date.getUTCFullYear(),

@@ -51,6 +51,21 @@ test('telegram-sync workflow validates changes and deploys Pages after sync comm
   assert.match(workflow, /actions\/deploy-pages@v4/);
 });
 
+test('telegram-sync workflow skips full database maintenance on webhook dispatches', async () => {
+  const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
+
+  for (const stepName of [
+    'Backfill core from archive snapshot',
+    'Reconcile committed markdown back to core',
+    'Export markdown from database snapshot',
+  ]) {
+    assert.match(
+      workflow,
+      new RegExp(`- name: ${escapeRegExp(stepName)}\\n\\s+if: github\\.event_name != 'repository_dispatch'`),
+    );
+  }
+});
+
 test('cloudflare worker workflow deploys wrangler config changes to Cloudflare', async () => {
   const workflow = await readWorkflow('.github/workflows/deploy-cloudflare-worker.yml');
 
