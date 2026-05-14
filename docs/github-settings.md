@@ -6,6 +6,7 @@
 
 - `.github/workflows/deploy-pages.yml`
 - `.github/workflows/telegram-sync.yml`
+- `.github/workflows/deploy-cloudflare-worker.yml`
 
 ## Secrets
 
@@ -33,6 +34,20 @@ postgresql://training_writer:你的数据库密码@你的数据库公网IP或域
 ```
 
 - 如果你的数据库启用了 SSL，再按实际情况追加 `?sslmode=require`
+
+### `CLOUDFLARE_API_TOKEN`
+
+- 用途：让 GitHub Actions 调用 Wrangler 部署 Cloudflare Worker
+- 使用工作流：`deploy-cloudflare-worker.yml`
+- 是否必填：使用 Telegram webhook + Cloudflare Worker 时必填
+- 权限建议：Cloudflare API Token 至少需要能编辑当前账号下的 Workers Scripts
+
+### `CLOUDFLARE_ACCOUNT_ID`
+
+- 用途：指定 Wrangler 要部署到哪个 Cloudflare 账号
+- 使用工作流：`deploy-cloudflare-worker.yml`
+- 是否必填：使用 Telegram webhook + Cloudflare Worker 时必填
+- 获取位置：Cloudflare Dashboard 右侧账号信息里的 Account ID
 
 ## Variables
 
@@ -149,6 +164,8 @@ training-records-dashboard
 - `TELEGRAM_BOT_TOKEN`
 - `AI_API_KEY`
 - `TRAINING_DB_URL`
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
 
 ### Variables
 
@@ -170,6 +187,8 @@ training-records-dashboard
 TELEGRAM_BOT_TOKEN=你的 Telegram Bot Token
 AI_API_KEY=你的 AI 平台 API Key
 TRAINING_DB_URL=postgresql://training_writer:你的数据库密码@你的数据库公网IP或域名:5432/training_records
+CLOUDFLARE_API_TOKEN=你的 Cloudflare API Token
+CLOUDFLARE_ACCOUNT_ID=你的 Cloudflare Account ID
 ```
 
 ### Variables 模板
@@ -193,6 +212,7 @@ TRAINING_DB_APP_NAME=training-records-dashboard
 3. 再配置 `TRAINING_DB_URL`、`TRAINING_SNAPSHOT_SOURCE`、`TRAINING_DB_TIMEOUT_MS`、`TRAINING_DB_APP_NAME`
 4. 先把 `TRAINING_DB_ENABLED` 设成 `false`
 5. 本地确认 PostgreSQL 链路和回退链路都正常后，再改成 `true`
+6. 如果启用 Telegram webhook，再配置 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
 
 ## 当前实现下的重要说明
 
@@ -202,6 +222,7 @@ TRAINING_DB_APP_NAME=training-records-dashboard
 - `deploy-pages.yml` 是否依赖 PostgreSQL，取决于 `TRAINING_SNAPSHOT_SOURCE`
   - `markdown`：页面构建不依赖 PostgreSQL
   - `database`：页面构建直接依赖 PostgreSQL
+- `wrangler.toml` 推送到 GitHub 后，只有 `deploy-cloudflare-worker.yml` 成功运行，Cloudflare Worker 里的 Durable Object binding 才会真正更新
 
 ## SQL 文件约定
 

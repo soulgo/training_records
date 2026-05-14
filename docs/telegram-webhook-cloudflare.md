@@ -64,6 +64,25 @@ new_sqlite_classes = ["TelegramAlbumBuffer"]
 
 其中 `compatibility_date` 是 Cloudflare Workers 运行时兼容日期，不是训练记录日期，也不会参与图片日期识别。训练归档日期仍由 Telegram caption/text、截图 OCR 和同步逻辑自动决定。
 
+把 `wrangler.toml` push 到 GitHub 只会更新仓库文件，不会自动修改 Cloudflare 控制台。Cloudflare 上的 Worker、变量和 Durable Object binding 只有在 Wrangler 部署成功后才会变化。
+
+当前仓库已经提供 [`deploy-cloudflare-worker.yml`](/C:/Users/ljq90/Desktop/project_test/健身锻炼/.github/workflows/deploy-cloudflare-worker.yml)，它会在以下文件推到 `main` 后自动运行 `wrangler deploy`：
+
+- `wrangler.toml`
+- `cloudflare/**`
+- `.github/workflows/deploy-cloudflare-worker.yml`
+
+第一次使用前，需要先在 GitHub 仓库 `Settings -> Secrets and variables -> Actions -> Secrets` 添加：
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+如果不想走 GitHub Actions，也可以在本地手动部署：
+
+```powershell
+npx wrangler deploy
+```
+
 ## 4. GitHub Actions 行为
 
 [`telegram-sync.yml`](/C:/Users/ljq90/Desktop/project_test/健身锻炼/.github/workflows/telegram-sync.yml) 现在支持：

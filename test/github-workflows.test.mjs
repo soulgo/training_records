@@ -42,6 +42,24 @@ test('telegram-sync workflow validates changes and deploys Pages after sync comm
   assert.match(workflow, /actions\/deploy-pages@v4/);
 });
 
+test('cloudflare worker workflow deploys wrangler config changes to Cloudflare', async () => {
+  const workflow = await readWorkflow('.github/workflows/deploy-cloudflare-worker.yml');
+
+  assert.match(workflow, /on:\s*\n\s*workflow_dispatch:\s*\n\s*push:\s*\n\s*branches:\s*\n\s*-\s*main/);
+  for (const expectedPath of [
+    'wrangler.toml',
+    'cloudflare/**',
+    '.github/workflows/deploy-cloudflare-worker.yml',
+  ]) {
+    assert.match(workflow, new RegExp(`-\\s*${escapeRegExp(expectedPath)}`));
+  }
+  assert.match(workflow, /permissions:\s*\n\s*contents:\s*read/);
+  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
+  assert.match(workflow, /apiToken:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+  assert.match(workflow, /accountId:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
+  assert.match(workflow, /command:\s*deploy/);
+});
+
 async function readWorkflow(relativePath) {
   return readFile(new URL(relativePath, rootDir), 'utf8');
 }
