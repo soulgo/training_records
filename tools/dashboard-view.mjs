@@ -41,6 +41,7 @@ export function buildDashboardViewModel(snapshot) {
     latestMeasurement: normalizeMeasurementDate(latestMeasurement),
     latestDay: normalizeDayDate(latestDay),
     previousDay: normalizeDayDate(previousDay),
+    dailyOverviewHint: buildDailyOverviewHint(),
     latestDashboardDate,
     chartWindowDays,
     dailyCardLimit,
@@ -156,4 +157,8 @@ function normalizeDayDate(day) {
     measurement: normalizeMeasurementDate(day.measurement),
     measurements: (day.measurements || []).map(normalizeMeasurementDate),
   };
+}
+
+function buildDailyOverviewHint() {
+  return '顶部主卡按最新体脂归档日展示，最近活动以下方日期卡片为准';
 }

@@ -364,7 +364,7 @@ function normalizeDetectedDateValue(value, messageYear) {
   }
 
   const monthDay = parseMonthDay(value);
-  if (monthDay) {
+  if (monthDay && isValidDateParts(messageYear, monthDay.month, monthDay.day)) {
     return formatDateParts(messageYear, monthDay.month, monthDay.day);
   }
 
@@ -758,6 +758,9 @@ function extractDateFromText(text) {
     return null;
   }
   const [year, month, day] = match[1].split('-').map(Number);
+  if (!isValidDateParts(year, month, day)) {
+    return null;
+  }
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
@@ -796,6 +799,28 @@ function parseMonthDay(value) {
 
 function isReasonableYear(year, messageYear) {
   return year >= messageYear - 1 && year <= messageYear + 1;
+}
+
+function isValidDateParts(year, month, day) {
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31
+  ) {
+    return false;
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() + 1 === month &&
+    date.getUTCDate() === day
+  );
 }
 
 function dateFromUnix(unixSeconds) {

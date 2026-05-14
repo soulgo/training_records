@@ -93,6 +93,14 @@ test('dashboard embeds daily overview pagination controls without changing the d
   });
 });
 
+test('dashboard explains that the top card follows the latest measurement day while recent activity stays in the daily cards', () => {
+  const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
+
+  assert.match(homepage, /每日记录速览/);
+  assert.match(homepage, /顶部主卡按最新体脂归档日展示/);
+  assert.match(homepage, /最近活动以下方日期卡片为准/);
+});
+
 test('dashboard fallback view handles ISO datetime dates from generated data', () => {
   withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
@@ -118,7 +126,7 @@ test('dashboard fallback view handles ISO datetime dates from generated data', (
 
       const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
 
-      assert.match(homepage, /最新归档日期/);
+      assert.match(homepage, /最新体脂归档日/);
       assert.match(homepage, /2026-03-03/);
     } finally {
       restoreOptionalFile(trainingDataPath, originalTrainingData);

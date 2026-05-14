@@ -13,6 +13,7 @@ const dailyCardLimit = dashboardView.dailyCardLimit || 4;
 const dailyOverviewTotal = dashboardView.dailyOverviewTotal || dailyOverviewEntries.length;
 const trainedDays = dashboardView.trainedDays || 0;
 const chartPayload = dashboardView.chartPayload || { charts: dashboard.charts || {} };
+const dailyOverviewHint = dashboardView.dailyOverviewHint || '顶部主卡按最新体脂归档日展示，最近活动以下方日期卡片为准';
 
 function buildFallbackDashboardViewModel(inputDashboard) {
   const latestMeasurementValue = inputDashboard.latest?.measurement || null;
@@ -51,6 +52,7 @@ function buildFallbackDashboardViewModel(inputDashboard) {
     latestMeasurement: normalizeMeasurementDate(latestMeasurementValue),
     latestDay: normalizeDayDate(latestDayValue),
     previousDay: normalizeDayDate(previousDayValue),
+    dailyOverviewHint: '顶部主卡按最新体脂归档日展示，最近活动以下方日期卡片为准',
     dailyCardLimit: dailyCardLimitValue,
     dailyOverviewEntries: dailyOverviewEntriesValue,
     recentDays: dailyOverviewEntriesValue.slice(0, dailyCardLimitValue),
@@ -278,7 +280,7 @@ function formatDailyRange(pageIndex, pageSize, total) {
   <% } else { %>
     <section class="hero-metrics">
       <article class="hero-card hero-card--primary">
-        <span class="hero-label">最新归档日期</span>
+        <span class="hero-label">最新体脂归档日</span>
         <strong><%= latestMeasurement.archivedDate %></strong>
         <p>真实测量时间：<%= latestMeasurement.measuredAt %></p>
         <p class="hero-card__comparison">
@@ -382,7 +384,7 @@ function formatDailyRange(pageIndex, pageSize, total) {
       <div class="chart-heading daily-section__heading">
         <div>
           <h2>每日记录速览</h2>
-          <span>最近记录优先显示</span>
+          <span><%= dailyOverviewHint %></span>
         </div>
         <div class="daily-section__meta">
           <span class="daily-section__status" data-daily-status><%= formatDailyRange(0, dailyCardLimit, dailyOverviewTotal) %></span>

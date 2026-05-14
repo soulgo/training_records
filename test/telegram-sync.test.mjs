@@ -373,6 +373,141 @@ test('normalizes detected month-day using the telegram message year when AI retu
   assert.equal(analyzed.archivedDate, '2026-05-06');
 });
 
+test('uses the explicit year from the screenshot when a valid four-digit year is present', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-explicit-year',
+    messages: [
+      {
+        updateId: 520905341,
+        messageId: 131,
+        mediaGroupId: null,
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 8, 56, 29) / 1000,
+        photos: [{ fileId: 'file-workout', fileUniqueId: 'uniq-workout' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 131,
+      imageType: 'workout',
+      detectedDate: '2025-05-13',
+      dateEvidence: 'image header shows 2025年5月13日',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        activities: [
+          {
+            time: '20:27',
+            type: '力量训练',
+            detail: '总消耗250千卡，时长00:28:48，平均心率125次/分钟',
+          },
+        ],
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2025-05-13');
+});
+
+test('falls back to the telegram message year when OCR returns an invalid full date but the image only shows month-day', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-invalid-full-date',
+    messages: [
+      {
+        updateId: 520905341,
+        messageId: 132,
+        mediaGroupId: null,
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 8, 56, 29) / 1000,
+        photos: [{ fileId: 'file-workout', fileUniqueId: 'uniq-workout' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 132,
+      imageType: 'workout',
+      detectedDate: '2026-13-13',
+      dateEvidence: 'activity rows show 5月13日',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        activities: [
+          {
+            time: '20:27',
+            type: '力量训练',
+            detail: '总消耗250千卡，时长00:28:48，平均心率125次/分钟',
+          },
+        ],
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-13');
+});
+
+test('rejects impossible full dates instead of treating them as reliable archive dates', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-impossible-full-date',
+    messages: [
+      {
+        updateId: 520905341,
+        messageId: 133,
+        mediaGroupId: null,
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 8, 56, 29) / 1000,
+        photos: [{ fileId: 'file-workout', fileUniqueId: 'uniq-workout' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 133,
+      imageType: 'workout',
+      detectedDate: '2026-02-31',
+      dateEvidence: 'ocr guessed 2026-02-31',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        activities: [
+          {
+            time: '20:27',
+            type: '力量训练',
+            detail: '总消耗250千卡，时长00:28:48，平均心率125次/分钟',
+          },
+        ],
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.match(analyzed.reason, /no reliable archived date/i);
+});
+
 test('fills missing measurement date from telegram message year when month-day is visible in evidence', async () => {
   const lib = await importTelegramSyncLib();
 
