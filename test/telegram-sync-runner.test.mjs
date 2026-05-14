@@ -256,6 +256,73 @@ test('runTelegramSync writes the ready batch back into markdown when the rebuilt
   assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /活动热量：402千卡/);
 });
 
+test('runTelegramSync falls back to markdown rebuild when database snapshot lacks measurements after storing a batch', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-incomplete-db-snapshot-'));
+
+  await import('node:fs/promises').then(({ writeFile }) =>
+    writeFile(
+      path.join(tempRoot, '训练记录.md'),
+      '# 训练记录\n\n### 2026-05-14\n\n#### 2026-05-14 饮食截图记录\n\n##### 餐次汇总\n\n- 午餐：420千卡，建议范围620–1033千卡\n',
+      'utf8',
+    ),
+  );
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 94,
+          date: 1775433600,
+          chat: { id: 42 },
+          caption: '归档到 2026-05-14',
+          photo: [{ file_id: 'file-d', file_unique_id: 'uniq-d' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 94,
+        imageType: 'nutrition',
+        detectedDate: '2026-05-14',
+        dateEvidence: 'caption',
+        confidence: 0.97,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [{ name: '晚餐', calories: 329, recommendedMin: 310, recommendedMax: 723 }],
+          totalCalories: 857,
+          details: ['晚餐 329 千卡'],
+          dailyWorkoutSummary: null,
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    buildTrainingSnapshot: async () => {
+      throw new Error('database snapshot is empty or missing measurements');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run when snapshot rebuild falls back to markdown');
+    },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.fallbackUsed, false);
+  assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /晚餐：329千卡/);
+});
+
 test('runTelegramSync falls back to markdown when database persistence fails', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-fallback-'));
   const fallbackMarkdown = [];

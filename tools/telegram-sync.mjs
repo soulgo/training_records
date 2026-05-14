@@ -12,8 +12,12 @@ import {
   exportTrainingMarkdown as exportTrainingMarkdownFromSnapshot,
   getLastProcessedTelegramUpdateId,
   persistNormalizedBatch as persistNormalizedBatchToDatabase,
+  resolveTrainingCoreConfig,
 } from './training-db-core.mjs';
-import { buildTrainingSnapshot as buildTrainingSnapshotFromSource } from './training-snapshot.mjs';
+import {
+  buildTrainingSnapshot as buildTrainingSnapshotFromSource,
+  isIncompleteDatabaseSnapshotError,
+} from './training-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -62,6 +66,7 @@ export async function runTelegramSync(options = {}) {
       }));
   const exportMarkdown = options.exportTrainingMarkdown ?? exportTrainingMarkdownFromSnapshot;
   const onFallbackMarkdownWritten = options.onFallbackMarkdownWritten ?? null;
+  const trainingDbConfig = resolveTrainingCoreConfig(options.env ?? process.env);
 
   const previousLastProcessedUpdateId = await readLastProcessedUpdateId();
   const pendingBatches = await readPendingFallbackBatches(pendingQueuePath);
@@ -180,18 +185,35 @@ export async function runTelegramSync(options = {}) {
     await writeFile(recordPath, fallbackMarkdown, 'utf8');
     onFallbackMarkdownWritten?.(fallbackMarkdown);
   } else if (changed) {
-    const snapshot = await buildSnapshot({
+    const readyPersistedBatches = batchResults.filter(
+      (batch) => batch.status === 'ready' && batch.persistenceStatus === 'stored',
+    );
+    const snapshotOptions = {
       source: 'database',
       rootDir: activeRootDir,
       env: options.env ?? process.env,
       now,
-    });
-    const readyPersistedBatches = batchResults.filter(
-      (batch) => batch.status === 'ready' && batch.persistenceStatus === 'stored',
-    );
-    const markdown = snapshotCoversPersistedBatches(snapshot, readyPersistedBatches)
-      ? exportMarkdown(snapshot)
-      : rebuildMarkdownFromPersistedBatches(fallbackMarkdown, readyPersistedBatches);
+    };
+    let markdown;
+
+    try {
+      const snapshot = await buildSnapshot(snapshotOptions);
+      markdown = snapshotCoversPersistedBatches(snapshot, readyPersistedBatches)
+        ? exportMarkdown(snapshot)
+        : rebuildMarkdownFromPersistedBatches(fallbackMarkdown, readyPersistedBatches);
+    } catch (error) {
+      const canFallbackFromDatabase =
+        trainingDbConfig.enabled && Boolean(trainingDbConfig.url);
+      if (canFallbackFromDatabase && isIncompleteDatabaseSnapshotError(error)) {
+        process.stderr.write(
+          `[telegram-sync] ${error.message}; rebuilding markdown from persisted batches\n`,
+        );
+        markdown = rebuildMarkdownFromPersistedBatches(fallbackMarkdown, readyPersistedBatches);
+      } else {
+        throw error;
+      }
+    }
+
     await writeFile(recordPath, markdown, 'utf8');
   }
 
