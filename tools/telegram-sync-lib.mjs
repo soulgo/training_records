@@ -17,15 +17,26 @@ export function groupTelegramUpdates(updates) {
 
   for (const update of updates) {
     const message = update.message ?? update.edited_message;
-    if (!hasRecognizableImage(message)) {
+    if (!message) {
       continue;
     }
 
     const normalized = normalizeTelegramMessage(update, message);
+    const thoughtBatch = buildThoughtBatch(normalized);
+    if (thoughtBatch) {
+      batches.push(thoughtBatch);
+      continue;
+    }
+
+    if (!hasRecognizableImage(message)) {
+      continue;
+    }
+
     if (normalized.mediaGroupId) {
       let batch = albumMap.get(normalized.mediaGroupId);
       if (!batch) {
         batch = {
+          kind: 'image',
           batchId: normalized.mediaGroupId,
           messages: [],
         };
@@ -37,6 +48,7 @@ export function groupTelegramUpdates(updates) {
     }
 
     batches.push({
+      kind: 'image',
       batchId: `single-${normalized.messageId}`,
       messages: [normalized],
     });
@@ -50,6 +62,10 @@ export function groupTelegramUpdates(updates) {
 }
 
 export function analyzeTelegramBatch(batch, recognitions, options = {}) {
+  if (batch.kind === 'thought') {
+    return analyzeThoughtBatch(batch);
+  }
+
   const minConfidence = options.minConfidence ?? 0.75;
   const recognitionMap = new Map(recognitions.map((item) => [item.messageId, item]));
   const imageDates = new Set();
@@ -244,6 +260,7 @@ export async function processTelegramUpdates({
     const isAllowed = batch.messages.every((message) => allowedChatIds.has(message.chatId));
     if (!isAllowed) {
       batchResults.push({
+        kind: batch.kind ?? 'image',
         batchId: batch.batchId,
         status: 'ignored',
         reason: 'unauthorized chat',
@@ -255,6 +272,7 @@ export async function processTelegramUpdates({
     const recognitions = await recognizeBatch(batch);
     const analyzed = analyzeTelegramBatch(batch, recognitions, { minConfidence });
     batchResults.push({
+      kind: batch.kind ?? analyzed.kind ?? 'image',
       ...analyzed,
       updateIds: batch.messages.map((message) => message.updateId),
     });
@@ -267,7 +285,7 @@ export async function processTelegramUpdates({
       }),
     );
 
-    if (analyzed.status !== 'ready') {
+    if (analyzed.status !== 'ready' || batch.kind === 'thought') {
       continue;
     }
 
@@ -317,6 +335,7 @@ function normalizeTelegramMessage(update, message) {
   }
 
   return {
+    kind: 'message',
     updateId: update.update_id,
     messageId: message.message_id,
     mediaGroupId: message.media_group_id ?? null,
@@ -325,6 +344,23 @@ function normalizeTelegramMessage(update, message) {
     chatId: message.chat?.id ?? null,
     dateUnix: message.date ?? null,
     photos,
+  };
+}
+
+function buildThoughtBatch(message) {
+  const parsedThought = parseThoughtCommand(message.text);
+  if (!parsedThought) {
+    return null;
+  }
+
+  return {
+    kind: 'thought',
+    batchId: `thought-${message.messageId}`,
+    messages: [message],
+    thought: {
+      command: '/thought',
+      body: parsedThought.body,
+    },
   };
 }
 
@@ -466,10 +502,46 @@ function resolveDetectedDate(detectedDates) {
 function buildSkippedBatchResult(batch, { reason, warnings = [], issues = [] }) {
   return {
     status: 'skipped',
+    kind: batch.kind ?? 'image',
     batchId: batch.batchId,
     reason,
     warnings,
     issues,
+  };
+}
+
+function analyzeThoughtBatch(batch) {
+  const message = batch.messages?.[0] ?? null;
+  const body = batch.thought?.body?.trim() ?? '';
+
+  if (!body) {
+    return buildSkippedBatchResult(batch, {
+      reason: 'empty thought body',
+    });
+  }
+
+  const titleSource = body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+  const title = truncateTitle(collapseWhitespace(titleSource ?? '未命名随想'));
+
+  return {
+    status: 'ready',
+    kind: 'thought',
+    batchId: batch.batchId,
+    archivedDate: null,
+    warnings: [],
+    issues: [],
+    confidence: 1,
+    thought: {
+      title,
+      body,
+      tags: ['训练', '随想', 'Telegram'],
+      telegramMessageId: message?.messageId ?? null,
+      telegramChatId: message?.chatId ?? null,
+      messageDateUnix: message?.dateUnix ?? null,
+    },
   };
 }
 
@@ -789,6 +861,7 @@ function mergeBlock(existingBlock, nextBlock) {
 
 function buildInboxEntry({ batch, recognitions, analyzed }) {
   return {
+    kind: batch.kind ?? 'image',
     batchId: batch.batchId,
     processedAt: new Date().toISOString(),
     status: analyzed.status,
@@ -810,6 +883,38 @@ function buildInboxEntry({ batch, recognitions, analyzed }) {
     })),
     recognitions,
   };
+}
+
+function parseThoughtCommand(text) {
+  if (typeof text !== 'string') {
+    return null;
+  }
+
+  const trimmedStart = text.trimStart();
+  if (!trimmedStart.startsWith('/thought')) {
+    return null;
+  }
+
+  const body = trimmedStart.slice('/thought'.length);
+  if (!/^\s/.test(body)) {
+    return null;
+  }
+
+  return {
+    body: body.trim(),
+  };
+}
+
+function collapseWhitespace(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function truncateTitle(value, maxLength = 30) {
+  const glyphs = [...String(value ?? '')];
+  if (glyphs.length <= maxLength) {
+    return glyphs.join('');
+  }
+  return `${glyphs.slice(0, maxLength).join('')}…`;
 }
 
 function appendMetric(lines, label, value, suffix = '') {

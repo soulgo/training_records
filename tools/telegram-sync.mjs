@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -40,6 +40,7 @@ export async function runTelegramSync(options = {}) {
   const env = loadRequiredEnv(options.env ?? process.env);
   const activeRootDir = options.rootDir ?? rootDir;
   const recordPath = path.join(activeRootDir, '训练记录.md');
+  const thoughtsDir = path.join(activeRootDir, 'source', '_posts');
   const runtimeDir = path.join(activeRootDir, 'runtime');
   const pendingQueuePath = path.join(runtimeDir, 'telegram-sync-pending.ndjson');
   const now = options.now ?? new Date();
@@ -74,6 +75,13 @@ export async function runTelegramSync(options = {}) {
       }));
   const exportMarkdown = options.exportTrainingMarkdown ?? exportTrainingMarkdownFromSnapshot;
   const onFallbackMarkdownWritten = options.onFallbackMarkdownWritten ?? null;
+  const writeThoughtPost =
+    options.writeThoughtPost ??
+    ((input) =>
+      writeThoughtPostFile({
+        ...input,
+        rootDir: activeRootDir,
+      }));
   const trainingDbConfig = resolveTrainingCoreConfig(options.env ?? process.env);
 
   const dispatchUpdates = await resolveDispatchTelegramUpdates({
@@ -87,6 +95,7 @@ export async function runTelegramSync(options = {}) {
   });
   const pendingBatches = await readPendingFallbackBatches(pendingQueuePath);
   let replayStoredAny = false;
+  let replayStoredImageAny = false;
 
   for (const pending of pendingBatches) {
     try {
@@ -97,6 +106,9 @@ export async function runTelegramSync(options = {}) {
       });
       if (replayResult.status === 'stored' || replayResult.status === 'unchanged') {
         replayStoredAny = replayStoredAny || replayResult.status === 'stored';
+        replayStoredImageAny =
+          replayStoredImageAny ||
+          (pending.batch?.kind !== 'thought' && replayResult.status === 'stored');
         pending.replayed = true;
       }
     } catch {
@@ -127,6 +139,7 @@ export async function runTelegramSync(options = {}) {
     const isAllowed = batch.messages.every((message) => env.allowedChatIds.has(message.chatId));
     if (!isAllowed) {
       batchResults.push({
+        kind: batch.kind ?? 'image',
         batchId: batch.batchId,
         status: 'ignored',
         reason: 'unauthorized chat',
@@ -141,6 +154,7 @@ export async function runTelegramSync(options = {}) {
     });
     const persistedBatch = {
       ...analyzed,
+      kind: batch.kind ?? analyzed.kind ?? 'image',
       updateIds: batch.messages.map((message) => message.updateId),
       messages: batch.messages,
       recognitions,
@@ -148,6 +162,44 @@ export async function runTelegramSync(options = {}) {
 
     if (analyzed.status !== 'ready') {
       batchResults.push(persistedBatch);
+      continue;
+    }
+
+    if (persistedBatch.kind === 'thought') {
+      const thoughtWriteResult = await writeThoughtPost({
+        batch: persistedBatch,
+        thoughtsDir,
+      });
+      changed ||= thoughtWriteResult.changed;
+
+      try {
+        const persistResult = await persistBatch({
+          batch: persistedBatch,
+          processedAt: now,
+          env: options.env ?? process.env,
+        });
+        changed ||= persistResult.status === 'stored';
+        batchResults.push({
+          ...persistedBatch,
+          postPath: thoughtWriteResult.postPath,
+          thoughtWriteStatus: thoughtWriteResult.status,
+          persistenceStatus: persistResult.status,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await appendPendingFallbackBatch(pendingQueuePath, {
+          batch: persistedBatch,
+          failedAt: now.toISOString(),
+          error: errorMessage,
+        });
+        batchResults.push({
+          ...persistedBatch,
+          postPath: thoughtWriteResult.postPath,
+          thoughtWriteStatus: thoughtWriteResult.status,
+          persistenceStatus: 'pending_replay',
+          persistenceError: errorMessage,
+        });
+      }
       continue;
     }
 
@@ -197,9 +249,12 @@ export async function runTelegramSync(options = {}) {
   if (fallbackUsed) {
     await writeFile(recordPath, fallbackMarkdown, 'utf8');
     onFallbackMarkdownWritten?.(fallbackMarkdown);
-  } else if (changed) {
+  } else if (changed && shouldRewriteTrainingMarkdown({ replayStoredImageAny, batchResults })) {
     const readyPersistedBatches = batchResults.filter(
-      (batch) => batch.status === 'ready' && batch.persistenceStatus === 'stored',
+      (batch) =>
+        batch.kind !== 'thought' &&
+        batch.status === 'ready' &&
+        batch.persistenceStatus === 'stored',
     );
     const snapshotOptions = {
       source: 'database',
@@ -261,9 +316,12 @@ export function buildTelegramSyncReport(result) {
     lastProcessedUpdateId: result.lastProcessedUpdateId,
     readyBatches: result.readyBatches,
     batches: (result.batchResults ?? []).map((batch) => ({
+      kind: batch.kind ?? 'image',
       batchId: batch.batchId,
       status: batch.status,
       archivedDate: batch.archivedDate ?? null,
+      postPath: batch.postPath ?? null,
+      thoughtWriteStatus: batch.thoughtWriteStatus ?? null,
       persistenceStatus: batch.persistenceStatus ?? null,
       persistenceError: batch.persistenceError ?? null,
       warnings: batch.warnings ?? [],
@@ -283,6 +341,19 @@ function rebuildMarkdownFromPersistedBatches(markdown, batches) {
     const applied = applyTelegramSyncToMarkdown(currentMarkdown, batch);
     return applied.markdown;
   }, markdown);
+}
+
+function shouldRewriteTrainingMarkdown({ replayStoredImageAny, batchResults }) {
+  if (replayStoredImageAny) {
+    return true;
+  }
+
+  return (batchResults ?? []).some(
+    (batch) =>
+      batch.kind !== 'thought' &&
+      batch.status === 'ready' &&
+      batch.persistenceStatus === 'stored',
+  );
 }
 
 async function readLastProcessedUpdateIdForRun({
@@ -441,6 +512,92 @@ async function readPendingFallbackBatches(queuePath) {
       .map((line) => JSON.parse(line));
   } catch {
     return [];
+  }
+}
+
+async function writeThoughtPostFile({ batch, thoughtsDir }) {
+  const post = buildThoughtPost(batch);
+  const postPath = path.join(thoughtsDir, post.fileName);
+
+  if (await fileExists(postPath)) {
+    return {
+      changed: false,
+      status: 'duplicate',
+      postPath,
+    };
+  }
+
+  await mkdir(thoughtsDir, { recursive: true });
+  await writeFile(postPath, post.content, 'utf8');
+  return {
+    changed: true,
+    status: 'written',
+    postPath,
+  };
+}
+
+function buildThoughtPost(batch) {
+  const thought = batch.thought ?? {};
+  const message = batch.messages?.[0] ?? {};
+  const dateParts = formatThoughtDateParts(message.dateUnix);
+  const fileName = `${dateParts.date}-telegram-thought-${message.messageId}.md`;
+  const lines = [
+    '---',
+    `title: ${quoteYamlString(thought.title ?? '未命名随想')}`,
+    `date: ${dateParts.dateTime}`,
+    'tags:',
+    '  - 训练',
+    '  - 随想',
+    '  - Telegram',
+    `telegram_message_id: ${message.messageId ?? ''}`,
+    `telegram_chat_id: ${message.chatId ?? ''}`,
+    '---',
+    '',
+    thought.body ?? '',
+    '',
+  ];
+
+  return {
+    fileName,
+    content: lines.join('\n'),
+  };
+}
+
+function formatThoughtDateParts(dateUnix) {
+  const date = new Date((dateUnix ?? 0) * 1000);
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(date)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  );
+
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    dateTime: `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`,
+  };
+}
+
+function quoteYamlString(value) {
+  return JSON.stringify(String(value ?? ''));
+}
+
+async function fileExists(targetPath) {
+  try {
+    await access(targetPath);
+    return true;
+  } catch {
+    return false;
   }
 }
 

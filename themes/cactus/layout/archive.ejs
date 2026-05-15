@@ -1,9 +1,14 @@
 <div id="archive">
+  <%
+    function isThoughtPost(post) {
+      return Boolean(post?.tags?.findOne && post.tags.findOne({ name: '随想' }));
+    }
+  %>
   <ul class="post-list">
     <% var year = 0 %>
     <% var change = false %>
     <% var field_sort = theme.archive.sort_updated ? 'updated' : 'date' %>
-    <% page.posts.sort(field_sort, 'desc').each(function(post) { %>
+    <% page.posts.sort(field_sort, 'desc').filter(function(post){ return !isThoughtPost(post); }).each(function(post) { %>
       <% var itemYear = date(post[field_sort], 'YYYY') %>
       <% change = year !== itemYear %>
       <% year = change ? itemYear : year %>

@@ -136,7 +136,7 @@ export async function persistNormalizedBatch(options) {
     await upsertIngestMessages(client, batch, processedAt);
     await upsertIngestRecognitions(client, batch, processedAt);
 
-    if (batch.status === 'ready' && batch.archivedDate) {
+    if (batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
       const existingDay = await readCoreDay(client, batch.archivedDate);
       const mergedDay = mergeBatchIntoDay(existingDay, batch);
       await replaceCoreDay(client, mergedDay, batch.batchId, processedAt);

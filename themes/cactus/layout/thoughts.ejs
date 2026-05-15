@@ -1,5 +1,7 @@
 <%
-const thoughts = site.posts.sort('date', 'desc');
+const thoughts = site.posts
+  .sort('date', 'desc')
+  .filter((post) => post?.tags?.findOne && post.tags.findOne({ name: '随想' }));
 %>
 
 <section class="thoughts-page">
@@ -11,7 +13,7 @@ const thoughts = site.posts.sort('date', 'desc');
 
   <% if (!thoughts.length) { %>
     <div class="thoughts-empty">
-      <p>还没有锻炼随想。后续在 <code>source/_posts/</code> 下新增 Markdown 文件，这里会自动出现新的记录。</p>
+      <p>还没有锻炼随想。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/thought 正文</code> 自动归档到这里。</p>
     </div>
   <% } else { %>
     <div class="thoughts-list">

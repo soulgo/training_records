@@ -49,6 +49,9 @@ test('telegram-sync workflow validates changes and deploys Pages after sync comm
   assert.match(workflow, /- name: Build site data and static files/);
   assert.match(workflow, /actions\/upload-pages-artifact@v3/);
   assert.match(workflow, /actions\/deploy-pages@v4/);
+  assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts/);
+  assert.match(workflow, /git add 训练记录\.md source\/_posts/);
+  assert.match(workflow, /git commit -m "chore: sync Telegram updates"/);
 });
 
 test('telegram-sync workflow skips full database maintenance on webhook dispatches', async () => {

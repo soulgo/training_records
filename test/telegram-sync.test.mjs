@@ -62,6 +62,7 @@ test('groups album document images and applies filename date when screenshots ar
   const batches = lib.groupTelegramUpdates(updates);
 
   assert.equal(batches.length, 2);
+  assert.equal(batches[0].kind, 'image');
   assert.equal(batches[0].messages.length, 2);
   assert.equal(batches[1].messages.length, 1);
 
@@ -103,6 +104,107 @@ test('groups album document images and applies filename date when screenshots ar
   assert.equal(analyzed.archivedDate, '2026-05-09');
   assert.equal(analyzed.nutrition.totalCalories, 308);
   assert.equal(analyzed.activities.length, 1);
+});
+
+test('groups /thought text messages into thought batches and ignores normal text', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const updates = [
+    {
+      update_id: 201,
+      message: {
+        message_id: 11,
+        date: 1_746_748_800,
+        chat: { id: 42 },
+        text: '/thought 今天训练后臀部发力更明显\n感觉动作路线更顺了',
+      },
+    },
+    {
+      update_id: 202,
+      message: {
+        message_id: 12,
+        date: 1_746_748_900,
+        chat: { id: 42 },
+        text: '只是普通文本',
+      },
+    },
+  ];
+
+  const batches = lib.groupTelegramUpdates(updates);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought');
+  assert.equal(batches[0].batchId, 'thought-11');
+  assert.equal(batches[0].thought.body, '今天训练后臀部发力更明显\n感觉动作路线更顺了');
+});
+
+test('analyzes /thought batches into ready thought entries', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    kind: 'thought',
+    batchId: 'thought-11',
+    messages: [
+      {
+        updateId: 201,
+        messageId: 11,
+        mediaGroupId: null,
+        caption: '',
+        text: '/thought 今天训练后臀部发力更明显\n感觉动作路线更顺了',
+        chatId: 42,
+        dateUnix: 1_746_748_800,
+        photos: [],
+      },
+    ],
+    thought: {
+      command: '/thought',
+      body: '今天训练后臀部发力更明显\n感觉动作路线更顺了',
+    },
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, []);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.kind, 'thought');
+  assert.equal(analyzed.thought.title, '今天训练后臀部发力更明显');
+  assert.equal(analyzed.thought.body, '今天训练后臀部发力更明显\n感觉动作路线更顺了');
+});
+
+test('skips /thought batches when the command body is empty', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    kind: 'thought',
+    batchId: 'thought-15',
+    messages: [
+      {
+        updateId: 205,
+        messageId: 15,
+        mediaGroupId: null,
+        caption: '',
+        text: '/thought ',
+        chatId: 42,
+        dateUnix: 1_746_748_800,
+        photos: [],
+      },
+    ],
+    thought: {
+      command: '/thought',
+      body: '',
+    },
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, []);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.equal(analyzed.kind, 'thought');
+  assert.match(analyzed.reason, /empty thought body/);
 });
 
 test('skips writeback when a batch has conflicting detected dates without caption override', async () => {
