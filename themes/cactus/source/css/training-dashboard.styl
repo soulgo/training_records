@@ -157,8 +157,7 @@
 
 .hero-card,
 .metric-card,
-.chart-card,
-.daily-section__surface
+.chart-card
   border-radius 24px
   background rgba(255, 255, 255, 0.92)
   border 1px solid rgba(148, 163, 184, 0.12)
@@ -378,11 +377,8 @@
   width 100%
   height 240px !important
 
-.daily-section__surface
-  padding 1.15rem
-
 .daily-section__heading
-  align-items flex-end
+  align-items center
   margin-bottom 1rem
 
 .daily-section__meta
@@ -390,134 +386,98 @@
   align-items center
   gap 0.7rem
   flex-wrap wrap
+  justify-content flex-end
 
 .daily-section__status
-  display inline-flex
-  align-items center
-  justify-content center
-  min-height 2.2rem
-  padding 0.3rem 0.8rem
+  padding 0.28rem 0.72rem
   border-radius 999px
-  background #f8fbff
-  border 1px solid rgba(148, 163, 184, 0.14)
-  color #607086
+  background #f8fafc
+  border 1px solid #e2e8f0
+  color #64748b
   font-size 0.84rem
-  font-weight 600
-  line-height 1
+  line-height 1.2
 
 .daily-section__pager
   display inline-flex
   align-items center
-  padding 0.18rem
+  padding 0.2rem
   border-radius 999px
-  background #f8fbff
-  border 1px solid rgba(148, 163, 184, 0.14)
+  border 1px solid #e2e8f0
+  background rgba(248, 250, 252, 0.96)
+  box-shadow 0 10px 24px rgba(15, 23, 42, 0.05)
 
 .daily-section__nav
   border 0
   border-radius 999px
-  min-height 1.95rem
-  padding 0.35rem 0.9rem
+  padding 0.42rem 0.9rem
   background transparent
-  color #4f5f76
-  font-size 0.84rem
+  color #475569
+  font-size 0.86rem
   font-weight 600
   line-height 1
   cursor pointer
   transition background-color 0.2s ease, color 0.2s ease, transform 0.2s ease
 
 .daily-section__nav:hover:not(:disabled)
-  background #ffffff
-  color #102a43
+  background #e2e8f0
+  color #0f172a
   transform translateY(-1px)
 
 .daily-section__nav:disabled
-  color #9aa5b1
+  color #94a3b8
   cursor default
 
 .daily-grid
   display grid
-  grid-template-columns repeat(4, minmax(0, 1fr))
+  grid-template-columns repeat(auto-fit, minmax(260px, 1fr))
   gap 0.9rem
 
 .day-card
+  padding 1rem
+  border-radius 16px
+  background linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)
+  border 1px solid #e2e8f0
   display flex
   flex-direction column
-  min-height 100%
-  padding 1rem
-  border-radius 22px
-  background linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)
-  border 1px solid rgba(148, 163, 184, 0.12)
 
 .day-card__header
   display flex
-  align-items flex-start
   justify-content space-between
-  gap 0.75rem
-  margin-bottom 1rem
+  gap 1rem
+  align-items baseline
+  margin-bottom 0.75rem
 
 .day-card__header h3
   margin 0
-  color #102a43
-  font-size 1.02rem
-  line-height 1.2
+  font-size 1.05rem
 
-.day-card__header p
-  margin 0.28rem 0 0
-  color #5f6f86
-  font-size 0.88rem
-
-.day-card__count
-  display inline-flex
-  align-items center
-  justify-content center
-  min-height 1.85rem
-  padding 0.2rem 0.68rem
-  border-radius 999px
-  background rgba(232, 244, 255, 0.9)
-  color #2f6b8a
-  font-size 0.78rem
+.day-card__header span
+  color #0f766e
   font-weight 600
-  white-space nowrap
 
 .day-card__stats
-  display grid
-  grid-template-columns repeat(2, minmax(0, 1fr))
-  gap 0.7rem
+  list-style none
+  padding 0
   margin 0 0 0.9rem
 
-.day-card__stat
-  padding 0.72rem 0.78rem
-  border-radius 16px
-  background rgba(248, 251, 255, 0.95)
-  border 1px solid rgba(148, 163, 184, 0.1)
-
-.day-card__stat span
-  display block
-  color #7b879c
-  font-size 0.76rem
-  line-height 1.3
-
-.day-card__stat strong
-  display block
-  margin-top 0.2rem
-  color #243b53
-  font-size 0.94rem
-  line-height 1.4
+.day-card__stats li
+  display flex
+  justify-content space-between
+  gap 0.75rem
+  margin-bottom 0.35rem
+  color #475569
 
 .day-card__tags
   display flex
   flex-wrap wrap
   gap 0.45rem
-  margin-top auto
 
 .day-card__tags span
-  padding 0.28rem 0.58rem
+  padding 0.3rem 0.55rem
   border-radius 999px
-  background rgba(226, 232, 240, 0.68)
-  color #41566f
-  font-size 0.78rem
-  line-height 1.25
+  background #e2e8f0
+  color #334155
+  font-size 0.85rem
 
 .dashboard-empty
   padding 1.25rem
@@ -576,8 +536,7 @@
   .overview-card,
   .hero-card,
   .metric-card,
-  .chart-card,
-  .daily-section__surface
+  .chart-card
     padding 1rem
     border-radius 22px
 
@@ -615,6 +574,3 @@
 
   .day-card__header
     flex-direction column
-
-  .day-card__count
-    align-self flex-start

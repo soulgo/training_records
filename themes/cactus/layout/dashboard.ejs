@@ -287,18 +287,16 @@ function renderDayCard(day) {
 
   return `<article class="day-card">
     <div class="day-card__header">
-      <div>
-        <h3>${escapeHtml(day.date)}</h3>
-        <p>${escapeHtml(day.weightLabel)}</p>
-      </div>
-      <span class="day-card__count">${escapeHtml(day.activityCount)} 次活动</span>
+      <h3>${escapeHtml(day.date)}</h3>
+      <span>${escapeHtml(day.weightLabel)}</span>
     </div>
-    <div class="day-card__stats">
-      <div class="day-card__stat"><span>训练消耗</span><strong>${escapeHtml(day.trainingCaloriesLabel)}</strong></div>
-      <div class="day-card__stat"><span>锻炼时长</span><strong>${escapeHtml(day.workoutDurationLabel)}</strong></div>
-      <div class="day-card__stat"><span>骑行里程</span><strong>${escapeHtml(day.cyclingDistanceLabel)}</strong></div>
-      <div class="day-card__stat"><span>饮食热量</span><strong>${escapeHtml(day.nutritionCaloriesLabel)}</strong></div>
-    </div>
+    <ul class="day-card__stats">
+      <li>活动次数：<strong>${escapeHtml(day.activityCount)}</strong></li>
+      <li>训练消耗：<strong>${escapeHtml(day.trainingCaloriesLabel)}</strong></li>
+      <li>锻炼时长：<strong>${escapeHtml(day.workoutDurationLabel)}</strong></li>
+      <li>骑行里程：<strong>${escapeHtml(day.cyclingDistanceLabel)}</strong></li>
+      <li>饮食热量：<strong>${escapeHtml(day.nutritionCaloriesLabel)}</strong></li>
+    </ul>
     ${tags}
   </article>`;
 }
@@ -482,28 +480,26 @@ const chartCards = [
     </section>
 
     <section class="daily-section">
-      <div class="daily-section__surface">
-        <div class="chart-heading daily-section__heading">
-          <div>
-            <span class="dashboard-section__eyebrow">活动归档</span>
-            <h2>每日记录速览</h2>
-            <span><%= dailyOverviewHint %></span>
-          </div>
-          <div class="daily-section__meta">
-            <span class="daily-section__status" data-daily-status><%= formatDailyRange(0, dailyCardLimit, dailyOverviewTotal) %></span>
-            <div class="daily-section__pager">
-              <button type="button" class="daily-section__nav" data-daily-nav="prev" disabled>较新</button>
-              <button
-                type="button"
-                class="daily-section__nav"
-                data-daily-nav="next"
-                <%= dailyOverviewTotal > dailyCardLimit ? '' : 'disabled' %>
-              >较早</button>
-            </div>
+      <div class="chart-heading daily-section__heading">
+        <div>
+          <span class="dashboard-section__eyebrow">活动归档</span>
+          <h2>每日记录速览</h2>
+          <span><%= dailyOverviewHint %></span>
+        </div>
+        <div class="daily-section__meta">
+          <span class="daily-section__status" data-daily-status><%= formatDailyRange(0, dailyCardLimit, dailyOverviewTotal) %></span>
+          <div class="daily-section__pager">
+            <button type="button" class="daily-section__nav" data-daily-nav="prev" disabled>较新</button>
+            <button
+              type="button"
+              class="daily-section__nav"
+              data-daily-nav="next"
+              <%= dailyOverviewTotal > dailyCardLimit ? '' : 'disabled' %>
+            >较早</button>
           </div>
         </div>
-        <div class="daily-grid" data-daily-grid><%- recentDays.map(renderDayCard).join('') %></div>
       </div>
+      <div class="daily-grid" data-daily-grid><%- recentDays.map(renderDayCard).join('') %></div>
     </section>
 
     <% if (page.content) { %>
