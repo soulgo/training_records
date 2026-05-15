@@ -23,7 +23,10 @@ test('thoughts page lists posts from source/_posts', () => {
 
     const thoughtsIndex = readFileSync(path.join(rootDir, 'public', 'thoughts', 'index.html'), 'utf8');
 
-    assert.match(thoughtsIndex, /燃脂和哑铃力量训练后屁股有点疼/);
+    assert.match(thoughtsIndex, /昨晚燃脂 \+ 哑铃力量训练锻炼完以后，屁股有点疼，不知道是啥原因？/);
+    assert.doesNotMatch(thoughtsIndex, /燃脂和哑铃力量训练后屁股有点疼/);
+    assert.doesNotMatch(thoughtsIndex, /你可以手工在/);
+    assert.doesNotMatch(thoughtsIndex, /阅读全文/);
     assert.doesNotMatch(thoughtsIndex, /还没有锻炼随想/);
   });
 });
@@ -69,13 +72,59 @@ tags:
         '2026-05-10-non-thought-note',
         'index.html',
       );
-      assert.match(thoughtsIndex, /燃脂和哑铃力量训练后屁股有点疼/);
+      assert.match(thoughtsIndex, /昨晚燃脂 \+ 哑铃力量训练锻炼完以后，屁股有点疼，不知道是啥原因？/);
       assert.doesNotMatch(thoughtsIndex, /普通记录文章/);
-      assert.doesNotMatch(homepage, /燃脂和哑铃力量训练后屁股有点疼/);
+      assert.doesNotMatch(homepage, /昨晚燃脂 \+ 哑铃力量训练锻炼完以后，屁股有点疼，不知道是啥原因？/);
       assert.equal(existsSync(regularPostPagePath), true);
       assert.equal(existsSync(path.join(rootDir, 'public', 'archives', 'index.html')), false);
     } finally {
       restoreOptionalFile(extraPostPath, originalExtraPost);
+    }
+  });
+});
+
+test('thought detail page hides the title heading for telegram thoughts without front matter title', () => {
+  withSharedSiteFixture(() => {
+    const thoughtPostPath = path.join(rootDir, 'source', '_posts', '2026-05-14-telegram-thought-501.md');
+    const originalThoughtPost = readOptionalFile(thoughtPostPath);
+
+    try {
+      writeFileSync(
+        thoughtPostPath,
+        `---
+date: 2026-05-14 10:30:00
+tags:
+  - 训练
+  - 随想
+  - Telegram
+telegram_message_id: 501
+telegram_chat_id: 42
+---
+
+今天训练后臀部发力更明显
+感觉动作路线更顺了
+`,
+        'utf8',
+      );
+
+      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+
+      const detailPage = readFileSync(
+        path.join(rootDir, 'public', 'thoughts', '2026', '05', '14', '2026-05-14-telegram-thought-501', 'index.html'),
+        'utf8',
+      );
+
+      assert.doesNotMatch(detailPage, /<h1 class="posttitle p-name" itemprop="name headline">/);
+      assert.match(detailPage, /今天训练后臀部发力更明显/);
+    } finally {
+      restoreOptionalFile(thoughtPostPath, originalThoughtPost);
     }
   });
 });

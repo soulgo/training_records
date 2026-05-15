@@ -6,7 +6,7 @@
 
 - `TrainingSnapshot` 作为统一中间层
 - `markdown` 与 `database` 两种数据来源并存
-- Telegram 自动同步优先写 PostgreSQL，失败时回退写 Markdown，恢复后自动补偿入库
+- Telegram 自动同步优先写 PostgreSQL；图片批次失败时回退写 `训练记录.md`，`/thought` 批次保留 `source/_posts` 并进入待补偿队列
 
 ## 1. 系统目标
 
@@ -22,6 +22,7 @@
 - `训练记录.md` 到 canonical snapshot 的解析
 - PostgreSQL `core.*` 到 canonical snapshot 的读取
 - Telegram 图片识别结果优先写 PostgreSQL，失败时回退写 Markdown
+- Telegram `/thought` 文字随想直接写 `source/_posts/*.md`，并同步入库或进入待补偿队列
 - PostgreSQL 恢复后自动重放待补偿批次
 - snapshot 到 Hexo 页面展示的转换
 - GitHub Actions 自动测试、构建和发布 GitHub Pages
@@ -36,14 +37,18 @@
 
 ```mermaid
 flowchart TD
-    A["训练截图 / 饮食截图 / 体脂秤截图 / 文字反馈"] --> B["Telegram Bot / 人工录入 / AI 识别"]
+    A["训练截图 / 饮食截图 / 体脂秤截图"] --> B["Telegram Bot / AI 识别"]
+    T["/thought 文字随想"] --> T1["写入 source/_posts/*.md"]
     B --> C["写入 PostgreSQL core.*"]
+    T1 --> C
     C --> D["tools/training-snapshot.mjs 构建 TrainingSnapshot"]
     D --> E["source/_data/training.json + dashboardView.json"]
     E --> F["Hexo 生成 public/"]
     F --> G["GitHub Pages"]
-    C -. PG 临时失败 .-> H["回退写 训练记录.md"]
+    C -. 图片批次 PG 临时失败 .-> H["回退写 训练记录.md"]
+    C -. /thought PG 临时失败 .-> Q["写入 runtime/telegram-sync-pending.ndjson"]
     H -. PG 恢复后自动补偿 .-> C
+    Q -. PG 恢复后自动补偿 .-> C
 ```
 
 ## 4. 输入类型与归档口径
@@ -182,7 +187,7 @@ Markdown 推荐结构：
   从 PostgreSQL 导出派生 `训练记录.md`
 
 - `tools/telegram-sync.mjs`
-  处理 Telegram 同步、DB 优先写入、Markdown 回退和待补偿重放
+  处理 Telegram 同步、图片识别、`/thought` 随想写入、DB 优先写入、Markdown 回退和待补偿重放
 
 - `cloudflare/telegram-sync-dispatch-worker.mjs`
   Cloudflare Worker 示例，用于把 Telegram webhook 转发成 GitHub `repository_dispatch`，并把相册消息按 `media_group_id` 聚合后再派发
@@ -214,11 +219,25 @@ npm run build
 
 1. 接收 GitHub `repository_dispatch` 传入的 Telegram update，或在轮询模式下拉 Telegram 消息
    Cloudflare webhook 接入已支持把同一相册的多条 update 聚合后一次 dispatch
-2. 调用 AI 识别截图
-3. 优先写 PostgreSQL
-4. 如果 PostgreSQL 失败，则先回退写 Markdown
-5. 把失败批次写入 `runtime/telegram-sync-pending.ndjson`
-6. PostgreSQL 恢复后，下次同步会先重放待补偿批次
+2. 如果是截图消息，则调用 AI 识别图片并归档训练/饮食/体脂数据
+3. 如果是 `/thought 正文` 文字消息，则直接生成 `source/_posts/YYYY-MM-DD-telegram-thought-<messageId>.md`
+4. 所有 ready 批次都优先写 PostgreSQL
+5. 图片批次在 PostgreSQL 失败时会回退写 `训练记录.md`
+6. `/thought` 批次在 PostgreSQL 失败时会保留已写出的随想 Markdown，并把待补偿记录写入队列
+7. 失败批次写入 `runtime/telegram-sync-pending.ndjson`
+8. PostgreSQL 恢复后，下次同步会先重放待补偿批次
+
+### 7.2.1 `/thought` 随想的当前规则
+
+- 入口命令是 Telegram 文本消息 `/thought 正文`
+- 当前只识别文字消息，不需要图片
+- 同步时会生成 `source/_posts/YYYY-MM-DD-telegram-thought-<messageId>.md`
+- front matter 当前包含：`date`、`tags`、`telegram_message_id`、`telegram_chat_id`
+- 当前不会为 Telegram 随想生成 `title`
+- “锻炼随想”列表页只展示时间、标签和正文，不展示标题，也没有“阅读全文”
+- 无标题 Telegram 随想的单篇详情页不会渲染空 H1
+
+更完整的维护说明见 `docs/thoughts-module.md`。
 
 ### 7.3 页面构建
 
@@ -253,7 +272,7 @@ npm run build
   从 PostgreSQL 导出 Markdown
 
 - `npm run sync:telegram`
-  处理 Telegram update、识别截图、同步到 PostgreSQL，必要时回退写 Markdown
+  处理 Telegram update、识别截图或写入 `/thought` 随想，同步到 PostgreSQL，必要时回退写 Markdown / 待补偿队列
 
 ## 9. GitHub Actions
 
@@ -270,6 +289,9 @@ npm run build
 
 - `docs/telegram-webhook-cloudflare.md`
   Telegram webhook + Cloudflare Worker 的接入说明
+
+- `docs/thoughts-module.md`
+  锻炼随想模块与 Telegram `/thought` 的维护说明
 
 页面展示数据来源取决于 `TRAINING_SNAPSHOT_SOURCE`：
 
@@ -324,6 +346,7 @@ npm run build
 - 如果页面继续走 `markdown` source，PG 故障不会影响页面构建
 - 如果页面切到 `database` source，PG 就会变成页面构建依赖
 - PostgreSQL 失败时，Telegram 批次会先写 Markdown，再进入待补偿队列，不会直接丢
+- `/thought` 随想当前写入 `source/_posts` 时不生成 `title`；如果后续要恢复标题或调整 permalink，请同步修改模板、同步逻辑和测试
 - 如果你在 PG 故障期间又手工改了同一天的 Markdown，后续补偿入库时要注意冲突口径
 
 ## 13. 一句话总结

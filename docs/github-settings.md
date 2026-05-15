@@ -217,7 +217,9 @@ TRAINING_DB_APP_NAME=training-records-dashboard
 ## 当前实现下的重要说明
 
 - `telegram-sync.yml` 现在会直接访问 PostgreSQL
+- Telegram `/thought` 虽然不走图片识别，但当前 `npm run sync:telegram` 入口仍会统一校验 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`，所以这些变量不能省
 - PostgreSQL 失败时，Telegram 同步会回退写 Markdown，并把待补偿批次写到 `runtime/telegram-sync-pending.ndjson`
+- 对 `/thought` 来说，“回退写 Markdown”指的是保留已经生成在 `source/_posts/` 下的随想文件，并把待补偿入库信息写到 `runtime/telegram-sync-pending.ndjson`
 - PostgreSQL 恢复后，后续同步会先重放待补偿批次
 - `deploy-pages.yml` 是否依赖 PostgreSQL，取决于 `TRAINING_SNAPSHOT_SOURCE`
   - `markdown`：页面构建不依赖 PostgreSQL

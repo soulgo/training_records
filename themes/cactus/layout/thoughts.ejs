@@ -29,11 +29,9 @@ const thoughts = site.posts
               </div>
             <% } %>
           </div>
-          <h2><a href="<%- url_for(post.path) %>"><%= post.title %></a></h2>
           <div class="thought-card__body">
-            <%- post.excerpt || post.content %>
+            <%- post.content %>
           </div>
-          <a class="thought-card__link" href="<%- url_for(post.path) %>">阅读全文</a>
         </article>
       <% }) %>
     </div>

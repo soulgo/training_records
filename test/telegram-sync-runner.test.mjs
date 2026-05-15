@@ -1329,7 +1329,7 @@ test('runTelegramSync writes a /thought telegram message into source/_posts and 
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].kind, 'thought');
-  assert.match(postContent, /title: "今天训练后臀部发力更明显"/);
+  assert.doesNotMatch(postContent, /^title:/m);
   assert.match(postContent, /date: 2026-05-14 10:30:00/);
   assert.match(postContent, /telegram_message_id: 501/);
   assert.match(postContent, /telegram_chat_id: 42/);
@@ -1462,7 +1462,6 @@ test('runTelegramSync replays pending thought batches without rewriting training
             issues: [],
             confidence: 1,
             thought: {
-              title: '恢复节奏更稳了',
               body: '恢复节奏更稳了',
               tags: ['训练', '随想', 'Telegram'],
               telegramMessageId: 801,

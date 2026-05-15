@@ -543,7 +543,6 @@ function buildThoughtPost(batch) {
   const fileName = `${dateParts.date}-telegram-thought-${message.messageId}.md`;
   const lines = [
     '---',
-    `title: ${quoteYamlString(thought.title ?? '未命名随想')}`,
     `date: ${dateParts.dateTime}`,
     'tags:',
     '  - 训练',
@@ -586,10 +585,6 @@ function formatThoughtDateParts(dateUnix) {
     date: `${parts.year}-${parts.month}-${parts.day}`,
     dateTime: `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`,
   };
-}
-
-function quoteYamlString(value) {
-  return JSON.stringify(String(value ?? ''));
 }
 
 async function fileExists(targetPath) {

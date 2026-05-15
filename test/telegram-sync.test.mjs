@@ -170,7 +170,6 @@ test('analyzes /thought batches into ready thought entries', async () => {
 
   assert.equal(analyzed.status, 'ready');
   assert.equal(analyzed.kind, 'thought');
-  assert.equal(analyzed.thought.title, '今天训练后臀部发力更明显');
   assert.equal(analyzed.thought.body, '今天训练后臀部发力更明显\n感觉动作路线更顺了');
 });
 

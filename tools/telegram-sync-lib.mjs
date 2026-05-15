@@ -520,12 +520,6 @@ function analyzeThoughtBatch(batch) {
     });
   }
 
-  const titleSource = body
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find(Boolean);
-  const title = truncateTitle(collapseWhitespace(titleSource ?? '未命名随想'));
-
   return {
     status: 'ready',
     kind: 'thought',
@@ -535,7 +529,6 @@ function analyzeThoughtBatch(batch) {
     issues: [],
     confidence: 1,
     thought: {
-      title,
       body,
       tags: ['训练', '随想', 'Telegram'],
       telegramMessageId: message?.messageId ?? null,
@@ -903,18 +896,6 @@ function parseThoughtCommand(text) {
   return {
     body: body.trim(),
   };
-}
-
-function collapseWhitespace(value) {
-  return String(value ?? '').replace(/\s+/g, ' ').trim();
-}
-
-function truncateTitle(value, maxLength = 30) {
-  const glyphs = [...String(value ?? '')];
-  if (glyphs.length <= maxLength) {
-    return glyphs.join('');
-  }
-  return `${glyphs.slice(0, maxLength).join('')}…`;
 }
 
 function appendMetric(lines, label, value, suffix = '') {
