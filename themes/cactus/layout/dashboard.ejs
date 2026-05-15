@@ -208,10 +208,12 @@ function getComparison(current, previous) {
   if (!comparison) {
     return {
       direction: 'neutral',
-      arrow: '•',
+      arrow: '·',
       label: '暂无前一日对比',
+      shortLabel: '待比较',
       value: '',
       text: '暂无前一日对比',
+      strength: 0,
     };
   }
 
@@ -220,8 +222,10 @@ function getComparison(current, previous) {
       direction: 'flat',
       arrow: '→',
       label: '较前一日',
+      shortLabel: '持平',
       value: '持平',
       text: '较前一日持平',
+      strength: 18,
     };
   }
 
@@ -233,8 +237,10 @@ function getComparison(current, previous) {
     direction: isUp ? 'up' : 'down',
     arrow: isUp ? '↑' : '↓',
     label,
+    shortLabel: isUp ? '上升' : '回落',
     value,
     text: `${label} ${value}`,
+    strength: Math.min(100, Math.max(Math.round(comparison.ratio * 0.85), 16)),
   };
 }
 
@@ -247,12 +253,31 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function renderNumberValue(number, unit) {
+  return `<div class="metric-value"><span class="metric-value__number">${escapeHtml(number)}</span><span class="metric-value__unit">${escapeHtml(unit)}</span></div>`;
+}
+
+function renderTextValue(text, modifier = '') {
+  return `<div class="metric-value${modifier ? ` ${modifier}` : ''}"><span class="metric-value__number">${escapeHtml(text)}</span></div>`;
+}
+
+function renderCompositeValue(values) {
+  return `<div class="metric-value metric-value--composite">${values.map((item) => `<span class="metric-value__pair"><span class="metric-value__number">${escapeHtml(item.value)}</span><span class="metric-value__unit">${escapeHtml(item.unit)}</span></span>`).join('<span class="metric-value__separator">/</span>')}</div>`;
+}
+
+function renderMetaLine(label, value) {
+  return `<div class="metric-meta"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
 function renderComparison(comparison, className) {
   const valueMarkup = comparison.value
     ? `<span class="comparison-pill__value">${escapeHtml(comparison.value)}</span>`
     : '';
+  const strengthMarkup = comparison.strength
+    ? `<span class="comparison-pill__meter"><span class="comparison-pill__meter-fill" style="width:${comparison.strength}%"></span></span>`
+    : `<span class="comparison-pill__meter comparison-pill__meter--empty"></span>`;
 
-  return `<p class="${className} comparison-pill comparison-pill--${escapeHtml(comparison.direction)}"><span class="comparison-pill__arrow">${escapeHtml(comparison.arrow)}</span><span>${escapeHtml(comparison.text)}</span><span class="comparison-pill__label" aria-hidden="true">${escapeHtml(comparison.label)}</span>${valueMarkup}</p>`;
+  return `<div class="${className} comparison-pill comparison-pill--${escapeHtml(comparison.direction)}"><div class="comparison-pill__summary"><span class="comparison-pill__arrow">${escapeHtml(comparison.arrow)}</span><span>${escapeHtml(comparison.text)}</span><span class="comparison-pill__label" aria-hidden="true">${escapeHtml(comparison.shortLabel)}</span></div>${valueMarkup}${strengthMarkup}</div>`;
 }
 
 function renderDayCard(day) {
@@ -262,16 +287,18 @@ function renderDayCard(day) {
 
   return `<article class="day-card">
     <div class="day-card__header">
-      <h3>${escapeHtml(day.date)}</h3>
-      <span>${escapeHtml(day.weightLabel)}</span>
+      <div>
+        <h3>${escapeHtml(day.date)}</h3>
+        <p>${escapeHtml(day.weightLabel)}</p>
+      </div>
+      <span class="day-card__count">${escapeHtml(day.activityCount)} 次活动</span>
     </div>
-    <ul class="day-card__stats">
-      <li>活动次数：<strong>${escapeHtml(day.activityCount)}</strong></li>
-      <li>训练消耗：<strong>${escapeHtml(day.trainingCaloriesLabel)}</strong></li>
-      <li>锻炼时长：<strong>${escapeHtml(day.workoutDurationLabel)}</strong></li>
-      <li>骑行里程：<strong>${escapeHtml(day.cyclingDistanceLabel)}</strong></li>
-      <li>饮食热量：<strong>${escapeHtml(day.nutritionCaloriesLabel)}</strong></li>
-    </ul>
+    <div class="day-card__stats">
+      <div class="day-card__stat"><span>训练消耗</span><strong>${escapeHtml(day.trainingCaloriesLabel)}</strong></div>
+      <div class="day-card__stat"><span>锻炼时长</span><strong>${escapeHtml(day.workoutDurationLabel)}</strong></div>
+      <div class="day-card__stat"><span>骑行里程</span><strong>${escapeHtml(day.cyclingDistanceLabel)}</strong></div>
+      <div class="day-card__stat"><span>饮食热量</span><strong>${escapeHtml(day.nutritionCaloriesLabel)}</strong></div>
+    </div>
     ${tags}
   </article>`;
 }
@@ -286,6 +313,86 @@ function formatDailyRange(pageIndex, pageSize, total) {
 
   return `${start}-${end} / 共 ${total} 天`;
 }
+
+const overviewMeta = [
+  { label: '真实测量', value: latestMeasurement.measuredAt || '—' },
+  { label: '对比日期', value: previousDay?.date || '暂无前一日' },
+];
+
+const overviewStats = [
+  {
+    label: '已训练天数',
+    value: `${formatNumber(trainedDays, 0)} 天`,
+    hint: '当前记录中有训练消耗的日期',
+  },
+  {
+    label: '累计训练归档',
+    value: `${formatNumber(dashboard.daily?.length || 0, 0)} 天`,
+    hint: '完整训练归档天数',
+  },
+];
+
+const primaryMetrics = [
+  {
+    title: '体重',
+    valueHtml: renderNumberValue(formatNumber(latestMeasurement.weightKg), 'kg'),
+    metaHtml: renderMetaLine('BMI', formatNumber(latestMeasurement.bmi, 1)),
+    comparison: getComparison(latestMeasurement.weightKg, previousDay?.measurement?.weightKg),
+  },
+  {
+    title: '体脂率',
+    valueHtml: renderNumberValue(`${formatNumber(latestMeasurement.bodyFatPct, 1)}`, '%'),
+    metaHtml: renderMetaLine('骨骼肌量', `${formatNumber(latestMeasurement.skeletalMuscleKg)} kg`),
+    comparison: getComparison(latestMeasurement.bodyFatPct, previousDay?.measurement?.bodyFatPct),
+  },
+  {
+    title: '训练消耗',
+    valueHtml: renderNumberValue(formatNumber(latestDay?.workoutSummary?.trainingCalories || 0, 0), 'kcal'),
+    metaHtml: renderMetaLine('饮食摄入', `${formatNumber(latestDay?.nutrition?.totalCalories, 0)} kcal`),
+    comparison: getComparison(latestDay?.workoutSummary?.trainingCalories || 0, previousDay?.workoutSummary?.trainingCalories),
+  },
+  {
+    title: '锻炼时长',
+    valueHtml: latestDay?.workoutSummary?.workoutDurationMinutes !== null && latestDay?.workoutSummary?.workoutDurationMinutes !== undefined
+      ? renderNumberValue(formatNumber(latestDay.workoutSummary.workoutDurationMinutes, 0), '分钟')
+      : renderTextValue(formatWorkoutDuration(latestDay), 'metric-value--compact'),
+    metaHtml: latestDay?.workoutSummary?.activeHours !== null && latestDay?.workoutSummary?.activeHours !== undefined
+      ? renderMetaLine('活动小时数', `${formatNumber(latestDay.workoutSummary.activeHours, 0)} 小时`)
+      : renderMetaLine('身体类型', latestMeasurement.bodyType || '—'),
+    comparison: getComparison(getWorkoutDurationValue(latestDay), getWorkoutDurationValue(previousDay)),
+  },
+];
+
+const secondaryMetrics = [
+  {
+    title: '基础代谢',
+    valueHtml: renderNumberValue(formatNumber(latestMeasurement.basalMetabolismKcal, 0), 'kcal/日'),
+    metaHtml: renderMetaLine('内脏脂肪等级', formatNumber(latestMeasurement.visceralFatLevel, 1)),
+    comparison: getComparison(latestMeasurement.basalMetabolismKcal, previousDay?.measurement?.basalMetabolismKcal),
+  },
+  {
+    title: '水分与蛋白质',
+    valueHtml: renderCompositeValue([
+      { value: formatNumber(latestMeasurement.bodyWaterPct, 1), unit: '%' },
+      { value: formatNumber(latestMeasurement.proteinPct, 1), unit: '%' },
+    ]),
+    metaHtml: renderMetaLine('身体年龄', `${formatNumber(latestMeasurement.bodyAge, 0)} 岁`),
+    comparison: getComparison(latestMeasurement.bodyWaterPct, previousDay?.measurement?.bodyWaterPct),
+  },
+  {
+    title: '骑行里程',
+    valueHtml: renderNumberValue(formatNumber(latestDay?.workoutSummary?.cyclingDistanceKm || 0), 'km'),
+    metaHtml: renderMetaLine('当日活动', `${formatNumber(latestDay?.workoutSummary?.totalActivities || 0, 0)} 次`),
+    comparison: getComparison(latestDay?.workoutSummary?.cyclingDistanceKm || 0, previousDay?.workoutSummary?.cyclingDistanceKm),
+  },
+];
+
+const chartCards = [
+  { id: 'weight-chart', title: '体重趋势', subtitle: '最近 30 天归档走势', className: 'chart-card chart-card--wide' },
+  { id: 'composition-chart', title: '体脂与骨骼肌', subtitle: '观察减脂与保肌变化', className: 'chart-card chart-card--wide' },
+  { id: 'calorie-chart', title: '热量对比', subtitle: '摄入与训练消耗对照', className: 'chart-card' },
+  { id: 'cycling-chart', title: '骑行里程', subtitle: '通勤有氧累积', className: 'chart-card' },
+];
 %>
 
 <section class="dashboard-page">
@@ -294,128 +401,109 @@ function formatDailyRange(pageIndex, pageSize, total) {
       <p>还没有可展示的数据。先在仓库里补充 `训练记录.md`，然后重新构建站点。</p>
     </div>
   <% } else { %>
-    <section class="hero-metrics">
-      <article class="hero-card hero-card--primary">
-        <span class="hero-label">最新体脂归档日</span>
-        <strong><%= latestMeasurement.archivedDate %></strong>
-        <p>真实测量时间：<%= latestMeasurement.measuredAt %></p>
-        <p class="hero-card__comparison">
-          对比日期：<%= previousDay?.date || '暂无前一日' %>
-        </p>
+    <section class="dashboard-overview">
+      <article class="overview-card">
+        <div class="overview-card__header">
+          <span class="dashboard-section__eyebrow">最新体脂归档日</span>
+          <strong><%= latestMeasurement.archivedDate %></strong>
+          <p>核心训练与身体指标总览</p>
+        </div>
+        <div class="overview-card__meta">
+          <% overviewMeta.forEach((item) => { %>
+            <div class="overview-card__meta-item">
+              <span><%= item.label %></span>
+              <strong><%= item.value %></strong>
+            </div>
+          <% }); %>
+        </div>
+        <div class="overview-card__stats">
+          <% overviewStats.forEach((item) => { %>
+            <div class="overview-card__stat">
+              <span><%= item.label %></span>
+              <strong><%= item.value %></strong>
+              <small><%= item.hint %></small>
+            </div>
+          <% }); %>
+        </div>
       </article>
-      <article class="hero-card">
-        <span class="hero-label">体重</span>
-        <strong><%= formatNumber(latestMeasurement.weightKg) %> kg</strong>
-        <p>BMI <%= formatNumber(latestMeasurement.bmi, 1) %></p>
-        <% const weightComparison = getComparison(latestMeasurement.weightKg, previousDay?.measurement?.weightKg); %>
-        <%- renderComparison(weightComparison, 'hero-card__comparison') %>
-      </article>
-      <article class="hero-card">
-        <span class="hero-label">体脂率</span>
-        <strong><%= formatNumber(latestMeasurement.bodyFatPct, 1) %>%</strong>
-        <p>骨骼肌量 <%= formatNumber(latestMeasurement.skeletalMuscleKg) %> kg</p>
-        <% const bodyFatComparison = getComparison(latestMeasurement.bodyFatPct, previousDay?.measurement?.bodyFatPct); %>
-        <%- renderComparison(bodyFatComparison, 'hero-card__comparison') %>
-      </article>
-      <article class="hero-card">
-        <span class="hero-label">训练消耗</span>
-        <strong><%= formatNumber(latestDay?.workoutSummary?.trainingCalories || 0, 0) %> kcal</strong>
-        <p>饮食摄入 <%= formatNumber(latestDay?.nutrition?.totalCalories, 0) %> kcal</p>
-        <% const trainingComparison = getComparison(latestDay?.workoutSummary?.trainingCalories || 0, previousDay?.workoutSummary?.trainingCalories); %>
-        <%- renderComparison(trainingComparison, 'hero-card__comparison') %>
-      </article>
-      <article class="hero-card">
-        <span class="hero-label">锻炼时长</span>
-        <strong><%= formatWorkoutDuration(latestDay) %></strong>
-        <p><%= latestDay?.workoutSummary?.activeHours !== null && latestDay?.workoutSummary?.activeHours !== undefined ? `活动小时数 ${formatNumber(latestDay.workoutSummary.activeHours, 0)} 小时` : `身体类型 ${latestMeasurement.bodyType || '—'}` %></p>
-        <% const durationComparison = getComparison(getWorkoutDurationValue(latestDay), getWorkoutDurationValue(previousDay)); %>
-        <%- renderComparison(durationComparison, 'hero-card__comparison') %>
-      </article>
-      <article class="hero-card hero-card--primary">
-        <span class="hero-label">已训练天数</span>
-        <strong><%= formatNumber(trainedDays, 0) %> 天</strong>
-        <p>按当前训练记录中有训练消耗的日期统计</p>
-        <p class="hero-card__comparison">
-          累计完成训练归档 <%= formatNumber(dashboard.daily?.length || 0, 0) %> 天
-        </p>
-      </article>
+
+      <section class="hero-metrics">
+        <% primaryMetrics.forEach((metric) => { %>
+          <article class="hero-card">
+            <span class="hero-label"><%= metric.title %></span>
+            <%- metric.valueHtml %>
+            <div class="hero-card__meta"><%- metric.metaHtml %></div>
+            <%- renderComparison(metric.comparison, 'hero-card__comparison') %>
+          </article>
+        <% }); %>
+        <span class="sr-only">已训练天数</span>
+      </section>
     </section>
 
     <section class="metric-grid">
-      <article class="metric-card">
-        <span class="metric-title">基础代谢</span>
-        <strong><%= formatNumber(latestMeasurement.basalMetabolismKcal, 0) %> kcal/日</strong>
-        <p>内脏脂肪等级 <%= formatNumber(latestMeasurement.visceralFatLevel, 1) %></p>
-        <% const metabolismComparison = getComparison(latestMeasurement.basalMetabolismKcal, previousDay?.measurement?.basalMetabolismKcal); %>
-        <%- renderComparison(metabolismComparison, 'metric-card__comparison') %>
-      </article>
-      <article class="metric-card">
-        <span class="metric-title">水分与蛋白质</span>
-        <strong><%= formatNumber(latestMeasurement.bodyWaterPct, 1) %>% / <%= formatNumber(latestMeasurement.proteinPct, 1) %>%</strong>
-        <p>身体年龄 <%= formatNumber(latestMeasurement.bodyAge, 0) %> 岁</p>
-        <% const waterComparison = getComparison(latestMeasurement.bodyWaterPct, previousDay?.measurement?.bodyWaterPct); %>
-        <%- renderComparison(waterComparison, 'metric-card__comparison') %>
-      </article>
-      <article class="metric-card">
-        <span class="metric-title">骑行里程</span>
-        <strong><%= formatNumber(latestDay?.workoutSummary?.cyclingDistanceKm || 0) %> km</strong>
-        <p>当日活动 <%= formatNumber(latestDay?.workoutSummary?.totalActivities || 0, 0) %> 次</p>
-        <% const cyclingComparison = getComparison(latestDay?.workoutSummary?.cyclingDistanceKm || 0, previousDay?.workoutSummary?.cyclingDistanceKm); %>
-        <%- renderComparison(cyclingComparison, 'metric-card__comparison') %>
-      </article>
+      <div class="dashboard-section__header">
+        <div>
+          <span class="dashboard-section__eyebrow">健康指标</span>
+          <h2>身体状态</h2>
+        </div>
+      </div>
+      <div class="metric-grid__cards">
+        <% secondaryMetrics.forEach((metric) => { %>
+          <article class="metric-card">
+            <span class="metric-title"><%= metric.title %></span>
+            <%- metric.valueHtml %>
+            <div class="metric-card__meta"><%- metric.metaHtml %></div>
+            <%- renderComparison(metric.comparison, 'metric-card__comparison') %>
+          </article>
+        <% }); %>
+      </div>
     </section>
 
-    <section class="chart-grid">
-      <article class="chart-card">
-        <div class="chart-heading">
-          <h2>体重趋势</h2>
-          <span>按归档日期</span>
+    <section class="dashboard-charts">
+      <div class="dashboard-section__header">
+        <div>
+          <span class="dashboard-section__eyebrow">趋势分析</span>
+          <h2>最近 30 天</h2>
         </div>
-        <canvas id="weight-chart"></canvas>
-      </article>
-      <article class="chart-card">
-        <div class="chart-heading">
-          <h2>体脂与骨骼肌</h2>
-          <span>观察减脂与保肌</span>
-        </div>
-        <canvas id="composition-chart"></canvas>
-      </article>
-      <article class="chart-card">
-        <div class="chart-heading">
-          <h2>热量对比</h2>
-          <span>摄入 vs 训练消耗</span>
-        </div>
-        <canvas id="calorie-chart"></canvas>
-      </article>
-      <article class="chart-card">
-        <div class="chart-heading">
-          <h2>骑行里程</h2>
-          <span>通勤有氧累积</span>
-        </div>
-        <canvas id="cycling-chart"></canvas>
-      </article>
+      </div>
+      <div class="chart-grid">
+        <% chartCards.forEach((chart) => { %>
+          <article class="<%= chart.className %>">
+            <div class="chart-heading">
+              <div>
+                <h2><%= chart.title %></h2>
+                <span><%= chart.subtitle %></span>
+              </div>
+            </div>
+            <canvas id="<%= chart.id %>"></canvas>
+          </article>
+        <% }); %>
+      </div>
     </section>
 
     <section class="daily-section">
-      <div class="chart-heading daily-section__heading">
-        <div>
-          <h2>每日记录速览</h2>
-          <span><%= dailyOverviewHint %></span>
-        </div>
-        <div class="daily-section__meta">
-          <span class="daily-section__status" data-daily-status><%= formatDailyRange(0, dailyCardLimit, dailyOverviewTotal) %></span>
-          <div class="daily-section__pager">
-            <button type="button" class="daily-section__nav" data-daily-nav="prev" disabled>较新</button>
-            <button
-              type="button"
-              class="daily-section__nav"
-              data-daily-nav="next"
-              <%= dailyOverviewTotal > dailyCardLimit ? '' : 'disabled' %>
-            >较早</button>
+      <div class="daily-section__surface">
+        <div class="chart-heading daily-section__heading">
+          <div>
+            <span class="dashboard-section__eyebrow">活动归档</span>
+            <h2>每日记录速览</h2>
+            <span><%= dailyOverviewHint %></span>
+          </div>
+          <div class="daily-section__meta">
+            <span class="daily-section__status" data-daily-status><%= formatDailyRange(0, dailyCardLimit, dailyOverviewTotal) %></span>
+            <div class="daily-section__pager">
+              <button type="button" class="daily-section__nav" data-daily-nav="prev" disabled>较新</button>
+              <button
+                type="button"
+                class="daily-section__nav"
+                data-daily-nav="next"
+                <%= dailyOverviewTotal > dailyCardLimit ? '' : 'disabled' %>
+              >较早</button>
+            </div>
           </div>
         </div>
+        <div class="daily-grid" data-daily-grid><%- recentDays.map(renderDayCard).join('') %></div>
       </div>
-      <div class="daily-grid" data-daily-grid><%- recentDays.map(renderDayCard).join('') %></div>
     </section>
 
     <% if (page.content) { %>

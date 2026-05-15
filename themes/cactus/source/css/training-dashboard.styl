@@ -1,140 +1,290 @@
 .dashboard-page
-  margin-top 1rem
+  margin-top 1.5rem
+  display flex
+  flex-direction column
+  gap 1.5rem
 
 .dashboard-page p
   text-align start
 
-.dashboard-copy
-  max-width 46rem
-  color #4b5563
+.dashboard-page h2
+  margin 0
+  font-size 1.22rem
+  line-height 1.2
+  color #14213d
 
 .dashboard-note
-  margin-top 1.5rem
-  color #4b5563
-  font-size 0.95rem
-  line-height 1.7
+  margin-top 0.25rem
+  padding 1rem 1.1rem
+  border-radius 20px
+  background rgba(255, 255, 255, 0.88)
+  color #52607a
+  font-size 0.93rem
+  line-height 1.75
+  border 1px solid rgba(148, 163, 184, 0.14)
+  box-shadow 0 18px 40px rgba(15, 23, 42, 0.05)
 
 .dashboard-note p
   margin 0
 
+.dashboard-section__header
+  display flex
+  align-items flex-end
+  justify-content space-between
+  gap 1rem
+  margin-bottom 0.95rem
+
+.dashboard-section__eyebrow
+  display inline-flex
+  align-items center
+  margin-bottom 0.35rem
+  color #7b879c
+  font-size 0.76rem
+  font-weight 600
+  line-height 1
+  letter-spacing 0.08em
+  text-transform uppercase
+
+.dashboard-overview
+  display grid
+  grid-template-columns minmax(0, 1.35fr) minmax(0, 2fr)
+  gap 1rem
+  align-items stretch
+
+.overview-card
+  position relative
+  display flex
+  flex-direction column
+  justify-content space-between
+  min-height 100%
+  padding 1.3rem
+  border-radius 28px
+  background linear-gradient(160deg, #ffffff 0%, #f4fbff 62%, #ecfeff 100%)
+  border 1px solid rgba(125, 211, 252, 0.22)
+  box-shadow 0 28px 64px rgba(15, 23, 42, 0.08)
+  overflow hidden
+
+.overview-card:before
+  content ""
+  position absolute
+  inset auto -12% -28% auto
+  width 16rem
+  height 16rem
+  border-radius 50%
+  background radial-gradient(circle, rgba(125, 211, 252, 0.2), rgba(125, 211, 252, 0))
+  pointer-events none
+
+.overview-card__header,
+.overview-card__meta,
+.overview-card__stats
+  position relative
+  z-index 1
+
+.overview-card__header strong
+  display block
+  margin-top 0.15rem
+  color #0b3954
+  font-size clamp(2rem, 4vw, 3rem)
+  line-height 0.98
+  letter-spacing 0
+
+.overview-card__header p
+  margin 0.65rem 0 0
+  max-width 20rem
+  color #527287
+  font-size 0.97rem
+  line-height 1.6
+
+.overview-card__meta
+  display grid
+  grid-template-columns repeat(2, minmax(0, 1fr))
+  gap 0.75rem
+  margin-top 1.35rem
+
+.overview-card__meta-item
+  padding 0.85rem 0.95rem
+  border-radius 18px
+  background rgba(255, 255, 255, 0.7)
+  border 1px solid rgba(148, 163, 184, 0.12)
+  backdrop-filter blur(10px)
+
+.overview-card__meta-item span
+  display block
+  color #7b879c
+  font-size 0.76rem
+  line-height 1.3
+
+.overview-card__meta-item strong
+  display block
+  margin-top 0.28rem
+  color #17324d
+  font-size 1rem
+  line-height 1.4
+
+.overview-card__stats
+  display grid
+  grid-template-columns repeat(2, minmax(0, 1fr))
+  gap 0.8rem
+  margin-top 1.1rem
+
+.overview-card__stat
+  padding-top 0.9rem
+  border-top 1px solid rgba(148, 163, 184, 0.18)
+
+.overview-card__stat span
+  display block
+  color #6d7f92
+  font-size 0.8rem
+
+.overview-card__stat strong
+  display block
+  margin-top 0.3rem
+  color #102a43
+  font-size 1.4rem
+  line-height 1.1
+
+.overview-card__stat small
+  display block
+  margin-top 0.35rem
+  color #7b879c
+  font-size 0.8rem
+  line-height 1.45
+
 .hero-metrics
   display grid
-  grid-template-columns repeat(auto-fit, minmax(205px, 1fr))
-  gap 0.85rem
-  margin-bottom 0.85rem
+  grid-template-columns repeat(2, minmax(0, 1fr))
+  gap 1rem
 
-.hero-card
-  padding 1rem 1.05rem
-  border 1px solid #e5e7eb
-  border-radius 18px
-  background #ffffff
-  box-shadow 0 14px 32px rgba(15, 23, 42, 0.05)
-  display flex
-  flex-direction column
-  min-height 100%
+.hero-card,
+.metric-card,
+.chart-card,
+.daily-section__surface
+  border-radius 24px
+  background rgba(255, 255, 255, 0.92)
+  border 1px solid rgba(148, 163, 184, 0.12)
+  box-shadow 0 18px 44px rgba(15, 23, 42, 0.06)
 
-.hero-card--primary
-  background linear-gradient(135deg, #ecfeff, #ccfbf1)
-  color #134e4a
-  border-color #99f6e4
-
-.hero-card--primary p
-  color #0f766e
-
-.hero-card--primary .hero-card__comparison
-  color #115e59
-
-.hero-label
-  display block
-  font-size 0.8rem
-  text-transform uppercase
-  letter-spacing 0.04em
-  margin-bottom 0.4rem
-
-.hero-card strong
-  display block
-  font-size 1.8rem
-  line-height 1.1
-  margin-bottom 0.28rem
-
-.hero-card p
-  margin 0.16rem 0 0
-  color #6b7280
-  font-size 0.95rem
-
-.hero-card__comparison
-  font-size 0.82rem
-  font-weight 600
-  margin-top auto
-  padding-top 0.65rem
-
-.metric-grid
-  display grid
-  grid-template-columns repeat(auto-fit, minmax(205px, 1fr))
-  gap 0.85rem
-  margin-bottom 1.35rem
-
+.hero-card,
 .metric-card
-  padding 0.95rem 1rem
-  border-radius 16px
-  background #f8fafc
-  border 1px solid #e2e8f0
   display flex
   flex-direction column
   min-height 100%
+  padding 1.2rem
 
-.metric-card--accent
-  background linear-gradient(135deg, #ecfeff 0%, #f0fdf4 100%)
-  border-color #99f6e4
-
-.metric-card--accent strong
-  color #0f766e
-
+.hero-label,
 .metric-title
   display block
-  margin-bottom 0.4rem
-  font-size 0.9rem
-  color #475569
-
-.metric-card strong
-  display block
-  font-size 1.22rem
-  line-height 1.2
-  margin-bottom 0.25rem
-
-.metric-card p
-  margin 0.14rem 0 0
-  color #64748b
-
-.metric-card__comparison
-  font-size 0.8rem
+  margin-bottom 0.75rem
+  color #6b7a90
+  font-size 0.82rem
   font-weight 600
+  line-height 1.2
+  letter-spacing 0.04em
+  text-transform uppercase
+
+.metric-value
+  display flex
+  align-items flex-end
+  gap 0.45rem
+  min-height 3.8rem
+  color #15253f
+
+.metric-value--compact
+  align-items center
+  min-height 3rem
+
+.metric-value--composite
+  align-items baseline
+  gap 0.55rem
+  flex-wrap wrap
+
+.metric-value__pair
+  display inline-flex
+  align-items baseline
+  gap 0.32rem
+
+.metric-value__number
+  font-size clamp(2.05rem, 3vw, 2.7rem)
+  font-weight 700
+  line-height 1
+  letter-spacing 0
+
+.metric-value--compact .metric-value__number
+  font-size clamp(1.8rem, 2.5vw, 2.2rem)
+
+.metric-value__unit,
+.metric-value__separator
+  color #617086
+  font-size 1rem
+  font-weight 600
+  line-height 1.4
+
+.metric-value__separator
+  padding-bottom 0.2rem
+
+.hero-card__meta,
+.metric-card__meta
+  margin-top 0.9rem
+
+.metric-meta
+  display flex
+  align-items baseline
+  justify-content space-between
+  gap 0.75rem
+  color #6d7f92
+  font-size 0.92rem
+  line-height 1.45
+
+.metric-meta strong
+  color #334e68
+  font-size 0.96rem
+  font-weight 600
+  text-align right
+
+.hero-card__comparison,
+.metric-card__comparison
   margin-top auto
-  padding-top 0.6rem
+  padding-top 1rem
 
 .comparison-pill
-  display flex
+  display grid
+  grid-template-columns auto auto minmax(0, 1fr)
   align-items center
-  gap 0.38rem
-  width 100%
-  min-height 1.75rem
-  margin-top 0.45rem
-  padding 0.1rem 0 0
+  gap 0.65rem
+  min-height 2.65rem
+  padding-top 0.9rem
+  border-top 1px solid rgba(148, 163, 184, 0.16)
+
+.sr-only
+  position absolute
+  width 1px
+  height 1px
+  padding 0
+  margin -1px
+  overflow hidden
+  clip rect(0, 0, 0, 0)
+  white-space nowrap
   border 0
-  border-top 1px solid #e2e8f0
-  border-radius 0
-  background transparent
-  color #64748b
-  text-align start
-  line-height 1.35
-  box-sizing border-box
+
+.comparison-pill__summary
+  display grid
+  grid-template-columns auto minmax(0, 1fr)
+  align-items center
+  gap 0.35rem
+  min-width 0
 
 .comparison-pill__arrow
-  font-size 0.8rem
+  display inline-flex
+  align-items center
+  justify-content center
+  width 1.3rem
+  height 1.3rem
+  border-radius 999px
+  background rgba(148, 163, 184, 0.12)
+  font-size 0.78rem
   line-height 1
-  flex 0 0 auto
 
-.comparison-pill > span:nth-child(2)
+.comparison-pill__summary > span:nth-child(2)
   position absolute
   width 1px
   height 1px
@@ -146,181 +296,311 @@
   border 0
 
 .comparison-pill__label
-  min-width 0
-  text-align start
-  flex 1 1 auto
+  color #6d7f92
+  font-size 0.84rem
+  font-weight 600
+  line-height 1.2
 
 .comparison-pill__value
-  flex 0 0 auto
-  font-variant-numeric tabular-nums
+  color #243b53
+  font-size 1rem
   font-weight 700
-  text-align right
+  font-variant-numeric tabular-nums
+  line-height 1
+
+.comparison-pill__meter
+  display block
+  position relative
+  width 100%
+  height 0.28rem
+  border-radius 999px
+  background rgba(148, 163, 184, 0.12)
+  overflow hidden
+
+.comparison-pill__meter--empty
+  background rgba(148, 163, 184, 0.08)
+
+.comparison-pill__meter-fill
+  display block
+  height 100%
+  border-radius inherit
+  background currentColor
+  opacity 0.9
 
 .comparison-pill--up
-  color #c2410c
+  color #c05621
 
 .comparison-pill--down
-  color #15803d
+  color #16794f
 
 .comparison-pill--flat,
 .comparison-pill--neutral
-  color #475569
+  color #52607a
+
+.dashboard-charts,
+.metric-grid,
+.daily-section
+  display block
+
+.metric-grid__cards
+  display grid
+  grid-template-columns repeat(3, minmax(0, 1fr))
+  gap 1rem
 
 .chart-grid
   display grid
-  grid-template-columns repeat(auto-fit, minmax(280px, 1fr))
-  gap 0.9rem
-  margin-bottom 1.35rem
+  grid-template-columns repeat(2, minmax(0, 1fr))
+  gap 1rem
 
 .chart-card
-  padding 1rem
-  border-radius 18px
-  background #ffffff
-  border 1px solid #e5e7eb
-  box-shadow 0 14px 32px rgba(15, 23, 42, 0.04)
-  display flex
-  flex-direction column
+  padding 1.15rem 1.15rem 1rem
+
+.chart-card--wide
+  min-height 21rem
 
 .chart-heading
   display flex
   align-items flex-end
   justify-content space-between
   gap 1rem
-  margin-bottom 0.85rem
+  margin-bottom 1rem
 
 .chart-heading h2
   margin 0
-  font-size 1.1rem
 
 .chart-heading span
-  color #64748b
-  font-size 0.9rem
+  display block
+  margin-top 0.28rem
+  color #7b879c
+  font-size 0.88rem
 
 .chart-card canvas
   width 100%
   height 240px !important
 
-.daily-section
-  margin-bottom 1.5rem
+.daily-section__surface
+  padding 1.15rem
 
 .daily-section__heading
-  align-items center
+  align-items flex-end
+  margin-bottom 1rem
 
 .daily-section__meta
   display flex
   align-items center
   gap 0.7rem
   flex-wrap wrap
-  justify-content flex-end
 
 .daily-section__status
-  padding 0.28rem 0.72rem
+  display inline-flex
+  align-items center
+  justify-content center
+  min-height 2.2rem
+  padding 0.3rem 0.8rem
   border-radius 999px
-  background #f8fafc
-  border 1px solid #e2e8f0
-  color #64748b
+  background #f8fbff
+  border 1px solid rgba(148, 163, 184, 0.14)
+  color #607086
   font-size 0.84rem
-  line-height 1.2
+  font-weight 600
+  line-height 1
 
 .daily-section__pager
   display inline-flex
   align-items center
-  padding 0.2rem
+  padding 0.18rem
   border-radius 999px
-  border 1px solid #e2e8f0
-  background rgba(248, 250, 252, 0.96)
-  box-shadow 0 10px 24px rgba(15, 23, 42, 0.05)
+  background #f8fbff
+  border 1px solid rgba(148, 163, 184, 0.14)
 
 .daily-section__nav
   border 0
   border-radius 999px
-  padding 0.42rem 0.9rem
+  min-height 1.95rem
+  padding 0.35rem 0.9rem
   background transparent
-  color #475569
-  font-size 0.86rem
+  color #4f5f76
+  font-size 0.84rem
   font-weight 600
   line-height 1
   cursor pointer
   transition background-color 0.2s ease, color 0.2s ease, transform 0.2s ease
 
 .daily-section__nav:hover:not(:disabled)
-  background #e2e8f0
-  color #0f172a
+  background #ffffff
+  color #102a43
   transform translateY(-1px)
 
 .daily-section__nav:disabled
-  color #94a3b8
+  color #9aa5b1
   cursor default
 
 .daily-grid
   display grid
-  grid-template-columns repeat(auto-fit, minmax(260px, 1fr))
+  grid-template-columns repeat(4, minmax(0, 1fr))
   gap 0.9rem
 
 .day-card
-  padding 1rem
-  border-radius 16px
-  background linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)
-  border 1px solid #e2e8f0
   display flex
   flex-direction column
+  min-height 100%
+  padding 1rem
+  border-radius 22px
+  background linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)
+  border 1px solid rgba(148, 163, 184, 0.12)
 
 .day-card__header
   display flex
+  align-items flex-start
   justify-content space-between
-  gap 1rem
-  align-items baseline
-  margin-bottom 0.75rem
+  gap 0.75rem
+  margin-bottom 1rem
 
 .day-card__header h3
   margin 0
-  font-size 1.05rem
+  color #102a43
+  font-size 1.02rem
+  line-height 1.2
 
-.day-card__header span
-  color #0f766e
+.day-card__header p
+  margin 0.28rem 0 0
+  color #5f6f86
+  font-size 0.88rem
+
+.day-card__count
+  display inline-flex
+  align-items center
+  justify-content center
+  min-height 1.85rem
+  padding 0.2rem 0.68rem
+  border-radius 999px
+  background rgba(232, 244, 255, 0.9)
+  color #2f6b8a
+  font-size 0.78rem
   font-weight 600
+  white-space nowrap
 
 .day-card__stats
-  list-style none
-  padding 0
+  display grid
+  grid-template-columns repeat(2, minmax(0, 1fr))
+  gap 0.7rem
   margin 0 0 0.9rem
 
-.day-card__stats li
-  display flex
-  justify-content space-between
-  gap 0.75rem
-  margin-bottom 0.35rem
-  color #475569
+.day-card__stat
+  padding 0.72rem 0.78rem
+  border-radius 16px
+  background rgba(248, 251, 255, 0.95)
+  border 1px solid rgba(148, 163, 184, 0.1)
+
+.day-card__stat span
+  display block
+  color #7b879c
+  font-size 0.76rem
+  line-height 1.3
+
+.day-card__stat strong
+  display block
+  margin-top 0.2rem
+  color #243b53
+  font-size 0.94rem
+  line-height 1.4
 
 .day-card__tags
   display flex
   flex-wrap wrap
   gap 0.45rem
+  margin-top auto
 
 .day-card__tags span
-  padding 0.3rem 0.55rem
+  padding 0.28rem 0.58rem
   border-radius 999px
-  background #e2e8f0
-  color #334155
-  font-size 0.85rem
+  background rgba(226, 232, 240, 0.68)
+  color #41566f
+  font-size 0.78rem
+  line-height 1.25
 
 .dashboard-empty
   padding 1.25rem
-  border-radius 18px
+  border-radius 24px
   background #fff7ed
   color #9a3412
   border 1px solid #fdba74
 
-@media (max-width: 720px)
+@media (max-width: 1180px)
+  .dashboard-overview
+    grid-template-columns 1fr
+
+  .hero-metrics
+    grid-template-columns repeat(2, minmax(0, 1fr))
+
+  .metric-grid__cards
+    grid-template-columns repeat(2, minmax(0, 1fr))
+
+  .daily-grid
+    grid-template-columns repeat(2, minmax(0, 1fr))
+
+@media (max-width: 860px)
   .dashboard-page
-    margin-top 1.5rem
+    gap 1.2rem
 
-  .chart-heading
-    align-items flex-start
+  .hero-metrics,
+  .metric-grid__cards,
+  .chart-grid,
+  .daily-grid
+    grid-template-columns 1fr
+
+  .overview-card__meta,
+  .overview-card__stats,
+  .day-card__stats
+    grid-template-columns 1fr
+
+  .chart-card--wide
+    min-height auto
+
+  .chart-card canvas
+    height 220px !important
+
+  .comparison-pill
+    grid-template-columns auto 1fr
+
+  .comparison-pill__meter
+    grid-column 1 / -1
+
+  .comparison-pill__value
+    text-align left
+
+@media (max-width: 640px)
+  .dashboard-page
+    margin-top 1.2rem
+
+  .overview-card,
+  .hero-card,
+  .metric-card,
+  .chart-card,
+  .daily-section__surface
+    padding 1rem
+    border-radius 22px
+
+  .overview-card__header strong
+    font-size 2.15rem
+
+  .metric-value
+    min-height auto
+
+  .metric-value__number
+    font-size 1.9rem
+
+  .metric-value--compact .metric-value__number
+    font-size 1.7rem
+
+  .metric-meta
     flex-direction column
+    align-items flex-start
 
+  .chart-heading,
   .daily-section__heading
     align-items flex-start
+    flex-direction column
 
   .daily-section__meta
     width 100%
@@ -333,5 +613,8 @@
   .daily-section__nav
     flex 1
 
-  .chart-card canvas
-    height 220px !important
+  .day-card__header
+    flex-direction column
+
+  .day-card__count
+    align-self flex-start
