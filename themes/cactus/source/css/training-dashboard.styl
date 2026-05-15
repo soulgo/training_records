@@ -66,6 +66,7 @@
   font-size 0.82rem
   font-weight 600
   margin-top auto
+  padding-top 0.65rem
 
 .metric-grid
   display grid
@@ -109,46 +110,60 @@
   font-size 0.8rem
   font-weight 600
   margin-top auto
+  padding-top 0.6rem
 
 .comparison-pill
-  display inline-flex
+  display flex
   align-items center
-  gap 0.32rem
-  align-self flex-start
-  max-width 100%
+  gap 0.38rem
+  width 100%
+  min-height 1.75rem
   margin-top 0.45rem
-  padding 0.22rem 0.55rem
-  border-radius 999px
-  border 1px solid #cbd5e1
-  background #f8fafc
-  color #475569
+  padding 0.1rem 0 0
+  border 0
+  border-top 1px solid #e2e8f0
+  border-radius 0
+  background transparent
+  color #64748b
   text-align start
   line-height 1.35
   box-sizing border-box
 
 .comparison-pill__arrow
-  font-size 0.86em
+  font-size 0.8rem
   line-height 1
   flex 0 0 auto
 
-.comparison-pill > span:last-child
+.comparison-pill > span:nth-child(2)
+  position absolute
+  width 1px
+  height 1px
+  padding 0
+  margin -1px
+  overflow hidden
+  clip rect(0, 0, 0, 0)
+  white-space nowrap
+  border 0
+
+.comparison-pill__label
   min-width 0
   text-align start
+  flex 1 1 auto
+
+.comparison-pill__value
+  flex 0 0 auto
+  font-variant-numeric tabular-nums
+  font-weight 700
+  text-align right
 
 .comparison-pill--up
-  background #fff7ed
-  border-color #fdba74
   color #c2410c
 
 .comparison-pill--down
-  background #ecfdf5
-  border-color #86efac
   color #15803d
 
 .comparison-pill--flat,
 .comparison-pill--neutral
-  background #f8fafc
-  border-color #cbd5e1
   color #475569
 
 .chart-grid
