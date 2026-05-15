@@ -1,6 +1,9 @@
 .dashboard-page
   margin-top 1rem
 
+.dashboard-page p
+  text-align start
+
 .dashboard-copy
   max-width 46rem
   color #4b5563
@@ -26,6 +29,9 @@
   border-radius 18px
   background #ffffff
   box-shadow 0 14px 32px rgba(15, 23, 42, 0.05)
+  display flex
+  flex-direction column
+  min-height 100%
 
 .hero-card--primary
   background linear-gradient(135deg, #ecfeff, #ccfbf1)
@@ -59,6 +65,7 @@
 .hero-card__comparison
   font-size 0.82rem
   font-weight 600
+  margin-top auto
 
 .metric-grid
   display grid
@@ -71,6 +78,9 @@
   border-radius 16px
   background #f8fafc
   border 1px solid #e2e8f0
+  display flex
+  flex-direction column
+  min-height 100%
 
 .metric-card--accent
   background linear-gradient(135deg, #ecfeff 0%, #f0fdf4 100%)
@@ -98,22 +108,32 @@
 .metric-card__comparison
   font-size 0.8rem
   font-weight 600
+  margin-top auto
 
 .comparison-pill
   display inline-flex
   align-items center
   gap 0.32rem
-  width fit-content
+  align-self flex-start
+  max-width 100%
   margin-top 0.45rem
   padding 0.22rem 0.55rem
   border-radius 999px
   border 1px solid #cbd5e1
   background #f8fafc
   color #475569
+  text-align start
+  line-height 1.35
+  box-sizing border-box
 
 .comparison-pill__arrow
   font-size 0.86em
   line-height 1
+  flex 0 0 auto
+
+.comparison-pill > span:last-child
+  min-width 0
+  text-align start
 
 .comparison-pill--up
   background #fff7ed
@@ -143,6 +163,8 @@
   background #ffffff
   border 1px solid #e5e7eb
   box-shadow 0 14px 32px rgba(15, 23, 42, 0.04)
+  display flex
+  flex-direction column
 
 .chart-heading
   display flex
@@ -225,6 +247,8 @@
   border-radius 16px
   background linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)
   border 1px solid #e2e8f0
+  display flex
+  flex-direction column
 
 .day-card__header
   display flex
