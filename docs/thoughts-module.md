@@ -97,9 +97,9 @@ telegram_chat_id: 42
 - 手工写的历史随想仍然可以保留 `title`
 - 站点 permalink 当前不需要因为这件事改动；现有 URL 仍可稳定生成
 
-## 4. `/thought` 与图片同步的区别
+## 4. `/thought`、`/analysis` 与图片同步的区别
 
-当前 Telegram 同步里，图片批次和 thought 批次是两套路径：
+当前 Telegram 同步里，图片批次、thought 批次和 analysis 批次是三套路径：
 
 - 图片批次：
   - 需要 AI 识别
@@ -113,9 +113,19 @@ telegram_chat_id: 42
   - 然后尝试写 PostgreSQL
   - 如果 PostgreSQL 失败，保留已写出的 Markdown，并写入 `runtime/telegram-sync-pending.ndjson` 等待重放
 
+- `/analysis` / `/分析` 批次：
+  - 不走 AI 图片识别
+  - 不写 `训练记录.md`
+  - 不写 `source/_posts`
+  - 不写 PostgreSQL
+  - 基于现有 `TrainingSnapshot` 调用 AI 生成短建议
+  - 只通过 Telegram `sendMessage` 回发结果
+
+`/analysis` 的完整维护说明见 `docs/telegram-analysis.md`。
+
 ## 5. 环境变量注意事项
 
-虽然 `/thought` 本身不需要图片识别，但当前 `npm run sync:telegram` 入口仍会统一校验以下环境变量：
+虽然 `/thought` 本身不需要图片识别、`/analysis` 本身也不写数据库，但当前 `npm run sync:telegram` 入口仍会统一校验以下环境变量：
 
 - `TELEGRAM_BOT_TOKEN`
 - `AI_API_KEY`

@@ -132,7 +132,9 @@ Invoke-RestMethod `
 1. 给 Bot 发一张新的训练/饮食/体脂截图，应触发 1 次 `Telegram Sync`
 2. 给 Bot 发 2 张相册截图，应只触发 1 次 `Telegram Sync`；如果触发多次，先检查 `TELEGRAM_ALBUM_BUFFER` Durable Object 绑定
 3. 给 Bot 发一条 `/thought 今天训练后背阔发力更明显`，应触发 1 次 `Telegram Sync`
-4. 在 Cloudflare Worker 请求日志确认收到了 `POST`
-5. 在 GitHub Actions 确认 `Telegram Sync` 被 `repository_dispatch` 触发
-6. 对截图消息，检查是否产生新的 `训练记录.md` 同步提交
-7. 对 `/thought` 消息，检查是否产生新的 `source/_posts/YYYY-MM-DD-telegram-thought-<messageId>.md` 同步提交
+4. 给 Bot 发一条 `/analysis 今天怎么练` 或 `/分析 最近饮食怎么样`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的分析建议
+5. 在 Cloudflare Worker 请求日志确认收到了 `POST`
+6. 在 GitHub Actions 确认 `Telegram Sync` 被 `repository_dispatch` 触发
+7. 对截图消息，检查是否产生新的 `训练记录.md` 同步提交
+8. 对 `/thought` 消息，检查是否产生新的 `source/_posts/YYYY-MM-DD-telegram-thought-<messageId>.md` 同步提交
+9. 对 `/analysis` / `/分析` 消息，确认不会产生 `训练记录.md`、`source/_posts` 或 `docs/` 同步提交

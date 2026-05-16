@@ -1525,3 +1525,167 @@ test('runTelegramSync replays pending thought batches without rewriting training
     '',
   );
 });
+
+test('runTelegramSync replies to /analysis without image recognition or file writes', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-analysis-'));
+  const sentMessages = [];
+  let recognized = false;
+  let persisted = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 9011,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/analysis 今天怎么练',
+        },
+      },
+    ],
+    recognizeBatch: async () => {
+      recognized = true;
+      return [];
+    },
+    persistNormalizedBatch: async () => {
+      persisted = true;
+      return { status: 'stored' };
+    },
+    generateTrainingAnalysisReply: async ({ question }) => {
+      assert.equal(question, '今天怎么练');
+      return '数据结论：最近训练稳定。\n下一步行动：今天做低强度有氧 30 分钟。';
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 10001 };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run through sync override');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for analysis command');
+    },
+  });
+
+  assert.equal(result.changed, false);
+  assert.equal(result.fallbackUsed, false);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'analysis');
+  assert.equal(result.batchResults[0].analysisReplyStatus, 'sent');
+  assert.equal(result.batchResults[0].analysisReplyParts, 1);
+  assert.equal(recognized, false);
+  assert.equal(persisted, false);
+  assert.equal(sentMessages.length, 1);
+  assert.deepEqual(sentMessages[0], {
+    chatId: 42,
+    text: '数据结论：最近训练稳定。\n下一步行动：今天做低强度有氧 30 分钟。',
+    replyToMessageId: 9011,
+  });
+
+  await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
+  await assert.rejects(readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-9011.md'), 'utf8'), /ENOENT/);
+});
+
+test('runTelegramSync replies with a short failure message when analysis generation fails', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-analysis-failure-'));
+  const sentMessages = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 9012,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/分析 最近饮食怎么样',
+        },
+      },
+    ],
+    generateTrainingAnalysisReply: async () => {
+      throw new Error('AI unavailable');
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 10002 };
+    },
+  });
+
+  assert.equal(result.changed, false);
+  assert.equal(result.batchResults[0].kind, 'analysis');
+  assert.equal(result.batchResults[0].analysisReplyStatus, 'failed');
+  assert.equal(result.batchResults[0].analysisReplyError, 'AI unavailable');
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].chatId, 42);
+  assert.equal(sentMessages[0].replyToMessageId, 9012);
+  assert.match(sentMessages[0].text, /训练分析暂时生成失败：AI unavailable/);
+});
+
+test('runTelegramSync ignores unauthorized /analysis commands without generating replies', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-analysis-unauthorized-'));
+  let generated = false;
+  let sent = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 9013,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 99 },
+          text: '/analysis 今天怎么练',
+        },
+      },
+    ],
+    generateTrainingAnalysisReply: async () => {
+      generated = true;
+      return 'should not run';
+    },
+    sendTelegramMessage: async () => {
+      sent = true;
+    },
+  });
+
+  assert.equal(result.changed, false);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'analysis');
+  assert.equal(result.batchResults[0].status, 'ignored');
+  assert.equal(result.batchResults[0].reason, 'unauthorized chat');
+  assert.equal(generated, false);
+  assert.equal(sent, false);
+});

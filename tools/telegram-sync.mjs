@@ -19,6 +19,10 @@ import {
   isIncompleteDatabaseSnapshotError,
   isUnavailableDatabaseSnapshotError,
 } from './training-snapshot.mjs';
+import {
+  generateTrainingAnalysisReply,
+  splitTelegramMessage,
+} from './training-analysis.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -81,6 +85,22 @@ export async function runTelegramSync(options = {}) {
       writeThoughtPostFile({
         ...input,
         rootDir: activeRootDir,
+      }));
+  const generateAnalysisReply =
+    options.generateTrainingAnalysisReply ??
+    ((input) =>
+      generateTrainingAnalysisReply({
+        ...input,
+        rootDir: activeRootDir,
+        env: options.env ?? process.env,
+        now,
+      }));
+  const sendMessage =
+    options.sendTelegramMessage ??
+    ((input) =>
+      sendTelegramMessage({
+        ...input,
+        botToken: env.botToken,
       }));
   const trainingDbConfig = resolveTrainingCoreConfig(options.env ?? process.env);
 
@@ -148,7 +168,7 @@ export async function runTelegramSync(options = {}) {
       continue;
     }
 
-    const recognitions = (await recognizeBatchRunner(batch, env)).filter(Boolean);
+    const recognitions = batch.kind === 'image' ? (await recognizeBatchRunner(batch, env)).filter(Boolean) : [];
     const analyzed = analyzeTelegramBatch(batch, recognitions, {
       minConfidence: 0.75,
     });
@@ -162,6 +182,21 @@ export async function runTelegramSync(options = {}) {
 
     if (analyzed.status !== 'ready') {
       batchResults.push(persistedBatch);
+      continue;
+    }
+
+    if (persistedBatch.kind === 'analysis') {
+      const analysisResult = await handleAnalysisBatch({
+        batch: persistedBatch,
+        generateAnalysisReply,
+        sendMessage,
+      });
+      batchResults.push({
+        ...persistedBatch,
+        analysisReplyStatus: analysisResult.status,
+        analysisReplyError: analysisResult.error ?? null,
+        analysisReplyParts: analysisResult.parts ?? 0,
+      });
       continue;
     }
 
@@ -309,7 +344,7 @@ export function shouldPersistTelegramArtifacts({
 }
 
 export function buildTelegramSyncReport(result) {
-  return {
+  const normalized = {
     changed: result.changed,
     fallbackUsed: result.fallbackUsed,
     updatesFetched: result.updatesFetched,
@@ -329,6 +364,16 @@ export function buildTelegramSyncReport(result) {
       reason: batch.reason ?? null,
     })),
   };
+
+  for (const [index, batch] of (result.batchResults ?? []).entries()) {
+    if ((batch.kind ?? 'image') === 'analysis') {
+      normalized.batches[index].analysisReplyStatus = batch.analysisReplyStatus ?? null;
+      normalized.batches[index].analysisReplyError = batch.analysisReplyError ?? null;
+      normalized.batches[index].analysisReplyParts = batch.analysisReplyParts ?? null;
+    }
+  }
+
+  return normalized;
 }
 
 function snapshotCoversPersistedBatches(snapshot, batches) {
@@ -617,6 +662,67 @@ async function resolveTelegramFileUrl(botToken, fileId) {
     throw new Error(`Telegram getFile failed: ${payload.description ?? 'missing file_path'}`);
   }
   return `https://api.telegram.org/file/bot${botToken}/${payload.result.file_path}`;
+}
+
+async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }) {
+  const message = batch.messages?.[0] ?? {};
+  try {
+    const reply = await generateAnalysisReply({
+      question: batch.analysis?.question ?? '',
+    });
+    const parts = splitTelegramMessage(reply);
+    for (const [index, part] of parts.entries()) {
+      await sendMessage({
+        chatId: message.chatId,
+        text: part,
+        replyToMessageId: index === 0 ? message.messageId : null,
+      });
+    }
+    return {
+      status: 'sent',
+      parts: parts.length,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    await sendMessage({
+      chatId: message.chatId,
+      text: `训练分析暂时生成失败：${errorMessage}`,
+      replyToMessageId: message.messageId,
+    });
+    return {
+      status: 'failed',
+      error: errorMessage,
+      parts: 1,
+    };
+  }
+}
+
+async function sendTelegramMessage({ botToken, chatId, text, replyToMessageId = null }) {
+  const payload = {
+    chat_id: chatId,
+    text,
+    disable_web_page_preview: true,
+  };
+  if (replyToMessageId) {
+    payload.reply_to_message_id = replyToMessageId;
+    payload.allow_sending_without_reply = true;
+  }
+
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error(`Telegram sendMessage failed with HTTP ${response.status}`);
+  }
+  const result = await response.json();
+  if (!result.ok) {
+    throw new Error(`Telegram sendMessage failed: ${result.description ?? 'unknown error'}`);
+  }
+  return result.result;
 }
 
 async function recognizeImageMessage(message, imageUrl, env) {

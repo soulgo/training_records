@@ -18,7 +18,7 @@
 
 ### `AI_API_KEY`
 
-- 用途：截图识别所用 AI 服务鉴权
+- 用途：截图识别和 Telegram `/analysis` 训练分析所用 AI 服务鉴权
 - 使用工作流：`telegram-sync.yml`
 - 是否必填：是
 
@@ -53,7 +53,7 @@ postgresql://training_writer:你的数据库密码@你的数据库公网IP或域
 
 ### `AI_BASE_URL`
 
-- 用途：AI 服务基础地址
+- 用途：截图识别和 Telegram `/analysis` 训练分析的 AI 服务基础地址
 - 使用工作流：`telegram-sync.yml`
 - 是否必填：是
 - 推荐值：
@@ -64,7 +64,7 @@ https://api.openai.com/v1
 
 ### `AI_MODEL`
 
-- 用途：截图识别模型名
+- 用途：截图识别和 Telegram `/analysis` 训练分析模型名
 - 使用工作流：`telegram-sync.yml`
 - 是否必填：是
 - 推荐值：
@@ -218,6 +218,8 @@ TRAINING_DB_APP_NAME=training-records-dashboard
 
 - `telegram-sync.yml` 现在会直接访问 PostgreSQL
 - Telegram `/thought` 虽然不走图片识别，但当前 `npm run sync:telegram` 入口仍会统一校验 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`，所以这些变量不能省
+- Telegram `/analysis` / `/分析` 不走图片识别、不写数据库、不提交仓库，但会读取现有 `TrainingSnapshot` 并调用 AI 回发建议，所以同样依赖 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 和 `TELEGRAM_BOT_TOKEN`
+- `/analysis` 的数据来源跟随 `TRAINING_SNAPSHOT_SOURCE`；如果配置为 `database`，还需要保证 `TRAINING_DB_ENABLED`、`TRAINING_DB_URL` 和 PostgreSQL `core.*` 数据可用
 - PostgreSQL 失败时，Telegram 同步会回退写 Markdown，并把待补偿批次写到 `runtime/telegram-sync-pending.ndjson`
 - 对 `/thought` 来说，“回退写 Markdown”指的是保留已经生成在 `source/_posts/` 下的随想文件，并把待补偿入库信息写到 `runtime/telegram-sync-pending.ndjson`
 - PostgreSQL 恢复后，后续同步会先重放待补偿批次

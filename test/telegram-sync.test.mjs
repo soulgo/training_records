@@ -140,6 +140,86 @@ test('groups /thought text messages into thought batches and ignores normal text
   assert.equal(batches[0].thought.body, '今天训练后臀部发力更明显\n感觉动作路线更顺了');
 });
 
+test('groups /analysis text messages into analysis batches', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 301,
+      message: {
+        message_id: 21,
+        date: 1_746_748_800,
+        chat: { id: 42 },
+        text: '/analysis 今天怎么练',
+      },
+    },
+    {
+      update_id: 302,
+      message: {
+        message_id: 22,
+        date: 1_746_748_900,
+        chat: { id: 42 },
+        text: '/分析 最近饮食怎么样',
+      },
+    },
+    {
+      update_id: 303,
+      message: {
+        message_id: 23,
+        date: 1_746_749_000,
+        chat: { id: 42 },
+        text: '只是普通文本',
+      },
+    },
+  ]);
+
+  assert.equal(batches.length, 2);
+  assert.equal(batches[0].kind, 'analysis');
+  assert.equal(batches[0].batchId, 'analysis-21');
+  assert.equal(batches[0].analysis.command, '/analysis');
+  assert.equal(batches[0].analysis.question, '今天怎么练');
+  assert.equal(batches[1].kind, 'analysis');
+  assert.equal(batches[1].batchId, 'analysis-22');
+  assert.equal(batches[1].analysis.command, '/分析');
+  assert.equal(batches[1].analysis.question, '最近饮食怎么样');
+});
+
+test('analyzes /analysis batches into ready analysis entries', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const analyzed = lib.analyzeTelegramBatch({
+    kind: 'analysis',
+    batchId: 'analysis-21',
+    messages: [
+      {
+        updateId: 301,
+        messageId: 21,
+        mediaGroupId: null,
+        caption: '',
+        text: '/analysis 今天怎么练',
+        chatId: 42,
+        dateUnix: 1_746_748_800,
+        photos: [],
+      },
+    ],
+    analysis: {
+      command: '/analysis',
+      question: '今天怎么练',
+    },
+  }, []);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.kind, 'analysis');
+  assert.equal(analyzed.analysis.command, '/analysis');
+  assert.equal(analyzed.analysis.question, '今天怎么练');
+  assert.equal(analyzed.analysis.telegramMessageId, 21);
+  assert.equal(analyzed.analysis.telegramChatId, 42);
+});
+
 test('analyzes /thought batches into ready thought entries', async () => {
   const lib = await importTelegramSyncLib();
 

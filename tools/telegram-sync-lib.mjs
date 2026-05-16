@@ -22,6 +22,12 @@ export function groupTelegramUpdates(updates) {
     }
 
     const normalized = normalizeTelegramMessage(update, message);
+    const analysisBatch = buildAnalysisBatch(normalized);
+    if (analysisBatch) {
+      batches.push(analysisBatch);
+      continue;
+    }
+
     const thoughtBatch = buildThoughtBatch(normalized);
     if (thoughtBatch) {
       batches.push(thoughtBatch);
@@ -62,6 +68,10 @@ export function groupTelegramUpdates(updates) {
 }
 
 export function analyzeTelegramBatch(batch, recognitions, options = {}) {
+  if (batch.kind === 'analysis') {
+    return analyzeAnalysisBatch(batch);
+  }
+
   if (batch.kind === 'thought') {
     return analyzeThoughtBatch(batch);
   }
@@ -269,7 +279,7 @@ export async function processTelegramUpdates({
       continue;
     }
 
-    const recognitions = await recognizeBatch(batch);
+    const recognitions = batch.kind === 'image' ? await recognizeBatch(batch) : [];
     const analyzed = analyzeTelegramBatch(batch, recognitions, { minConfidence });
     batchResults.push({
       kind: batch.kind ?? analyzed.kind ?? 'image',
@@ -285,7 +295,7 @@ export async function processTelegramUpdates({
       }),
     );
 
-    if (analyzed.status !== 'ready' || batch.kind === 'thought') {
+    if (analyzed.status !== 'ready' || batch.kind !== 'image') {
       continue;
     }
 
@@ -360,6 +370,23 @@ function buildThoughtBatch(message) {
     thought: {
       command: '/thought',
       body: parsedThought.body,
+    },
+  };
+}
+
+function buildAnalysisBatch(message) {
+  const parsedAnalysis = parseAnalysisCommand(message.text);
+  if (!parsedAnalysis) {
+    return null;
+  }
+
+  return {
+    kind: 'analysis',
+    batchId: `analysis-${message.messageId}`,
+    messages: [message],
+    analysis: {
+      command: parsedAnalysis.command,
+      question: parsedAnalysis.question,
     },
   };
 }
@@ -531,6 +558,28 @@ function analyzeThoughtBatch(batch) {
     thought: {
       body,
       tags: ['训练', '随想', 'Telegram'],
+      telegramMessageId: message?.messageId ?? null,
+      telegramChatId: message?.chatId ?? null,
+      messageDateUnix: message?.dateUnix ?? null,
+    },
+  };
+}
+
+function analyzeAnalysisBatch(batch) {
+  const message = batch.messages?.[0] ?? null;
+  const question = batch.analysis?.question?.trim() ?? '';
+
+  return {
+    status: 'ready',
+    kind: 'analysis',
+    batchId: batch.batchId,
+    archivedDate: null,
+    warnings: [],
+    issues: [],
+    confidence: 1,
+    analysis: {
+      command: batch.analysis?.command ?? '/analysis',
+      question,
       telegramMessageId: message?.messageId ?? null,
       telegramChatId: message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,
@@ -895,6 +944,23 @@ function parseThoughtCommand(text) {
 
   return {
     body: body.trim(),
+  };
+}
+
+function parseAnalysisCommand(text) {
+  if (typeof text !== 'string') {
+    return null;
+  }
+
+  const trimmedStart = text.trimStart();
+  const match = trimmedStart.match(/^(\/(?:analysis|分析)(?:@[A-Za-z0-9_]+)?)(?=$|\s)([\s\S]*)$/u);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    command: match[1],
+    question: match[2].trim(),
   };
 }
 
