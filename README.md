@@ -7,7 +7,7 @@
 - `TrainingSnapshot` 作为统一中间层
 - `markdown` 与 `database` 两种数据来源并存
 - Telegram 自动同步优先写 PostgreSQL；图片批次失败时回退写 `训练记录.md`，`/thought` 批次保留 `source/_posts` 并进入待补偿队列
-- Telegram `/analysis` / `/分析` 可基于现有 `TrainingSnapshot` 生成临时训练建议并直接回发到 Telegram
+- Telegram `/analysis` / `/分析` 可基于现有 `TrainingSnapshot` 生成临时训练建议并直接回发到 Telegram，默认长期目标是“增肌减腹”
 
 ## 1. 系统目标
 
@@ -251,9 +251,12 @@ npm run build
 
 - 入口命令是 Telegram 文本消息 `/analysis 问题` 或 `/分析 问题`
 - 问题为空时使用默认问题：`请根据最近训练、体脂、饮食数据给出今天/明天的训练建议`
+- 默认长期目标是“增肌减腹”：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪
+- 可以通过 `TRAINING_ANALYSIS_GOAL` 覆盖默认长期目标
 - 只处理 `TELEGRAM_ALLOWED_CHAT_IDS` 白名单内的 chat
 - 不走图片识别，不写 `训练记录.md`，不写 `source/_posts`，不写 PostgreSQL
 - 基于现有 `TrainingSnapshot` 汇总最近 7/30 天数据，并通过 Telegram `sendMessage` 回发短建议
+- 用户明确问最近一周时，分析主结论只使用最近 7 天数据；用户明确问最近 30 天时才使用 30 天趋势
 - 输出约束由 `prompts/training-analysis.md` 维护
 
 更完整的维护说明见 `docs/telegram-analysis.md`。
@@ -339,6 +342,7 @@ npm run build
 - `AI_BASE_URL`
 - `AI_MODEL`
 - `AI_CONCURRENCY`
+- `TRAINING_ANALYSIS_GOAL`
 - `TELEGRAM_ALLOWED_CHAT_IDS`
 - `TELEGRAM_POLL_LIMIT`
 - `TRAINING_SNAPSHOT_SOURCE`
@@ -370,6 +374,7 @@ npm run build
 - PostgreSQL 失败时，Telegram 批次会先写 Markdown，再进入待补偿队列，不会直接丢
 - `/thought` 随想当前写入 `source/_posts` 时不生成 `title`；如果后续要恢复标题或调整 permalink，请同步修改模板、同步逻辑和测试
 - `/analysis` 训练分析只回发 Telegram，不写 docs、Markdown 或数据库；如果后续改成持久化报告，请同步修改文档、workflow 和测试
+- `/analysis` 默认按“增肌减腹”给建议；如果阶段目标改变，请优先改 `TRAINING_ANALYSIS_GOAL`，并同步 `docs/telegram-analysis.md`
 - 如果你在 PG 故障期间又手工改了同一天的 Markdown，后续补偿入库时要注意冲突口径
 
 ## 13. 一句话总结

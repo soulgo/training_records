@@ -8,12 +8,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const defaultAnalysisPromptPath = path.join(rootDir, 'prompts', 'training-analysis.md');
 const defaultQuestion = '请根据最近训练、体脂、饮食数据给出今天/明天的训练建议';
+const defaultTrainingGoal = '增肌减腹：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪；不追求单纯掉体重或局部减脂。';
 const fallbackAnalysisPrompt =
-  '你是训练数据分析助手。请根据用户问题和训练数据摘要，输出 Telegram 友好的中文短回复，包含数据结论、恢复风险、饮食观察、下一步行动。不要编造缺失数据，不做医疗诊断。';
+  '你是训练数据分析助手。请围绕训练者长期目标并严格遵守用户指定的时间窗口，根据用户问题和训练数据摘要输出 Telegram 友好的中文短回复，包含数据结论、恢复风险、饮食观察、下一步行动。不要编造缺失数据，不做医疗诊断。';
 
 export async function generateTrainingAnalysisReply(options = {}) {
-  const env = normalizeAnalysisEnv(options.env ?? process.env);
+  const rawEnv = options.env ?? process.env;
+  const env = normalizeAnalysisEnv(rawEnv);
   const question = normalizeAnalysisQuestion(options.question);
+  const trainingGoal = normalizeTrainingGoal(options.trainingGoal ?? rawEnv.TRAINING_ANALYSIS_GOAL);
   const snapshot =
     options.snapshot ??
     (await (options.buildTrainingSnapshot ?? buildTrainingSnapshotFromSource)({
@@ -23,10 +26,13 @@ export async function generateTrainingAnalysisReply(options = {}) {
     }));
   const prompt = await loadTrainingAnalysisPrompt(options.env ?? process.env);
   const summary = buildTrainingAnalysisSummary(snapshot, options.now ?? new Date());
+  const focus = inferTrainingAnalysisFocus(question);
   const content = await requestTrainingAnalysis({
     env,
     prompt,
     question,
+    trainingGoal,
+    focus,
     summary,
     fetchImpl: options.fetchImpl ?? fetch,
   });
@@ -91,6 +97,66 @@ export function normalizeAnalysisQuestion(question) {
   return normalized || defaultQuestion;
 }
 
+export function normalizeTrainingGoal(trainingGoal) {
+  const normalized = trainingGoal?.trim();
+  return normalized || defaultTrainingGoal;
+}
+
+export function inferTrainingAnalysisFocus(question) {
+  const normalized = normalizeAnalysisQuestion(question);
+  const hasSevenDayRequest = hasRecentSevenDayRequest(normalized);
+  const hasThirtyDayRequest = hasRecentThirtyDayRequest(normalized);
+  const hasNearTermTrainingRequest = hasNearTermTrainingIntent(normalized);
+
+  if (hasSevenDayRequest && !hasThirtyDayRequest) {
+    return {
+      primaryWindow: 'recent7',
+      primaryMeasurementTrend: 'measurementTrend7',
+      requestedTimeframe: '最近7天',
+      latestDaysRole: '仅用于核对最近几天的连续训练、饮食和恢复细节',
+      otherWindowPolicy: '不要引用 recent30 或 measurementTrend30，除非用户明确要求长期对比；若必须提及，只能标注为长期背景，不能写进主结论。',
+    };
+  }
+
+  if (hasThirtyDayRequest && !hasSevenDayRequest) {
+    return {
+      primaryWindow: 'recent30',
+      primaryMeasurementTrend: 'measurementTrend30',
+      requestedTimeframe: '最近30天',
+      latestDaysRole: '用于解释最近几天是否偏离30天趋势',
+      otherWindowPolicy: 'recent7 只能作为近期变化补充，不要替代30天主结论。',
+    };
+  }
+
+  if (hasSevenDayRequest && hasThirtyDayRequest) {
+    return {
+      primaryWindow: 'explicit_mixed',
+      primaryMeasurementTrend: 'explicit_mixed',
+      requestedTimeframe: '用户同时点名最近7天和最近30天',
+      latestDaysRole: '用于补充最近几天的执行细节',
+      otherWindowPolicy: '可以对比 recent7/recent30，但每个数字都必须标注对应时间窗。',
+    };
+  }
+
+  if (hasNearTermTrainingRequest) {
+    return {
+      primaryWindow: 'recent7',
+      primaryMeasurementTrend: 'measurementTrend7',
+      requestedTimeframe: '今天/明天训练建议，以最近7天负荷和最近5天细节为主',
+      latestDaysRole: '重点用于判断今天或明天是否需要降强度、主动恢复或安排力量训练',
+      otherWindowPolicy: 'recent30 只能作为长期趋势背景，不要主动展开。',
+    };
+  }
+
+  return {
+    primaryWindow: 'recent7',
+    primaryMeasurementTrend: 'measurementTrend7',
+    requestedTimeframe: '未明确指定时间窗，默认以最近7天给可执行建议',
+    latestDaysRole: '用于补充最近几天的训练、摄入和体测细节',
+    otherWindowPolicy: 'recent30 只能作为长期趋势背景；如引用必须明确说“30天背景”。',
+  };
+}
+
 export function splitTelegramMessage(text, maxLength = 3900) {
   const normalized = String(text ?? '').trim();
   if (!normalized) {
@@ -137,7 +203,7 @@ function normalizeAnalysisEnv(env) {
   };
 }
 
-async function requestTrainingAnalysis({ env, prompt, question, summary, fetchImpl }) {
+async function requestTrainingAnalysis({ env, prompt, question, trainingGoal, focus, summary, fetchImpl }) {
   const response = await fetchImpl(`${env.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -155,6 +221,11 @@ async function requestTrainingAnalysis({ env, prompt, question, summary, fetchIm
           role: 'user',
           content: [
             `用户问题：${question}`,
+            '',
+            `训练者长期目标：${trainingGoal}`,
+            '',
+            '回答时间窗与证据约束：',
+            JSON.stringify(focus, null, 2),
             '',
             '训练数据摘要：',
             JSON.stringify(summary, null, 2),
@@ -180,6 +251,20 @@ function normalizeTelegramReply(content) {
   return String(content ?? '')
     .replace(/\r\n/g, '\n')
     .trim();
+}
+
+function hasRecentSevenDayRequest(question) {
+  return /(?:最近|近|过去|前|这|本)?\s*(?:7|七)\s*天/u.test(question)
+    || /(?:最近|近|过去|这|本)?\s*(?:一|1)\s*周/u.test(question);
+}
+
+function hasRecentThirtyDayRequest(question) {
+  return /(?:最近|近|过去|前)?\s*(?:30|三十)\s*天/u.test(question)
+    || /(?:最近|近|过去)?\s*(?:一|1)\s*个?\s*月/u.test(question);
+}
+
+function hasNearTermTrainingIntent(question) {
+  return /今天|明天|今晚|明早|下一次|下次|怎么练|训练安排|训练建议|计划/u.test(question);
 }
 
 function summarizeWindow(days) {

@@ -84,6 +84,18 @@ gpt-4.1
 3
 ```
 
+### `TRAINING_ANALYSIS_GOAL`
+
+- 用途：覆盖 Telegram `/analysis` / `/分析` 的长期训练目标
+- 使用工作流：`telegram-sync.yml`
+- 是否必填：否
+- 默认值：未配置时使用“增肌减腹：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪；不追求单纯掉体重或局部减脂。”
+- 推荐值：
+
+```text
+增肌减腹：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪；不追求单纯掉体重或局部减脂。
+```
+
 ### `TELEGRAM_ALLOWED_CHAT_IDS`
 
 - 用途：允许自动处理的 Telegram chat id 白名单
@@ -197,6 +209,7 @@ CLOUDFLARE_ACCOUNT_ID=你的 Cloudflare Account ID
 AI_BASE_URL=https://api.openai.com/v1
 AI_MODEL=gpt-4.1
 AI_CONCURRENCY=3
+TRAINING_ANALYSIS_GOAL=增肌减腹：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪；不追求单纯掉体重或局部减脂。
 TELEGRAM_ALLOWED_CHAT_IDS=你的 Telegram Chat ID
 TELEGRAM_POLL_LIMIT=20
 TRAINING_SNAPSHOT_SOURCE=markdown
@@ -208,7 +221,7 @@ TRAINING_DB_APP_NAME=training-records-dashboard
 ## 推荐配置顺序
 
 1. 先配置 `TELEGRAM_BOT_TOKEN`、`AI_API_KEY`
-2. 再配置 `AI_BASE_URL`、`AI_MODEL`、`AI_CONCURRENCY`、`TELEGRAM_ALLOWED_CHAT_IDS`、`TELEGRAM_POLL_LIMIT`
+2. 再配置 `AI_BASE_URL`、`AI_MODEL`、`AI_CONCURRENCY`、`TRAINING_ANALYSIS_GOAL`、`TELEGRAM_ALLOWED_CHAT_IDS`、`TELEGRAM_POLL_LIMIT`
 3. 再配置 `TRAINING_DB_URL`、`TRAINING_SNAPSHOT_SOURCE`、`TRAINING_DB_TIMEOUT_MS`、`TRAINING_DB_APP_NAME`
 4. 先把 `TRAINING_DB_ENABLED` 设成 `false`
 5. 本地确认 PostgreSQL 链路和回退链路都正常后，再改成 `true`
@@ -219,6 +232,7 @@ TRAINING_DB_APP_NAME=training-records-dashboard
 - `telegram-sync.yml` 现在会直接访问 PostgreSQL
 - Telegram `/thought` 虽然不走图片识别，但当前 `npm run sync:telegram` 入口仍会统一校验 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`，所以这些变量不能省
 - Telegram `/analysis` / `/分析` 不走图片识别、不写数据库、不提交仓库，但会读取现有 `TrainingSnapshot` 并调用 AI 回发建议，所以同样依赖 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 和 `TELEGRAM_BOT_TOKEN`
+- Telegram `/analysis` / `/分析` 默认长期目标是“增肌减腹”；如果配置了 `TRAINING_ANALYSIS_GOAL`，线上回复会优先使用该变量
 - `/analysis` 的数据来源跟随 `TRAINING_SNAPSHOT_SOURCE`；如果配置为 `database`，还需要保证 `TRAINING_DB_ENABLED`、`TRAINING_DB_URL` 和 PostgreSQL `core.*` 数据可用
 - PostgreSQL 失败时，Telegram 同步会回退写 Markdown，并把待补偿批次写到 `runtime/telegram-sync-pending.ndjson`
 - 对 `/thought` 来说，“回退写 Markdown”指的是保留已经生成在 `source/_posts/` 下的随想文件，并把待补偿入库信息写到 `runtime/telegram-sync-pending.ndjson`
