@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -125,6 +125,69 @@ telegram_chat_id: 42
       assert.match(detailPage, /今天训练后臀部发力更明显/);
     } finally {
       restoreOptionalFile(thoughtPostPath, originalThoughtPost);
+    }
+  });
+});
+
+test('thoughts page and detail page render telegram thought photos', () => {
+  withSharedSiteFixture(() => {
+    const thoughtPostPath = path.join(rootDir, 'source', '_posts', '2026-05-14-telegram-thought-502.md');
+    const imagePath = path.join(
+      rootDir,
+      'source',
+      'images',
+      'thoughts',
+      '2026',
+      '05',
+      '2026-05-14-telegram-thought-502-1.jpg',
+    );
+    const originalThoughtPost = readOptionalFile(thoughtPostPath);
+    const originalImage = readOptionalFile(imagePath);
+
+    try {
+      writeFileSync(
+        thoughtPostPath,
+        `---
+date: 2026-05-14 10:30:00
+tags:
+  - 训练
+  - 随想
+  - Telegram
+telegram_message_id: 502
+telegram_chat_id: 42
+photos:
+  - /images/thoughts/2026/05/2026-05-14-telegram-thought-502-1.jpg
+---
+
+今天深蹲动作轨迹更稳了
+`,
+        'utf8',
+      );
+      mkdirSync(path.dirname(imagePath), { recursive: true });
+      writeFileSync(imagePath, 'fake image content', 'utf8');
+
+      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+
+      const thoughtsIndex = readFileSync(path.join(rootDir, 'public', 'thoughts', 'index.html'), 'utf8');
+      const detailPage = readFileSync(
+        path.join(rootDir, 'public', 'thoughts', '2026', '05', '14', '2026-05-14-telegram-thought-502', 'index.html'),
+        'utf8',
+      );
+
+      assert.match(thoughtsIndex, /class="thought-card__photos"/);
+      assert.match(thoughtsIndex, /src="\/images\/thoughts\/2026\/05\/2026-05-14-telegram-thought-502-1\.jpg"/);
+      assert.match(detailPage, /class="article-gallery"/);
+      assert.match(detailPage, /href="\/images\/thoughts\/2026\/05\/2026-05-14-telegram-thought-502-1\.jpg"/);
+    } finally {
+      restoreOptionalFile(thoughtPostPath, originalThoughtPost);
+      restoreOptionalFile(imagePath, originalImage);
     }
   });
 });

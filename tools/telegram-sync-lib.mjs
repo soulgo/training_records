@@ -28,17 +28,7 @@ export function groupTelegramUpdates(updates) {
       continue;
     }
 
-    const thoughtBatch = buildThoughtBatch(normalized);
-    if (thoughtBatch) {
-      batches.push(thoughtBatch);
-      continue;
-    }
-
-    if (!hasRecognizableImage(message)) {
-      continue;
-    }
-
-    if (normalized.mediaGroupId) {
+    if (normalized.mediaGroupId && normalized.photos.length > 0) {
       let batch = albumMap.get(normalized.mediaGroupId);
       if (!batch) {
         batch = {
@@ -53,6 +43,16 @@ export function groupTelegramUpdates(updates) {
       continue;
     }
 
+    const thoughtBatch = buildThoughtBatch(normalized);
+    if (thoughtBatch) {
+      batches.push(thoughtBatch);
+      continue;
+    }
+
+    if (normalized.photos.length === 0) {
+      continue;
+    }
+
     batches.push({
       kind: 'image',
       batchId: `single-${normalized.messageId}`,
@@ -62,6 +62,12 @@ export function groupTelegramUpdates(updates) {
 
   for (const batch of batches) {
     batch.messages.sort((left, right) => left.messageId - right.messageId);
+    if (batch.kind === 'image') {
+      const thoughtBatch = buildThoughtBatchFromMessages(batch.messages);
+      if (thoughtBatch) {
+        Object.assign(batch, thoughtBatch);
+      }
+    }
   }
 
   return batches;
@@ -336,6 +342,9 @@ function normalizeTelegramMessage(update, message) {
   const photos = (message.photo ?? []).map((photo) => ({
     fileId: photo.file_id,
     fileUniqueId: photo.file_unique_id,
+    width: photo.width ?? null,
+    height: photo.height ?? null,
+    fileSize: photo.file_size ?? null,
     fileName: null,
     mimeType: null,
     source: 'photo',
@@ -358,7 +367,16 @@ function normalizeTelegramMessage(update, message) {
 }
 
 function buildThoughtBatch(message) {
-  const parsedThought = parseThoughtCommand(message.text);
+  return buildThoughtBatchFromMessages([message]);
+}
+
+function buildThoughtBatchFromMessages(messages) {
+  const parsedEntry = findThoughtCommandEntry(messages);
+  if (!parsedEntry) {
+    return null;
+  }
+
+  const { message, parsedThought } = parsedEntry;
   if (!parsedThought) {
     return null;
   }
@@ -366,10 +384,11 @@ function buildThoughtBatch(message) {
   return {
     kind: 'thought',
     batchId: `thought-${message.messageId}`,
-    messages: [message],
+    messages,
     thought: {
-      command: '/thought',
+      command: parsedThought.command,
       body: parsedThought.body,
+      sourceMessageId: message.messageId,
     },
   };
 }
@@ -411,6 +430,9 @@ function normalizeTelegramImageDocument(document) {
   return {
     fileId: document.file_id,
     fileUniqueId: document.file_unique_id,
+    width: null,
+    height: null,
+    fileSize: document.file_size ?? null,
     fileName: fileName || null,
     mimeType: mimeType || null,
     source: 'document',
@@ -538,7 +560,7 @@ function buildSkippedBatchResult(batch, { reason, warnings = [], issues = [] }) 
 }
 
 function analyzeThoughtBatch(batch) {
-  const message = batch.messages?.[0] ?? null;
+  const message = getThoughtSourceMessage(batch);
   const body = batch.thought?.body?.trim() ?? '';
 
   if (!body) {
@@ -556,6 +578,7 @@ function analyzeThoughtBatch(batch) {
     issues: [],
     confidence: 1,
     thought: {
+      command: batch.thought?.command ?? '/thought',
       body,
       tags: ['训练', '随想', 'Telegram'],
       telegramMessageId: message?.messageId ?? null,
@@ -563,6 +586,15 @@ function analyzeThoughtBatch(batch) {
       messageDateUnix: message?.dateUnix ?? null,
     },
   };
+}
+
+function getThoughtSourceMessage(batch) {
+  const sourceMessageId = batch.thought?.sourceMessageId ?? null;
+  return (
+    (batch.messages ?? []).find((message) => message.messageId === sourceMessageId) ??
+    batch.messages?.[0] ??
+    null
+  );
 }
 
 function analyzeAnalysisBatch(batch) {
@@ -933,18 +965,30 @@ function parseThoughtCommand(text) {
   }
 
   const trimmedStart = text.trimStart();
-  if (!trimmedStart.startsWith('/thought')) {
-    return null;
-  }
-
-  const body = trimmedStart.slice('/thought'.length);
-  if (!/^\s/.test(body)) {
+  const match = trimmedStart.match(/^(\/(?:thought|随想)(?:@[A-Za-z0-9_]+)?)(?=$|\s)([\s\S]*)$/u);
+  if (!match) {
     return null;
   }
 
   return {
-    body: body.trim(),
+    command: match[1],
+    body: match[2].trim(),
   };
+}
+
+function findThoughtCommandEntry(messages) {
+  for (const message of messages ?? []) {
+    for (const text of [message.text, message.caption]) {
+      const parsedThought = parseThoughtCommand(text);
+      if (parsedThought) {
+        return {
+          message,
+          parsedThought,
+        };
+      }
+    }
+  }
+  return null;
 }
 
 function parseAnalysisCommand(text) {

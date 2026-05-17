@@ -71,6 +71,25 @@
 .thought-card__body > :last-child
   margin-bottom 0
 
+.thought-card__photos
+  display grid
+  grid-template-columns repeat(auto-fill, minmax(9rem, 1fr))
+  gap 0.7rem
+  margin-top 1rem
+
+.thought-card__photos a
+  display block
+  overflow hidden
+  border-radius 8px
+  background #e2e8f0
+  aspect-ratio 4 / 3
+
+.thought-card__photos img
+  display block
+  width 100%
+  height 100%
+  object-fit cover
+
 @media (max-width: 720px)
   .thoughts-page
     margin-top 1.5rem
@@ -78,3 +97,6 @@
   .thought-card__meta
     align-items flex-start
     flex-direction column
+
+  .thought-card__photos
+    grid-template-columns repeat(auto-fill, minmax(7.5rem, 1fr))

@@ -1337,6 +1337,168 @@ test('runTelegramSync writes a /thought telegram message into source/_posts and 
   assert.match(postContent, /感觉动作路线更顺了/);
 });
 
+test('runTelegramSync writes a /随想 image caption into source/_posts with downloaded photos', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-photo-'));
+  const persistedBatches = [];
+  const downloadedFileIds = [];
+  let recognized = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 502,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想 今天深蹲动作轨迹更稳了',
+          photo: [
+            {
+              file_id: 'photo-small',
+              file_unique_id: 'photo-small-u',
+              width: 320,
+              height: 240,
+              file_size: 1000,
+            },
+            {
+              file_id: 'photo-large',
+              file_unique_id: 'photo-large-u',
+              width: 1280,
+              height: 960,
+              file_size: 9000,
+            },
+          ],
+        },
+      },
+    ],
+    recognizeBatch: async () => {
+      recognized = true;
+      return [];
+    },
+    fetchTelegramFile: async (fileId) => {
+      downloadedFileIds.push(fileId);
+      return {
+        filePath: 'photos/file_502.jpg',
+        contentType: 'image/jpeg',
+        data: Buffer.from('fake image content'),
+      };
+    },
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  const postPath = path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-502.md');
+  const postContent = await readFile(postPath, 'utf8');
+  const imagePath = path.join(
+    tempRoot,
+    'source',
+    'images',
+    'thoughts',
+    '2026',
+    '05',
+    '2026-05-14-telegram-thought-502-1.jpg',
+  );
+
+  assert.equal(result.changed, true);
+  assert.equal(result.batchResults[0].kind, 'thought');
+  assert.equal(result.batchResults[0].thought.command, '/随想');
+  assert.equal(recognized, false);
+  assert.deepEqual(downloadedFileIds, ['photo-large']);
+  assert.equal(persistedBatches.length, 1);
+  assert.equal(persistedBatches[0].kind, 'thought');
+  assert.match(postContent, /photos:\n  - \/images\/thoughts\/2026\/05\/2026-05-14-telegram-thought-502-1\.jpg/);
+  assert.match(postContent, /今天深蹲动作轨迹更稳了/);
+  assert.equal(await readFile(imagePath, 'utf8'), 'fake image content');
+});
+
+test('runTelegramSync writes a /thought album caption as one thought post with all photos', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-album-'));
+  const downloadedFileIds = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 601,
+          media_group_id: 'album-thought',
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/thought 训练姿态记录',
+          photo: [{ file_id: 'album-photo-a', file_unique_id: 'album-photo-a-u' }],
+        },
+      },
+      {
+        update_id: 902,
+        message: {
+          message_id: 602,
+          media_group_id: 'album-thought',
+          date: Math.floor(new Date('2026-05-14T02:30:01Z').getTime() / 1000),
+          chat: { id: 42 },
+          photo: [{ file_id: 'album-photo-b', file_unique_id: 'album-photo-b-u' }],
+        },
+      },
+    ],
+    fetchTelegramFile: async (fileId) => {
+      downloadedFileIds.push(fileId);
+      return {
+        filePath: `${fileId}.png`,
+        contentType: 'image/png',
+        data: Buffer.from(fileId),
+      };
+    },
+    persistNormalizedBatch: async () => ({ status: 'stored', archivedDate: null }),
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  const postContent = await readFile(
+    path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-601.md'),
+    'utf8',
+  );
+
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought');
+  assert.equal(result.batchResults[0].batchId, 'thought-601');
+  assert.deepEqual(downloadedFileIds, ['album-photo-a', 'album-photo-b']);
+  assert.match(postContent, /\/images\/thoughts\/2026\/05\/2026-05-14-telegram-thought-601-1\.png/);
+  assert.match(postContent, /\/images\/thoughts\/2026\/05\/2026-05-14-telegram-thought-601-2\.png/);
+});
+
 test('runTelegramSync treats an existing thought post as duplicate and does not overwrite it', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-duplicate-'));
   const postsDir = path.join(tempRoot, 'source', '_posts');

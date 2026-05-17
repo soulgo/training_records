@@ -89,7 +89,7 @@ jobs:
       - name: Detect changes
         id: changes
         run: |
-          if [ -z "$(git status --porcelain -- 训练记录.md source/_posts)" ]; then
+          if [ -z "$(git status --porcelain -- 训练记录.md source/_posts source/images)" ]; then
             echo "repo_changed=false" >> "$GITHUB_OUTPUT"
             echo "content_changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -106,7 +106,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add 训练记录.md source/_posts
+          git add 训练记录.md source/_posts source/images
           git commit -m "chore: sync Telegram updates"
 
       - name: Rebase on latest main

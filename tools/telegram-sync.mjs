@@ -85,6 +85,13 @@ export async function runTelegramSync(options = {}) {
       writeThoughtPostFile({
         ...input,
         rootDir: activeRootDir,
+        fetchTelegramFile:
+          options.fetchTelegramFile ??
+          ((fileId) =>
+            fetchTelegramFile({
+              botToken: env.botToken,
+              fileId,
+            })),
       }));
   const generateAnalysisReply =
     options.generateTrainingAnalysisReply ??
@@ -560,9 +567,9 @@ async function readPendingFallbackBatches(queuePath) {
   }
 }
 
-async function writeThoughtPostFile({ batch, thoughtsDir }) {
-  const post = buildThoughtPost(batch);
-  const postPath = path.join(thoughtsDir, post.fileName);
+async function writeThoughtPostFile({ batch, thoughtsDir, rootDir, fetchTelegramFile }) {
+  const draft = buildThoughtPost(batch);
+  const postPath = path.join(thoughtsDir, draft.fileName);
 
   if (await fileExists(postPath)) {
     return {
@@ -571,6 +578,15 @@ async function writeThoughtPostFile({ batch, thoughtsDir }) {
       postPath,
     };
   }
+
+  const photoPaths = await writeThoughtImageFiles({
+    batch,
+    rootDir,
+    dateParts: draft.dateParts,
+    sourceMessageId: draft.message.messageId,
+    fetchTelegramFile,
+  });
+  const post = buildThoughtPost(batch, { photoPaths });
 
   await mkdir(thoughtsDir, { recursive: true });
   await writeFile(postPath, post.content, 'utf8');
@@ -581,9 +597,9 @@ async function writeThoughtPostFile({ batch, thoughtsDir }) {
   };
 }
 
-function buildThoughtPost(batch) {
+function buildThoughtPost(batch, options = {}) {
   const thought = batch.thought ?? {};
-  const message = batch.messages?.[0] ?? {};
+  const message = resolveThoughtPostMessage(batch);
   const dateParts = formatThoughtDateParts(message.dateUnix);
   const fileName = `${dateParts.date}-telegram-thought-${message.messageId}.md`;
   const lines = [
@@ -595,16 +611,116 @@ function buildThoughtPost(batch) {
     '  - Telegram',
     `telegram_message_id: ${message.messageId ?? ''}`,
     `telegram_chat_id: ${message.chatId ?? ''}`,
-    '---',
-    '',
-    thought.body ?? '',
-    '',
   ];
+  if (options.photoPaths?.length) {
+    lines.push('photos:');
+    for (const photoPath of options.photoPaths) {
+      lines.push(`  - ${photoPath}`);
+    }
+  }
+  lines.push('---', '', thought.body ?? '', '');
 
   return {
     fileName,
     content: lines.join('\n'),
+    dateParts,
+    message,
   };
+}
+
+async function writeThoughtImageFiles({
+  batch,
+  rootDir,
+  dateParts,
+  sourceMessageId,
+  fetchTelegramFile,
+}) {
+  if (!rootDir || !fetchTelegramFile) {
+    return [];
+  }
+
+  const imageMessages = (batch.messages ?? [])
+    .map((message) => ({
+      message,
+      photo: selectThoughtImagePhoto(message),
+    }))
+    .filter((item) => item.photo?.fileId)
+    .sort((left, right) => left.message.messageId - right.message.messageId);
+  if (imageMessages.length === 0) {
+    return [];
+  }
+
+  const [year, month] = dateParts.date.split('-');
+  const outputDir = path.join(rootDir, 'source', 'images', 'thoughts', year, month);
+  const publicPaths = [];
+
+  for (let index = 0; index < imageMessages.length; index += 1) {
+    const { photo } = imageMessages[index];
+    const file = await fetchTelegramFile(photo.fileId);
+    const extension = inferThoughtImageExtension(photo, file);
+    const imageFileName = `${dateParts.date}-telegram-thought-${sourceMessageId}-${index + 1}${extension}`;
+    const outputPath = path.join(outputDir, imageFileName);
+    const publicPath = `/images/thoughts/${year}/${month}/${imageFileName}`;
+
+    await mkdir(outputDir, { recursive: true });
+    if (!(await fileExists(outputPath))) {
+      await writeFile(outputPath, file.data);
+    }
+    publicPaths.push(publicPath);
+  }
+
+  return publicPaths;
+}
+
+function resolveThoughtPostMessage(batch) {
+  const sourceMessageId = batch.thought?.sourceMessageId ?? null;
+  return (
+    (batch.messages ?? []).find((message) => message.messageId === sourceMessageId) ??
+    batch.messages?.[0] ??
+    {}
+  );
+}
+
+function selectThoughtImagePhoto(message) {
+  const photos = message.photos ?? [];
+  const documentImage = photos.find((photo) => photo.source === 'document');
+  if (documentImage) {
+    return documentImage;
+  }
+
+  return (
+    photos
+      .filter((photo) => photo.source === 'photo')
+      .toSorted((left, right) => thoughtPhotoScore(right) - thoughtPhotoScore(left))
+      .at(0) ?? null
+  );
+}
+
+function thoughtPhotoScore(photo) {
+  if (Number.isFinite(photo.fileSize)) {
+    return photo.fileSize;
+  }
+  return (photo.width ?? 0) * (photo.height ?? 0);
+}
+
+function inferThoughtImageExtension(photo, file) {
+  const fromName = path.extname(photo.fileName ?? file.filePath ?? '').toLowerCase();
+  if (/^\.(?:jpe?g|png|webp|gif|bmp|heic|heif|tiff?)$/.test(fromName)) {
+    return fromName === '.jpeg' ? '.jpg' : fromName;
+  }
+
+  const mimeType = (photo.mimeType ?? file.contentType ?? '').toLowerCase().split(';')[0].trim();
+  const extensionByMimeType = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'image/gif': '.gif',
+    'image/bmp': '.bmp',
+    'image/heic': '.heic',
+    'image/heif': '.heif',
+    'image/tiff': '.tiff',
+  };
+  return extensionByMimeType[mimeType] ?? '.jpg';
 }
 
 function formatThoughtDateParts(dateUnix) {
@@ -653,6 +769,11 @@ async function writePendingFallbackBatches(queuePath, entries) {
 }
 
 async function resolveTelegramFileUrl(botToken, fileId) {
+  const file = await resolveTelegramFileInfo(botToken, fileId);
+  return file.url;
+}
+
+async function resolveTelegramFileInfo(botToken, fileId) {
   const response = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`);
   if (!response.ok) {
     throw new Error(`Telegram getFile failed with HTTP ${response.status}`);
@@ -661,7 +782,23 @@ async function resolveTelegramFileUrl(botToken, fileId) {
   if (!payload.ok || !payload.result?.file_path) {
     throw new Error(`Telegram getFile failed: ${payload.description ?? 'missing file_path'}`);
   }
-  return `https://api.telegram.org/file/bot${botToken}/${payload.result.file_path}`;
+  return {
+    filePath: payload.result.file_path,
+    url: `https://api.telegram.org/file/bot${botToken}/${payload.result.file_path}`,
+  };
+}
+
+async function fetchTelegramFile({ botToken, fileId }) {
+  const file = await resolveTelegramFileInfo(botToken, fileId);
+  const response = await fetch(file.url);
+  if (!response.ok) {
+    throw new Error(`Telegram file download failed with HTTP ${response.status}`);
+  }
+  return {
+    ...file,
+    contentType: response.headers.get('content-type') ?? '',
+    data: new Uint8Array(await response.arrayBuffer()),
+  };
 }
 
 async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }) {

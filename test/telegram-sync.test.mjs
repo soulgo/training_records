@@ -106,7 +106,7 @@ test('groups album document images and applies filename date when screenshots ar
   assert.equal(analyzed.activities.length, 1);
 });
 
-test('groups /thought text messages into thought batches and ignores normal text', async () => {
+test('groups /thought and /随想 messages into thought batches and ignores normal text', async () => {
   const lib = await importTelegramSyncLib();
 
   assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
@@ -127,6 +127,24 @@ test('groups /thought text messages into thought batches and ignores normal text
         message_id: 12,
         date: 1_746_748_900,
         chat: { id: 42 },
+        text: '/随想 恢复节奏更稳了',
+      },
+    },
+    {
+      update_id: 203,
+      message: {
+        message_id: 13,
+        date: 1_746_748_900,
+        chat: { id: 42 },
+        text: '/thoughts 这个不应该被识别',
+      },
+    },
+    {
+      update_id: 204,
+      message: {
+        message_id: 14,
+        date: 1_746_748_900,
+        chat: { id: 42 },
         text: '只是普通文本',
       },
     },
@@ -134,10 +152,68 @@ test('groups /thought text messages into thought batches and ignores normal text
 
   const batches = lib.groupTelegramUpdates(updates);
 
-  assert.equal(batches.length, 1);
+  assert.equal(batches.length, 2);
   assert.equal(batches[0].kind, 'thought');
   assert.equal(batches[0].batchId, 'thought-11');
+  assert.equal(batches[0].thought.command, '/thought');
   assert.equal(batches[0].thought.body, '今天训练后臀部发力更明显\n感觉动作路线更顺了');
+  assert.equal(batches[1].kind, 'thought');
+  assert.equal(batches[1].batchId, 'thought-12');
+  assert.equal(batches[1].thought.command, '/随想');
+  assert.equal(batches[1].thought.body, '恢复节奏更稳了');
+});
+
+test('groups thought captions with images and albums without treating them as training screenshots', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 211,
+      message: {
+        message_id: 31,
+        date: 1_746_748_800,
+        chat: { id: 42 },
+        caption: '/随想 今天训练后的动作截图',
+        photo: [
+          { file_id: 'small', file_unique_id: 'small-u', width: 90, height: 90, file_size: 1000 },
+          { file_id: 'large', file_unique_id: 'large-u', width: 1280, height: 960, file_size: 8000 },
+        ],
+      },
+    },
+    {
+      update_id: 212,
+      message: {
+        message_id: 32,
+        media_group_id: 'album-thought',
+        date: 1_746_748_810,
+        chat: { id: 42 },
+        caption: '/thought 相册随想',
+        photo: [{ file_id: 'album-a', file_unique_id: 'album-a-u' }],
+      },
+    },
+    {
+      update_id: 213,
+      message: {
+        message_id: 33,
+        media_group_id: 'album-thought',
+        date: 1_746_748_811,
+        chat: { id: 42 },
+        photo: [{ file_id: 'album-b', file_unique_id: 'album-b-u' }],
+      },
+    },
+  ]);
+
+  assert.equal(batches.length, 2);
+  assert.equal(batches[0].kind, 'thought');
+  assert.equal(batches[0].batchId, 'thought-31');
+  assert.equal(batches[0].thought.command, '/随想');
+  assert.equal(batches[0].messages.length, 1);
+  assert.equal(batches[1].kind, 'thought');
+  assert.equal(batches[1].batchId, 'thought-32');
+  assert.equal(batches[1].thought.command, '/thought');
+  assert.equal(batches[1].messages.length, 2);
 });
 
 test('groups /analysis text messages into analysis batches', async () => {

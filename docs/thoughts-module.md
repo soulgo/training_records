@@ -1,13 +1,13 @@
 # 锻炼随想模块维护说明
 
-这份文档专门说明当前“锻炼随想”页面和 Telegram `/thought` 同步链路的实现口径，方便后续维护、排查和交接。
+这份文档专门说明当前“锻炼随想”页面和 Telegram `/thought` / `/随想` 同步链路的实现口径，方便后续维护、排查和交接。
 
 ## 1. 模块范围
 
 当前“锻炼随想”模块包含两部分：
 
 - 随想列表页：`/thoughts/`
-- Telegram 文本命令 `/thought 正文` 的自动归档
+- Telegram 命令 `/thought 正文` 和 `/随想 正文` 的自动归档，支持图片 caption
 
 相关实现文件：
 
@@ -27,10 +27,11 @@
 - 保留页面标题“锻炼随想”
 - 保留页面简介文案
 - 删除顶部额外操作说明，不再展示“手工在 `source/_posts/` 新增 Markdown / Telegram 发送 `/thought`”那段文案
-- 每条随想卡片只展示：
+- 每条随想卡片展示：
   - 时间
   - 标签
   - 正文
+  - 图片预览
 - 当前不展示：
   - 卡片标题
   - 标题链接
@@ -44,18 +45,23 @@
 - 无标题 Telegram 随想详情页不会渲染空 H1
 - 详情页正文、时间、标签等其余结构保持主题默认行为
 
-## 3. Telegram `/thought` 的输入与输出
+## 3. Telegram `/thought` / `/随想` 的输入与输出
 
 ### 3.1 输入规则
 
-- 只识别 Telegram 文本消息
+- 识别 Telegram 文本消息的 `text`
+- 识别图片/相册消息的 `caption`
 - 命令格式必须是：
 
 ```text
 /thought 正文
+/随想 正文
 ```
 
-- `/thought` 后必须有正文；只有命令本身或只有空白会被跳过
+- 只支持 `/thought` 和 `/随想`，不支持 `/thoughts`
+- 命令后必须有正文；只有命令本身或只有空白会被跳过
+- 推荐带图随想发送方式：发送图片或相册，并在 caption 写 `/随想 正文` 或 `/thought 正文`
+- 图片 caption 被识别为随想后，不会进入训练/饮食/体脂截图 AI 识别
 
 ### 3.2 生成的 Markdown 文件
 
@@ -78,16 +84,28 @@ tags:
   - Telegram
 telegram_message_id: 501
 telegram_chat_id: 42
+photos:
+  - /images/thoughts/2026/05/2026-05-14-telegram-thought-501-1.jpg
 ---
 ```
 
-正文直接写 `/thought` 后面的文本内容。
+正文直接写命令后面的文本内容。没有图片时不会生成 `photos`。
 
-### 3.3 当前不会生成 `title`
+### 3.3 图片保存规则
+
+- Telegram `photo` 会取最大尺寸
+- image document 会按文件形式保存
+- 图片写到：
+
+```text
+source/images/thoughts/YYYY/MM/YYYY-MM-DD-telegram-thought-<messageId>-<index>.<ext>
+```
+
+### 3.4 当前不会生成 `title`
 
 这是当前实现里最容易被误判的点：
 
-- Telegram `/thought` 生成的 Markdown 当前不写 `title`
+- Telegram `/thought` / `/随想` 生成的 Markdown 当前不写 `title`
 - `analyzeTelegramBatch()` 返回的 `thought` 结构当前也没有 `title`
 - 列表页不展示标题
 - 详情页对无标题内容做了兼容，不会显示空标题
@@ -97,7 +115,7 @@ telegram_chat_id: 42
 - 手工写的历史随想仍然可以保留 `title`
 - 站点 permalink 当前不需要因为这件事改动；现有 URL 仍可稳定生成
 
-## 4. `/thought`、`/analysis` 与图片同步的区别
+## 4. `/thought` / `/随想`、`/analysis` 与图片同步的区别
 
 当前 Telegram 同步里，图片批次、thought 批次和 analysis 批次是三套路径：
 
@@ -106,10 +124,11 @@ telegram_chat_id: 42
   - 可能回退写 `训练记录.md`
   - 参与训练/饮食/体脂归档
 
-- `/thought` 批次：
+- `/thought` / `/随想` 批次：
   - 不走 AI 图片识别
   - 不写 `训练记录.md`
   - 直接写 `source/_posts`
+  - 若带图，同时写 `source/images/thoughts`
   - 然后尝试写 PostgreSQL
   - 如果 PostgreSQL 失败，保留已写出的 Markdown，并写入 `runtime/telegram-sync-pending.ndjson` 等待重放
 
@@ -125,7 +144,7 @@ telegram_chat_id: 42
 
 ## 5. 环境变量注意事项
 
-虽然 `/thought` 本身不需要图片识别、`/analysis` 本身也不写数据库，但当前 `npm run sync:telegram` 入口仍会统一校验以下环境变量：
+虽然 `/thought` / `/随想` 本身不需要图片识别、`/analysis` 本身也不写数据库，但当前 `npm run sync:telegram` 入口仍会统一校验以下环境变量：
 
 - `TELEGRAM_BOT_TOKEN`
 - `AI_API_KEY`
@@ -152,9 +171,10 @@ telegram_chat_id: 42
 
 ## 7. 修改这个模块时要同步改哪些地方
 
-如果后续调整“锻炼随想”展示或 `/thought` 写入格式，至少要一起检查：
+如果后续调整“锻炼随想”展示或 `/thought` / `/随想` 写入格式，至少要一起检查：
 
 - `source/thoughts/index.md`
+- `source/images/thoughts/`
 - `themes/cactus/layout/thoughts.ejs`
 - `themes/cactus/source/css/thoughts.styl`
 - `themes/cactus/layout/_partial/post/title.ejs`
@@ -167,7 +187,7 @@ telegram_chat_id: 42
 ## 8. 最低验证命令
 
 ```bash
-node --test test/telegram-sync.test.mjs test/telegram-sync-runner.test.mjs test/thoughts-page.test.mjs
+node --test test/telegram-sync.test.mjs test/telegram-sync-runner.test.mjs test/thoughts-page.test.mjs test/github-workflows.test.mjs
 npm run build
 ```
 
@@ -176,6 +196,6 @@ npm run build
 当前“锻炼随想”模块的核心规则可以概括为：
 
 - 列表页按“短内容直出”展示
-- Telegram `/thought` 直接生成无标题 Markdown 随想
+- Telegram `/thought` / `/随想` 直接生成无标题 Markdown 随想，可附带图片
 - 无标题随想详情页不显示空 H1
 - 数据库失败时保留随想文件，并通过 pending queue 补偿入库

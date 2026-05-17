@@ -32,6 +32,15 @@ const thoughts = site.posts
           <div class="thought-card__body">
             <%- post.content %>
           </div>
+          <% if (post.photos && post.photos.length) { %>
+            <div class="thought-card__photos">
+              <% post.photos.forEach(function(photo) { %>
+                <a href="<%- url_for(photo) %>">
+                  <img src="<%- url_for(photo) %>" alt="" loading="lazy" />
+                </a>
+              <% }) %>
+            </div>
+          <% } %>
         </article>
       <% }) %>
     </div>
