@@ -192,6 +192,47 @@ photos:
   });
 });
 
+test('thoughts page shows telegram message ids for telegram thoughts', () => {
+  withSharedSiteFixture(() => {
+    const thoughtPostPath = path.join(rootDir, 'source', '_posts', '2026-05-14-telegram-thought-501.md');
+    const originalThoughtPost = readOptionalFile(thoughtPostPath);
+
+    try {
+      writeFileSync(
+        thoughtPostPath,
+        `---
+date: 2026-05-14 10:30:00
+tags:
+  - 训练
+  - 随想
+  - Telegram
+telegram_message_id: 501
+telegram_chat_id: 42
+---
+
+今天训练后臀部发力更明显
+`,
+        'utf8',
+      );
+
+      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+
+      const thoughtsIndex = readFileSync(path.join(rootDir, 'public', 'thoughts', 'index.html'), 'utf8');
+
+      assert.match(thoughtsIndex, /class="thought-card__id"[^>]*>#501<\/span>/);
+    } finally {
+      restoreOptionalFile(thoughtPostPath, originalThoughtPost);
+    }
+  });
+});
+
 function readOptionalFile(targetPath) {
   try {
     return readFileSync(targetPath, 'utf8');

@@ -21,13 +21,18 @@ const thoughts = site.posts
         <article class="thought-card">
           <div class="thought-card__meta">
             <time datetime="<%= full_date(post.date) %>"><%= date(post.date, 'YYYY-MM-DD HH:mm') %></time>
-            <% if (post.tags && post.tags.length) { %>
-              <div class="thought-card__tags">
-                <% post.tags.each(function(tag) { %>
-                  <span><%= tag.name %></span>
-                <% }) %>
-              </div>
-            <% } %>
+            <div class="thought-card__meta-right">
+              <% if (post.tags && post.tags.length) { %>
+                <div class="thought-card__tags">
+                  <% post.tags.each(function(tag) { %>
+                    <span><%= tag.name %></span>
+                  <% }) %>
+                </div>
+              <% } %>
+              <% if (post.telegram_message_id) { %>
+                <span class="thought-card__id" title="Telegram message id">#<%= post.telegram_message_id %></span>
+              <% } %>
+            </div>
           </div>
           <div class="thought-card__body">
             <%- post.content %>
