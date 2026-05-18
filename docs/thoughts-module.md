@@ -63,6 +63,7 @@
 - 推荐带图随想发送方式：发送图片或相册，并在 caption 写 `/随想 正文` 或 `/thought 正文`
 - 图片 caption 被识别为随想后，不会进入训练/饮食/体脂截图 AI 识别
 - 如果后续直接编辑原 Telegram 随想消息，`edited_message` 会按同一个 `telegram_message_id` 覆盖对应 Markdown 正文
+- 如果是回复到已存在随想的修订消息，且正文仍以 `/thought` 或 `/随想` 开头，也会按回复目标覆盖原 Markdown，而不是新建一条
 - 如果要删除，支持两种命令：
 
 ```text

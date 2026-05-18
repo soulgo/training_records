@@ -1626,6 +1626,87 @@ telegram_chat_id: 42
   assert.doesNotMatch(postContent, /旧正文/);
 });
 
+test('runTelegramSync updates an existing telegram thought when a reply-based revision targets it', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-reply-edit-'));
+  const postsDir = path.join(tempRoot, 'source', '_posts');
+  await import('node:fs/promises').then(({ mkdir, writeFile }) =>
+    mkdir(postsDir, { recursive: true }).then(() =>
+      writeFile(
+        path.join(postsDir, '2026-05-18-telegram-thought-126.md'),
+        `---
+date: 2026-05-18 09:59:00
+tags:
+  - 训练
+  - 随想
+  - Telegram
+telegram_message_id: 126
+telegram_chat_id: 42
+---
+
+旧正文
+`,
+        'utf8',
+      ),
+    ),
+  );
+
+  const persistedBatches = [];
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 131,
+          date: Math.floor(new Date('2026-05-18T02:59:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          reply_to_message: {
+            message_id: 126,
+          },
+          text: '/随想 今天骑行 40 公里，温地公园是一个散步的好地方，\n高德地图骑行的公里数和华为手表骑行的公里数差别太大了，差了12公里多。',
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  const postContent = await readFile(
+    path.join(postsDir, '2026-05-18-telegram-thought-126.md'),
+    'utf8',
+  );
+
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches[0].kind, 'thought_edit');
+  assert.match(postContent, /高德地图骑行的公里数和华为手表骑行的公里数差别太大了/);
+  assert.doesNotMatch(postContent, /旧正文/);
+  await assert.rejects(
+    readFile(path.join(postsDir, '2026-05-18-telegram-thought-131.md'), 'utf8'),
+    /ENOENT/,
+  );
+});
+
 test('runTelegramSync deletes a telegram thought and its photos when receiving a reply delete command', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-delete-'));
   const postsDir = path.join(tempRoot, 'source', '_posts');

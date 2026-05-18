@@ -290,6 +290,37 @@ test('groups edited thought messages into thought_edit batches when the message 
   assert.equal(batches[0].thoughtEdit.body, '今天骑行 40 公里，状态更顺了');
 });
 
+test('groups reply-based thought revisions into thought_edit batches when replying to a known thought', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 402,
+      message: {
+        message_id: 131,
+        date: 1_746_748_800,
+        chat: { id: 42 },
+        reply_to_message: {
+          message_id: 126,
+        },
+        text: '/随想 今天骑行 40 公里，温地公园是一个散步的好地方，\n高德地图骑行的公里数和华为手表骑行的公里数差别太大了，差了12公里多。',
+      },
+    },
+  ], {
+    knownThoughtMessageKeys: ['42:126'],
+  });
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought_edit');
+  assert.equal(batches[0].thoughtEdit.targetMessageId, 126);
+  assert.equal(
+    batches[0].thoughtEdit.body,
+    '今天骑行 40 公里，温地公园是一个散步的好地方，\n高德地图骑行的公里数和华为手表骑行的公里数差别太大了，差了12公里多。',
+  );
+});
+
 test('groups thought delete commands by reply target and explicit message id', async () => {
   const lib = await importTelegramSyncLib();
 

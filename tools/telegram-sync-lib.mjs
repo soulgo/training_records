@@ -50,6 +50,18 @@ export function groupTelegramUpdates(updates, options = {}) {
       continue;
     }
 
+    if (
+      parsedThought &&
+      normalized.replyToMessageId &&
+      knownThoughtMessageKeys.has(buildThoughtMessageKey(normalized.chatId, normalized.replyToMessageId))
+    ) {
+      const thoughtEditBatch = buildThoughtEditBatch(normalized, {
+        targetMessageId: normalized.replyToMessageId,
+      });
+      batches.push(thoughtEditBatch);
+      continue;
+    }
+
     if (normalized.mediaGroupId && normalized.photos.length > 0) {
       let batch = albumMap.get(normalized.mediaGroupId);
       if (!batch) {
@@ -402,8 +414,11 @@ function buildThoughtBatch(message) {
   return buildThoughtBatchFromMessages([message]);
 }
 
-function buildThoughtEditBatch(message) {
+function buildThoughtEditBatch(message, options = {}) {
   const body = extractEditedThoughtBody(message);
+  const targetMessageId = normalizeMessageId(
+    options.targetMessageId ?? message.replyToMessageId ?? message.messageId,
+  );
 
   return {
     kind: 'thought_edit',
@@ -414,7 +429,7 @@ function buildThoughtEditBatch(message) {
         parseThoughtCommand(message.text)?.command ??
         parseThoughtCommand(message.caption)?.command ??
         '/thought',
-      targetMessageId: message.messageId,
+      targetMessageId,
       body,
     },
   };
