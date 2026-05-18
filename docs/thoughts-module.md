@@ -62,6 +62,15 @@
 - 命令后必须有正文；只有命令本身或只有空白会被跳过
 - 推荐带图随想发送方式：发送图片或相册，并在 caption 写 `/随想 正文` 或 `/thought 正文`
 - 图片 caption 被识别为随想后，不会进入训练/饮食/体脂截图 AI 识别
+- 如果后续直接编辑原 Telegram 随想消息，`edited_message` 会按同一个 `telegram_message_id` 覆盖对应 Markdown 正文
+- 如果要删除，支持两种命令：
+
+```text
+/随想删
+/随想删 126
+```
+
+- 第一种需要回复原随想消息发送；第二种里的 `126` 是原随想的 Telegram message id
 
 ### 3.2 生成的 Markdown 文件
 
@@ -131,6 +140,8 @@ source/images/thoughts/YYYY/MM/YYYY-MM-DD-telegram-thought-<messageId>-<index>.<
   - 若带图，同时写 `source/images/thoughts`
   - 然后尝试写 PostgreSQL
   - 如果 PostgreSQL 失败，保留已写出的 Markdown，并写入 `runtime/telegram-sync-pending.ndjson` 等待重放
+  - 编辑原消息时会更新已有 Markdown 正文
+  - 删除命令会删除对应 Markdown；若 front matter 里有 `photos`，会一起删除对应图片文件
 
 - `/analysis` / `/分析` 批次：
   - 不走 AI 图片识别
@@ -197,5 +208,6 @@ npm run build
 
 - 列表页按“短内容直出”展示
 - Telegram `/thought` / `/随想` 直接生成无标题 Markdown 随想，可附带图片
+- 编辑原 Telegram 随想消息会覆盖页面正文，`/随想删` 可删除对应随想和图片
 - 无标题随想详情页不显示空 H1
 - 数据库失败时保留随想文件，并通过 pending queue 补偿入库

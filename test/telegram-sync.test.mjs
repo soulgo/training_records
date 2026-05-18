@@ -262,6 +262,70 @@ test('groups /analysis text messages into analysis batches', async () => {
   assert.equal(batches[1].analysis.question, '最近饮食怎么样');
 });
 
+test('groups edited thought messages into thought_edit batches when the message is already a known thought', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates(
+    [
+      {
+        update_id: 401,
+        edited_message: {
+          message_id: 126,
+          date: 1_746_748_800,
+          chat: { id: 42 },
+          text: '今天骑行 40 公里，状态更顺了',
+        },
+      },
+    ],
+    {
+      knownThoughtMessageKeys: ['42:126'],
+    },
+  );
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought_edit');
+  assert.equal(batches[0].thoughtEdit.targetMessageId, 126);
+  assert.equal(batches[0].thoughtEdit.body, '今天骑行 40 公里，状态更顺了');
+});
+
+test('groups thought delete commands by reply target and explicit message id', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 411,
+      message: {
+        message_id: 701,
+        date: 1_746_748_800,
+        chat: { id: 42 },
+        text: '/随想删',
+        reply_to_message: {
+          message_id: 126,
+        },
+      },
+    },
+    {
+      update_id: 412,
+      message: {
+        message_id: 702,
+        date: 1_746_748_900,
+        chat: { id: 42 },
+        text: '/随想删 127',
+      },
+    },
+  ]);
+
+  assert.equal(batches.length, 2);
+  assert.equal(batches[0].kind, 'thought_delete');
+  assert.equal(batches[0].thoughtDelete.targetMessageId, 126);
+  assert.equal(batches[1].kind, 'thought_delete');
+  assert.equal(batches[1].thoughtDelete.targetMessageId, 127);
+});
+
 test('analyzes /analysis batches into ready analysis entries', async () => {
   const lib = await importTelegramSyncLib();
 

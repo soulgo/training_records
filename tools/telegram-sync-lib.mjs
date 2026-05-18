@@ -11,9 +11,10 @@ import {
   toNullableNumber,
 } from './training-domain.mjs';
 
-export function groupTelegramUpdates(updates) {
+export function groupTelegramUpdates(updates, options = {}) {
   const batches = [];
   const albumMap = new Map();
+  const knownThoughtMessageKeys = new Set(options.knownThoughtMessageKeys ?? []);
 
   for (const update of updates) {
     const message = update.message ?? update.edited_message;
@@ -22,9 +23,30 @@ export function groupTelegramUpdates(updates) {
     }
 
     const normalized = normalizeTelegramMessage(update, message);
+    normalized.updateType = update.edited_message ? 'edited_message' : 'message';
+
+    const parsedThought = parseThoughtCommand(normalized.text) ?? parseThoughtCommand(normalized.caption);
+    if (parsedThought && normalized.updateType === 'message') {
+      knownThoughtMessageKeys.add(buildThoughtMessageKey(normalized.chatId, normalized.messageId));
+    }
+
+    const thoughtDeleteBatch = buildThoughtDeleteBatch(normalized);
+    if (thoughtDeleteBatch) {
+      batches.push(thoughtDeleteBatch);
+      continue;
+    }
+
     const analysisBatch = buildAnalysisBatch(normalized);
     if (analysisBatch) {
       batches.push(analysisBatch);
+      continue;
+    }
+
+    if (normalized.updateType === 'edited_message') {
+      if (knownThoughtMessageKeys.has(buildThoughtMessageKey(normalized.chatId, normalized.messageId))) {
+        const thoughtEditBatch = buildThoughtEditBatch(normalized);
+        batches.push(thoughtEditBatch);
+      }
       continue;
     }
 
@@ -46,6 +68,7 @@ export function groupTelegramUpdates(updates) {
     const thoughtBatch = buildThoughtBatch(normalized);
     if (thoughtBatch) {
       batches.push(thoughtBatch);
+      knownThoughtMessageKeys.add(buildThoughtMessageKey(normalized.chatId, normalized.messageId));
       continue;
     }
 
@@ -76,6 +99,14 @@ export function groupTelegramUpdates(updates) {
 export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   if (batch.kind === 'analysis') {
     return analyzeAnalysisBatch(batch);
+  }
+
+  if (batch.kind === 'thought_edit') {
+    return analyzeThoughtEditBatch(batch);
+  }
+
+  if (batch.kind === 'thought_delete') {
+    return analyzeThoughtDeleteBatch(batch);
   }
 
   if (batch.kind === 'thought') {
@@ -362,12 +393,50 @@ function normalizeTelegramMessage(update, message) {
     text: message.text ?? '',
     chatId: message.chat?.id ?? null,
     dateUnix: message.date ?? null,
+    replyToMessageId: message.reply_to_message?.message_id ?? null,
     photos,
   };
 }
 
 function buildThoughtBatch(message) {
   return buildThoughtBatchFromMessages([message]);
+}
+
+function buildThoughtEditBatch(message) {
+  const body = extractEditedThoughtBody(message);
+
+  return {
+    kind: 'thought_edit',
+    batchId: `thought-edit-${message.messageId}`,
+    messages: [message],
+    thoughtEdit: {
+      command:
+        parseThoughtCommand(message.text)?.command ??
+        parseThoughtCommand(message.caption)?.command ??
+        '/thought',
+      targetMessageId: message.messageId,
+      body,
+    },
+  };
+}
+
+function buildThoughtDeleteBatch(message) {
+  const parsedDelete = parseThoughtDeleteCommand(message.text);
+  if (!parsedDelete) {
+    return null;
+  }
+
+  return {
+    kind: 'thought_delete',
+    batchId: `thought-delete-${message.messageId}`,
+    messages: [message],
+    thoughtDelete: {
+      command: parsedDelete.command,
+      targetMessageId: parsedDelete.targetMessageId ?? message.replyToMessageId ?? null,
+      requestedTargetText: parsedDelete.requestedTargetText,
+      replyToMessageId: message.replyToMessageId,
+    },
+  };
 }
 
 function buildThoughtBatchFromMessages(messages) {
@@ -582,6 +651,68 @@ function analyzeThoughtBatch(batch) {
       body,
       tags: ['训练', '随想', 'Telegram'],
       telegramMessageId: message?.messageId ?? null,
+      telegramChatId: message?.chatId ?? null,
+      messageDateUnix: message?.dateUnix ?? null,
+    },
+  };
+}
+
+function analyzeThoughtEditBatch(batch) {
+  const message = batch.messages?.[0] ?? null;
+  const body = batch.thoughtEdit?.body?.trim() ?? '';
+  const targetMessageId = normalizeMessageId(batch.thoughtEdit?.targetMessageId);
+
+  if (!targetMessageId) {
+    return buildSkippedBatchResult(batch, {
+      reason: 'missing target thought message id',
+    });
+  }
+
+  if (!body) {
+    return buildSkippedBatchResult(batch, {
+      reason: 'empty thought body',
+    });
+  }
+
+  return {
+    status: 'ready',
+    kind: 'thought_edit',
+    batchId: batch.batchId,
+    archivedDate: null,
+    warnings: [],
+    issues: [],
+    confidence: 1,
+    thoughtEdit: {
+      command: batch.thoughtEdit?.command ?? '/thought',
+      targetMessageId,
+      body,
+      telegramChatId: message?.chatId ?? null,
+      messageDateUnix: message?.dateUnix ?? null,
+    },
+  };
+}
+
+function analyzeThoughtDeleteBatch(batch) {
+  const message = batch.messages?.[0] ?? null;
+  const targetMessageId = normalizeMessageId(batch.thoughtDelete?.targetMessageId);
+
+  if (!targetMessageId) {
+    return buildSkippedBatchResult(batch, {
+      reason: 'missing target thought message id',
+    });
+  }
+
+  return {
+    status: 'ready',
+    kind: 'thought_delete',
+    batchId: batch.batchId,
+    archivedDate: null,
+    warnings: [],
+    issues: [],
+    confidence: 1,
+    thoughtDelete: {
+      command: batch.thoughtDelete?.command ?? '/随想删',
+      targetMessageId,
       telegramChatId: message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,
     },
@@ -974,6 +1105,46 @@ function parseThoughtCommand(text) {
     command: match[1],
     body: match[2].trim(),
   };
+}
+
+function extractEditedThoughtBody(message) {
+  const parsedThought = parseThoughtCommand(message.text) ?? parseThoughtCommand(message.caption);
+  if (parsedThought) {
+    return parsedThought.body;
+  }
+  return (message.text?.trim() || message.caption?.trim() || '').trim();
+}
+
+function parseThoughtDeleteCommand(text) {
+  if (typeof text !== 'string') {
+    return null;
+  }
+
+  const trimmedStart = text.trimStart();
+  const match = trimmedStart.match(
+    /^(\/(?:thought-delete|thoughtdel|delete-thought|删随想|随想删)(?:@[A-Za-z0-9_]+)?)(?=$|\s)([\s\S]*)$/u,
+  );
+  if (!match) {
+    return null;
+  }
+
+  const requestedTargetText = match[2].trim();
+  const idMatch = requestedTargetText.match(/^(\d+)\b/);
+
+  return {
+    command: match[1],
+    requestedTargetText,
+    targetMessageId: idMatch ? Number(idMatch[1]) : null,
+  };
+}
+
+function buildThoughtMessageKey(chatId, messageId) {
+  return `${chatId ?? ''}:${messageId ?? ''}`;
+}
+
+function normalizeMessageId(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
 }
 
 function findThoughtCommandEntry(messages) {

@@ -1552,6 +1552,171 @@ test('runTelegramSync treats an existing thought post as duplicate and does not 
   );
 });
 
+test('runTelegramSync updates an existing telegram thought when the original message is edited', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-edit-'));
+  const postsDir = path.join(tempRoot, 'source', '_posts');
+  await import('node:fs/promises').then(({ mkdir, writeFile }) =>
+    mkdir(postsDir, { recursive: true }).then(() =>
+      writeFile(
+        path.join(postsDir, '2026-05-17-telegram-thought-126.md'),
+        `---
+date: 2026-05-17 11:28:14
+tags:
+  - 训练
+  - 随想
+  - Telegram
+telegram_message_id: 126
+telegram_chat_id: 42
+---
+
+旧正文
+`,
+        'utf8',
+      ),
+    ),
+  );
+
+  const persistedBatches = [];
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        edited_message: {
+          message_id: 126,
+          date: Math.floor(new Date('2026-05-17T03:40:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '今天骑行 40 公里，动作更顺',
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  const postContent = await readFile(
+    path.join(postsDir, '2026-05-17-telegram-thought-126.md'),
+    'utf8',
+  );
+
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches[0].kind, 'thought_edit');
+  assert.match(postContent, /今天骑行 40 公里，动作更顺/);
+  assert.doesNotMatch(postContent, /旧正文/);
+});
+
+test('runTelegramSync deletes a telegram thought and its photos when receiving a reply delete command', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-delete-'));
+  const postsDir = path.join(tempRoot, 'source', '_posts');
+  const imageDir = path.join(tempRoot, 'source', 'images', 'thoughts', '2026', '05');
+  await import('node:fs/promises').then(({ mkdir, writeFile }) =>
+    Promise.all([
+      mkdir(postsDir, { recursive: true }),
+      mkdir(imageDir, { recursive: true }),
+    ]).then(() =>
+      Promise.all([
+        writeFile(
+          path.join(postsDir, '2026-05-17-telegram-thought-126.md'),
+          `---
+date: 2026-05-17 11:28:14
+tags:
+  - 训练
+  - 随想
+  - Telegram
+telegram_message_id: 126
+telegram_chat_id: 42
+photos:
+  - /images/thoughts/2026/05/2026-05-17-telegram-thought-126-1.jpg
+---
+
+待删除正文
+`,
+          'utf8',
+        ),
+        writeFile(
+          path.join(imageDir, '2026-05-17-telegram-thought-126-1.jpg'),
+          'fake image',
+          'utf8',
+        ),
+      ]),
+    ),
+  );
+
+  const persistedBatches = [];
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 801,
+          date: Math.floor(new Date('2026-05-17T03:45:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/随想删',
+          reply_to_message: {
+            message_id: 126,
+          },
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_delete');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'deleted');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches[0].kind, 'thought_delete');
+  await assert.rejects(
+    readFile(path.join(postsDir, '2026-05-17-telegram-thought-126.md'), 'utf8'),
+    /ENOENT/,
+  );
+  await assert.rejects(
+    readFile(path.join(imageDir, '2026-05-17-telegram-thought-126-1.jpg'), 'utf8'),
+    /ENOENT/,
+  );
+});
+
 test('runTelegramSync keeps thought posts when database persistence fails and queues replay', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-fallback-'));
 

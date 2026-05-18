@@ -1,6 +1,7 @@
-import { appendFile, access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, access, mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import frontMatter from 'hexo-front-matter';
 
 import {
   applyTelegramSyncToMarkdown,
@@ -135,7 +136,7 @@ export async function runTelegramSync(options = {}) {
         replayStoredAny = replayStoredAny || replayResult.status === 'stored';
         replayStoredImageAny =
           replayStoredImageAny ||
-          (pending.batch?.kind !== 'thought' && replayResult.status === 'stored');
+          (isTrainingDataBatchKind(pending.batch?.kind) && replayResult.status === 'stored');
         pending.replayed = true;
       }
     } catch {
@@ -156,7 +157,8 @@ export async function runTelegramSync(options = {}) {
           offset: previousLastProcessedUpdateId + 1,
           limit: env.pollLimit,
         }));
-  const grouped = groupTelegramUpdates(updates);
+  const knownThoughtMessageKeys = await readExistingThoughtMessageKeys(thoughtsDir);
+  const grouped = groupTelegramUpdates(updates, { knownThoughtMessageKeys });
   const batchResults = [];
   let changed = replayStoredAny;
   let fallbackUsed = false;
@@ -245,6 +247,85 @@ export async function runTelegramSync(options = {}) {
       continue;
     }
 
+    if (persistedBatch.kind === 'thought_edit') {
+      const thoughtEditResult = await editThoughtPost({
+        batch: persistedBatch,
+        thoughtsDir,
+      });
+      changed ||= thoughtEditResult.changed;
+
+      try {
+        const persistResult = await persistBatch({
+          batch: persistedBatch,
+          processedAt: now,
+          env: options.env ?? process.env,
+        });
+        changed ||= persistResult.status === 'stored';
+        batchResults.push({
+          ...persistedBatch,
+          postPath: thoughtEditResult.postPath,
+          thoughtWriteStatus: thoughtEditResult.status,
+          persistenceStatus: persistResult.status,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await appendPendingFallbackBatch(pendingQueuePath, {
+          batch: persistedBatch,
+          failedAt: now.toISOString(),
+          error: errorMessage,
+        });
+        batchResults.push({
+          ...persistedBatch,
+          postPath: thoughtEditResult.postPath,
+          thoughtWriteStatus: thoughtEditResult.status,
+          persistenceStatus: 'pending_replay',
+          persistenceError: errorMessage,
+        });
+      }
+      continue;
+    }
+
+    if (persistedBatch.kind === 'thought_delete') {
+      const thoughtDeleteResult = await deleteThoughtPost({
+        batch: persistedBatch,
+        thoughtsDir,
+        rootDir: activeRootDir,
+      });
+      changed ||= thoughtDeleteResult.changed;
+
+      try {
+        const persistResult = await persistBatch({
+          batch: persistedBatch,
+          processedAt: now,
+          env: options.env ?? process.env,
+        });
+        changed ||= persistResult.status === 'stored';
+        batchResults.push({
+          ...persistedBatch,
+          postPath: thoughtDeleteResult.postPath,
+          thoughtWriteStatus: thoughtDeleteResult.status,
+          deletedPhotoPaths: thoughtDeleteResult.deletedPhotoPaths ?? [],
+          persistenceStatus: persistResult.status,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await appendPendingFallbackBatch(pendingQueuePath, {
+          batch: persistedBatch,
+          failedAt: now.toISOString(),
+          error: errorMessage,
+        });
+        batchResults.push({
+          ...persistedBatch,
+          postPath: thoughtDeleteResult.postPath,
+          thoughtWriteStatus: thoughtDeleteResult.status,
+          deletedPhotoPaths: thoughtDeleteResult.deletedPhotoPaths ?? [],
+          persistenceStatus: 'pending_replay',
+          persistenceError: errorMessage,
+        });
+      }
+      continue;
+    }
+
     try {
       const persistResult = await persistBatch({
         batch: persistedBatch,
@@ -294,7 +375,7 @@ export async function runTelegramSync(options = {}) {
   } else if (changed && shouldRewriteTrainingMarkdown({ replayStoredImageAny, batchResults })) {
     const readyPersistedBatches = batchResults.filter(
       (batch) =>
-        batch.kind !== 'thought' &&
+        isTrainingDataBatchKind(batch.kind) &&
         batch.status === 'ready' &&
         batch.persistenceStatus === 'stored',
     );
@@ -402,10 +483,14 @@ function shouldRewriteTrainingMarkdown({ replayStoredImageAny, batchResults }) {
 
   return (batchResults ?? []).some(
     (batch) =>
-      batch.kind !== 'thought' &&
+      isTrainingDataBatchKind(batch.kind) &&
       batch.status === 'ready' &&
       batch.persistenceStatus === 'stored',
   );
+}
+
+function isTrainingDataBatchKind(kind) {
+  return kind !== 'thought' && kind !== 'thought_edit' && kind !== 'thought_delete' && kind !== 'analysis';
 }
 
 async function readLastProcessedUpdateIdForRun({
@@ -485,7 +570,7 @@ function loadRequiredEnv(env = process.env) {
 async function fetchTelegramUpdates({ botToken, offset, limit }) {
   const search = new URLSearchParams({
     timeout: '0',
-    allowed_updates: JSON.stringify(['message']),
+    allowed_updates: JSON.stringify(['message', 'edited_message']),
     offset: String(offset),
     limit: String(limit),
   });
@@ -597,6 +682,74 @@ async function writeThoughtPostFile({ batch, thoughtsDir, rootDir, fetchTelegram
   };
 }
 
+async function editThoughtPost({ batch, thoughtsDir }) {
+  const target = await findThoughtPostByMessage({
+    thoughtsDir,
+    messageId: batch.thoughtEdit?.targetMessageId,
+    chatId: batch.thoughtEdit?.telegramChatId,
+  });
+
+  if (!target) {
+    return {
+      changed: false,
+      status: 'not_found',
+      postPath: null,
+    };
+  }
+
+  const nextContent = replaceMarkdownBody(target.raw, batch.thoughtEdit?.body ?? '');
+  if (nextContent === target.raw) {
+    return {
+      changed: false,
+      status: 'unchanged',
+      postPath: target.postPath,
+    };
+  }
+
+  await writeFile(target.postPath, nextContent, 'utf8');
+  return {
+    changed: true,
+    status: 'updated',
+    postPath: target.postPath,
+  };
+}
+
+async function deleteThoughtPost({ batch, thoughtsDir, rootDir }) {
+  const target = await findThoughtPostByMessage({
+    thoughtsDir,
+    messageId: batch.thoughtDelete?.targetMessageId,
+    chatId: batch.thoughtDelete?.telegramChatId,
+  });
+
+  if (!target) {
+    return {
+      changed: false,
+      status: 'not_found',
+      postPath: null,
+      deletedPhotoPaths: [],
+    };
+  }
+
+  await unlink(target.postPath);
+  const deletedPhotoPaths = [];
+  for (const photoPath of resolveThoughtPhotoFilePaths({
+    rootDir,
+    photos: target.frontMatter.photos,
+  })) {
+    if (await fileExists(photoPath)) {
+      await unlink(photoPath);
+      deletedPhotoPaths.push(photoPath);
+    }
+  }
+
+  return {
+    changed: true,
+    status: 'deleted',
+    postPath: target.postPath,
+    deletedPhotoPaths,
+  };
+}
+
 function buildThoughtPost(batch, options = {}) {
   const thought = batch.thought ?? {};
   const message = resolveThoughtPostMessage(batch);
@@ -626,6 +779,112 @@ function buildThoughtPost(batch, options = {}) {
     dateParts,
     message,
   };
+}
+
+async function findThoughtPostByMessage({ thoughtsDir, messageId, chatId }) {
+  if (!messageId) {
+    return null;
+  }
+
+  const directPath = await findThoughtPostPathById({ thoughtsDir, messageId });
+  const candidatePaths = directPath ? [directPath] : await readDirRecursive(thoughtsDir);
+
+  for (const postPath of candidatePaths.filter((entry) => entry.endsWith('.md'))) {
+    const raw = await readFile(postPath, 'utf8');
+    const parsed = frontMatter.parse(raw);
+    const frontMatterData = normalizeThoughtFrontMatter(parsed);
+    if (
+      Number(frontMatterData.telegram_message_id) === Number(messageId) &&
+      (chatId == null || Number(frontMatterData.telegram_chat_id) === Number(chatId))
+    ) {
+      return {
+        postPath,
+        raw,
+        frontMatter: frontMatterData,
+      };
+    }
+  }
+
+  return null;
+}
+
+async function findThoughtPostPathById({ thoughtsDir, messageId }) {
+  const entries = await readDirRecursive(thoughtsDir);
+  const suffix = `-telegram-thought-${messageId}.md`;
+  return entries.find((entry) => entry.endsWith(suffix)) ?? null;
+}
+
+function normalizeThoughtFrontMatter(parsed) {
+  const { _content = '', ...frontMatterData } = parsed ?? {};
+  return {
+    ...frontMatterData,
+    _content,
+  };
+}
+
+function replaceMarkdownBody(raw, nextBody) {
+  const split = frontMatter.split(raw);
+  const parsed = frontMatter.parse(raw);
+  const { _content, ...frontMatterData } = parsed ?? {};
+  return `${frontMatter.stringify(frontMatterData, {
+    separator: split.separator,
+    prefixSeparator: split.prefixSeparator,
+  })}\n${String(nextBody ?? '').trim()}\n`;
+}
+
+function resolveThoughtPhotoFilePaths({ rootDir, photos }) {
+  if (!Array.isArray(photos) || !rootDir) {
+    return [];
+  }
+
+  return photos
+    .map((photoPath) =>
+      typeof photoPath === 'string' && photoPath.startsWith('/images/')
+        ? path.join(rootDir, 'source', photoPath.replace(/^\//, ''))
+        : null,
+    )
+    .filter(Boolean);
+}
+
+async function readDirRecursive(dirPath) {
+  const results = [];
+
+  async function walk(currentDir) {
+    let entries;
+    try {
+      entries = await readdir(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const entryPath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(entryPath);
+        continue;
+      }
+      results.push(entryPath);
+    }
+  }
+
+  await walk(dirPath);
+  return results;
+}
+
+async function readExistingThoughtMessageKeys(thoughtsDir) {
+  const keys = new Set();
+  for (const postPath of (await readDirRecursive(thoughtsDir)).filter((entry) => entry.endsWith('.md'))) {
+    try {
+      const raw = await readFile(postPath, 'utf8');
+      const parsed = frontMatter.parse(raw);
+      const chatId = Number(parsed.telegram_chat_id);
+      const messageId = Number(parsed.telegram_message_id);
+      if (Number.isInteger(chatId) && Number.isInteger(messageId) && messageId > 0) {
+        keys.add(`${chatId}:${messageId}`);
+      }
+    } catch {}
+  }
+  return keys;
 }
 
 async function writeThoughtImageFiles({
