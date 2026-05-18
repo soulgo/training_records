@@ -11,3 +11,5 @@ runtime/
 telegram/state.json
 telegram/process-log.ndjson
 telegram/inbox/
+.claude*
+.tmp*

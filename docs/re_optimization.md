@@ -22,17 +22,96 @@
 
 | 位置 | 当前职责 | 优化关注点 |
 | --- | --- | --- |
-| `tools/` | 数据解析、数据库读写、Telegram 同步、Hexo 数据生成、Markdown 导入导出 | 核心复杂度集中，部分文件职责偏大 |
-| `cloudflare/telegram-sync-dispatch-worker.mjs` | Telegram webhook 转 GitHub `repository_dispatch`，并对相册消息做缓冲聚合 | 逻辑相对独立，可保持边界 |
-| `themes/cactus/layout/` | Hexo EJS 模板，包含 dashboard、thoughts、post 等页面 | `dashboard.ejs` 承担较多数据派生与 HTML 渲染逻辑 |
+| `tools/` | 数据解析、数据库读写、Telegram 同步、Hexo 数据生成、Markdown 导入导出、Hexo CLI 封装 | 核心复杂度集中，部分文件职责偏大（详见下方表格） |
+| `cloudflare/telegram-sync-dispatch-worker.mjs` (227行) | Telegram webhook 转 GitHub `repository_dispatch`，并对相册消息通过 Durable Object 做缓冲聚合（3s alarm） | 逻辑相对独立，有 276 行测试覆盖；与 Node 侧同步链路通过 `repository_dispatch` 解耦 |
+| `themes/cactus/layout/` | Hexo EJS 模板，包含 dashboard、thoughts、post 等页面 | `dashboard.ejs`(514行) 承担较多数据派生与 HTML 渲染逻辑 |
 | `themes/cactus/source/js/` | 前端交互脚本，含 dashboard 图表与分页 | 前端渲染路径可继续轻量化 |
 | `themes/cactus/source/css/` | 主题样式与 dashboard 样式 | 可评估主题原始资源与实际使用资源的保留边界 |
-| `test/` | Node test 测试集，覆盖 parser、DB、Telegram、dashboard、workflow | 测试覆盖较完整，是后续重构的安全网 |
-| `.github/workflows/` | GitHub Pages、Telegram Sync、Cloudflare Worker 部署 | 多工作流共享 DB 环境变量与构建步骤，可分析重复配置 |
+| `test/` | Node test 测试集，覆盖 parser、DB、Telegram、dashboard、workflow（15 文件，6,253 行，108 用例，约 7s 完成） | 测试覆盖较完整，是后续重构的安全网；`github-workflows.test.mjs`(96行) 偏薄且存在 CRLF 兼容问题 |
+| `.github/workflows/` | GitHub Pages、Telegram Sync、Cloudflare Worker 部署（3 文件，294 行） | 多工作流共享 DB 环境变量与构建步骤，可分析重复配置 |
 | `docs/` | 系统说明与维护文档 | 可作为后续重构路线和行为约束的来源 |
 | `prompts/` | Telegram 图片识别 prompt | 与识别输出 schema 和日期解析强相关 |
 | `sql/pgsql17.sql` | PostgreSQL schema | 后续结构优化默认不改 schema |
-| `telegram/` | Telegram inbox、state、process log 等同步运行态/样例数据 | 存在运行态文件被纳入版本管理的清理空间 |
+| `telegram/` | Telegram inbox、state、process log 等同步运行态/样例数据（17 个被跟踪文件） | 存在运行态文件被纳入版本管理的清理空间；确认 test/ 下无引用后可安全迁移 |
+
+### 2.3 测试文件清单
+
+当前 test/ 目录共 15 个测试文件 + 1 个共享夹具文件，总计 6,253 行，108 个测试用例，完整执行约 7 秒（`npm test`）。
+
+| 测试文件 | 行数 | 覆盖模块 |
+| --- | --- | --- |
+| `test/telegram-sync.test.mjs` | 1,819 | `telegram-sync-lib.mjs`（日期解析、batch 分析、Markdown 渲染）、`training-parser.mjs` |
+| `test/telegram-sync-runner.test.mjs` | 1,527 | `telegram-sync.mjs`（同步主流程、pending queue、fallback） |
+| `test/training-db-archive.test.mjs` | 438 | `generate-training-data.mjs`（archive 持久化路径） |
+| `test/dashboard-page.test.mjs` | 395 | `dashboard.ejs`（stale data 回退场景） |
+| `test/training-snapshot.test.mjs` | 380 | `training-snapshot.mjs`（source 选择与 fallback） |
+| `test/training-db-core.test.mjs` | 315 | `training-db-core.mjs`（DB 读写与 batch merge） |
+| `test/telegram-sync-dispatch-worker.test.mjs` | 276 | `telegram-sync-dispatch-worker.mjs`（webhook、album buffer） |
+| `test/export-training-markdown.test.mjs` | 215 | `export-training-markdown.mjs` |
+| `test/training-parser.test.mjs` | 191 | `training-parser.mjs` |
+| `test/thoughts-page.test.mjs` | 147 | thoughts 页面生成 |
+| `test/github-workflows.test.mjs` | 96 | CI/CD workflow 配置验证 |
+| `test/dashboard-view.test.mjs` | 77 | `dashboard-view.mjs` |
+| `test/reconcile-training-markdown-to-core.test.mjs` | 59 | `reconcile-training-markdown-to-core.mjs` |
+| `test/backfill-training-core-from-archive.test.mjs` | 29 | `backfill-training-core-from-archive.mjs` |
+| `test/cloudflare-config.test.mjs` | 19 | CF worker 配置 |
+| `test/shared-site-fixture.mjs` | 53 | 共享测试夹具 |
+
+**注意**：`github-workflows.test.mjs`(96行) 存在 1 个已知失败——因 Windows CRLF 换行符与测试正则期望 `\n` 不匹配导致，不影响功能正确性。部分核心模块（`training-domain.mjs`、`training-db-core.mjs`、`telegram-sync-lib.mjs`）无独立测试文件，仅通过上层调用方间接覆盖。
+
+### 2.4 近期变更热点
+
+基于 2026-03-01 以来的 git log 统计，识别出变更最频繁的区域：
+
+| 变更热点 | 近期提交数 | 说明 |
+| --- | --- | --- |
+| `tools/telegram-sync*.mjs` | 15+ | Telegram 同步链路是近期迭代最密集区域 |
+| `tools/training-db-core.mjs` | 10+ | 数据库路径频繁修复 |
+| `themes/cactus/layout/dashboard.ejs` | 10+ | 看板布局和视觉频繁调整 |
+| `themes/cactus/source/css/training-dashboard.styl` | 8+ | 与 dashboard.ejs 同步变更 |
+| `训练记录.md` | 15+ | chored 同步提交，变更频率高但多为自动生成 |
+
+**重构影响**：拆分 `telegram-sync-lib.mjs`、`telegram-sync.mjs` 和 `training-db-core.mjs` 时需注意这些文件正处于高频修改期，拆分应分阶段小步推进以减少合并冲突风险。`dashboard.ejs` 同样高频变更，建议优先完成其重复逻辑清理，降低后续视觉调整时误改数据处理逻辑的概率。
+
+### 2.5 模块依赖关系
+
+tools/ 目录内部依赖关系（箭头方向 = "被导入方" ← "导入方"）：
+
+```
+training-domain.mjs (245行, 16 exports, 无本地导入)
+  ├── training-parser.mjs
+  │     ├── training-snapshot.mjs
+  │     │     ├── generate-training-data.mjs
+  │     │     ├── export-training-markdown.mjs
+  │     │     └── telegram-sync.mjs
+  │     └── training-db-core.mjs (1131行, 被 7 文件导入)
+  │           ├── import-training-markdown.mjs
+  │           ├── reconcile-training-markdown-to-core.mjs
+  │           ├── backfill-training-core-from-archive.mjs
+  │           ├── training-snapshot.mjs
+  │           ├── generate-training-data.mjs
+  │           ├── export-training-markdown.mjs
+  │           └── telegram-sync.mjs
+  ├── telegram-sync-lib.mjs (1069行)
+  │     └── telegram-sync.mjs (809行)
+  └── (telegram-sync-lib.mjs 自身)
+
+training-db-archive.mjs (488行, 3 exports, 无本地导入)
+  └── generate-training-data.mjs
+
+dashboard-view.mjs (164行, 无本地导入)
+  └── generate-training-data.mjs
+
+run-hexo-command.mjs (30行, 无本地导入, 孤立模块)
+```
+
+**关键发现**：
+- 无循环依赖，图是完全有向无环的（DAG）
+- `training-domain.mjs` 和 `training-db-core.mjs` 是两个核心基石模块
+- `training-db-core.mjs` 被 7 个文件导入——拆分时必须保持 facade 兼容
+- `training-db-archive.mjs` 完全自包含（零内部导入），边界清晰，拆分优先级可降低
+- Cloudflare Worker 不导入任何 tools/ 模块，与 Node 侧完全解耦
+- `dashboard-view.mjs` 无本地导入——是天然独立的纯数据模块
 
 ## 3. 关键发现摘要
 
@@ -48,6 +127,8 @@
 | P2 | `themes/cactus/source/lib/`、`themes/cactus/languages/`、`themes/cactus/source/css/_highlight/` | 静态资源体积 | 主题保留了大量字体、多语言和代码高亮资源 | 谨慎评估实际站点是否使用，避免误删主题依赖 |
 
 ## 4. 性能优化分析
+
+> **注意**：本节为静态代码分析，未包含运行时 profiling 数据（查询计时、IO 测量、内存分析等）。"写放大""查询重复"等判断基于代码路径推理，非实测瓶颈。建议在 Phase 4 实际优化前，先对关键路径（`persistNormalizedBatch`、snapshot 构建、Markdown IO）添加计时日志，获取实测数据后再确定优化目标。
 
 ### 4.1 数据库读取与写入路径
 
@@ -109,10 +190,10 @@
 
 - 第一阶段只抽出纯函数模块，不改变导出接口：日期解析、Markdown block 渲染、fingerprint、batch normalization。
 - 保持 `processTelegramUpdates`、`analyzeTelegramBatch`、`applyTelegramSyncToMarkdown` 的外部行为不变。
-- 为日期解析单独建立测试分组，继续复用 `test/telegram-sync.test.mjs` 中现有日期场景。
-- 将通用格式化工具收敛到共享模块，避免不同路径格式口径漂移。
+- 为日期解析单独建立测试分组，继续复用 `test/telegram-sync.test.mjs`（1,819行）中现有日期场景。日期解析变更是高风险操作——中文文本日期、相对日期、绝对日期、歧义格式覆盖场景多，拆分时必须将 `docs/telegram-date-resolution.md` 和现有测试用例作为刚性 spec。
+- 将通用格式化工具收敛到 `tools/training-domain.mjs` 或新建共享模块——`training-domain.mjs`(245行) 已包含 `parseDurationSeconds`、`parseNumber`、`toNullableNumber`、`roundTo` 等基础工具，是依赖图根节点，适合作为统一格式化工具的归属。
 
-风险等级：中。该模块测试覆盖较丰富，但日期和 Markdown 文本格式对数据归档影响很大。
+风险等级：中。该模块测试覆盖较丰富（1,819行），但日期和 Markdown 文本格式对数据归档影响很大。
 
 预期收益：显著降低单文件认知负担，减少后续调整 prompt 或日期口径时的误伤面。
 
@@ -173,31 +254,41 @@
 - `themes/cactus/layout/dashboard.ejs` 内仍保留 `buildFallbackDashboardViewModel`，并重复实现 `formatNumber`、`formatDuration`、`formatWorkoutDuration`、`addDays`、`filterChartsByDate`、`findLatestDashboardDate`、`normalizeDateValue`、`normalizeMeasurementDate`、`normalizeDayDate` 等逻辑。
 - 模板同时承担数据兜底、视图模型计算、HTML 字符串渲染和页面结构输出，导致页面行为变化难以定位。
 
+补充发现：
+
+- 除上述 9 个完全重复的函数外，EJS 模板中还包含 3 个**仅在模板中存在**的数据处理函数，`dashboard-view.mjs` 并未导出对应逻辑：
+  - `getWorkoutDurationValue`（EJS L94-104）：从 workout 对象提取数值形式的训练时长（分钟），供 comparison 计算使用。
+  - `calculateRatio`（EJS L187-203）：计算两个数值之间的差值与百分比变化。
+  - `getComparison`（EJS L205-245）：构建比较对象（方向、箭头、强度条），被 `renderDayCard` 消费。
+- 这 ~69 行意味着：**即使 `dashboardView.json` 新鲜有效，EJS 仍需要在运行时执行数据处理**（计算 comparison），而非纯粹从预生成 JSON 读取。
+- 当前 `buildDashboardViewModel` 输出不包含 comparison 对象，模板回退路径和正常路径都需要 `getComparison` 提供的展示数据。
+
 优化建议：
 
 - 第一阶段保留模板兜底，但将 fallback 降级为最小兜底：只处理空数据或 stale `dashboardView.json` 的提示。
-- 第二阶段让 `tools/dashboard-view.mjs` 成为 dashboard 派生数据唯一来源。
-- 第三阶段把 `dashboard.ejs` 中的 metric/render helper 进一步组件化或局部化，减少单模板复杂度。
+- 第二阶段让 `tools/dashboard-view.mjs` 成为 dashboard 派生数据唯一来源。**关键：扩展 `buildDashboardViewModel` 输出 schema**，在每个 dailyOverviewEntry 中预计算 `comparison` 对象（包含差值、百分比变化、方向、强度等级），使 EJS 可以移除 `calculateRatio`、`getComparison`、`getWorkoutDurationValue` 三个函数。
+- 第三阶段把 `dashboard.ejs` 中的 `render*` 系列纯渲染 helper 进一步组件化或局部化，减少单模板复杂度。`formatDateLabel`、`formatDailyRange` 等展示辅助可保留在模板层。
+- 完成后 EJS 模板可移除 ~95 行（重复的 9 个辅助函数）+ ~69 行（comparison 相关） = ~164 行 JS 逻辑。
 
-风险等级：中。模板回退逻辑可能是为旧数据或生成文件 stale 场景服务，移除前必须覆盖 `test/dashboard-page.test.mjs` 中 stale data 场景。
+风险等级：中。模板回退逻辑可能是为旧数据或生成文件 stale 场景服务，移除前必须覆盖 `test/dashboard-page.test.mjs` 中 stale data 场景。扩展 view model 输出 schema 时需同步更新 `test/dashboard-view.test.mjs`(77行)，当前覆盖偏薄。
 
-预期收益：消除最明显重复逻辑，避免 dashboard 生成态与运行态口径不一致。
+预期收益：消除最明显重复逻辑，避免 dashboard 生成态与运行态口径不一致。完成后 EJS 只消费预计算数据，模板逻辑从 ~250 行 JS 降至 ~86 行纯渲染 helper。
 
 ### 5.2 数据库核心模块拆分
 
 涉及位置：
 
-- `tools/training-db-core.mjs`
-- `tools/training-db-archive.mjs`
+- `tools/training-db-core.mjs`（1131行，被 7 个文件导入）
+- `tools/training-db-archive.mjs`（488行，3 exports，完全自包含，零内部导入）
 - `tools/backfill-training-core-from-archive.mjs`
 - `tools/import-training-markdown.mjs`
 - `tools/export-training-markdown.mjs`
 - `tools/reconcile-training-markdown-to-core.mjs`
 
-当前问题：
+依赖概况：
 
-- `tools/training-db-core.mjs` 对外提供多个高层能力，同时包含大量底层 SQL 与数据映射。
-- `tools/training-db-archive.mjs` 与 core 模块存在配置解析、client 创建、正整数解析等相似模式。
+- `training-db-core.mjs` 是数据库层事实上的中枢：被 7 个文件导入（import、reconcile、backfill、snapshot、generate-data、export、telegram-sync）。这是拆分时最需要 facade 保护的模块。
+- `training-db-archive.mjs`（488行）完全自包含——无任何 tools/ 内部导入，仅依赖 `pg` 和 Node 内置模块。其职责是独立的 archive 持久化管道（事务性写入、基于 SHA-256/MD5 哈希去重、运行记录），与 core 路径耦合极低。**拆分优先级可降至 Phase 3 末尾或 Phase 4。**
 - 导入、导出、reconcile、backfill 脚本已经很薄，核心复杂度都压在 DB 模块内部。
 
 优化建议：
@@ -246,23 +337,26 @@
 
 涉及位置：
 
-- `tools/training-parser.mjs`
-- `tools/training-domain.mjs`
-- `tools/training-snapshot.mjs`
+- `tools/training-parser.mjs`（191 行测试覆盖）
+- `tools/training-domain.mjs`（245行，16 个导出函数，零内部导入——是依赖图的根节点）
+- `tools/training-snapshot.mjs`（380 行测试覆盖）
+- `tools/training-db-archive.mjs`（488行，完全自包含，3 个导出函数）
 
 当前问题：
 
 - `training-parser` 聚焦 Markdown 到 canonical daily，职责清晰。
-- `training-domain` 包含 section split、数值解析、活动汇总、snapshot 构建，整体仍可维护。
+- `training-domain` 包含 section split、数值解析、活动汇总、snapshot 构建，共 16 个纯函数，无副作用，整体仍可维护。是依赖图的底层基石（被 `training-parser`、`telegram-sync-lib`、`training-db-core` 分别导入）。
 - `training-snapshot` 负责 source 选择与 fallback 错误分类，体量较小。
+- `training-db-archive` 为独立的 archive 持久化模块，与 core 路径无内部依赖耦合，职责清晰。
 
 优化建议：
 
 - 该区域暂不作为第一阶段重构重点。
-- 可在后续把通用日期、数值格式化工具与 dashboard/telegram 重复逻辑统一。
+- `training-db-archive.mjs` 的拆分优先级可降至 Phase 3 末尾或 Phase 4——其独立性强，不影响其他拆分工作。
+- `training-domain.mjs` 中的通用日期、数值格式化工具（`parseDurationSeconds`、`parseNumber`、`toNullableNumber`、`roundTo` 等）可在后续与 dashboard/telegram 重复逻辑统一。
 - 保持 parser 输出 schema 稳定，避免影响 DB import/export 和 dashboard。
 
-风险等级：低到中。parser 是数据入口之一，但当前模块边界比 DB 和 Telegram 更清晰。
+风险等级：低。parser 是数据入口之一，但当前模块边界比 DB 和 Telegram 更清晰。
 
 预期收益：有限，建议排在 dashboard 重复逻辑和大文件拆分之后。
 
@@ -289,6 +383,12 @@
 - `public/` 当前在工作区存在但未被 `git ls-files` 跟踪，符合生成物定位。
 - `source/_data/*.json` 当前工作区存在但未被跟踪，符合构建产物定位。
 
+验证结果：
+
+- 已对 `test/` 目录全文搜索 `telegram/inbox/`、`telegram/state.json`、`telegram/process-log`——**均为零匹配**。测试代码不直接引用这些运行态文件路径，迁移或移除不会影响测试。
+- `telegram/inbox/*.ndjson` 中的 14 个文件如果确为历史同步样本，建议移至 `test/fixtures/telegram/` 并作为只读测试数据引用；如果是纯运行态缓冲，可直接从版本库移除。
+- `telegram/state.json` 和 `telegram/process-log.ndjson` 确认为运行态文件——`.gitignore` 已覆盖，仅因历史提交而被持续跟踪。
+
 优化建议：
 
 - 明确 `telegram/inbox/*.ndjson` 的身份：如果是测试夹具，建议迁移到 `test/fixtures/telegram/`；如果是运行态数据，建议从版本库移除跟踪。
@@ -296,7 +396,7 @@
 - `source/_data/*.json` 和 `训练数据解析.md` 继续保持生成物，不建议提交。
 - `public/` 继续保持 GitHub Pages artifact 输出，不建议提交。
 
-风险等级：中。清理已跟踪运行态文件可能影响既有测试或调试流程，删除前需确认没有测试直接依赖这些具体文件。
+风险等级：低（已确认 test/ 无引用）。清理已跟踪运行态文件不会影响测试，但建议操作前 `git rm --cached` 而非直接删除，保留本地工作区文件。
 
 预期收益：减少仓库噪音，降低误提交运行态数据的概率。
 
@@ -317,7 +417,17 @@
 
 - 主题目录保留了 Cactus 原主题的多语言、字体、高亮主题和第三方库。
 - 当前站点语言是 `zh-CN`，主要页面是 dashboard、thoughts、about。
-- 主题资源体积较大，但其中部分可能由主题配置、样式 import 或模板条件引用。
+- 主题资源体积较大（lib/ 约 10.4MB，其中 meslo-LG 字体 7.1MB、vazir 波斯语字体 2.1MB），但其中部分可能由主题配置、样式 import 或模板条件引用。
+- **关键发现**：`themes/cactus/_config.yml` 已启用 CDN（`cdn.enable: true`），jQuery、Font Awesome、justifiedGallery、clipboard 均已配置 CDN 加载。这意味着 `themes/cactus/source/lib/` 下的本地副本可能已被 CDN 替代，可进一步确认后删除。
+- highlight theme 在配置中被注释（`# highlight: rainbow`），实际使用默认主题；71 个高亮主题文件中仅 1 个被实际使用。
+
+验证方法：
+
+- 检查根目录 `_config.yml` 的 `language` 设置（如为 `zh-CN`，则仅需保留 `zh-CN.yml`）。
+- 确认 `themes/cactus/_config.yml` 中 `cdn.enable: true` 生效后，验证 `jquery/`、`clipboard/`、`font-awesome/`、`justified-gallery/` 本地副本是否还被任何 import/script 引用。
+- 检查 `.styl` 文件中是否 `@import` 了 `_highlight/` 下的具体主题；确认实际启用的主题后，可保留 1 个、移除其余 70 个。
+- `vazir-font/`(2.1MB) 仅在 `direction: rtl` 时加载——当前配置为 `ltr`，可安全移除。
+- `meslo-LG/`(7.1MB) 需确认是否被 CSS `@font-face` 或主题默认字体栈引用。
 
 优化建议：
 
@@ -394,6 +504,11 @@
 - 中期可把重复 env 名称和步骤整理到文档 checklist，或使用 composite action 复用。
 - workflow 优化必须保留 repository_dispatch 快速路径差异。
 
+测试覆盖注意：
+
+- `test/github-workflows.test.mjs`(96行) 覆盖偏薄——仅验证 YAML 配置文本模式匹配，不测试实际 workflow 行为（如 DB 连接、构建产物、部署结果）。
+- 该测试当前存在 1 个已知失败：Windows 环境下的 CRLF 换行符（`\r\n`）与测试正则期望的 `\n` 不匹配。建议修复该正则兼容性问题后，再评估是否补充 workflow 集成测试。
+
 风险等级：中。CI/CD 改动影响自动发布和 Telegram 同步。
 
 ## 8. 后续重构路线
@@ -406,9 +521,10 @@
 
 建议任务：
 
-- 标记 `telegram/inbox/*.ndjson`、`telegram/state.json`、`telegram/process-log.ndjson` 的身份，决定是否迁移到 `test/fixtures/` 或移出版本跟踪。
+- 标记 `telegram/inbox/*.ndjson`、`telegram/state.json`、`telegram/process-log.ndjson` 的身份——**已确认 test/ 目录无引用**，可安全从版本库移出跟踪（`git rm --cached` 保留本地文件）。
 - 补充生成物与运行态文件说明，明确 `source/_data/*.json`、`public/`、`训练数据解析.md` 不应提交。
-- 在 docs 中记录 dashboard view model 的唯一来源目标。
+- 在 docs 中记录 dashboard view model 的唯一来源目标：`dashboard-view.mjs` 的 `buildDashboardViewModel` 输出为唯一入口。
+- 修复 `test/github-workflows.test.mjs` 的 CRLF 兼容问题（正则匹配 `\r?\n` 或使用 `String.prototype.replace` 归一化换行符）。
 
 验证：
 
@@ -482,12 +598,17 @@
 
 | 顺序 | 建议事项 | 原因 |
 | --- | --- | --- |
-| 1 | 统一 dashboard view model 来源 | 重复最明显，收益高，风险可由现有 dashboard 测试覆盖 |
-| 2 | 明确并清理 Telegram 运行态跟踪文件 | 仓库噪音明显，且 `.gitignore` 已表达不应继续跟踪 |
-| 3 | 拆分 `tools/training-db-core.mjs` | 数据库层复杂度最高，是后续性能优化前置条件 |
-| 4 | 拆分 `tools/telegram-sync-lib.mjs` | 日期解析和 Markdown 渲染需要更清晰边界 |
+| 1 | 统一 dashboard view model 来源 | 重复最明显（~164行可移除），收益高，`dashboard-view.mjs` 为独立叶子模块无耦合风险；变更热点 dashboard.ejs 的视觉调整与逻辑拆分可解耦 |
+| 2 | 明确并清理 Telegram 运行态跟踪文件 | 仓库噪音明显，已确认 test/ 无引用，低风险 git hygiene 操作，5 分钟即可完成 |
+| 3 | 拆分 `tools/training-db-core.mjs` | 数据库层复杂度最高（1131行，7 个消费者），是后续性能优化前置条件；但变更频率高，需 facade 保护 |
+| 4 | 拆分 `tools/telegram-sync-lib.mjs` | 日期解析和 Markdown 渲染需要更清晰边界；变更最频繁（15+ 提交），需小步拆分 |
 | 5 | 拆分 `tools/telegram-sync.mjs` | 主流程副作用多，拆分后更容易维护 |
-| 6 | 优化 DB 查询与 Markdown IO | 应在结构边界稳定后执行，避免边重构边调性能导致风险叠加 |
+| 6 | 优化 DB 查询与 Markdown IO | 应在结构边界稳定后且获得实测 profiling 数据后执行，避免边重构边调性能导致风险叠加 |
+
+优先级说明：
+- 事项 2（Telegram 文件清理）排在事项 3（DB 拆分）之前，原因是：清理操作风险极低（git rm --cached）、5 分钟即可完成、不改变任何代码行为，适合作为热身操作建立重构节奏。如果资源紧张，两者可并行。
+- 事项 1 排在最前的额外理由：`dashboard-view.mjs`(164行) 是独立叶子模块（零内部导入），扩展其输出 schema 不会波及其他模块，是风险最低的结构优化入口。
+- 事项 6 排在最后，因为当前缺少运行时 profiling 数据（见 Section 4 免责声明），需先完成结构拆分、添加计时日志、获取实测数据后再执行。
 
 ## 11. 结论
 
