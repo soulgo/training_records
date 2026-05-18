@@ -251,6 +251,14 @@ export async function runTelegramSync(options = {}) {
       const thoughtEditResult = await editThoughtPost({
         batch: persistedBatch,
         thoughtsDir,
+        rootDir: activeRootDir,
+        fetchTelegramFile:
+          options.fetchTelegramFile ??
+          ((fileId) =>
+            fetchTelegramFile({
+              botToken: env.botToken,
+              fileId,
+            })),
       });
       changed ||= thoughtEditResult.changed;
 
@@ -682,7 +690,7 @@ async function writeThoughtPostFile({ batch, thoughtsDir, rootDir, fetchTelegram
   };
 }
 
-async function editThoughtPost({ batch, thoughtsDir }) {
+async function editThoughtPost({ batch, thoughtsDir, rootDir, fetchTelegramFile }) {
   const target = await findThoughtPostByMessage({
     thoughtsDir,
     messageId: batch.thoughtEdit?.targetMessageId,
@@ -697,12 +705,42 @@ async function editThoughtPost({ batch, thoughtsDir }) {
     };
   }
 
-  const nextContent = replaceMarkdownBody(target.raw, batch.thoughtEdit?.body ?? '');
+  let nextPhotoPaths = null;
+  let deletedPhotoPaths = [];
+  if (batch.thoughtEdit?.replacePhotos) {
+    nextPhotoPaths = await writeThoughtImageFiles({
+      batch,
+      rootDir,
+      dateParts: resolveThoughtFrontMatterDateParts(target.frontMatter),
+      sourceMessageId: batch.thoughtEdit.targetMessageId,
+      fetchTelegramFile,
+      overwrite: true,
+    });
+    deletedPhotoPaths = await deleteThoughtPhotoFiles({
+      rootDir,
+      photos: target.frontMatter.photos,
+      excludePublicPaths: nextPhotoPaths,
+    });
+  }
+
+  const nextContent = replaceMarkdownBody(target.raw, batch.thoughtEdit?.body ?? '', {
+    photoPaths: nextPhotoPaths,
+  });
   if (nextContent === target.raw) {
+    if (batch.thoughtEdit?.replacePhotos && (nextPhotoPaths?.length ?? 0) > 0) {
+      return {
+        changed: true,
+        status: 'updated',
+        postPath: target.postPath,
+        deletedPhotoPaths,
+        photoPaths: nextPhotoPaths,
+      };
+    }
     return {
       changed: false,
       status: 'unchanged',
       postPath: target.postPath,
+      deletedPhotoPaths,
     };
   }
 
@@ -711,6 +749,8 @@ async function editThoughtPost({ batch, thoughtsDir }) {
     changed: true,
     status: 'updated',
     postPath: target.postPath,
+    deletedPhotoPaths,
+    photoPaths: nextPhotoPaths ?? target.frontMatter.photos ?? [],
   };
 }
 
@@ -731,16 +771,10 @@ async function deleteThoughtPost({ batch, thoughtsDir, rootDir }) {
   }
 
   await unlink(target.postPath);
-  const deletedPhotoPaths = [];
-  for (const photoPath of resolveThoughtPhotoFilePaths({
+  const deletedPhotoPaths = await deleteThoughtPhotoFiles({
     rootDir,
     photos: target.frontMatter.photos,
-  })) {
-    if (await fileExists(photoPath)) {
-      await unlink(photoPath);
-      deletedPhotoPaths.push(photoPath);
-    }
-  }
+  });
 
   return {
     changed: true,
@@ -822,14 +856,58 @@ function normalizeThoughtFrontMatter(parsed) {
   };
 }
 
-function replaceMarkdownBody(raw, nextBody) {
+function replaceMarkdownBody(raw, nextBody, options = {}) {
   const split = frontMatter.split(raw);
   const parsed = frontMatter.parse(raw);
   const { _content, ...frontMatterData } = parsed ?? {};
+  if (Array.isArray(options.photoPaths)) {
+    if (options.photoPaths.length > 0) {
+      frontMatterData.photos = options.photoPaths;
+    } else {
+      delete frontMatterData.photos;
+    }
+  }
   return `${frontMatter.stringify(frontMatterData, {
     separator: split.separator,
     prefixSeparator: split.prefixSeparator,
   })}\n${String(nextBody ?? '').trim()}\n`;
+}
+
+function resolveThoughtFrontMatterDateParts(frontMatterData) {
+  const rawDate = frontMatterData?.date;
+  const date =
+    rawDate instanceof Date
+      ? rawDate
+      : rawDate
+        ? new Date(rawDate)
+        : null;
+  if (date && !Number.isNaN(date.getTime())) {
+    return formatThoughtDateParts(Math.floor(date.getTime() / 1000));
+  }
+  return formatThoughtDateParts(0);
+}
+
+async function deleteThoughtPhotoFiles({ rootDir, photos, excludePublicPaths = [] }) {
+  const deletedPhotoPaths = [];
+  const excluded = new Set(
+    excludePublicPaths
+      .map((photoPath) =>
+        typeof photoPath === 'string' && photoPath.startsWith('/images/')
+          ? path.join(rootDir, 'source', photoPath.replace(/^\//, ''))
+          : null,
+      )
+      .filter(Boolean),
+  );
+  for (const photoPath of resolveThoughtPhotoFilePaths({ rootDir, photos })) {
+    if (excluded.has(photoPath)) {
+      continue;
+    }
+    if (await fileExists(photoPath)) {
+      await unlink(photoPath);
+      deletedPhotoPaths.push(photoPath);
+    }
+  }
+  return deletedPhotoPaths;
 }
 
 function resolveThoughtPhotoFilePaths({ rootDir, photos }) {
@@ -893,6 +971,7 @@ async function writeThoughtImageFiles({
   dateParts,
   sourceMessageId,
   fetchTelegramFile,
+  overwrite = false,
 }) {
   if (!rootDir || !fetchTelegramFile) {
     return [];
@@ -922,7 +1001,7 @@ async function writeThoughtImageFiles({
     const publicPath = `/images/thoughts/${year}/${month}/${imageFileName}`;
 
     await mkdir(outputDir, { recursive: true });
-    if (!(await fileExists(outputPath))) {
+    if (overwrite || !(await fileExists(outputPath))) {
       await writeFile(outputPath, file.data);
     }
     publicPaths.push(publicPath);

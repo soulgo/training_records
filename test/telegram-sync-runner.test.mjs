@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -1704,6 +1704,104 @@ telegram_chat_id: 42
   await assert.rejects(
     readFile(path.join(postsDir, '2026-05-18-telegram-thought-131.md'), 'utf8'),
     /ENOENT/,
+  );
+});
+
+test('runTelegramSync updates an existing telegram thought by explicit id and replaces photos', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-explicit-edit-'));
+  const postsDir = path.join(tempRoot, 'source', '_posts');
+  const imageDir = path.join(tempRoot, 'source', 'images', 'thoughts', '2026', '05');
+  await mkdir(postsDir, { recursive: true });
+  await mkdir(imageDir, { recursive: true });
+  await writeFile(
+    path.join(postsDir, '2026-05-17-telegram-thought-126.md'),
+    `---
+date: 2026-05-17 11:28:14
+tags:
+  - 训练
+  - 随想
+  - Telegram
+telegram_message_id: 126
+telegram_chat_id: 42
+photos:
+  - /images/thoughts/2026/05/2026-05-17-telegram-thought-126-1.jpg
+---
+
+旧正文
+`,
+    'utf8',
+  );
+  await writeFile(
+    path.join(imageDir, '2026-05-17-telegram-thought-126-1.jpg'),
+    'old image',
+    'utf8',
+  );
+
+  const downloadedFileIds = [];
+  const persistedBatches = [];
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 132,
+          date: Math.floor(new Date('2026-05-18T02:59:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想编 126 今天骑行 40 公里，补充图片',
+          photo: [{ file_id: 'new-photo', file_unique_id: 'new-photo-u' }],
+        },
+      },
+    ],
+    fetchTelegramFile: async (fileId) => {
+      downloadedFileIds.push(fileId);
+      return {
+        filePath: `${fileId}.png`,
+        contentType: 'image/png',
+        data: Buffer.from('new image'),
+      };
+    },
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  const postContent = await readFile(
+    path.join(postsDir, '2026-05-17-telegram-thought-126.md'),
+    'utf8',
+  );
+
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
+  assert.equal(persistedBatches[0].thoughtEdit.replacePhotos, true);
+  assert.deepEqual(downloadedFileIds, ['new-photo']);
+  assert.match(postContent, /今天骑行 40 公里，补充图片/);
+  assert.match(postContent, /photos:\n  - \/images\/thoughts\/2026\/05\/2026-05-17-telegram-thought-126-1\.png/);
+  await assert.rejects(
+    readFile(path.join(imageDir, '2026-05-17-telegram-thought-126-1.jpg'), 'utf8'),
+    /ENOENT/,
+  );
+  assert.equal(
+    await readFile(path.join(imageDir, '2026-05-17-telegram-thought-126-1.png'), 'utf8'),
+    'new image',
   );
 });
 

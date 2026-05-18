@@ -321,6 +321,55 @@ test('groups reply-based thought revisions into thought_edit batches when replyi
   );
 });
 
+test('groups explicit thought edit commands by target message id', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 403,
+      message: {
+        message_id: 132,
+        date: 1_746_748_800,
+        chat: { id: 42 },
+        text: '/随想编 126 今天骑行 40 公里，补充一下高德和手表差了12公里多。',
+      },
+    },
+  ]);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought_edit');
+  assert.equal(batches[0].thoughtEdit.command, '/随想编');
+  assert.equal(batches[0].thoughtEdit.targetMessageId, 126);
+  assert.equal(batches[0].thoughtEdit.body, '今天骑行 40 公里，补充一下高德和手表差了12公里多。');
+});
+
+test('groups explicit thought edit captions with images as photo replacement edits', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 404,
+      message: {
+        message_id: 133,
+        date: 1_746_748_800,
+        chat: { id: 42 },
+        caption: '/随想编 126 更新正文并替换图片',
+        photo: [{ file_id: 'new-photo', file_unique_id: 'new-photo-u' }],
+      },
+    },
+  ]);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought_edit');
+  assert.equal(batches[0].thoughtEdit.targetMessageId, 126);
+  assert.equal(batches[0].thoughtEdit.body, '更新正文并替换图片');
+  assert.equal(batches[0].thoughtEdit.replacePhotos, true);
+});
+
 test('groups thought delete commands by reply target and explicit message id', async () => {
   const lib = await importTelegramSyncLib();
 

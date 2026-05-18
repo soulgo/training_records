@@ -25,6 +25,7 @@ export function groupTelegramUpdates(updates, options = {}) {
     const normalized = normalizeTelegramMessage(update, message);
     normalized.updateType = update.edited_message ? 'edited_message' : 'message';
 
+    const parsedThoughtEdit = parseThoughtEditCommand(normalized.text) ?? parseThoughtEditCommand(normalized.caption);
     const parsedThought = parseThoughtCommand(normalized.text) ?? parseThoughtCommand(normalized.caption);
     if (parsedThought && normalized.updateType === 'message') {
       knownThoughtMessageKeys.add(buildThoughtMessageKey(normalized.chatId, normalized.messageId));
@@ -39,6 +40,12 @@ export function groupTelegramUpdates(updates, options = {}) {
     const analysisBatch = buildAnalysisBatch(normalized);
     if (analysisBatch) {
       batches.push(analysisBatch);
+      continue;
+    }
+
+    if (parsedThoughtEdit && normalized.updateType === 'message' && !normalized.mediaGroupId) {
+      const thoughtEditBatch = buildExplicitThoughtEditBatch(normalized, parsedThoughtEdit);
+      batches.push(thoughtEditBatch);
       continue;
     }
 
@@ -98,6 +105,11 @@ export function groupTelegramUpdates(updates, options = {}) {
   for (const batch of batches) {
     batch.messages.sort((left, right) => left.messageId - right.messageId);
     if (batch.kind === 'image') {
+      const thoughtEditBatch = buildExplicitThoughtEditBatchFromMessages(batch.messages);
+      if (thoughtEditBatch) {
+        Object.assign(batch, thoughtEditBatch);
+        continue;
+      }
       const thoughtBatch = buildThoughtBatchFromMessages(batch.messages);
       if (thoughtBatch) {
         Object.assign(batch, thoughtBatch);
@@ -435,6 +447,40 @@ function buildThoughtEditBatch(message, options = {}) {
   };
 }
 
+function buildExplicitThoughtEditBatch(message, parsedThoughtEdit) {
+  return {
+    kind: 'thought_edit',
+    batchId: `thought-edit-${message.messageId}`,
+    messages: [message],
+    thoughtEdit: {
+      command: parsedThoughtEdit.command,
+      targetMessageId: parsedThoughtEdit.targetMessageId,
+      body: parsedThoughtEdit.body,
+      replacePhotos: message.photos.length > 0,
+    },
+  };
+}
+
+function buildExplicitThoughtEditBatchFromMessages(messages) {
+  const parsedEntry = findThoughtEditCommandEntry(messages);
+  if (!parsedEntry) {
+    return null;
+  }
+
+  const { message, parsedThoughtEdit } = parsedEntry;
+  return {
+    kind: 'thought_edit',
+    batchId: `thought-edit-${message.messageId}`,
+    messages,
+    thoughtEdit: {
+      command: parsedThoughtEdit.command,
+      targetMessageId: parsedThoughtEdit.targetMessageId,
+      body: parsedThoughtEdit.body,
+      replacePhotos: messages.some((item) => (item.photos?.length ?? 0) > 0),
+    },
+  };
+}
+
 function buildThoughtDeleteBatch(message) {
   const parsedDelete = parseThoughtDeleteCommand(message.text);
   if (!parsedDelete) {
@@ -701,6 +747,7 @@ function analyzeThoughtEditBatch(batch) {
       command: batch.thoughtEdit?.command ?? '/thought',
       targetMessageId,
       body,
+      replacePhotos: Boolean(batch.thoughtEdit?.replacePhotos),
       telegramChatId: message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,
     },
@@ -1122,6 +1169,32 @@ function parseThoughtCommand(text) {
   };
 }
 
+function parseThoughtEditCommand(text) {
+  if (typeof text !== 'string') {
+    return null;
+  }
+
+  const trimmedStart = text.trimStart();
+  const match = trimmedStart.match(
+    /^(\/(?:thought-edit|thoughtedit|edit-thought|编随想|随想编)(?:@[A-Za-z0-9_]+)?)(?=$|\s)([\s\S]*)$/u,
+  );
+  if (!match) {
+    return null;
+  }
+
+  const rawBody = match[2].trim();
+  const bodyMatch = rawBody.match(/^(\d+)\s+([\s\S]+)$/u);
+  if (!bodyMatch) {
+    return null;
+  }
+
+  return {
+    command: match[1],
+    targetMessageId: Number(bodyMatch[1]),
+    body: bodyMatch[2].trim(),
+  };
+}
+
 function extractEditedThoughtBody(message) {
   const parsedThought = parseThoughtCommand(message.text) ?? parseThoughtCommand(message.caption);
   if (parsedThought) {
@@ -1170,6 +1243,21 @@ function findThoughtCommandEntry(messages) {
         return {
           message,
           parsedThought,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function findThoughtEditCommandEntry(messages) {
+  for (const message of messages ?? []) {
+    for (const text of [message.text, message.caption]) {
+      const parsedThoughtEdit = parseThoughtEditCommand(text);
+      if (parsedThoughtEdit) {
+        return {
+          message,
+          parsedThoughtEdit,
         };
       }
     }
