@@ -54,6 +54,19 @@ test('telegram-sync workflow validates changes and deploys Pages after sync comm
   assert.match(workflow, /git commit -m "chore: sync Telegram updates"/);
 });
 
+test('telegram-sync workflow keeps the repository_dispatch fast path gated by detected changes', async () => {
+  const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
+
+  assert.match(workflow, /- name: Detect changes/);
+  assert.match(workflow, /repo_changed=false/);
+  assert.match(workflow, /content_changed=false/);
+  assert.match(workflow, /- name: Run tests\s*\n\s*if: steps\.changes\.outputs\.content_changed == 'true'/);
+  assert.match(workflow, /- name: Commit sync results\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /- name: Rebase on latest main\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /- name: Push changes\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /if:\s*needs\.sync\.outputs\.repo_changed == 'true'/);
+});
+
 test('telegram-sync workflow skips full database maintenance on webhook dispatches', async () => {
   const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
 
@@ -88,7 +101,8 @@ test('cloudflare worker workflow deploys wrangler config changes to Cloudflare',
 });
 
 async function readWorkflow(relativePath) {
-  return readFile(new URL(relativePath, rootDir), 'utf8');
+  const workflow = await readFile(new URL(relativePath, rootDir), 'utf8');
+  return workflow.replace(/\r\n?/g, '\n');
 }
 
 function escapeRegExp(value) {
