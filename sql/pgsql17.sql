@@ -384,6 +384,28 @@ create table if not exists core.meal (
   updated_at timestamptz not null
 );
 
+create table if not exists core.thought (
+  telegram_message_id bigint primary key,
+  telegram_chat_id bigint null,
+  source_batch_id text null,
+  command text not null,
+  body text not null,
+  tags_json jsonb not null default '["训练","随想","Telegram"]'::jsonb,
+  message_date_unix bigint null,
+  markdown_path text null,
+  image_refs_json jsonb not null default '[]'::jsonb,
+  status text not null default 'active',
+  deleted_at timestamptz null,
+  updated_at timestamptz not null
+);
+
+comment on table core.thought is '锻炼随想正文镜像表；图片仍保存在本地目录或后续对象存储，表内只保存引用';
+comment on column core.thought.telegram_message_id is '原 Telegram message_id，也是随想的稳定定位 ID';
+comment on column core.thought.body is '随想正文文本，不包含图片二进制';
+comment on column core.thought.markdown_path is '当前 Markdown 兼容层路径，例如 source/_posts/YYYY-MM-DD-telegram-thought-501.md';
+comment on column core.thought.image_refs_json is '有序图片引用清单，当前为 /images/thoughts/...，后续可切换为 OSS object key 或 URL';
+comment on column core.thought.status is 'active 或 deleted；删除命令使用软删除保留迁移线索';
+
 create index if not exists idx_core_measurement_archived_date
 on core.measurement (archived_date);
 
@@ -392,6 +414,9 @@ on core.activity (archived_date);
 
 create index if not exists idx_core_meal_archived_date
 on core.meal (archived_date);
+
+create index if not exists idx_core_thought_updated_at
+on core.thought (updated_at desc);
 
 grant usage on schema ingest to training_writer;
 grant usage on schema core to training_writer;

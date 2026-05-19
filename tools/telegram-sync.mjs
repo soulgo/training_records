@@ -214,17 +214,22 @@ export async function runTelegramSync(options = {}) {
         batch: persistedBatch,
         thoughtsDir,
       });
+      const thoughtStorageBatch = attachThoughtStorageMetadata(
+        persistedBatch,
+        thoughtWriteResult,
+        activeRootDir,
+      );
       changed ||= thoughtWriteResult.changed;
 
       try {
         const persistResult = await persistBatch({
-          batch: persistedBatch,
+          batch: thoughtStorageBatch,
           processedAt: now,
           env: options.env ?? process.env,
         });
         changed ||= persistResult.status === 'stored';
         batchResults.push({
-          ...persistedBatch,
+          ...thoughtStorageBatch,
           postPath: thoughtWriteResult.postPath,
           thoughtWriteStatus: thoughtWriteResult.status,
           persistenceStatus: persistResult.status,
@@ -232,12 +237,12 @@ export async function runTelegramSync(options = {}) {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         await appendPendingFallbackBatch(pendingQueuePath, {
-          batch: persistedBatch,
+          batch: thoughtStorageBatch,
           failedAt: now.toISOString(),
           error: errorMessage,
         });
         batchResults.push({
-          ...persistedBatch,
+          ...thoughtStorageBatch,
           postPath: thoughtWriteResult.postPath,
           thoughtWriteStatus: thoughtWriteResult.status,
           persistenceStatus: 'pending_replay',
@@ -260,17 +265,22 @@ export async function runTelegramSync(options = {}) {
               fileId,
             })),
       });
+      const thoughtStorageBatch = attachThoughtStorageMetadata(
+        persistedBatch,
+        thoughtEditResult,
+        activeRootDir,
+      );
       changed ||= thoughtEditResult.changed;
 
       try {
         const persistResult = await persistBatch({
-          batch: persistedBatch,
+          batch: thoughtStorageBatch,
           processedAt: now,
           env: options.env ?? process.env,
         });
         changed ||= persistResult.status === 'stored';
         batchResults.push({
-          ...persistedBatch,
+          ...thoughtStorageBatch,
           postPath: thoughtEditResult.postPath,
           thoughtWriteStatus: thoughtEditResult.status,
           persistenceStatus: persistResult.status,
@@ -278,12 +288,12 @@ export async function runTelegramSync(options = {}) {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         await appendPendingFallbackBatch(pendingQueuePath, {
-          batch: persistedBatch,
+          batch: thoughtStorageBatch,
           failedAt: now.toISOString(),
           error: errorMessage,
         });
         batchResults.push({
-          ...persistedBatch,
+          ...thoughtStorageBatch,
           postPath: thoughtEditResult.postPath,
           thoughtWriteStatus: thoughtEditResult.status,
           persistenceStatus: 'pending_replay',
@@ -299,17 +309,22 @@ export async function runTelegramSync(options = {}) {
         thoughtsDir,
         rootDir: activeRootDir,
       });
+      const thoughtStorageBatch = attachThoughtStorageMetadata(
+        persistedBatch,
+        thoughtDeleteResult,
+        activeRootDir,
+      );
       changed ||= thoughtDeleteResult.changed;
 
       try {
         const persistResult = await persistBatch({
-          batch: persistedBatch,
+          batch: thoughtStorageBatch,
           processedAt: now,
           env: options.env ?? process.env,
         });
         changed ||= persistResult.status === 'stored';
         batchResults.push({
-          ...persistedBatch,
+          ...thoughtStorageBatch,
           postPath: thoughtDeleteResult.postPath,
           thoughtWriteStatus: thoughtDeleteResult.status,
           deletedPhotoPaths: thoughtDeleteResult.deletedPhotoPaths ?? [],
@@ -318,12 +333,12 @@ export async function runTelegramSync(options = {}) {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         await appendPendingFallbackBatch(pendingQueuePath, {
-          batch: persistedBatch,
+          batch: thoughtStorageBatch,
           failedAt: now.toISOString(),
           error: errorMessage,
         });
         batchResults.push({
-          ...persistedBatch,
+          ...thoughtStorageBatch,
           postPath: thoughtDeleteResult.postPath,
           thoughtWriteStatus: thoughtDeleteResult.status,
           deletedPhotoPaths: thoughtDeleteResult.deletedPhotoPaths ?? [],
@@ -501,6 +516,72 @@ function isTrainingDataBatchKind(kind) {
   return kind !== 'thought' && kind !== 'thought_edit' && kind !== 'thought_delete' && kind !== 'analysis';
 }
 
+function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {
+  const storage = {
+    markdownPath: toRepoRelativePath(writeResult.postPath, activeRootDir),
+    photoPaths: writeResult.photoPaths ?? [],
+    deletedPhotoPaths: (writeResult.deletedPhotoPaths ?? [])
+      .map((photoPath) => toPublicThoughtImagePath(photoPath, activeRootDir))
+      .filter(Boolean),
+    writeStatus: writeResult.status ?? null,
+  };
+
+  if (batch.kind === 'thought') {
+    return {
+      ...batch,
+      thought: {
+        ...batch.thought,
+        storage,
+      },
+    };
+  }
+
+  if (batch.kind === 'thought_edit') {
+    return {
+      ...batch,
+      thoughtEdit: {
+        ...batch.thoughtEdit,
+        storage,
+      },
+    };
+  }
+
+  if (batch.kind === 'thought_delete') {
+    return {
+      ...batch,
+      thoughtDelete: {
+        ...batch.thoughtDelete,
+        storage,
+      },
+    };
+  }
+
+  return batch;
+}
+
+function toRepoRelativePath(targetPath, activeRootDir) {
+  if (!targetPath || !activeRootDir) {
+    return null;
+  }
+
+  const relative = path.relative(activeRootDir, targetPath).split(path.sep).join('/');
+  return relative && !relative.startsWith('..') ? relative : targetPath;
+}
+
+function toPublicThoughtImagePath(targetPath, activeRootDir) {
+  if (!targetPath || !activeRootDir) {
+    return null;
+  }
+
+  const relative = toRepoRelativePath(targetPath, activeRootDir);
+  if (typeof relative !== 'string') {
+    return null;
+  }
+  return relative.startsWith('source/images/')
+    ? `/${relative.slice('source/'.length)}`
+    : relative;
+}
+
 async function readLastProcessedUpdateIdForRun({
   readLastProcessedUpdateId,
   dispatchUpdates,
@@ -669,6 +750,7 @@ async function writeThoughtPostFile({ batch, thoughtsDir, rootDir, fetchTelegram
       changed: false,
       status: 'duplicate',
       postPath,
+      photoPaths: await readThoughtPhotoPathsFromPost(postPath),
     };
   }
 
@@ -687,6 +769,7 @@ async function writeThoughtPostFile({ batch, thoughtsDir, rootDir, fetchTelegram
     changed: true,
     status: 'written',
     postPath,
+    photoPaths,
   };
 }
 
@@ -854,6 +937,16 @@ function normalizeThoughtFrontMatter(parsed) {
     ...frontMatterData,
     _content,
   };
+}
+
+async function readThoughtPhotoPathsFromPost(postPath) {
+  try {
+    const raw = await readFile(postPath, 'utf8');
+    const parsed = frontMatter.parse(raw);
+    return Array.isArray(parsed.photos) ? parsed.photos : [];
+  } catch {
+    return [];
+  }
 }
 
 function replaceMarkdownBody(raw, nextBody, options = {}) {

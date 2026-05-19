@@ -75,6 +75,25 @@ test('dashboard defaults charts to the latest 30 days and daily cards to the lat
   });
 });
 
+test('dashboard chart script keeps full data while sparsifying x-axis labels and preserving full tooltip dates', () => {
+  const homepage = renderHomepageWithDashboard(buildSyntheticDashboard({ startDate: '2026-03-01', days: 30 }));
+  const script = readFileSync(path.join(rootDir, 'themes', 'cactus', 'source', 'js', 'training-dashboard.js'), 'utf8');
+  const payloadMatch = homepage.match(
+    /<script id="training-dashboard-data" type="application\/json">([\s\S]*?)<\/script>/,
+  );
+
+  assert.ok(payloadMatch, 'expected embedded dashboard payload');
+  const payload = JSON.parse(payloadMatch[1]);
+
+  assert.equal(payload.charts.weightKg.length, 30);
+  assert.match(script, /function shouldShowDateTick/);
+  assert.match(script, /return index === 0 \|\| index === total - 1 \|\| index % interval === 0/);
+  assert.match(script, /tooltip:\s*{[\s\S]*title\(items\)/);
+  assert.match(script, /return items\?\.\[0\]\?\.label \|\| ''/);
+  assert.match(script, /labels: \(charts\.intakeCalories \|\| \[\]\)\.map\(\(point\) => point\.date\)/);
+  assert.doesNotMatch(script, /labels: \(charts\.intakeCalories \|\| \[\]\)\.map\(\(point\) => point\.date\.slice\(5\)\)/);
+});
+
 test('dashboard embeds daily overview pagination controls without changing the default latest 4-day view', () => {
   withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);

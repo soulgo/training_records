@@ -1329,6 +1329,11 @@ test('runTelegramSync writes a /thought telegram message into source/_posts and 
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].kind, 'thought');
+  assert.equal(
+    persistedBatches[0].thought.storage.markdownPath,
+    'source/_posts/2026-05-14-telegram-thought-501.md',
+  );
+  assert.deepEqual(persistedBatches[0].thought.storage.photoPaths, []);
   assert.doesNotMatch(postContent, /^title:/m);
   assert.match(postContent, /date: 2026-05-14 10:30:00/);
   assert.match(postContent, /telegram_message_id: 501/);
@@ -1425,6 +1430,13 @@ test('runTelegramSync writes a /随想 image caption into source/_posts with dow
   assert.deepEqual(downloadedFileIds, ['photo-large']);
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].kind, 'thought');
+  assert.equal(
+    persistedBatches[0].thought.storage.markdownPath,
+    'source/_posts/2026-05-14-telegram-thought-502.md',
+  );
+  assert.deepEqual(persistedBatches[0].thought.storage.photoPaths, [
+    '/images/thoughts/2026/05/2026-05-14-telegram-thought-502-1.jpg',
+  ]);
   assert.match(postContent, /photos:\n  - \/images\/thoughts\/2026\/05\/2026-05-14-telegram-thought-502-1\.jpg/);
   assert.match(postContent, /今天深蹲动作轨迹更稳了/);
   assert.equal(await readFile(imagePath, 'utf8'), 'fake image content');
@@ -1622,6 +1634,11 @@ telegram_chat_id: 42
   assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].kind, 'thought_edit');
+  assert.equal(
+    persistedBatches[0].thoughtEdit.storage.markdownPath,
+    'source/_posts/2026-05-17-telegram-thought-126.md',
+  );
+  assert.deepEqual(persistedBatches[0].thoughtEdit.storage.photoPaths, []);
   assert.match(postContent, /今天骑行 40 公里，动作更顺/);
   assert.doesNotMatch(postContent, /旧正文/);
 });
@@ -1886,6 +1903,13 @@ photos:
   assert.equal(result.batchResults[0].thoughtWriteStatus, 'deleted');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].kind, 'thought_delete');
+  assert.equal(
+    persistedBatches[0].thoughtDelete.storage.markdownPath,
+    'source/_posts/2026-05-17-telegram-thought-126.md',
+  );
+  assert.deepEqual(persistedBatches[0].thoughtDelete.storage.deletedPhotoPaths, [
+    '/images/thoughts/2026/05/2026-05-17-telegram-thought-126-1.jpg',
+  ]);
   await assert.rejects(
     readFile(path.join(postsDir, '2026-05-17-telegram-thought-126.md'), 'utf8'),
     /ENOENT/,

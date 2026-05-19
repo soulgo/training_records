@@ -136,7 +136,9 @@ export async function persistNormalizedBatch(options) {
     await upsertIngestMessages(client, batch, processedAt);
     await upsertIngestRecognitions(client, batch, processedAt);
 
-    if (batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
+    if (isThoughtBatchKind(batch.kind) && batch.status === 'ready') {
+      await persistThoughtMirror(client, batch, processedAt);
+    } else if (batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
       const existingDay = await readCoreDay(client, batch.archivedDate);
       const mergedDay = mergeBatchIntoDay(existingDay, batch);
       await replaceCoreDay(client, mergedDay, batch.batchId, processedAt);
@@ -724,6 +726,175 @@ async function upsertIngestRecognitions(client, batch, processedAt) {
   }
 }
 
+async function persistThoughtMirror(client, batch, processedAt) {
+  if (getThoughtStorageWriteStatus(batch) === 'not_found') {
+    return;
+  }
+
+  if (batch.kind === 'thought') {
+    await upsertThoughtMirror(client, {
+      messageId: batch.thought?.telegramMessageId,
+      chatId: batch.thought?.telegramChatId,
+      sourceBatchId: batch.batchId,
+      command: batch.thought?.command ?? '/thought',
+      body: batch.thought?.body ?? '',
+      tags: batch.thought?.tags ?? ['训练', '随想', 'Telegram'],
+      messageDateUnix: batch.thought?.messageDateUnix ?? null,
+      markdownPath: batch.thought?.storage?.markdownPath ?? null,
+      imageRefs: batch.thought?.storage?.photoPaths ?? [],
+      status: 'active',
+      processedAt,
+    });
+    return;
+  }
+
+  if (batch.kind === 'thought_edit') {
+    await upsertThoughtMirror(client, {
+      messageId: batch.thoughtEdit?.targetMessageId,
+      chatId: batch.thoughtEdit?.telegramChatId,
+      sourceBatchId: batch.batchId,
+      command: batch.thoughtEdit?.command ?? '/thought',
+      body: batch.thoughtEdit?.body ?? '',
+      tags: ['训练', '随想', 'Telegram'],
+      messageDateUnix: batch.thoughtEdit?.messageDateUnix ?? null,
+      markdownPath: batch.thoughtEdit?.storage?.markdownPath ?? null,
+      imageRefs: batch.thoughtEdit?.storage?.photoPaths ?? null,
+      status: 'active',
+      processedAt,
+    });
+    return;
+  }
+
+  if (batch.kind === 'thought_delete') {
+    await markThoughtMirrorDeleted(client, {
+      messageId: batch.thoughtDelete?.targetMessageId,
+      chatId: batch.thoughtDelete?.telegramChatId,
+      sourceBatchId: batch.batchId,
+      command: batch.thoughtDelete?.command ?? '/随想删',
+      messageDateUnix: batch.thoughtDelete?.messageDateUnix ?? null,
+      markdownPath: batch.thoughtDelete?.storage?.markdownPath ?? null,
+      deletedImageRefs: batch.thoughtDelete?.storage?.deletedPhotoPaths ?? [],
+      processedAt,
+    });
+  }
+}
+
+function getThoughtStorageWriteStatus(batch) {
+  if (batch.kind === 'thought') {
+    return batch.thought?.storage?.writeStatus ?? null;
+  }
+  if (batch.kind === 'thought_edit') {
+    return batch.thoughtEdit?.storage?.writeStatus ?? null;
+  }
+  if (batch.kind === 'thought_delete') {
+    return batch.thoughtDelete?.storage?.writeStatus ?? null;
+  }
+  return null;
+}
+
+async function upsertThoughtMirror(client, thought) {
+  const messageId = normalizePositiveInteger(thought.messageId);
+  if (!messageId) {
+    return;
+  }
+
+  await client.query(
+    `
+      insert into core.thought (
+        telegram_message_id,
+        telegram_chat_id,
+        source_batch_id,
+        command,
+        body,
+        tags_json,
+        message_date_unix,
+        markdown_path,
+        image_refs_json,
+        status,
+        deleted_at,
+        updated_at
+      )
+      values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, coalesce($9::jsonb, '[]'::jsonb), $10, null, $11)
+      on conflict (telegram_message_id) do update set
+        telegram_chat_id = coalesce(excluded.telegram_chat_id, core.thought.telegram_chat_id),
+        source_batch_id = excluded.source_batch_id,
+        command = excluded.command,
+        body = excluded.body,
+        tags_json = excluded.tags_json,
+        message_date_unix = coalesce(excluded.message_date_unix, core.thought.message_date_unix),
+        markdown_path = coalesce(excluded.markdown_path, core.thought.markdown_path),
+        image_refs_json = case
+          when $9::jsonb is null then core.thought.image_refs_json
+          else excluded.image_refs_json
+        end,
+        status = excluded.status,
+        deleted_at = null,
+        updated_at = excluded.updated_at
+    `,
+    [
+      messageId,
+      normalizeBigIntValue(thought.chatId),
+      thought.sourceBatchId ?? null,
+      thought.command ?? '/thought',
+      String(thought.body ?? '').trim(),
+      JSON.stringify(thought.tags ?? ['训练', '随想', 'Telegram']),
+      normalizeBigIntValue(thought.messageDateUnix),
+      thought.markdownPath ?? null,
+      Array.isArray(thought.imageRefs) ? JSON.stringify(thought.imageRefs) : null,
+      thought.status ?? 'active',
+      thought.processedAt.toISOString(),
+    ],
+  );
+}
+
+async function markThoughtMirrorDeleted(client, thought) {
+  const messageId = normalizePositiveInteger(thought.messageId);
+  if (!messageId) {
+    return;
+  }
+
+  const imageRefs = Array.isArray(thought.deletedImageRefs)
+    ? JSON.stringify(thought.deletedImageRefs)
+    : JSON.stringify([]);
+  await client.query(
+    `
+      insert into core.thought (
+        telegram_message_id,
+        telegram_chat_id,
+        source_batch_id,
+        command,
+        body,
+        tags_json,
+        message_date_unix,
+        markdown_path,
+        image_refs_json,
+        status,
+        deleted_at,
+        updated_at
+      )
+      values ($1, $2, $3, $4, '', '["训练","随想","Telegram"]'::jsonb, $5, $6, $7::jsonb, 'deleted', $8, $9)
+      on conflict (telegram_message_id) do update set
+        telegram_chat_id = coalesce(excluded.telegram_chat_id, core.thought.telegram_chat_id),
+        source_batch_id = excluded.source_batch_id,
+        command = excluded.command,
+        status = excluded.status,
+        deleted_at = excluded.deleted_at,
+        updated_at = excluded.updated_at
+    `,
+    [
+      messageId,
+      normalizeBigIntValue(thought.chatId),
+      thought.sourceBatchId ?? null,
+      thought.command ?? '/随想删',
+      normalizeBigIntValue(thought.messageDateUnix),
+      thought.markdownPath ?? null,
+      imageRefs,
+      thought.processedAt.toISOString(),
+      thought.processedAt.toISOString(),
+    ],
+  );
+}
+
 async function readCoreDay(client, archivedDate) {
   const dayResult = await client.query(
     `
@@ -1097,6 +1268,20 @@ function hasNutritionPayload(nutrition) {
     nutrition?.totalCalories !== null ||
     (nutrition?.details?.length ?? 0) > 0
   );
+}
+
+function isThoughtBatchKind(kind) {
+  return kind === 'thought' || kind === 'thought_edit' || kind === 'thought_delete';
+}
+
+function normalizePositiveInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function normalizeBigIntValue(value) {
+  const number = Number(value);
+  return Number.isInteger(number) ? number : null;
 }
 
 function countActivitiesByType(activities) {

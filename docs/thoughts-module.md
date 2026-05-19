@@ -8,6 +8,7 @@
 
 - 随想列表页：`/thoughts/`
 - Telegram 命令 `/thought 正文` 和 `/随想 正文` 的自动归档，支持图片 caption
+- PostgreSQL 正文镜像：`core.thought` 保存正文、Telegram 元数据、Markdown 路径和有序图片引用；图片文件仍在本地目录
 
 相关实现文件：
 
@@ -17,6 +18,8 @@
 - `themes/cactus/layout/_partial/post/title.ejs`
 - `tools/telegram-sync-lib.mjs`
 - `tools/telegram-sync.mjs`
+- `tools/training-db-core.mjs`
+- `sql/pgsql17.sql`
 
 ## 2. 页面展示规则
 
@@ -176,6 +179,9 @@ photos:
 source/images/thoughts/YYYY/MM/YYYY-MM-DD-telegram-thought-<messageId>-<index>.<ext>
 ```
 
+- PostgreSQL 只保存图片引用，例如 `/images/thoughts/YYYY/MM/...jpg`；不保存图片二进制
+- 后续迁移到腾讯云 OSS 时，正文 schema 不需要变化，只需要把图片写入后端和引用生成逻辑换成对象键或 URL
+
 ### 3.7 当前不会生成 `title`
 
 这是当前实现里最容易被误判的点：
@@ -202,14 +208,14 @@ source/images/thoughts/YYYY/MM/YYYY-MM-DD-telegram-thought-<messageId>-<index>.<
 - `/thought` / `/随想` 批次：
   - 不走 AI 图片识别
   - 不写 `训练记录.md`
-  - 直接写 `source/_posts`
+  - 写 `source/_posts` 作为当前 Markdown 兼容层
   - 若带图，同时写 `source/images/thoughts`
-  - 然后尝试写 PostgreSQL
+  - 然后尝试把随想正文、Telegram 元数据、Markdown 路径和图片引用镜像到 PostgreSQL `core.thought`
   - 如果 PostgreSQL 失败，保留已写出的 Markdown，并写入 `runtime/telegram-sync-pending.ndjson` 等待重放
-  - 编辑原消息时会更新已有 Markdown 正文
-  - 回复已有随想并发送 `/thought` / `/随想` 修订版时，也会更新已有 Markdown 正文
-  - 发送 `/随想编 <id> <正文>` 会按 ID 更新已有 Markdown；如果带图，会替换原图片
-  - 删除命令会删除对应 Markdown；若 front matter 里有 `photos`，会一起删除对应图片文件
+  - 编辑原消息时会更新已有 Markdown 正文，并同步更新 `core.thought.body`
+  - 回复已有随想并发送 `/thought` / `/随想` 修订版时，也会更新已有 Markdown 正文和 DB 正文
+  - 发送 `/随想编 <id> <正文>` 会按 ID 更新已有 Markdown；如果带图，会替换原图片并更新 DB 图片引用
+  - 删除命令会删除对应 Markdown；若 front matter 里有 `photos`，会一起删除对应图片文件；DB 中对应行标记为 `deleted`
 
 - `/analysis` / `/分析` 批次：
   - 不走 AI 图片识别

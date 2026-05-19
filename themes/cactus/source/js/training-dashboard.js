@@ -4,16 +4,30 @@
     const data = JSON.parse(payload.textContent);
     const charts = data.charts || {};
 
-    const labels = (charts.weightKg || []).map((point) => point.date.slice(5));
+    const labels = (charts.weightKg || []).map((point) => point.date);
     const weightValues = (charts.weightKg || []).map((point) => point.value);
     const bodyFatValues = (charts.bodyFatPct || []).map((point) => point.value);
     const muscleValues = (charts.skeletalMuscleKg || []).map((point) => point.value);
     const intakeValues = (charts.intakeCalories || []).map((point) => point.value);
     const trainingValues = (charts.trainingCalories || []).map((point) => point.value);
-    const cyclingLabels = (charts.cyclingDistanceKm || []).map((point) => point.date.slice(5));
+    const cyclingLabels = (charts.cyclingDistanceKm || []).map((point) => point.date);
     const cyclingValues = (charts.cyclingDistanceKm || []).map((point) => point.value);
 
-    const commonOptions = {
+    function shortDateLabel(date) {
+      return String(date || '').slice(5);
+    }
+
+    function shouldShowDateTick(index, total) {
+      if (total <= 10) {
+        return true;
+      }
+
+      const interval = Math.ceil(total / 8);
+      return index === 0 || index === total - 1 || index % interval === 0;
+    }
+
+    function makeCommonOptions() {
+      return {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
@@ -23,11 +37,31 @@
             boxWidth: 10,
           },
         },
+        tooltip: {
+          callbacks: {
+            title(items) {
+              return items?.[0]?.label || '';
+            },
+          },
+        },
       },
       scales: {
         x: {
           grid: {
             display: false,
+          },
+          ticks: {
+            autoSkip: false,
+            callback(value, index, ticks) {
+              const total = ticks?.length || 0;
+              if (!shouldShowDateTick(index, total)) {
+                return '';
+              }
+              const label = typeof this.getLabelForValue === 'function'
+                ? this.getLabelForValue(value)
+                : value;
+              return shortDateLabel(label);
+            },
           },
         },
         y: {
@@ -37,6 +71,7 @@
         },
       },
     };
+    }
 
     new Chart(document.getElementById('weight-chart'), {
       type: 'line',
@@ -52,7 +87,7 @@
           pointRadius: 3,
         }],
       },
-      options: commonOptions,
+      options: makeCommonOptions(),
     });
 
     new Chart(document.getElementById('composition-chart'), {
@@ -77,13 +112,13 @@
           pointRadius: 3,
         }],
       },
-      options: commonOptions,
+      options: makeCommonOptions(),
     });
 
     new Chart(document.getElementById('calorie-chart'), {
       type: 'bar',
       data: {
-        labels: (charts.intakeCalories || []).map((point) => point.date.slice(5)),
+        labels: (charts.intakeCalories || []).map((point) => point.date),
         datasets: [{
           label: '饮食摄入 (kcal)',
           data: intakeValues,
@@ -94,7 +129,7 @@
           backgroundColor: '#14b8a6',
         }],
       },
-      options: commonOptions,
+      options: makeCommonOptions(),
     });
 
     new Chart(document.getElementById('cycling-chart'), {
@@ -111,7 +146,7 @@
           pointRadius: 3,
         }],
       },
-      options: commonOptions,
+      options: makeCommonOptions(),
     });
   }
 

@@ -116,6 +116,174 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls.at(-1)[0], 'end');
 });
 
+test('persistNormalizedBatch mirrors thought create, edit, and delete batches into core.thought', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash\s+from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+  const env = {
+    TRAINING_DB_ENABLED: 'true',
+    TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+  };
+  const processedAt = new Date('2026-05-14T03:00:00.000Z');
+
+  await persistNormalizedBatch({
+    batch: {
+      kind: 'thought',
+      batchId: 'thought-501',
+      status: 'ready',
+      archivedDate: null,
+      warnings: [],
+      issues: [],
+      confidence: 1,
+      updateIds: [901],
+      recognitions: [],
+      messages: [
+        {
+          updateId: 901,
+          messageId: 501,
+          mediaGroupId: null,
+          chatId: 42,
+          caption: '',
+          text: '/thought 今天训练后臀部发力更明显',
+          dateUnix: 1778725800,
+          photos: [],
+        },
+      ],
+      thought: {
+        command: '/thought',
+        body: '今天训练后臀部发力更明显',
+        tags: ['训练', '随想', 'Telegram'],
+        telegramMessageId: 501,
+        telegramChatId: 42,
+        messageDateUnix: 1778725800,
+        storage: {
+          markdownPath: 'source/_posts/2026-05-14-telegram-thought-501.md',
+          photoPaths: ['/images/thoughts/2026/05/2026-05-14-telegram-thought-501-1.jpg'],
+        },
+      },
+    },
+    env,
+    createClient() {
+      return fakeClient;
+    },
+    processedAt,
+  });
+
+  await persistNormalizedBatch({
+    batch: {
+      kind: 'thought_edit',
+      batchId: 'thought-edit-132',
+      status: 'ready',
+      archivedDate: null,
+      warnings: [],
+      issues: [],
+      confidence: 1,
+      updateIds: [902],
+      recognitions: [],
+      messages: [
+        {
+          updateId: 902,
+          messageId: 132,
+          mediaGroupId: null,
+          chatId: 42,
+          caption: '/随想编 501 更新后的正文',
+          text: '',
+          dateUnix: 1778812200,
+          photos: [],
+        },
+      ],
+      thoughtEdit: {
+        command: '/随想编',
+        targetMessageId: 501,
+        body: '更新后的正文',
+        replacePhotos: false,
+        telegramChatId: 42,
+        messageDateUnix: 1778812200,
+        storage: {
+          markdownPath: 'source/_posts/2026-05-14-telegram-thought-501.md',
+          photoPaths: [],
+        },
+      },
+    },
+    env,
+    createClient() {
+      return fakeClient;
+    },
+    processedAt,
+  });
+
+  await persistNormalizedBatch({
+    batch: {
+      kind: 'thought_delete',
+      batchId: 'thought-delete-801',
+      status: 'ready',
+      archivedDate: null,
+      warnings: [],
+      issues: [],
+      confidence: 1,
+      updateIds: [903],
+      recognitions: [],
+      messages: [
+        {
+          updateId: 903,
+          messageId: 801,
+          mediaGroupId: null,
+          chatId: 42,
+          caption: '',
+          text: '/随想删 501',
+          dateUnix: 1778898600,
+          photos: [],
+        },
+      ],
+      thoughtDelete: {
+        command: '/随想删',
+        targetMessageId: 501,
+        telegramChatId: 42,
+        messageDateUnix: 1778898600,
+        storage: {
+          markdownPath: 'source/_posts/2026-05-14-telegram-thought-501.md',
+          deletedPhotoPaths: ['/images/thoughts/2026/05/2026-05-14-telegram-thought-501-1.jpg'],
+        },
+      },
+    },
+    env,
+    createClient() {
+      return fakeClient;
+    },
+    processedAt,
+  });
+
+  const thoughtWrites = calls.filter(
+    ([sql]) => typeof sql === 'string' && /insert into core\.thought/i.test(sql),
+  );
+  assert.equal(thoughtWrites.length, 3);
+  assert.equal(thoughtWrites[0][1][0], 501);
+  assert.equal(thoughtWrites[0][1][4], '今天训练后臀部发力更明显');
+  assert.equal(thoughtWrites[0][1][7], 'source/_posts/2026-05-14-telegram-thought-501.md');
+  assert.deepEqual(JSON.parse(thoughtWrites[0][1][8]), [
+    '/images/thoughts/2026/05/2026-05-14-telegram-thought-501-1.jpg',
+  ]);
+  assert.equal(thoughtWrites[1][1][4], '更新后的正文');
+  assert.equal(thoughtWrites[1][1][8], '[]');
+  assert.match(thoughtWrites[2][0], /status = excluded\.status/i);
+  assert.deepEqual(JSON.parse(thoughtWrites[2][1][6]), [
+    '/images/thoughts/2026/05/2026-05-14-telegram-thought-501-1.jpg',
+  ]);
+});
+
 test('getLastProcessedTelegramUpdateId reads the max update id from ingest records', async () => {
   const fakeClient = {
     async connect() {},
