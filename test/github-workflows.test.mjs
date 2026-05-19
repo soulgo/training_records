@@ -38,6 +38,13 @@ test('deploy-pages workflow reconciles committed markdown before building the si
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.TRAINING_DB_URL\s*\}\}/);
 });
 
+test('deploy-pages workflow backfills telegram thought markdown before tests', async () => {
+  const workflow = await readWorkflow('.github/workflows/deploy-pages.yml');
+
+  assert.match(workflow, /- name: Backfill thought markdown back to core/);
+  assert.match(workflow, /run:\s*npm run backfill:thoughts/);
+});
+
 test('telegram-sync workflow validates changes and deploys Pages after sync commits', async () => {
   const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
 
@@ -73,6 +80,7 @@ test('telegram-sync workflow skips full database maintenance on webhook dispatch
   for (const stepName of [
     'Backfill core from archive snapshot',
     'Reconcile committed markdown back to core',
+    'Backfill thought markdown back to core',
     'Export markdown from database snapshot',
   ]) {
     assert.match(
