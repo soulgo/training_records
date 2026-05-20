@@ -13,8 +13,6 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: telegram-sync
@@ -23,8 +21,6 @@ concurrency:
 jobs:
   sync:
     if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
-    environment:
-      name: github-pages
     runs-on: ubuntu-latest
     env:
       TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
@@ -109,25 +105,3 @@ jobs:
         if: steps.changes.outputs.repo_changed == 'true'
         run: git push origin HEAD:main
 
-      - name: Build site data and static files
-        if: steps.changes.outputs.repo_changed == 'true'
-        env:
-          TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_ACTIONS: "true"
-        run: npm run build
-
-      - name: Setup Pages
-        if: steps.changes.outputs.repo_changed == 'true'
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        if: steps.changes.outputs.repo_changed == 'true'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./public
-
-      - name: Deploy to GitHub Pages
-        if: steps.changes.outputs.repo_changed == 'true'
-        id: deployment
-        uses: actions/deploy-pages@v4

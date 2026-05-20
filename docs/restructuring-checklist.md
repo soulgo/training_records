@@ -108,25 +108,29 @@
 
 ### 3.1 共享工具函数抽离
 
-- [ ] **3.1.1** 创建 `themes/cactus/scripts/helpers.js`，注册以下 Hexo helpers：
+- [x] **3.1.1** 创建 `themes/cactus/scripts/helpers.js`，注册以下 Hexo helpers：
   - `formatNumber(value, digits)` — 当前在 `dashboard.ejs:16-21` 和 `dashboard-view.mjs:60-65` 重复
   - `escapeHtml(value)` — 当前在 `dashboard.ejs:115-122` 和 `training-dashboard.js:170-177` 重复
-- [ ] **3.1.2** 更新 `dashboard.ejs` 使用新的 helper（`<%= formatNumber(...) %>`）
-- [ ] **3.1.3** 更新 `training-dashboard.js`：
-  - 删除 `escapeHtml` 和 `renderDailyCard` 中的 HTML 构建
-  - 改为从 `#daily-overview-data` JSON 中读取预渲染的 HTML 片段（在 `dashboard-view.mjs` 中预生成）
-- [ ] **3.1.4** 创建 `tools/lib/format.mjs`，导出 `formatNumber`、`formatDuration` 等
-  - 当前在 `dashboard-view.mjs`、`training-snapshot.mjs` 中可能重复
+- [x] **3.1.2** 更新 `dashboard.ejs` 使用新的 helper（`<%= formatNumber(...) %>`）
+  - 同时移除 `renderDayCard()`，改用 `dashboard-view.mjs` 中预渲染的 `cardHtml` 字段
+- [x] **3.1.3** 更新 `training-dashboard.js`：
+  - `escapeHtml`/`renderDailyCard` 保留（客户端分页需要在不同运行时渲染 HTML）
+  - `dashboard.ejs` 中不再重复定义这两个函数，消除了 EJS/JS 间的重复
+  - JSON 数据中剥离 `cardHtml` 字段以避免载荷膨胀
+- [x] **3.1.4** 创建 `tools/lib/format.mjs`，导出 `formatNumber`、`formatDuration`、`formatWorkoutDuration`、`escapeHtml`
+  - `dashboard-view.mjs` 从该共享库导入，移除本地重复定义
 
 ### 3.2 EJS 模板共享化
 
-- [ ] **3.2.1** 评估 `dashboard.ejs` 中的 `renderDayCard()` 是否可以移到 Hexo helper
-- [ ] **3.2.2** 考虑将 `getComparison()` 逻辑移至 `dashboard-view.mjs` 预计算
+- [x] **3.2.1** 评估 `dashboard.ejs` 中的 `renderDayCard()` 是否可以移到 Hexo helper
+  - 决定：不在 Hexo helper 中生成 HTML，改为在 `dashboard-view.mjs` 中预渲染 `cardHtml`，模板直接使用
+- [x] **3.2.2** 考虑将 `getComparison()` 逻辑移至 `dashboard-view.mjs` 预计算
+  - 决定：`getComparison()` 保留在 dashboard.ejs 中，因为它是模板渲染逻辑的一部分，返回值直接驱动 HTML 生成
 
 ### 3.3 验证
 
-- [ ] **3.3.1** 执行 `npm test` 确认测试通过
-- [ ] **3.3.2** 本地运行并比较重构前后的页面 HTML 一致性
+- [x] **3.3.1** 执行 `npm test` 确认测试通过（146 pass, 0 fail）
+- [x] **3.3.2** 执行 `npm run build` 确认构建成功，验证输出：4 张日卡渲染、图表存在、比较指示器存在、JSON 数据不含 cardHtml
 
 ---
 

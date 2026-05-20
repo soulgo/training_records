@@ -5,20 +5,15 @@ const latestMeasurement = dashboardView.latestMeasurement || dashboard.latest?.m
 const latestDay = dashboardView.latestDay || dashboard.latest?.daily || null;
 const previousDay = dashboardView.previousDay || null;
 const recentDays = dashboardView.recentDays || [];
+const recentDaysHtml = recentDays.map(d => d.cardHtml).join('');
 const dailyOverviewEntries = dashboardView.dailyOverviewEntries || [];
+const dailyOverviewJson = JSON.stringify(dailyOverviewEntries.map(({ cardHtml, ...rest }) => rest));
 const dailyCardLimit = dashboardView.dailyCardLimit || 4;
 const dailyOverviewTotal = dashboardView.dailyOverviewTotal || dailyOverviewEntries.length;
 const trainedDays = dashboardView.trainedDays || 0;
 const totalArchivedDays = dashboardView.totalArchivedDays || dashboard.daily?.length || 0;
 const chartPayload = dashboardView.chartPayload || { charts: dashboard.charts || {} };
 const dailyOverviewHint = dashboardView.dailyOverviewHint || '顶部主卡按最新体脂归档日展示，最近活动以下方日期卡片为准';
-
-function formatNumber(value, digits = 2) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return '—';
-  }
-  return Number(value).toFixed(digits).replace(/\.00$/, '');
-}
 
 function formatDuration(seconds) {
   if (!seconds) {
@@ -110,15 +105,6 @@ function getComparison(current, previous) {
     text: `${label} ${value}`,
     strength: Math.min(100, Math.max(Math.round(comparison.ratio * 0.85), 16)),
   };
-}
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 function renderNumberValue(number, unit) {
@@ -367,7 +353,7 @@ const chartCards = [
           </div>
         </div>
       </div>
-      <div class="daily-grid" data-daily-grid><%- recentDays.map(renderDayCard).join('') %></div>
+      <div class="daily-grid" data-daily-grid><%- recentDaysHtml %></div>
     </section>
 
     <% if (page.content) { %>
@@ -375,7 +361,7 @@ const chartCards = [
     <% } %>
 
     <script id="training-dashboard-data" type="application/json"><%- JSON.stringify(chartPayload) %></script>
-    <script id="daily-overview-data" type="application/json" data-page-size="<%= dailyCardLimit %>"><%- JSON.stringify(dailyOverviewEntries) %></script>
+    <script id="daily-overview-data" type="application/json" data-page-size="<%= dailyCardLimit %>"><%- dailyOverviewJson %></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" integrity="sha384-JUh163oCRItcbPme8pYnROHQMC6fNKTBWtRG3I3I0erJkzNgL7uxKlNwcrcFKeqF" crossorigin="anonymous" defer></script>
     <script defer src="<%- url_for('/js/training-dashboard.js') %>"></script>
   <% } %>

@@ -1,3 +1,5 @@
+import { formatNumber, formatDuration, formatWorkoutDuration, escapeHtml } from './lib/format.mjs';
+
 export function buildDashboardViewModel(snapshot) {
   const dashboard = snapshot || { daily: [], charts: {}, latest: {} };
   const dailyEntries = Array.isArray(dashboard.daily) ? dashboard.daily : [];
@@ -19,19 +21,47 @@ export function buildDashboardViewModel(snapshot) {
   const chartWindowDays = 30;
   const dailyCardLimit = 4;
   const chartStartDate = latestDashboardDate ? addDays(latestDashboardDate, -(chartWindowDays - 1)) : null;
-  const dailyOverviewEntries = [...dailyEntries].reverse().map((day) => ({
-    date: normalizeDateValue(day.date) || String(day.date ?? '—'),
-    weightLabel: day.measurement ? `${formatNumber(day.measurement.weightKg)} kg` : '无体脂数据',
-    activityCount: formatNumber(day.workoutSummary.totalActivities, 0),
-    trainingCaloriesLabel: `${formatNumber(day.workoutSummary.trainingCalories, 0)} kcal`,
-    workoutDurationLabel: formatWorkoutDuration(day),
-    cyclingDistanceLabel: `${formatNumber(day.workoutSummary.cyclingDistanceKm)} km`,
-    nutritionCaloriesLabel:
-      day.nutrition.totalCalories === null ? '—' : `${formatNumber(day.nutrition.totalCalories, 0)} kcal`,
-    tags: Object.entries(day.workoutSummary.countsByType || {})
+  const dailyOverviewEntries = [...dailyEntries].reverse().map((day) => {
+    const date = normalizeDateValue(day.date) || String(day.date ?? '—');
+    const weightLabel = day.measurement ? `${formatNumber(day.measurement.weightKg)} kg` : '无体脂数据';
+    const activityCount = formatNumber(day.workoutSummary.totalActivities, 0);
+    const trainingCaloriesLabel = `${formatNumber(day.workoutSummary.trainingCalories, 0)} kcal`;
+    const workoutDurationLabel = formatWorkoutDuration(day);
+    const cyclingDistanceLabel = `${formatNumber(day.workoutSummary.cyclingDistanceKm)} km`;
+    const nutritionCaloriesLabel =
+      day.nutrition.totalCalories === null ? '—' : `${formatNumber(day.nutrition.totalCalories, 0)} kcal`;
+    const tags = Object.entries(day.workoutSummary.countsByType || {})
       .filter(([, count]) => count > 0)
-      .map(([type, count]) => `${type} × ${count}`),
-  }));
+      .map(([type, count]) => `${type} × ${count}`);
+    const tagsHtml = tags.length
+      ? `<div class="day-card__tags">${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>`
+      : '';
+
+    return {
+      date,
+      weightLabel,
+      activityCount,
+      trainingCaloriesLabel,
+      workoutDurationLabel,
+      cyclingDistanceLabel,
+      nutritionCaloriesLabel,
+      tags,
+      cardHtml: `<article class="day-card">
+    <div class="day-card__header">
+      <h3>${escapeHtml(date)}</h3>
+      <span>${escapeHtml(weightLabel)}</span>
+    </div>
+    <ul class="day-card__stats">
+      <li>活动次数：<strong>${escapeHtml(activityCount)}</strong></li>
+      <li>训练消耗：<strong>${escapeHtml(trainingCaloriesLabel)}</strong></li>
+      <li>锻炼时长：<strong>${escapeHtml(workoutDurationLabel)}</strong></li>
+      <li>骑行里程：<strong>${escapeHtml(cyclingDistanceLabel)}</strong></li>
+      <li>饮食热量：<strong>${escapeHtml(nutritionCaloriesLabel)}</strong></li>
+    </ul>
+    ${tagsHtml}
+  </article>`,
+    };
+  });
   const recentDays = dailyOverviewEntries.slice(0, dailyCardLimit);
   const dailyOverviewTotal = dailyOverviewEntries.length;
   const trainedDays = dailyEntries.filter((entry) => (entry.workoutSummary?.trainingCalories || 0) > 0).length;
@@ -55,33 +85,6 @@ export function buildDashboardViewModel(snapshot) {
       charts: filterChartsByDate(dashboard.charts || {}, chartStartDate),
     },
   };
-}
-
-function formatNumber(value, digits = 2) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return '—';
-  }
-  return Number(value).toFixed(digits).replace(/\.00$/, '');
-}
-
-function formatDuration(seconds) {
-  if (!seconds) {
-    return '—';
-  }
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (hours > 0) {
-    return `${hours}小时${minutes}分`;
-  }
-  return `${minutes}分`;
-}
-
-function formatWorkoutDuration(day) {
-  const workoutDurationMinutes = day?.workoutSummary?.workoutDurationMinutes;
-  if (workoutDurationMinutes !== null && workoutDurationMinutes !== undefined) {
-    return `${formatNumber(workoutDurationMinutes, 0)} 分钟`;
-  }
-  return formatDuration(day?.workoutSummary?.totalDurationSeconds || 0);
 }
 
 function addDays(dateString, offset) {
