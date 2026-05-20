@@ -1,9 +1,6 @@
 <%
 const dashboard = site.data.training || { daily: [], charts: {}, latest: {} };
-const dashboardViewData = site.data.dashboardView || {};
-const dashboardView = dashboardViewData.generatedAt === dashboard.generatedAt
-  ? dashboardViewData
-  : buildFallbackDashboardViewModel(dashboard);
+const dashboardView = site.data.dashboardView || {};
 const latestMeasurement = dashboardView.latestMeasurement || dashboard.latest?.measurement || null;
 const latestDay = dashboardView.latestDay || dashboard.latest?.daily || null;
 const previousDay = dashboardView.previousDay || null;
@@ -12,57 +9,9 @@ const dailyOverviewEntries = dashboardView.dailyOverviewEntries || [];
 const dailyCardLimit = dashboardView.dailyCardLimit || 4;
 const dailyOverviewTotal = dashboardView.dailyOverviewTotal || dailyOverviewEntries.length;
 const trainedDays = dashboardView.trainedDays || 0;
+const totalArchivedDays = dashboardView.totalArchivedDays || dashboard.daily?.length || 0;
 const chartPayload = dashboardView.chartPayload || { charts: dashboard.charts || {} };
 const dailyOverviewHint = dashboardView.dailyOverviewHint || '顶部主卡按最新体脂归档日展示，最近活动以下方日期卡片为准';
-
-function buildFallbackDashboardViewModel(inputDashboard) {
-  const latestMeasurementValue = inputDashboard.latest?.measurement || null;
-  const latestMeasurementDateValue = normalizeDateValue(latestMeasurementValue?.archivedDate);
-  const latestDayValue = latestMeasurementValue
-    ? inputDashboard.daily.find((entry) => normalizeDateValue(entry.date) === latestMeasurementDateValue) || inputDashboard.latest?.daily || null
-    : inputDashboard.latest?.daily || null;
-  const latestDayDateValue = normalizeDateValue(latestDayValue?.date);
-  const latestDayIndexValue = latestDayValue
-    ? inputDashboard.daily.findIndex((entry) => normalizeDateValue(entry.date) === latestDayDateValue)
-    : -1;
-  const previousDayValue = latestDayIndexValue > 0 ? inputDashboard.daily[latestDayIndexValue - 1] : null;
-  const latestDashboardDate = findLatestDashboardDate({
-    latestMeasurement: latestMeasurementValue,
-    latestDay: latestDayValue,
-    daily: inputDashboard.daily,
-  });
-  const chartWindowDaysValue = 30;
-  const dailyCardLimitValue = 4;
-  const chartStartDate = latestDashboardDate ? addDays(latestDashboardDate, -(chartWindowDaysValue - 1)) : null;
-  const dailyOverviewEntriesValue = [...(inputDashboard.daily || [])].reverse().map((day) => ({
-    date: normalizeDateValue(day.date) || String(day.date ?? '—'),
-    weightLabel: day.measurement ? `${formatNumber(day.measurement.weightKg)} kg` : '无体脂数据',
-    activityCount: formatNumber(day.workoutSummary.totalActivities, 0),
-    trainingCaloriesLabel: `${formatNumber(day.workoutSummary.trainingCalories, 0)} kcal`,
-    workoutDurationLabel: formatWorkoutDuration(day),
-    cyclingDistanceLabel: `${formatNumber(day.workoutSummary.cyclingDistanceKm)} km`,
-    nutritionCaloriesLabel:
-      day.nutrition.totalCalories === null ? '—' : `${formatNumber(day.nutrition.totalCalories, 0)} kcal`,
-    tags: Object.entries(day.workoutSummary.countsByType || {})
-      .filter(([, count]) => count > 0)
-      .map(([type, count]) => `${type} × ${count}`),
-  }));
-
-  return {
-    latestMeasurement: normalizeMeasurementDate(latestMeasurementValue),
-    latestDay: normalizeDayDate(latestDayValue),
-    previousDay: normalizeDayDate(previousDayValue),
-    dailyOverviewHint: '顶部主卡按最新体脂归档日展示，最近活动以下方日期卡片为准',
-    dailyCardLimit: dailyCardLimitValue,
-    dailyOverviewEntries: dailyOverviewEntriesValue,
-    recentDays: dailyOverviewEntriesValue.slice(0, dailyCardLimitValue),
-    dailyOverviewTotal: dailyOverviewEntriesValue.length,
-    trainedDays: (inputDashboard.daily || []).filter((entry) => (entry.workoutSummary?.trainingCalories || 0) > 0).length,
-    chartPayload: {
-      charts: filterChartsByDate(inputDashboard.charts || {}, chartStartDate),
-    },
-  };
-}
 
 function formatNumber(value, digits = 2) {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -101,87 +50,6 @@ function getWorkoutDurationValue(day) {
     return null;
   }
   return Number((totalDurationSeconds / 60).toFixed(2));
-}
-
-function formatDateLabel(value) {
-  return value ? value.slice(5) : '—';
-}
-
-function addDays(dateString, offset) {
-  const normalizedDate = normalizeDateValue(dateString);
-  if (!normalizedDate) {
-    return null;
-  }
-  const date = new Date(`${normalizedDate}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + offset);
-  return date.toISOString().slice(0, 10);
-}
-
-function filterChartsByDate(charts, startDate) {
-  return Object.fromEntries(
-    Object.entries(charts).map(([key, points]) => [
-      key,
-      (points || [])
-        .map((point) => {
-          const normalizedDate = normalizeDateValue(point?.date);
-          return normalizedDate ? { ...point, date: normalizedDate } : point;
-        })
-        .filter((point) => {
-          const normalizedDate = normalizeDateValue(point?.date);
-          return !startDate || (normalizedDate && normalizedDate >= startDate);
-        }),
-    ]),
-  );
-}
-
-function findLatestDashboardDate({ latestMeasurement, latestDay, daily }) {
-  return (
-    normalizeDateValue(latestMeasurement?.archivedDate) ||
-    normalizeDateValue(latestDay?.date) ||
-    [...(daily || [])].reverse().map((entry) => normalizeDateValue(entry?.date)).find(Boolean) ||
-    null
-  );
-}
-
-function normalizeDateValue(value) {
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value.toISOString().slice(0, 10);
-  }
-
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const match = value.trim().match(/^(\d{4}-\d{2}-\d{2})/);
-  if (!match) {
-    return null;
-  }
-
-  const date = new Date(`${match[1]}T00:00:00Z`);
-  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== match[1] ? null : match[1];
-}
-
-function normalizeMeasurementDate(measurement) {
-  if (!measurement) {
-    return measurement;
-  }
-
-  const archivedDate = normalizeDateValue(measurement.archivedDate);
-  return archivedDate ? { ...measurement, archivedDate } : measurement;
-}
-
-function normalizeDayDate(day) {
-  if (!day) {
-    return day;
-  }
-
-  const date = normalizeDateValue(day.date);
-  return {
-    ...day,
-    date: date || day.date,
-    measurement: normalizeMeasurementDate(day.measurement),
-    measurements: (day.measurements || []).map(normalizeMeasurementDate),
-  };
 }
 
 function calculateRatio(current, previous) {
@@ -325,7 +193,7 @@ const overviewStats = [
   },
   {
     label: '累计训练归档',
-    value: `${formatNumber(dashboard.daily?.length || 0, 0)} 天`,
+    value: `${formatNumber(totalArchivedDays, 0)} 天`,
     hint: '完整训练归档天数',
   },
 ];

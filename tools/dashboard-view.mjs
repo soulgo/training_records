@@ -35,6 +35,7 @@ export function buildDashboardViewModel(snapshot) {
   const recentDays = dailyOverviewEntries.slice(0, dailyCardLimit);
   const dailyOverviewTotal = dailyOverviewEntries.length;
   const trainedDays = dailyEntries.filter((entry) => (entry.workoutSummary?.trainingCalories || 0) > 0).length;
+  const totalArchivedDays = dailyEntries.length;
 
   return {
     generatedAt: dashboard.generatedAt ?? null,
@@ -49,6 +50,7 @@ export function buildDashboardViewModel(snapshot) {
     recentDays,
     dailyOverviewTotal,
     trainedDays,
+    totalArchivedDays,
     chartPayload: {
       charts: filterChartsByDate(dashboard.charts || {}, chartStartDate),
     },

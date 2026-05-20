@@ -1,16 +1,13 @@
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildTrainingSnapshot as buildTrainingSnapshotFromSource } from './training-snapshot.mjs';
+import { buildTrainingAnalysisPrompt } from './training-prompt.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
-const defaultAnalysisPromptPath = path.join(rootDir, 'prompts', 'training-analysis.md');
 const defaultQuestion = '请根据最近训练、体脂、饮食数据给出今天/明天的训练建议';
 const defaultTrainingGoal = '增肌减腹：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪；不追求单纯掉体重或局部减脂。';
-const fallbackAnalysisPrompt =
-  '你是训练数据分析助手。请围绕训练者长期目标并严格遵守用户指定的时间窗口，根据用户问题和训练数据摘要输出 Telegram 友好的中文短回复，包含数据结论、恢复风险、饮食观察、下一步行动。不要编造缺失数据，不做医疗诊断。';
 
 export async function generateTrainingAnalysisReply(options = {}) {
   const rawEnv = options.env ?? process.env;
@@ -24,7 +21,10 @@ export async function generateTrainingAnalysisReply(options = {}) {
       env: options.env ?? process.env,
       now: options.now,
     }));
-  const prompt = await loadTrainingAnalysisPrompt(options.env ?? process.env);
+  const prompt = await buildTrainingAnalysisPrompt({
+    env: options.env ?? process.env,
+    trainingGoal,
+  });
   const summary = buildTrainingAnalysisSummary(snapshot, options.now ?? new Date());
   const focus = inferTrainingAnalysisFocus(question);
   const content = await requestTrainingAnalysis({
@@ -45,15 +45,7 @@ export async function generateTrainingAnalysisReply(options = {}) {
 }
 
 export async function loadTrainingAnalysisPrompt(env = process.env) {
-  const promptPath = env.TRAINING_ANALYSIS_PROMPT_PATH?.trim() || defaultAnalysisPromptPath;
-
-  try {
-    const prompt = await readFile(promptPath, 'utf8');
-    const trimmed = prompt.trim();
-    return trimmed || fallbackAnalysisPrompt;
-  } catch {
-    return fallbackAnalysisPrompt;
-  }
+  return buildTrainingAnalysisPrompt({ env });
 }
 
 export function buildTrainingAnalysisSummary(snapshot, now = new Date()) {
@@ -108,52 +100,49 @@ export function inferTrainingAnalysisFocus(question) {
   const hasThirtyDayRequest = hasRecentThirtyDayRequest(normalized);
   const hasNearTermTrainingRequest = hasNearTermTrainingIntent(normalized);
 
+  // Returns compact focus: w=window, m=measurementTrend, q=timeframe, p=policy code.
+  // Policy codes map to full text in the system prompt (回答时间窗策略 section).
   if (hasSevenDayRequest && !hasThirtyDayRequest) {
     return {
-      primaryWindow: 'recent7',
-      primaryMeasurementTrend: 'measurementTrend7',
-      requestedTimeframe: '最近7天',
-      latestDaysRole: '仅用于核对最近几天的连续训练、饮食和恢复细节',
-      otherWindowPolicy: '不要引用 recent30 或 measurementTrend30，除非用户明确要求长期对比；若必须提及，只能标注为长期背景，不能写进主结论。',
+      w: 'recent7',
+      m: 'measurementTrend7',
+      q: '最近7天',
+      p: 'no_recent30',
     };
   }
 
   if (hasThirtyDayRequest && !hasSevenDayRequest) {
     return {
-      primaryWindow: 'recent30',
-      primaryMeasurementTrend: 'measurementTrend30',
-      requestedTimeframe: '最近30天',
-      latestDaysRole: '用于解释最近几天是否偏离30天趋势',
-      otherWindowPolicy: 'recent7 只能作为近期变化补充，不要替代30天主结论。',
+      w: 'recent30',
+      m: 'measurementTrend30',
+      q: '最近30天',
+      p: 'recent7_supplement',
     };
   }
 
   if (hasSevenDayRequest && hasThirtyDayRequest) {
     return {
-      primaryWindow: 'explicit_mixed',
-      primaryMeasurementTrend: 'explicit_mixed',
-      requestedTimeframe: '用户同时点名最近7天和最近30天',
-      latestDaysRole: '用于补充最近几天的执行细节',
-      otherWindowPolicy: '可以对比 recent7/recent30，但每个数字都必须标注对应时间窗。',
+      w: 'explicit_mixed',
+      m: 'explicit_mixed',
+      q: '用户同时点名最近7天和最近30天',
+      p: 'explicit_mixed',
     };
   }
 
   if (hasNearTermTrainingRequest) {
     return {
-      primaryWindow: 'recent7',
-      primaryMeasurementTrend: 'measurementTrend7',
-      requestedTimeframe: '今天/明天训练建议，以最近7天负荷和最近5天细节为主',
-      latestDaysRole: '重点用于判断今天或明天是否需要降强度、主动恢复或安排力量训练',
-      otherWindowPolicy: 'recent30 只能作为长期趋势背景，不要主动展开。',
+      w: 'recent7',
+      m: 'measurementTrend7',
+      q: '今天/明天训练建议',
+      p: 'near_term',
     };
   }
 
   return {
-    primaryWindow: 'recent7',
-    primaryMeasurementTrend: 'measurementTrend7',
-    requestedTimeframe: '未明确指定时间窗，默认以最近7天给可执行建议',
-    latestDaysRole: '用于补充最近几天的训练、摄入和体测细节',
-    otherWindowPolicy: 'recent30 只能作为长期趋势背景；如引用必须明确说“30天背景”。',
+    w: 'recent7',
+    m: 'measurementTrend7',
+    q: '默认最近7天',
+    p: 'default_recent7',
   };
 }
 
@@ -220,15 +209,9 @@ async function requestTrainingAnalysis({ env, prompt, question, trainingGoal, fo
         {
           role: 'user',
           content: [
-            `用户问题：${question}`,
-            '',
-            `训练者长期目标：${trainingGoal}`,
-            '',
-            '回答时间窗与证据约束：',
-            JSON.stringify(focus, null, 2),
-            '',
-            '训练数据摘要：',
-            JSON.stringify(summary, null, 2),
+            `Q: ${question}`,
+            `focus: ${JSON.stringify(focus)}`,
+            `data: ${JSON.stringify(summary)}`,
           ].join('\n'),
         },
       ],

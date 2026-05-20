@@ -4,24 +4,26 @@ import assert from 'node:assert/strict';
 import {
   generateTrainingAnalysisReply,
   inferTrainingAnalysisFocus,
+  loadTrainingAnalysisPrompt,
   normalizeTrainingGoal,
 } from '../tools/training-analysis.mjs';
 
 test('inferTrainingAnalysisFocus respects explicit recent-week requests', () => {
   const focus = inferTrainingAnalysisFocus('分析近一周训练及体脂数据，提供快速瘦腹建议。');
 
-  assert.equal(focus.primaryWindow, 'recent7');
-  assert.equal(focus.primaryMeasurementTrend, 'measurementTrend7');
-  assert.equal(focus.requestedTimeframe, '最近7天');
-  assert.match(focus.otherWindowPolicy, /不要引用 recent30/);
+  assert.equal(focus.w, 'recent7');
+  assert.equal(focus.m, 'measurementTrend7');
+  assert.equal(focus.q, '最近7天');
+  assert.equal(focus.p, 'no_recent30');
 });
 
 test('inferTrainingAnalysisFocus uses 30-day data only when requested', () => {
   const focus = inferTrainingAnalysisFocus('看一下最近30天训练和体脂趋势');
 
-  assert.equal(focus.primaryWindow, 'recent30');
-  assert.equal(focus.primaryMeasurementTrend, 'measurementTrend30');
-  assert.equal(focus.requestedTimeframe, '最近30天');
+  assert.equal(focus.w, 'recent30');
+  assert.equal(focus.m, 'measurementTrend30');
+  assert.equal(focus.q, '最近30天');
+  assert.equal(focus.p, 'recent7_supplement');
 });
 
 test('normalizeTrainingGoal defaults to muscle gain and belly-fat reduction', () => {
@@ -75,12 +77,21 @@ test('generateTrainingAnalysisReply sends time-window constraints to the model',
 
   assert.equal(requestPayload.model, 'gpt-test');
   const userMessage = requestPayload.messages.find((message) => message.role === 'user');
-  assert.match(userMessage.content, /训练者长期目标：增肌减腹/);
-  assert.match(userMessage.content, /回答时间窗与证据约束/);
-  assert.match(userMessage.content, /"primaryWindow": "recent7"/);
-  assert.match(userMessage.content, /"primaryMeasurementTrend": "measurementTrend7"/);
-  assert.match(userMessage.content, /不要引用 recent30/);
+  assert.match(userMessage.content, /focus:/);
+  assert.match(userMessage.content, /"w"\s*:\s*"recent7"/);
+  assert.match(userMessage.content, /"m"\s*:\s*"measurementTrend7"/);
+  assert.match(userMessage.content, /"p"\s*:\s*"no_recent30"/);
   assert.match(reply, /近7天训练稳定/);
+});
+
+test('loadTrainingAnalysisPrompt reads the compiled prompt by default', async () => {
+  const prompt = await loadTrainingAnalysisPrompt({
+    TRAINING_ANALYSIS_PROMPT_PATH: '',
+  });
+
+  assert.match(prompt, /训练数据分析助手/);
+  assert.match(prompt, /## 输出要求/);
+  assert.match(prompt, /## 回答时间窗策略（focus\.p 代码对照）/);
 });
 
 function buildSyntheticSnapshot() {

@@ -1,0 +1,29 @@
+{
+  "_description": "Shared rules referenced by both recognition and analysis prompts. Edit here, then regenerate prompts via `node tools/prompt-generator.mjs`.",
+
+  "nullConventions": {
+    "title": "空值约定",
+    "rules": [
+      "- schema 中要求存在的字段必须全部出现。",
+      "- 没有对应内容时：对象用 `null`，数组用 `[]`，数值不可靠用 `null`。",
+      "- 不要输出字符串形式的 `null`、`未知`、`N/A` 作为数值字段。"
+    ]
+  },
+
+  "confidenceAndWarnings": {
+    "title": "置信度和警告",
+    "rules": [
+      "- `confidence` 用 0 到 1 的数字表示整体可靠度。",
+      "- 低于 0.75 的结果会被系统跳过；不确定时降低 confidence 并写入 `warnings`。",
+      "- 关键字段缺失、日期不可靠、截图裁切、单位模糊、同屏多天数据等情况必须写入 `warnings`。"
+    ]
+  },
+
+  "sharedDateRules": {
+    "title": "日期规则（共享）",
+    "rules": [
+      "- 不要从 caption/text 或图片文件名推断日期；这些来源由程序在识别后单独处理。",
+      "- 不要猜测跨天归档；截图只负责提供画面内真实日期。"
+    ]
+  }
+}

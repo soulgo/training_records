@@ -35,11 +35,13 @@ test('dashboard renders comparison pills for the latest metrics without relying 
 test('dashboard defaults charts to the latest 30 days and daily cards to the latest 4 days', () => {
   withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
+    const originalDashboardView = readOptionalFile(dashboardViewPath);
     const syntheticDashboard = buildSyntheticDashboard({ startDate: '2026-03-01', days: 45 });
 
     try {
       ensureDataDir();
       writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
+      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(syntheticDashboard), null, 2));
       execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
         cwd: rootDir,
         stdio: 'pipe',
@@ -71,6 +73,7 @@ test('dashboard defaults charts to the latest 30 days and daily cards to the lat
       assert.doesNotMatch(homepage, /<h3>2026-04-10<\/h3>/);
     } finally {
       restoreOptionalFile(trainingDataPath, originalTrainingData);
+      restoreOptionalFile(dashboardViewPath, originalDashboardView);
     }
   });
 });
@@ -97,11 +100,13 @@ test('dashboard chart script keeps full data while sparsifying x-axis labels and
 test('dashboard embeds daily overview pagination controls without changing the default latest 4-day view', () => {
   withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
+    const originalDashboardView = readOptionalFile(dashboardViewPath);
     const syntheticDashboard = buildSyntheticDashboard({ startDate: '2026-03-01', days: 9 });
 
     try {
       ensureDataDir();
       writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
+      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(syntheticDashboard), null, 2));
       execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
         cwd: rootDir,
         stdio: 'pipe',
@@ -117,6 +122,7 @@ test('dashboard embeds daily overview pagination controls without changing the d
       assert.match(homepage, /<script id="daily-overview-data" type="application\/json"[^>]*>/);
     } finally {
       restoreOptionalFile(trainingDataPath, originalTrainingData);
+      restoreOptionalFile(dashboardViewPath, originalDashboardView);
     }
   });
 });

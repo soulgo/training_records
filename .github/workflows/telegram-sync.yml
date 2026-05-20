@@ -23,9 +23,14 @@ concurrency:
 jobs:
   sync:
     if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
+    environment:
+      name: github-pages
     runs-on: ubuntu-latest
-    outputs:
-      repo_changed: ${{ steps.changes.outputs.repo_changed }}
+    env:
+      TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
+      TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
+      TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
+      TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,7 +41,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -44,29 +49,14 @@ jobs:
 
       - name: Backfill core from archive snapshot
         if: github.event_name != 'repository_dispatch'
-        env:
-          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
-          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
-          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
-          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
         run: npm run backfill:core
 
       - name: Reconcile committed markdown back to core
         if: github.event_name != 'repository_dispatch'
-        env:
-          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
-          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
-          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
-          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
         run: npm run reconcile:markdown
 
       - name: Backfill thought markdown back to core
         if: github.event_name != 'repository_dispatch'
-        env:
-          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
-          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
-          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
-          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
         run: npm run backfill:thoughts
 
       - name: Sync Telegram updates
@@ -80,19 +70,10 @@ jobs:
           TELEGRAM_ALLOWED_CHAT_IDS: ${{ vars.TELEGRAM_ALLOWED_CHAT_IDS }}
           TELEGRAM_POLL_LIMIT: ${{ vars.TELEGRAM_POLL_LIMIT }}
           TELEGRAM_SYNC_TRANSPORT: webhook
-          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
-          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
-          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
-          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
         run: npm run sync:telegram
 
       - name: Export markdown from database snapshot
         if: github.event_name != 'repository_dispatch'
-        env:
-          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
-          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
-          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
-          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
         run: npm run export:markdown
 
       - name: Detect changes
@@ -128,48 +109,25 @@ jobs:
         if: steps.changes.outputs.repo_changed == 'true'
         run: git push origin HEAD:main
 
-  deploy:
-    if: needs.sync.outputs.repo_changed == 'true'
-    needs: sync
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout latest main
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
       - name: Build site data and static files
+        if: steps.changes.outputs.repo_changed == 'true'
         env:
           TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
-          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
-          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
-          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
-          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_ACTIONS: "true"
         run: npm run build
 
       - name: Setup Pages
+        if: steps.changes.outputs.repo_changed == 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
+        if: steps.changes.outputs.repo_changed == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./public
 
       - name: Deploy to GitHub Pages
+        if: steps.changes.outputs.repo_changed == 'true'
         id: deployment
         uses: actions/deploy-pages@v4

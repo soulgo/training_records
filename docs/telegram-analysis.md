@@ -54,7 +54,22 @@
 
 系统会调用 AI 生成适合 Telegram 阅读的短回复，并通过 `sendMessage` 回发到原 chat，优先回复到原始指令消息。
 
-回复约束由 `prompts/training-analysis.md` 控制：
+## 3.1 Prompt 源文件
+
+分析 prompt 的**单一事实来源**是结构化源文件：
+
+- `prompts/_source/shared-rules.json` — 共享规则（空值约定等）
+- `prompts/_source/analysis-rules.json` — 分析特有规则（输出要求、时间窗策略、建议口径）
+
+运行时 prompt `prompts/training-analysis.md` 由生成器编译产出：
+
+```bash
+node tools/prompt-generator.mjs
+```
+
+**维护规则：改规则只改 `prompts/_source/` 下的 JSON 源，不直接手写 `prompts/training-analysis.md`。**
+
+回复约束由编译后的 `prompts/training-analysis.md` 控制：
 
 - 纯文本
 - 控制在 Telegram 友好的长度
@@ -81,11 +96,16 @@
 
 ## 5. 相关实现文件
 
-- `prompts/training-analysis.md`
-- `tools/training-analysis.mjs`
+- `prompts/_source/analysis-rules.json` — 分析 prompt 结构化源
+- `prompts/_source/shared-rules.json` — 共享规则源
+- `prompts/training-analysis.md` — 编译后的运行时 prompt
+- `tools/prompt-generator.mjs` — prompt 生成器
+- `tools/training-analysis.mjs` — 分析编排（含 compact focus 格式）
+- `tools/training-prompt.mjs` — prompt 加载与目标注入
 - `tools/telegram-sync-lib.mjs`
 - `tools/telegram-sync.mjs`
-- `test/telegram-sync.test.mjs`
+- `test/training-analysis.test.mjs`
+- `test/prompt-generator.test.mjs`
 - `test/telegram-sync-runner.test.mjs`
 
 ## 6. 环境变量

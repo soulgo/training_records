@@ -45,20 +45,19 @@ test('deploy-pages workflow backfills telegram thought markdown before tests', a
   assert.match(workflow, /run:\s*npm run backfill:thoughts/);
 });
 
-test('telegram-sync workflow validates changes and deploys Pages after sync commits', async () => {
+test('telegram-sync workflow validates changes and deploys Pages from a single merged job', async () => {
   const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
 
   assert.match(workflow, /- name: Run tests/);
   assert.match(workflow, /pages:\s*write/);
   assert.match(workflow, /id-token:\s*write/);
-  assert.match(workflow, /repo_changed:\s*\$\{\{\s*steps\.changes\.outputs\.repo_changed\s*\}\}/);
-  assert.match(workflow, /needs:\s*sync/);
   assert.match(workflow, /- name: Build site data and static files/);
   assert.match(workflow, /actions\/upload-pages-artifact@v3/);
   assert.match(workflow, /actions\/deploy-pages@v4/);
   assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
   assert.match(workflow, /git add 训练记录\.md source\/_posts source\/images/);
   assert.match(workflow, /git commit -m "chore: sync Telegram updates"/);
+  assert.doesNotMatch(workflow, /needs:\s*sync/);
 });
 
 test('telegram-sync workflow keeps the repository_dispatch fast path gated by detected changes', async () => {
@@ -71,7 +70,7 @@ test('telegram-sync workflow keeps the repository_dispatch fast path gated by de
   assert.match(workflow, /- name: Commit sync results\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
   assert.match(workflow, /- name: Rebase on latest main\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
   assert.match(workflow, /- name: Push changes\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
-  assert.match(workflow, /if:\s*needs\.sync\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /- name: Build site data and static files\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
 });
 
 test('telegram-sync workflow skips full database maintenance on webhook dispatches', async () => {
@@ -106,6 +105,21 @@ test('cloudflare worker workflow deploys wrangler config changes to Cloudflare',
   assert.match(workflow, /apiToken:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
   assert.match(workflow, /accountId:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
   assert.match(workflow, /command:\s*deploy/);
+});
+
+test('site workflows require Node 24', async () => {
+  for (const workflowPath of ['.github/workflows/deploy-pages.yml', '.github/workflows/telegram-sync.yml']) {
+    const workflow = await readWorkflow(workflowPath);
+    for (const match of workflow.matchAll(/node-version:\s*(\d+)/g)) {
+      if (match[1] !== '24') {
+        throw new assert.AssertionError({
+          message: `Expected ${workflowPath} to use node-version 24`,
+          actual: match[1],
+          expected: '24',
+        });
+      }
+    }
+  }
 });
 
 async function readWorkflow(relativePath) {

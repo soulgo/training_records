@@ -1,7 +1,6 @@
-import { appendFile, access, mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import frontMatter from 'hexo-front-matter';
 
 import {
   applyTelegramSyncToMarkdown,
@@ -24,6 +23,20 @@ import {
   generateTrainingAnalysisReply,
   splitTelegramMessage,
 } from './training-analysis.mjs';
+import { buildRecognitionSchema } from './telegram-recognition-schema.mjs';
+import {
+  fetchTelegramUpdates,
+  resolveDispatchTelegramUpdates,
+  sendTelegramMessage,
+  resolveTelegramFileUrl,
+  fetchTelegramFile,
+} from './telegram-transport.mjs';
+import {
+  writeThoughtPostFile,
+  editThoughtPost,
+  deleteThoughtPost,
+  readExistingThoughtMessageKeys,
+} from './telegram-thoughts.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -162,7 +175,16 @@ export async function runTelegramSync(options = {}) {
   const batchResults = [];
   let changed = replayStoredAny;
   let fallbackUsed = false;
-  let fallbackMarkdown = await readMarkdownOrDefault(recordPath);
+  let fallbackMarkdown = null;
+  let fallbackMarkdownLoaded = false;
+
+  async function getFallbackMarkdown() {
+    if (!fallbackMarkdownLoaded) {
+      fallbackMarkdown = await readMarkdownOrDefault(recordPath);
+      fallbackMarkdownLoaded = true;
+    }
+    return fallbackMarkdown;
+  }
 
   for (const batch of grouped) {
     const isAllowed = batch.messages.every((message) => env.allowedChatIds.has(message.chatId));
@@ -363,7 +385,7 @@ export async function runTelegramSync(options = {}) {
       });
       } catch (error) {
       if (analyzed.status === 'ready') {
-        const applied = applyTelegramSyncToMarkdown(fallbackMarkdown, persistedBatch);
+        const applied = applyTelegramSyncToMarkdown(await getFallbackMarkdown(), persistedBatch);
         fallbackMarkdown = applied.markdown;
         changed ||= applied.changed;
         fallbackUsed = true;
@@ -410,11 +432,12 @@ export async function runTelegramSync(options = {}) {
     };
     let markdown;
 
+    const currentMarkdown = await getFallbackMarkdown();
     try {
       const snapshot = await buildSnapshot(snapshotOptions);
       markdown = snapshotCoversPersistedBatches(snapshot, readyPersistedBatches)
         ? exportMarkdown(snapshot)
-        : rebuildMarkdownFromPersistedBatches(fallbackMarkdown, readyPersistedBatches);
+        : rebuildMarkdownFromPersistedBatches(currentMarkdown, readyPersistedBatches);
     } catch (error) {
       const canFallbackFromDatabase =
         trainingDbConfig.enabled && Boolean(trainingDbConfig.url);
@@ -422,7 +445,7 @@ export async function runTelegramSync(options = {}) {
         process.stderr.write(
           `[telegram-sync] ${error.message}; rebuilding markdown from persisted batches\n`,
         );
-        markdown = rebuildMarkdownFromPersistedBatches(fallbackMarkdown, readyPersistedBatches);
+        markdown = rebuildMarkdownFromPersistedBatches(currentMarkdown, readyPersistedBatches);
       } else {
         throw error;
       }
@@ -485,6 +508,18 @@ export function buildTelegramSyncReport(result) {
   }
 
   return normalized;
+}
+
+export async function loadRecognitionSystemPrompt(env = process.env) {
+  const promptPath = env.TELEGRAM_RECOGNITION_PROMPT_PATH?.trim() || defaultRecognitionPromptPath;
+
+  try {
+    const prompt = await readFile(promptPath, 'utf8');
+    const trimmed = prompt.trim();
+    return trimmed || fallbackRecognitionSystemPrompt;
+  } catch {
+    return fallbackRecognitionSystemPrompt;
+  }
 }
 
 function snapshotCoversPersistedBatches(snapshot, batches) {
@@ -656,58 +691,6 @@ function loadRequiredEnv(env = process.env) {
   };
 }
 
-async function fetchTelegramUpdates({ botToken, offset, limit }) {
-  const search = new URLSearchParams({
-    timeout: '0',
-    allowed_updates: JSON.stringify(['message', 'edited_message']),
-    offset: String(offset),
-    limit: String(limit),
-  });
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?${search}`);
-  if (!response.ok) {
-    throw new Error(`Telegram getUpdates failed with HTTP ${response.status}`);
-  }
-  const payload = await response.json();
-  if (!payload.ok) {
-    throw new Error(`Telegram getUpdates failed: ${payload.description ?? 'unknown error'}`);
-  }
-  return payload.result ?? [];
-}
-
-async function resolveDispatchTelegramUpdates({
-  repositoryDispatchEvent,
-  githubEventName,
-  githubEventPath,
-}) {
-  const eventPayload =
-    repositoryDispatchEvent ??
-    (githubEventName === 'repository_dispatch' && githubEventPath
-      ? await readGithubEventFile(githubEventPath)
-      : null);
-
-  if (!eventPayload) {
-    return null;
-  }
-
-  const clientPayload = eventPayload.client_payload ?? {};
-  if (clientPayload.telegram_update) {
-    return [clientPayload.telegram_update];
-  }
-  if (Array.isArray(clientPayload.telegram_updates)) {
-    return clientPayload.telegram_updates;
-  }
-  return [];
-}
-
-async function readGithubEventFile(eventPath) {
-  try {
-    const raw = await readFile(eventPath, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
 async function recognizeBatch(batch, env) {
   const recognitions = await mapWithConcurrency(batch.messages, env.aiConcurrency, async (message) => {
     const fileId = message.photos.at(-1)?.fileId;
@@ -729,7 +712,34 @@ async function readMarkdownOrDefault(recordPath) {
   }
 }
 
+const MAX_PENDING_QUEUE_SIZE = 1000;
+
+async function appendPendingFallbackBatch(queuePath, payload) {
+  const existing = await readPendingFallbackBatchesRaw(queuePath);
+  const deduped = existing.filter((entry) => entry.batch?.batchId !== payload.batch?.batchId);
+  const trimmed = deduped.length >= MAX_PENDING_QUEUE_SIZE
+    ? deduped.slice(-MAX_PENDING_QUEUE_SIZE + 1)
+    : deduped;
+  trimmed.push(payload);
+  await mkdir(path.dirname(queuePath), { recursive: true });
+  const content = trimmed.map((entry) => JSON.stringify(entry)).join('\n');
+  await writeFile(queuePath, content ? `${content}\n` : '', 'utf8');
+}
+
+async function writePendingFallbackBatches(queuePath, entries) {
+  await mkdir(path.dirname(queuePath), { recursive: true });
+  const trimmed = entries.length > MAX_PENDING_QUEUE_SIZE
+    ? entries.slice(-MAX_PENDING_QUEUE_SIZE)
+    : entries;
+  const content = trimmed.map((entry) => JSON.stringify(entry)).join('\n');
+  await writeFile(queuePath, content ? `${content}\n` : '', 'utf8');
+}
+
 async function readPendingFallbackBatches(queuePath) {
+  return readPendingFallbackBatchesRaw(queuePath);
+}
+
+async function readPendingFallbackBatchesRaw(queuePath) {
   try {
     const raw = await readFile(queuePath, 'utf8');
     return raw
@@ -739,497 +749,6 @@ async function readPendingFallbackBatches(queuePath) {
   } catch {
     return [];
   }
-}
-
-async function writeThoughtPostFile({ batch, thoughtsDir, rootDir, fetchTelegramFile }) {
-  const draft = buildThoughtPost(batch);
-  const postPath = path.join(thoughtsDir, draft.fileName);
-
-  if (await fileExists(postPath)) {
-    return {
-      changed: false,
-      status: 'duplicate',
-      postPath,
-      photoPaths: await readThoughtPhotoPathsFromPost(postPath),
-    };
-  }
-
-  const photoPaths = await writeThoughtImageFiles({
-    batch,
-    rootDir,
-    dateParts: draft.dateParts,
-    sourceMessageId: draft.message.messageId,
-    fetchTelegramFile,
-  });
-  const post = buildThoughtPost(batch, { photoPaths });
-
-  await mkdir(thoughtsDir, { recursive: true });
-  await writeFile(postPath, post.content, 'utf8');
-  return {
-    changed: true,
-    status: 'written',
-    postPath,
-    photoPaths,
-  };
-}
-
-async function editThoughtPost({ batch, thoughtsDir, rootDir, fetchTelegramFile }) {
-  const target = await findThoughtPostByMessage({
-    thoughtsDir,
-    messageId: batch.thoughtEdit?.targetMessageId,
-    chatId: batch.thoughtEdit?.telegramChatId,
-  });
-
-  if (!target) {
-    return {
-      changed: false,
-      status: 'not_found',
-      postPath: null,
-    };
-  }
-
-  let nextPhotoPaths = null;
-  let deletedPhotoPaths = [];
-  if (batch.thoughtEdit?.replacePhotos) {
-    nextPhotoPaths = await writeThoughtImageFiles({
-      batch,
-      rootDir,
-      dateParts: resolveThoughtFrontMatterDateParts(target.frontMatter),
-      sourceMessageId: batch.thoughtEdit.targetMessageId,
-      fetchTelegramFile,
-      overwrite: true,
-    });
-    deletedPhotoPaths = await deleteThoughtPhotoFiles({
-      rootDir,
-      photos: target.frontMatter.photos,
-      excludePublicPaths: nextPhotoPaths,
-    });
-  }
-
-  const nextContent = replaceMarkdownBody(target.raw, batch.thoughtEdit?.body ?? '', {
-    photoPaths: nextPhotoPaths,
-  });
-  if (nextContent === target.raw) {
-    if (batch.thoughtEdit?.replacePhotos && (nextPhotoPaths?.length ?? 0) > 0) {
-      return {
-        changed: true,
-        status: 'updated',
-        postPath: target.postPath,
-        deletedPhotoPaths,
-        photoPaths: nextPhotoPaths,
-      };
-    }
-    return {
-      changed: false,
-      status: 'unchanged',
-      postPath: target.postPath,
-      deletedPhotoPaths,
-    };
-  }
-
-  await writeFile(target.postPath, nextContent, 'utf8');
-  return {
-    changed: true,
-    status: 'updated',
-    postPath: target.postPath,
-    deletedPhotoPaths,
-    photoPaths: nextPhotoPaths ?? target.frontMatter.photos ?? [],
-  };
-}
-
-async function deleteThoughtPost({ batch, thoughtsDir, rootDir }) {
-  const target = await findThoughtPostByMessage({
-    thoughtsDir,
-    messageId: batch.thoughtDelete?.targetMessageId,
-    chatId: batch.thoughtDelete?.telegramChatId,
-  });
-
-  if (!target) {
-    return {
-      changed: false,
-      status: 'not_found',
-      postPath: null,
-      deletedPhotoPaths: [],
-    };
-  }
-
-  await unlink(target.postPath);
-  const deletedPhotoPaths = await deleteThoughtPhotoFiles({
-    rootDir,
-    photos: target.frontMatter.photos,
-  });
-
-  return {
-    changed: true,
-    status: 'deleted',
-    postPath: target.postPath,
-    deletedPhotoPaths,
-  };
-}
-
-function buildThoughtPost(batch, options = {}) {
-  const thought = batch.thought ?? {};
-  const message = resolveThoughtPostMessage(batch);
-  const dateParts = formatThoughtDateParts(message.dateUnix);
-  const fileName = `${dateParts.date}-telegram-thought-${message.messageId}.md`;
-  const lines = [
-    '---',
-    `date: ${dateParts.dateTime}`,
-    'tags:',
-    '  - 训练',
-    '  - 随想',
-    '  - Telegram',
-    `telegram_message_id: ${message.messageId ?? ''}`,
-    `telegram_chat_id: ${message.chatId ?? ''}`,
-  ];
-  if (options.photoPaths?.length) {
-    lines.push('photos:');
-    for (const photoPath of options.photoPaths) {
-      lines.push(`  - ${photoPath}`);
-    }
-  }
-  lines.push('---', '', thought.body ?? '', '');
-
-  return {
-    fileName,
-    content: lines.join('\n'),
-    dateParts,
-    message,
-  };
-}
-
-async function findThoughtPostByMessage({ thoughtsDir, messageId, chatId }) {
-  if (!messageId) {
-    return null;
-  }
-
-  const directPath = await findThoughtPostPathById({ thoughtsDir, messageId });
-  const candidatePaths = directPath ? [directPath] : await readDirRecursive(thoughtsDir);
-
-  for (const postPath of candidatePaths.filter((entry) => entry.endsWith('.md'))) {
-    const raw = await readFile(postPath, 'utf8');
-    const parsed = frontMatter.parse(raw);
-    const frontMatterData = normalizeThoughtFrontMatter(parsed);
-    if (
-      Number(frontMatterData.telegram_message_id) === Number(messageId) &&
-      (chatId == null || Number(frontMatterData.telegram_chat_id) === Number(chatId))
-    ) {
-      return {
-        postPath,
-        raw,
-        frontMatter: frontMatterData,
-      };
-    }
-  }
-
-  return null;
-}
-
-async function findThoughtPostPathById({ thoughtsDir, messageId }) {
-  const entries = await readDirRecursive(thoughtsDir);
-  const suffix = `-telegram-thought-${messageId}.md`;
-  return entries.find((entry) => entry.endsWith(suffix)) ?? null;
-}
-
-function normalizeThoughtFrontMatter(parsed) {
-  const { _content = '', ...frontMatterData } = parsed ?? {};
-  return {
-    ...frontMatterData,
-    _content,
-  };
-}
-
-async function readThoughtPhotoPathsFromPost(postPath) {
-  try {
-    const raw = await readFile(postPath, 'utf8');
-    const parsed = frontMatter.parse(raw);
-    return Array.isArray(parsed.photos) ? parsed.photos : [];
-  } catch {
-    return [];
-  }
-}
-
-function replaceMarkdownBody(raw, nextBody, options = {}) {
-  const split = frontMatter.split(raw);
-  const parsed = frontMatter.parse(raw);
-  const { _content, ...frontMatterData } = parsed ?? {};
-  if (Array.isArray(options.photoPaths)) {
-    if (options.photoPaths.length > 0) {
-      frontMatterData.photos = options.photoPaths;
-    } else {
-      delete frontMatterData.photos;
-    }
-  }
-  return `${frontMatter.stringify(frontMatterData, {
-    separator: split.separator,
-    prefixSeparator: split.prefixSeparator,
-  })}\n${String(nextBody ?? '').trim()}\n`;
-}
-
-function resolveThoughtFrontMatterDateParts(frontMatterData) {
-  const rawDate = frontMatterData?.date;
-  const date =
-    rawDate instanceof Date
-      ? rawDate
-      : rawDate
-        ? new Date(rawDate)
-        : null;
-  if (date && !Number.isNaN(date.getTime())) {
-    return formatThoughtDateParts(Math.floor(date.getTime() / 1000));
-  }
-  return formatThoughtDateParts(0);
-}
-
-async function deleteThoughtPhotoFiles({ rootDir, photos, excludePublicPaths = [] }) {
-  const deletedPhotoPaths = [];
-  const excluded = new Set(
-    excludePublicPaths
-      .map((photoPath) =>
-        typeof photoPath === 'string' && photoPath.startsWith('/images/')
-          ? path.join(rootDir, 'source', photoPath.replace(/^\//, ''))
-          : null,
-      )
-      .filter(Boolean),
-  );
-  for (const photoPath of resolveThoughtPhotoFilePaths({ rootDir, photos })) {
-    if (excluded.has(photoPath)) {
-      continue;
-    }
-    if (await fileExists(photoPath)) {
-      await unlink(photoPath);
-      deletedPhotoPaths.push(photoPath);
-    }
-  }
-  return deletedPhotoPaths;
-}
-
-function resolveThoughtPhotoFilePaths({ rootDir, photos }) {
-  if (!Array.isArray(photos) || !rootDir) {
-    return [];
-  }
-
-  return photos
-    .map((photoPath) =>
-      typeof photoPath === 'string' && photoPath.startsWith('/images/')
-        ? path.join(rootDir, 'source', photoPath.replace(/^\//, ''))
-        : null,
-    )
-    .filter(Boolean);
-}
-
-async function readDirRecursive(dirPath) {
-  const results = [];
-
-  async function walk(currentDir) {
-    let entries;
-    try {
-      entries = await readdir(currentDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      const entryPath = path.join(currentDir, entry.name);
-      if (entry.isDirectory()) {
-        await walk(entryPath);
-        continue;
-      }
-      results.push(entryPath);
-    }
-  }
-
-  await walk(dirPath);
-  return results;
-}
-
-async function readExistingThoughtMessageKeys(thoughtsDir) {
-  const keys = new Set();
-  for (const postPath of (await readDirRecursive(thoughtsDir)).filter((entry) => entry.endsWith('.md'))) {
-    try {
-      const raw = await readFile(postPath, 'utf8');
-      const parsed = frontMatter.parse(raw);
-      const chatId = Number(parsed.telegram_chat_id);
-      const messageId = Number(parsed.telegram_message_id);
-      if (Number.isInteger(chatId) && Number.isInteger(messageId) && messageId > 0) {
-        keys.add(`${chatId}:${messageId}`);
-      }
-    } catch {}
-  }
-  return keys;
-}
-
-async function writeThoughtImageFiles({
-  batch,
-  rootDir,
-  dateParts,
-  sourceMessageId,
-  fetchTelegramFile,
-  overwrite = false,
-}) {
-  if (!rootDir || !fetchTelegramFile) {
-    return [];
-  }
-
-  const imageMessages = (batch.messages ?? [])
-    .map((message) => ({
-      message,
-      photo: selectThoughtImagePhoto(message),
-    }))
-    .filter((item) => item.photo?.fileId)
-    .sort((left, right) => left.message.messageId - right.message.messageId);
-  if (imageMessages.length === 0) {
-    return [];
-  }
-
-  const [year, month] = dateParts.date.split('-');
-  const outputDir = path.join(rootDir, 'source', 'images', 'thoughts', year, month);
-  const publicPaths = [];
-
-  for (let index = 0; index < imageMessages.length; index += 1) {
-    const { photo } = imageMessages[index];
-    const file = await fetchTelegramFile(photo.fileId);
-    const extension = inferThoughtImageExtension(photo, file);
-    const imageFileName = `${dateParts.date}-telegram-thought-${sourceMessageId}-${index + 1}${extension}`;
-    const outputPath = path.join(outputDir, imageFileName);
-    const publicPath = `/images/thoughts/${year}/${month}/${imageFileName}`;
-
-    await mkdir(outputDir, { recursive: true });
-    if (overwrite || !(await fileExists(outputPath))) {
-      await writeFile(outputPath, file.data);
-    }
-    publicPaths.push(publicPath);
-  }
-
-  return publicPaths;
-}
-
-function resolveThoughtPostMessage(batch) {
-  const sourceMessageId = batch.thought?.sourceMessageId ?? null;
-  return (
-    (batch.messages ?? []).find((message) => message.messageId === sourceMessageId) ??
-    batch.messages?.[0] ??
-    {}
-  );
-}
-
-function selectThoughtImagePhoto(message) {
-  const photos = message.photos ?? [];
-  const documentImage = photos.find((photo) => photo.source === 'document');
-  if (documentImage) {
-    return documentImage;
-  }
-
-  return (
-    photos
-      .filter((photo) => photo.source === 'photo')
-      .toSorted((left, right) => thoughtPhotoScore(right) - thoughtPhotoScore(left))
-      .at(0) ?? null
-  );
-}
-
-function thoughtPhotoScore(photo) {
-  if (Number.isFinite(photo.fileSize)) {
-    return photo.fileSize;
-  }
-  return (photo.width ?? 0) * (photo.height ?? 0);
-}
-
-function inferThoughtImageExtension(photo, file) {
-  const fromName = path.extname(photo.fileName ?? file.filePath ?? '').toLowerCase();
-  if (/^\.(?:jpe?g|png|webp|gif|bmp|heic|heif|tiff?)$/.test(fromName)) {
-    return fromName === '.jpeg' ? '.jpg' : fromName;
-  }
-
-  const mimeType = (photo.mimeType ?? file.contentType ?? '').toLowerCase().split(';')[0].trim();
-  const extensionByMimeType = {
-    'image/jpeg': '.jpg',
-    'image/png': '.png',
-    'image/webp': '.webp',
-    'image/gif': '.gif',
-    'image/bmp': '.bmp',
-    'image/heic': '.heic',
-    'image/heif': '.heif',
-    'image/tiff': '.tiff',
-  };
-  return extensionByMimeType[mimeType] ?? '.jpg';
-}
-
-function formatThoughtDateParts(dateUnix) {
-  const date = new Date((dateUnix ?? 0) * 1000);
-  const formatter = new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-  const parts = Object.fromEntries(
-    formatter
-      .formatToParts(date)
-      .filter((part) => part.type !== 'literal')
-      .map((part) => [part.type, part.value]),
-  );
-
-  return {
-    date: `${parts.year}-${parts.month}-${parts.day}`,
-    dateTime: `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`,
-  };
-}
-
-async function fileExists(targetPath) {
-  try {
-    await access(targetPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function appendPendingFallbackBatch(queuePath, payload) {
-  await mkdir(path.dirname(queuePath), { recursive: true });
-  await appendFile(queuePath, `${JSON.stringify(payload)}\n`, 'utf8');
-}
-
-async function writePendingFallbackBatches(queuePath, entries) {
-  await mkdir(path.dirname(queuePath), { recursive: true });
-  const content = entries.map((entry) => JSON.stringify(entry)).join('\n');
-  await writeFile(queuePath, content ? `${content}\n` : '', 'utf8');
-}
-
-async function resolveTelegramFileUrl(botToken, fileId) {
-  const file = await resolveTelegramFileInfo(botToken, fileId);
-  return file.url;
-}
-
-async function resolveTelegramFileInfo(botToken, fileId) {
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${encodeURIComponent(fileId)}`);
-  if (!response.ok) {
-    throw new Error(`Telegram getFile failed with HTTP ${response.status}`);
-  }
-  const payload = await response.json();
-  if (!payload.ok || !payload.result?.file_path) {
-    throw new Error(`Telegram getFile failed: ${payload.description ?? 'missing file_path'}`);
-  }
-  return {
-    filePath: payload.result.file_path,
-    url: `https://api.telegram.org/file/bot${botToken}/${payload.result.file_path}`,
-  };
-}
-
-async function fetchTelegramFile({ botToken, fileId }) {
-  const file = await resolveTelegramFileInfo(botToken, fileId);
-  const response = await fetch(file.url);
-  if (!response.ok) {
-    throw new Error(`Telegram file download failed with HTTP ${response.status}`);
-  }
-  return {
-    ...file,
-    contentType: response.headers.get('content-type') ?? '',
-    data: new Uint8Array(await response.arrayBuffer()),
-  };
 }
 
 async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }) {
@@ -1263,34 +782,6 @@ async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }
       parts: 1,
     };
   }
-}
-
-async function sendTelegramMessage({ botToken, chatId, text, replyToMessageId = null }) {
-  const payload = {
-    chat_id: chatId,
-    text,
-    disable_web_page_preview: true,
-  };
-  if (replyToMessageId) {
-    payload.reply_to_message_id = replyToMessageId;
-    payload.allow_sending_without_reply = true;
-  }
-
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    throw new Error(`Telegram sendMessage failed with HTTP ${response.status}`);
-  }
-  const result = await response.json();
-  if (!result.ok) {
-    throw new Error(`Telegram sendMessage failed: ${result.description ?? 'unknown error'}`);
-  }
-  return result.result;
 }
 
 async function recognizeImageMessage(message, imageUrl, env) {
@@ -1352,132 +843,5 @@ async function recognizeImageMessage(message, imageUrl, env) {
   return {
     messageId: message.messageId,
     ...parsed,
-  };
-}
-
-export async function loadRecognitionSystemPrompt(env = process.env) {
-  const promptPath = env.TELEGRAM_RECOGNITION_PROMPT_PATH?.trim() || defaultRecognitionPromptPath;
-
-  try {
-    const prompt = await readFile(promptPath, 'utf8');
-    const trimmed = prompt.trim();
-    return trimmed || fallbackRecognitionSystemPrompt;
-  } catch {
-    return fallbackRecognitionSystemPrompt;
-  }
-}
-
-function buildRecognitionSchema() {
-  return {
-    type: 'object',
-    additionalProperties: false,
-    required: ['imageType', 'detectedDate', 'dateEvidence', 'records', 'confidence', 'warnings'],
-    properties: {
-      imageType: {
-        type: 'string',
-        enum: ['measurement', 'workout', 'nutrition', 'unknown'],
-      },
-      detectedDate: {
-        type: ['string', 'null'],
-        pattern: '^\\d{4}-\\d{2}-\\d{2}$',
-      },
-      dateEvidence: {
-        type: 'string',
-      },
-      confidence: {
-        type: 'number',
-      },
-      warnings: {
-        type: 'array',
-        items: { type: 'string' },
-      },
-      records: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['measurement', 'activities', 'meals', 'totalCalories', 'details', 'dailyWorkoutSummary'],
-        properties: {
-          measurement: {
-            type: ['object', 'null'],
-            additionalProperties: false,
-            required: [
-              'measuredAt',
-              'bodyScore',
-              'weightKg',
-              'bmi',
-              'bodyFatPct',
-              'skeletalMuscleKg',
-              'visceralFatLevel',
-              'basalMetabolismKcal',
-              'bodyWaterPct',
-              'proteinPct',
-              'boneMassKg',
-              'fatFreeMassKg',
-              'bodyAge',
-              'bodyType',
-            ],
-            properties: {
-              measuredAt: { type: ['string', 'null'] },
-              bodyScore: { type: ['number', 'null'] },
-              weightKg: { type: ['number', 'null'] },
-              bmi: { type: ['number', 'null'] },
-              bodyFatPct: { type: ['number', 'null'] },
-              skeletalMuscleKg: { type: ['number', 'null'] },
-              visceralFatLevel: { type: ['number', 'null'] },
-              basalMetabolismKcal: { type: ['number', 'null'] },
-              bodyWaterPct: { type: ['number', 'null'] },
-              proteinPct: { type: ['number', 'null'] },
-              boneMassKg: { type: ['number', 'null'] },
-              fatFreeMassKg: { type: ['number', 'null'] },
-              bodyAge: { type: ['number', 'null'] },
-              bodyType: { type: ['string', 'null'] },
-            },
-          },
-          activities: {
-            type: 'array',
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['time', 'type', 'detail'],
-              properties: {
-                time: { type: 'string' },
-                type: { type: 'string' },
-                detail: { type: 'string' },
-              },
-            },
-          },
-          meals: {
-            type: 'array',
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['name', 'calories', 'recommendedMin', 'recommendedMax'],
-              properties: {
-                name: { type: 'string' },
-                calories: { type: 'number' },
-                recommendedMin: { type: 'number' },
-                recommendedMax: { type: 'number' },
-              },
-            },
-          },
-          totalCalories: {
-            type: ['number', 'null'],
-          },
-          details: {
-            type: 'array',
-            items: { type: 'string' },
-          },
-          dailyWorkoutSummary: {
-            type: ['object', 'null'],
-            additionalProperties: false,
-            required: ['activityCaloriesKcal', 'workoutDurationMinutes', 'activeHours'],
-            properties: {
-              activityCaloriesKcal: { type: ['number', 'null'] },
-              workoutDurationMinutes: { type: ['number', 'null'] },
-              activeHours: { type: ['number', 'null'] },
-            },
-          },
-        },
-      },
-    },
   };
 }
