@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: telegram-sync
@@ -104,4 +106,30 @@ jobs:
       - name: Push changes
         if: steps.changes.outputs.repo_changed == 'true'
         run: git push origin HEAD:main
+
+      - name: Build site data and static files
+        if: steps.changes.outputs.repo_changed == 'true'
+        env:
+          TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
+          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
+          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
+          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
+          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_ACTIONS: "true"
+        run: npm run build
+
+      - name: Setup Pages
+        if: steps.changes.outputs.repo_changed == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        if: steps.changes.outputs.repo_changed == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./public
+
+      - name: Deploy to GitHub Pages
+        if: steps.changes.outputs.repo_changed == 'true'
+        uses: actions/deploy-pages@v4
 

@@ -13,3 +13,4 @@ telegram/process-log.ndjson
 telegram/inbox/
 .claude*
 .tmp*
+logs*
