@@ -29,43 +29,43 @@
 
 ### 1.1 字体文件清理
 
-- [ ] **1.1.1** 删除整个 Vazir 字体目录
+- [x] **1.1.1** 删除整个 Vazir 字体目录
   - `rm -rf themes/cactus/source/lib/vazir-font/`
-- [ ] **1.1.2** 删除多余 Meslo 变体，仅保留 `MesloLGS-Regular.ttf`
+- [x] **1.1.2** 删除多余 Meslo 变体，仅保留 `MesloLGS-Regular.ttf`
   - 保留：`themes/cactus/source/lib/meslo-LG/MesloLGS-Regular.ttf`
   - 删除：所有 `MesloLGL-*`、`MesloLGM-*`、`MesloLGS-Bold*`、`MesloLGS-Italic*` 等
-- [ ] **1.1.3** 更新 `_fonts.styl` 确认只引用 `MesloLGS-Regular.ttf`
+- [x] **1.1.3** 更新 `_fonts.styl` 确认只引用 `MesloLGS-Regular.ttf`
 
 ### 1.2 Highlight 主题清理
 
-- [ ] **1.2.1** 确认当前使用的 highlight 主题
+- [x] **1.2.1** 确认当前使用的 highlight 主题
   - 查看 `_colors/white.styl:16` → `$highlight = hexo-config("highlight") || "atelier-cave-light"`
   - 如果 `_config.yml` 无 `highlight` 覆盖，则使用 `atelier-cave-light`
-- [ ] **1.2.2** 删除 `themes/cactus/source/css/_highlight/` 下除以下文件外的所有 `.styl` 文件
+- [x] **1.2.2** 删除 `themes/cactus/source/css/_highlight/` 下除以下文件外的所有 `.styl` 文件
   - 保留：`atelier-cave-light.styl`、`index.styl`
-- [ ] **1.2.3** 删除 highlight 目录下的图片文件
+- [x] **1.2.3** 删除 highlight 目录下的图片文件
   - `brown-papersq.png`、`pojoaque.jpg`、`school-book.png`
 
 ### 1.3 语言文件清理
 
-- [ ] **1.3.1** 删除 `themes/cactus/languages/` 下除 `zh-CN.yml` 和 `default.yml` 外的所有文件
+- [x] **1.3.1** 删除 `themes/cactus/languages/` 下除 `zh-CN.yml` 和 `default.yml` 外的所有文件
   - 保留：`default.yml`（fallback）、`zh-CN.yml`
-- [ ] **1.3.2** 如 `en.yml` 被引用为 base，保留 `en.yml` 作为 fallback
+- [x] **1.3.2** 如 `en.yml` 被引用为 base，保留 `en.yml` 作为 fallback（`default.yml` 是 `en.yml` 的 symlink，已保留）
 
 ### 1.4 本地 lib 清理（CDN 已启用）
 
-- [ ] **1.4.1** 确认 `themes/cactus/_config.yml` 中 `cdn.enable: true`
-- [ ] **1.4.2** 删除本地冗余副本：
+- [x] **1.4.1** 确认 `themes/cactus/_config.yml` 中 `cdn.enable: true`
+- [x] **1.4.2** 删除本地冗余副本：
   - `themes/cactus/source/lib/jquery/`
   - `themes/cactus/source/lib/clipboard/`
   - `themes/cactus/source/lib/font-awesome/`
   - `themes/cactus/source/lib/justified-gallery/`
-- [ ] **1.4.3** 保留 `themes/cactus/source/lib/meslo-LG/MesloLGS-Regular.ttf`（无 CDN 替代）
+- [x] **1.4.3** 保留 `themes/cactus/source/lib/meslo-LG/MesloLGS-Regular.ttf`（无 CDN 替代）
 
 ### 1.5 验证
 
-- [ ] **1.5.1** 执行 `npm run clean && npm run build` 确认清理后构建成功
-- [ ] **1.5.2** 执行 `npm test` 确认测试通过
+- [x] **1.5.1** 执行 `npm run clean && npm run build` 确认清理后构建成功
+- [x] **1.5.2** 执行 `npm test` 确认测试通过（146 pass, 0 fail）
 
 ---
 
