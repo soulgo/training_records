@@ -377,6 +377,6 @@ const chartCards = [
     <script id="training-dashboard-data" type="application/json"><%- JSON.stringify(chartPayload) %></script>
     <script id="daily-overview-data" type="application/json" data-page-size="<%= dailyCardLimit %>"><%- JSON.stringify(dailyOverviewEntries) %></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" integrity="sha384-JUh163oCRItcbPme8pYnROHQMC6fNKTBWtRG3I3I0erJkzNgL7uxKlNwcrcFKeqF" crossorigin="anonymous" defer></script>
-    <script src="<%- url_for('/js/training-dashboard.js') %>"></script>
+    <script defer src="<%- url_for('/js/training-dashboard.js') %>"></script>
   <% } %>
 </section>
