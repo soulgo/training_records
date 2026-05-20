@@ -311,85 +311,87 @@ test('getLastProcessedTelegramUpdateId reads the max update id from ingest recor
 
 test('backfillCoreFromLatestArchiveSnapshot writes only archive dates missing from core', async () => {
   const calls = [];
-  const fakeClient = {
-    async connect() {
-      calls.push(['connect']);
-    },
-    async query(sql, params) {
-      calls.push([sql, params]);
-      if (/from archive\.training_day/i.test(sql)) {
-        return {
-          rows: [
-            {
-              archived_date: '2026-04-03',
-              total_activities: 1,
-              total_duration_seconds: 1920,
-              training_calories: 459,
-              workout_duration_minutes: 32,
-              active_hours: 13,
-              cycling_distance_km: 0,
-              intake_calories: null,
-            },
-            {
-              archived_date: '2026-04-13',
-              total_activities: 1,
-              total_duration_seconds: 3300,
-              training_calories: 779,
-              workout_duration_minutes: 55,
-              active_hours: 14,
-              cycling_distance_km: 0,
-              intake_calories: null,
-            },
-          ],
-        };
-      }
-      if (/from archive\.training_measurement/i.test(sql)) {
+  function createArchiveClient() {
+    return {
+      async connect() {
+        calls.push(['connect']);
+      },
+      async query(sql, params) {
+        calls.push([sql, params]);
+        if (/from archive\.training_day/i.test(sql)) {
+          return {
+            rows: [
+              {
+                archived_date: '2026-04-03',
+                total_activities: 1,
+                total_duration_seconds: 1920,
+                training_calories: 459,
+                workout_duration_minutes: 32,
+                active_hours: 13,
+                cycling_distance_km: 0,
+                intake_calories: null,
+              },
+              {
+                archived_date: '2026-04-13',
+                total_activities: 1,
+                total_duration_seconds: 3300,
+                training_calories: 779,
+                workout_duration_minutes: 55,
+                active_hours: 14,
+                cycling_distance_km: 0,
+                intake_calories: null,
+              },
+            ],
+          };
+        }
+        if (/from archive\.training_measurement/i.test(sql)) {
+          return { rows: [] };
+        }
+        if (/from archive\.training_activity/i.test(sql)) {
+          return {
+            rows: [
+              {
+                archived_date: '2026-04-03',
+                activity_time: '20:18',
+                activity_type: 'traditional_strength_training',
+                raw_type: 'traditional_strength_training',
+                detail: '总消耗459千卡，时长00:32:00',
+                calories: 459,
+                heart_rate: null,
+                distance_km: null,
+                avg_speed_kmh: null,
+                duration_text: '00:32:00',
+                duration_seconds: 1920,
+              },
+              {
+                archived_date: '2026-04-13',
+                activity_time: '20:12',
+                activity_type: 'mixed_cardio',
+                raw_type: 'mixed_cardio',
+                detail: '总消耗779千卡，时长00:55:00',
+                calories: 779,
+                heart_rate: null,
+                distance_km: null,
+                avg_speed_kmh: null,
+                duration_text: '00:55:00',
+                duration_seconds: 3300,
+              },
+            ],
+          };
+        }
+        if (/from archive\.training_meal/i.test(sql)) {
+          return { rows: [] };
+        }
+        if (/select\s+archived_date\s+from core\.training_day/i.test(sql)) {
+          return { rows: [{ archived_date: '2026-04-13' }] };
+        }
         return { rows: [] };
-      }
-      if (/from archive\.training_activity/i.test(sql)) {
-        return {
-          rows: [
-            {
-              archived_date: '2026-04-03',
-              activity_time: '20:18',
-              activity_type: 'traditional_strength_training',
-              raw_type: 'traditional_strength_training',
-              detail: '总消耗459千卡，时长00:32:00',
-              calories: 459,
-              heart_rate: null,
-              distance_km: null,
-              avg_speed_kmh: null,
-              duration_text: '00:32:00',
-              duration_seconds: 1920,
-            },
-            {
-              archived_date: '2026-04-13',
-              activity_time: '20:12',
-              activity_type: 'mixed_cardio',
-              raw_type: 'mixed_cardio',
-              detail: '总消耗779千卡，时长00:55:00',
-              calories: 779,
-              heart_rate: null,
-              distance_km: null,
-              avg_speed_kmh: null,
-              duration_text: '00:55:00',
-              duration_seconds: 3300,
-            },
-          ],
-        };
-      }
-      if (/from archive\.training_meal/i.test(sql)) {
-        return { rows: [] };
-      }
-      if (/select\s+archived_date\s+from core\.training_day/i.test(sql)) {
-        return { rows: [{ archived_date: '2026-04-13' }] };
-      }
-      return { rows: [] };
-    },
-    async end() {
-      calls.push(['end']);
-    },
-  };
+      },
+      async end() {
+        calls.push(['end']);
+      },
+    };
+  }
 
   const result = await backfillCoreFromLatestArchiveSnapshot({
     env: {
@@ -397,7 +399,7 @@ test('backfillCoreFromLatestArchiveSnapshot writes only archive dates missing fr
       TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
     },
     createClient() {
-      return fakeClient;
+      return createArchiveClient();
     },
     processedAt: new Date('2026-05-13T00:00:00.000Z'),
   });
