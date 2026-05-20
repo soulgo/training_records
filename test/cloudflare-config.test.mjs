@@ -13,7 +13,7 @@ test('wrangler config binds Telegram album Durable Object without storing secret
   assert.match(config, /name\s*=\s*"TELEGRAM_ALBUM_BUFFER"/);
   assert.match(config, /class_name\s*=\s*"TelegramAlbumBuffer"/);
   assert.match(config, /new_sqlite_classes\s*=\s*\["TelegramAlbumBuffer"\]/);
-  assert.match(config, /GITHUB_OWNER\s*=\s*"soulgo"/);
-  assert.match(config, /GITHUB_REPO\s*=\s*"training_records"/);
+  assert.doesNotMatch(config, /GITHUB_OWNER/);
+  assert.doesNotMatch(config, /GITHUB_REPO/);
   assert.doesNotMatch(config, /GITHUB_TOKEN|TELEGRAM_SECRET_TOKEN/);
 });

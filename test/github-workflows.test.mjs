@@ -107,18 +107,19 @@ test('cloudflare worker workflow deploys wrangler config changes to Cloudflare',
   assert.match(workflow, /command:\s*deploy/);
 });
 
-test('site workflows require Node 24', async () => {
+test('site workflows require Node 22 LTS', async () => {
   for (const workflowPath of ['.github/workflows/deploy-pages.yml', '.github/workflows/telegram-sync.yml']) {
     const workflow = await readWorkflow(workflowPath);
     for (const match of workflow.matchAll(/node-version:\s*(\d+)/g)) {
-      if (match[1] !== '24') {
+      if (match[1] !== '22') {
         throw new assert.AssertionError({
-          message: `Expected ${workflowPath} to use node-version 24`,
+          message: `Expected ${workflowPath} to use node-version 22`,
           actual: match[1],
-          expected: '24',
+          expected: '22',
         });
       }
     }
+    assert.match(workflow, /node-version:\s*22/);
   }
 });
 
