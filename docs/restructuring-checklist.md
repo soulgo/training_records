@@ -73,45 +73,34 @@
 
 ### 2.1 main.js 清理
 
-- [ ] **2.1.1** 移除 `main.js:1-11` 的 justifiedGallery 全局初始化（当前无 gallery 页面）
-  - 或改为：仅在 `.article-gallery` 存在时初始化
-- [ ] **2.1.2** 移除 `main.js:56-78` 的 `#footer-post`、`#menu-icon-tablet`、`#top-icon-tablet` 相关代码
-  - 这些元素在当前 layout 中不存在
-- [ ] **2.1.3** 移除 `main.js:96-111` 的 `#actions-footer`、`#nav-footer`、`#toc-footer`、`#share-footer` 相关代码
-  - 这些元素在当前 post layout 中不存在
-- [ ] **2.1.4** 保留：移动端菜单 toggle（`#header > #nav > ul > .icon` click）和桌面端 menu scroll 行为（如果实际使用）
+- [x] **2.1.1** 移除 `main.js:1-11` 的 justifiedGallery 全局初始化（当前无 gallery 页面）
+- [x] **2.1.2** 保留 `#footer-post`/`#menu-icon-tablet`/`#top-icon-tablet` 代码 — 经核实，这些元素在 `actions_desktop.ejs` 和 `actions_mobile.ejs` 中定义，由 `layout.ejs` 在 `is_post()` 时加载，实际存在于 post 页面中，移除会破坏移动端菜单功能
+- [x] **2.1.3** 保留 `#actions-footer`/`#nav-footer`/`#toc-footer`/`#share-footer` 代码 — 同上，这些元素在 post 页面的 `actions_mobile.ejs` 中真实存在
+- [x] **2.1.4** 保留：移动端菜单 toggle（`#header > #nav > ul > .icon` click）和桌面端 menu scroll 行为
 
 ### 2.2 search.js 移除
 
-- [ ] **2.2.1** 从 `scripts.ejs` 中删除第 45-82 行（search.js 加载 + MutationObserver 逻辑）
-- [ ] **2.2.2** 删除 `themes/cactus/source/js/search.js`
-- [ ] **2.2.3** 如果 `search.ejs` partial 在 layout 中被引用，也删除该引用
+- [x] **2.2.1** 从 `scripts.ejs` 中删除 search.js 加载 + MutationObserver 逻辑（原第 45-82 行）
+- [x] **2.2.2** 删除 `themes/cactus/source/js/search.js`
+- [x] **2.2.3** `search.ejs` partial 保留 — 仅在 `page.search` 为 true 时条件引用，当前无页面满足条件，不产生输出，无害保留
 
-### 2.3 jQuery 依赖移除（可选，建议 Phase 3 做）
+### 2.3 jQuery 依赖移除（Phase 3 进行）
 
-- [ ] **2.3.1** 评估 `main.js` 中剩余 jQuery 用法：
-  - `$("#header > #nav > ul > .icon").click(...)` → `document.querySelector(...).addEventListener(...)`
-  - `$(document).ready(...)` → `DOMContentLoaded` 或直接执行（script 在 body 末尾）
-  - `$(".post").length` → `document.querySelector('.post')`
-- [ ] **2.3.2** 如果 clipboard.js 仍用 jQuery 初始化，改为原生 JS（见 audit 文档 6.2 节）
-- [ ] **2.3.3** 如果完全移除 jQuery 依赖：
-  - 删除 `scripts.ejs:1-6` 的 jQuery CDN 加载
-  - 从 CDN 配置中移除 jquery 条目
-  - 从 `themes/cactus/_config.yml` 的 `cdn` 块中移除 `jquery`
+- [ ] **2.3.1** 评估 `main.js` 中剩余 jQuery 用法
+- [ ] **2.3.2** clipboard.js jQuery 初始化改为原生 JS
+- [ ] **2.3.3** 完全移除 jQuery 依赖
 
 ### 2.4 CSS 清理
 
-- [ ] **2.4.1** 如果站点不使用 categories/tags 页面，删除：
-  - `themes/cactus/source/css/_partial/categories.styl`
-  - `themes/cactus/source/css/_partial/tags.styl`
-- [ ] **2.4.2** 从 `style.styl` 中移除对应的 `@import`（第 144-146 行）
-- [ ] **2.4.3** 如果 direction 始终为 `ltr`，删除 `rtl.styl` 及其 import
+- [x] **2.4.1** 删除 `categories.styl` 和 `tags.styl`
+- [x] **2.4.2** 从 `style.styl` 中移除 `categories.styl` 和 `tags.styl` 的 `@import`
+- [x] **2.4.3** 删除 `rtl.styl`（站点始终使用 `ltr`，且 style.styl 中无 rtl import）
 
 ### 2.5 验证
 
-- [ ] **2.5.1** 执行 `npm run build` 确认构建成功
-- [ ] **2.5.2** 本地 `npm run server` 后在浏览器检查所有页面功能正常
-- [ ] **2.5.3** 特别检查：移动端菜单、代码块复制按钮（如有）、首页列表、dashboard 图表、daily overview 翻页
+- [x] **2.5.1** 执行 `npm run build` 确认构建成功（12 files generated）
+- [ ] **2.5.2** 本地 `npm run server` 后在浏览器检查所有页面功能正常（需手动验证）
+- [ ] **2.5.3** 特别检查：移动端菜单、代码块复制按钮、首页列表、dashboard 图表、daily overview 翻页（需手动验证）
 
 ---
 
