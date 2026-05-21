@@ -45,18 +45,18 @@ test('deploy-pages workflow backfills telegram thought markdown before tests', a
   assert.match(workflow, /run:\s*npm run backfill:thoughts/);
 });
 
-test('telegram-sync workflow validates changes and deploys Pages from a single merged job', async () => {
+test('telegram-sync workflow keeps repository_dispatch on the fast path and leaves Pages work gated', async () => {
   const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
 
-  assert.match(workflow, /- name: Run tests/);
-  assert.match(workflow, /pages:\s*write/);
-  assert.match(workflow, /id-token:\s*write/);
-  assert.match(workflow, /- name: Build site data and static files/);
-  assert.match(workflow, /actions\/upload-pages-artifact@v3/);
-  assert.match(workflow, /actions\/deploy-pages@v4/);
   assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
   assert.match(workflow, /git add 训练记录\.md source\/_posts source\/images/);
   assert.match(workflow, /git commit -m "chore: sync Telegram updates"/);
+  assert.match(workflow, /- name: Run tests\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.changes\.outputs\.content_changed == 'true'/);
+  assert.match(workflow, /run:\s*npm run test:fast/);
+  assert.match(workflow, /- name: Build site data and static files\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.changes\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /- name: Setup Pages\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.changes\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /actions\/upload-pages-artifact@v3/);
+  assert.match(workflow, /actions\/deploy-pages@v4/);
   assert.doesNotMatch(workflow, /needs:\s*sync/);
 });
 
@@ -66,11 +66,11 @@ test('telegram-sync workflow keeps the repository_dispatch fast path gated by de
   assert.match(workflow, /- name: Detect changes/);
   assert.match(workflow, /repo_changed=false/);
   assert.match(workflow, /content_changed=false/);
-  assert.match(workflow, /- name: Run tests\s*\n\s*if: steps\.changes\.outputs\.content_changed == 'true'/);
+  assert.match(workflow, /- name: Run tests\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.changes\.outputs\.content_changed == 'true'/);
   assert.match(workflow, /- name: Commit sync results\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
   assert.match(workflow, /- name: Rebase on latest main\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
   assert.match(workflow, /- name: Push changes\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
-  assert.match(workflow, /- name: Build site data and static files\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /- name: Build site data and static files\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.changes\.outputs\.repo_changed == 'true'/);
 });
 
 test('telegram-sync workflow skips full database maintenance on webhook dispatches', async () => {

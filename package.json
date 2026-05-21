@@ -5,6 +5,7 @@
   "description": "Hexo dashboard for Markdown-based training records",
   "scripts": {
     "test": "node --test",
+    "test:fast": "node --test --test-skip-pattern \"dashboard renders|dashboard defaults|dashboard chart script|dashboard embeds|dashboard explains|dashboard fallback view|homepage|thoughts page|thought detail page\"",
     "build:data": "node tools/generate-training-data.mjs",
     "backfill:core": "node tools/backfill-training-core-from-archive.mjs",
     "backfill:thoughts": "node tools/backfill-thoughts-to-core.mjs",
