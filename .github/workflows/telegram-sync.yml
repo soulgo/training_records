@@ -108,7 +108,7 @@ jobs:
         run: git push origin HEAD:main
 
       - name: Build site data and static files
-        if: github.event_name != 'repository_dispatch' && steps.changes.outputs.repo_changed == 'true'
+        if: steps.changes.outputs.repo_changed == 'true'
         env:
           TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
           TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
@@ -120,15 +120,15 @@ jobs:
         run: npm run build
 
       - name: Setup Pages
-        if: github.event_name != 'repository_dispatch' && steps.changes.outputs.repo_changed == 'true'
+        if: steps.changes.outputs.repo_changed == 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        if: github.event_name != 'repository_dispatch' && steps.changes.outputs.repo_changed == 'true'
+        if: steps.changes.outputs.repo_changed == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./public
 
       - name: Deploy to GitHub Pages
-        if: github.event_name != 'repository_dispatch' && steps.changes.outputs.repo_changed == 'true'
+        if: steps.changes.outputs.repo_changed == 'true'
         uses: actions/deploy-pages@v4
