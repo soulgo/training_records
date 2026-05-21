@@ -11,6 +11,7 @@ on:
       - source/**
       - themes/**
       - tools/**
+      - .github/actions/site-build/action.yml
       - .github/workflows/deploy-pages.yml
       - .github/workflows/telegram-sync.yml
       - package.json
@@ -27,10 +28,23 @@ concurrency:
 
 jobs:
   build:
-    uses: ./.github/workflows/_reusable-build.yml
-    with:
-      run_backfill: true
-      run_tests: true
-      deploy: true
-      checkout_ref: main
-    secrets: inherit
+    runs-on: ubuntu-latest
+    env:
+      TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
+      TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
+      TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
+      TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
+      TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Build and deploy site
+        uses: ./.github/actions/site-build
+        with:
+          run_backfill: 'true'
+          run_tests: 'true'
+          deploy: 'true'

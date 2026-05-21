@@ -24,14 +24,12 @@ jobs:
   sync:
     if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    outputs:
-      repo_changed: ${{ steps.changes.outputs.repo_changed }}
-      content_changed: ${{ steps.changes.outputs.content_changed }}
     env:
       TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
       TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
       TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
       TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
+      TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -110,14 +108,10 @@ jobs:
         if: steps.changes.outputs.repo_changed == 'true'
         run: git push origin HEAD:main
 
-  deploy:
-    name: Deploy site snapshot
-    needs: sync
-    if: needs.sync.outputs.repo_changed == 'true'
-    uses: ./.github/workflows/_reusable-build.yml
-    with:
-      run_backfill: false
-      run_tests: false
-      deploy: true
-      checkout_ref: main
-    secrets: inherit
+      - name: Build and deploy site snapshot
+        if: steps.changes.outputs.repo_changed == 'true'
+        uses: ./.github/actions/site-build
+        with:
+          run_backfill: 'false'
+          run_tests: 'false'
+          deploy: 'true'

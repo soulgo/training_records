@@ -1,0 +1,77 @@
+name: Shared Site Build
+description: Shared setup, build, and deploy steps for the Hexo site
+
+inputs:
+  run_backfill:
+    description: Whether to sync committed data back into the database before building
+    required: false
+    default: 'true'
+  run_tests:
+    description: Whether to run the full test suite before building
+    required: false
+    default: 'true'
+  deploy:
+    description: Whether to upload and deploy the generated Pages artifact
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+
+    - name: Cache Hexo
+      uses: actions/cache@v4
+      with:
+        path: |
+          .hexo_cache
+        key: hexo-${{ runner.os }}-${{ hashFiles('训练记录.md', 'source/_posts/**', 'themes/**') }}
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Backfill core from archive snapshot
+      if: ${{ inputs.run_backfill == 'true' }}
+      shell: bash
+      run: npm run backfill:core
+
+    - name: Reconcile committed markdown back to core
+      if: ${{ inputs.run_backfill == 'true' }}
+      shell: bash
+      run: npm run reconcile:markdown
+
+    - name: Backfill thought markdown back to core
+      if: ${{ inputs.run_backfill == 'true' }}
+      shell: bash
+      run: npm run backfill:thoughts
+
+    - name: Run tests
+      if: ${{ inputs.run_tests == 'true' }}
+      shell: bash
+      run: npm test
+
+    - name: Build site data and static files
+      shell: bash
+      env:
+        GITHUB_ACTOR: ${{ github.actor }}
+        GITHUB_ACTIONS: 'true'
+      run: npm run build
+
+    - name: Setup Pages
+      if: ${{ inputs.deploy == 'true' }}
+      uses: actions/configure-pages@v5
+
+    - name: Upload artifact
+      if: ${{ inputs.deploy == 'true' }}
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: ./public
+
+    - name: Deploy to GitHub Pages
+      if: ${{ inputs.deploy == 'true' }}
+      uses: actions/deploy-pages@v4
