@@ -639,10 +639,6 @@ function canRebuildMarkdownFromPersistedBatches(error) {
   return isIncompleteDatabaseSnapshotError(error) || isUnavailableDatabaseSnapshotError(error);
 }
 
-if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {
-  await main();
-}
-
 function loadRequiredEnv(env = process.env) {
   const botToken = env.TELEGRAM_BOT_TOKEN;
   const apiKey = env.AI_API_KEY;
@@ -844,4 +840,8 @@ async function recognizeImageMessage(message, imageUrl, env) {
     messageId: message.messageId,
     ...parsed,
   };
+}
+
+if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {
+  await main();
 }

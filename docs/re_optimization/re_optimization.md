@@ -38,8 +38,7 @@
 | 图片识别 prompt 维护 | `docs/telegram-recognition-prompt.md` |
 | `/analysis` 行为 | `docs/telegram-analysis.md` |
 | `/thought` 行为 | `docs/thoughts-module.md` |
-| GitHub secrets/vars | `docs/github-settings.md` |
-| Cloudflare webhook | `docs/telegram-webhook-cloudflare.md` |
+| GitHub / Cloudflare 配置 | `docs/github-cloudflare-settings.md` |
 | Dashboard 派生数据 | `tools/dashboard-view.mjs` 与 `test/dashboard-view.test.mjs`、`test/dashboard-page.test.mjs` |
 | Analysis 编排与 compact focus | `tools/training-analysis.mjs` |
 | Analysis prompt 加载 | `tools/training-prompt.mjs` |

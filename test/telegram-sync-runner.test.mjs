@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +11,28 @@ import {
   runTelegramSync,
   shouldPersistTelegramArtifacts,
 } from '../tools/telegram-sync.mjs';
+
+test('telegram sync entrypoint exits cleanly in webhook mode without queued work', () => {
+  const stdout = execFileSync(process.execPath, ['tools/telegram-sync.mjs'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'false',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TELEGRAM_SYNC_TRANSPORT: 'webhook',
+    },
+  });
+
+  const report = JSON.parse(stdout);
+  assert.equal(report.changed, false);
+  assert.equal(report.updatesFetched, 0);
+});
 
 test('does not persist telegram artifacts when no updates were fetched and nothing changed', () => {
   assert.equal(

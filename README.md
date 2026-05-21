@@ -309,8 +309,8 @@ npm run build
 - `docs/telegram-date-resolution.md`
   Telegram 单张/多张图片的日期归档与跳过规则说明，包含 `photo` 与 `document` 的差异
 
-- `docs/telegram-webhook-cloudflare.md`
-  Telegram webhook + Cloudflare Worker 的接入说明
+- `docs/github-cloudflare-settings.md`
+  GitHub Settings + Cloudflare Worker 的统一配置说明
 
 - `docs/thoughts-module.md`
   锻炼随想模块与 Telegram `/thought` 的维护说明
@@ -350,7 +350,7 @@ npm run build
 - `TRAINING_DB_TIMEOUT_MS`
 - `TRAINING_DB_APP_NAME`
 
-详细说明见 [docs/github-settings.md](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/github-settings.md)。
+详细说明见 [docs/github-cloudflare-settings.md](docs/github-cloudflare-settings.md)。
 
 ## 11. PostgreSQL 初始化
 
