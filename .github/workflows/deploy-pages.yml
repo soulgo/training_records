@@ -27,76 +27,10 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Backfill core from archive snapshot
-        env:
-          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
-          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
-          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
-          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
-        run: npm run backfill:core
-
-      - name: Reconcile committed markdown back to core
-        env:
-          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
-          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
-          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
-          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
-        run: npm run reconcile:markdown
-
-      - name: Backfill thought markdown back to core
-        env:
-          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
-          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
-          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
-          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
-        run: npm run backfill:thoughts
-
-      - name: Run tests
-        run: npm test
-
-      - name: Build site data and static files
-        env:
-          TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
-          TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
-          TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
-          TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
-          TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_ACTIONS: "true"
-        run: npm run build
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./public
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+    uses: ./.github/workflows/_reusable-build.yml
+    with:
+      run_backfill: true
+      run_tests: true
+      deploy: true
+      checkout_ref: main
+    secrets: inherit

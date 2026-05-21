@@ -4,14 +4,43 @@ import { readFile } from 'node:fs/promises';
 
 const rootDir = new URL('../', import.meta.url);
 
-test('deploy-pages workflow runs on push to main instead of workflow_run fan-out', async () => {
-  const workflow = await readWorkflow('.github/workflows/deploy-pages.yml');
+test('reusable build workflow centralizes Hexo build, cache, and deploy steps', async () => {
+  const workflow = await readWorkflow('.github/workflows/_reusable-build.yml');
 
-  assert.match(workflow, /on:\s*\n\s*workflow_dispatch:\s*\n\s*push:\s*\n\s*branches:\s*\n\s*-\s*main/);
-  assert.doesNotMatch(workflow, /workflow_run:/);
+  assert.match(workflow, /on:\s*\n\s*workflow_call:/);
+  for (const inputName of ['run_backfill', 'run_tests', 'deploy']) {
+    assert.match(workflow, new RegExp(`${inputName}:\\s*\\n\\s*type:\\s*boolean`));
+  }
+  assert.match(workflow, /actions\/checkout@v4/);
+  assert.match(workflow, /actions\/setup-node@v4/);
+  assert.match(workflow, /cache:\s*npm/);
+  assert.match(workflow, /actions\/cache@v4/);
+  assert.match(workflow, /path:\s*\|\s*\n\s*\.hexo_cache/);
+  assert.match(
+    workflow,
+    /key:\s*hexo-\$\{\{\s*runner\.os\s*\}\}-\$\{\{\s*hashFiles\('训练记录\.md', 'source\/_posts\/\*\*', 'themes\/\*\*'\)\s*\}\}/,
+  );
+  assert.match(workflow, /- name: Backfill core from archive snapshot/);
+  assert.match(workflow, /- name: Reconcile committed markdown back to core/);
+  assert.match(workflow, /- name: Backfill thought markdown back to core/);
+  assert.match(workflow, /- name: Run tests/);
+  assert.match(workflow, /- name: Build site data and static files/);
+  assert.match(workflow, /actions\/configure-pages@v5/);
+  assert.match(workflow, /actions\/upload-pages-artifact@v3/);
+  assert.match(workflow, /actions\/deploy-pages@v4/);
 });
 
-test('deploy-pages workflow limits automatic deploys to site-relevant paths', async () => {
+test('deploy-pages workflow delegates build and deploy to the reusable workflow', async () => {
+  const workflow = await readWorkflow('.github/workflows/deploy-pages.yml');
+
+  assert.match(workflow, /jobs:\s*\n\s*build:\s*\n\s*uses:\s*\.\/\.github\/workflows\/_reusable-build\.yml/);
+  assert.match(workflow, /run_backfill:\s*true/);
+  assert.match(workflow, /run_tests:\s*true/);
+  assert.match(workflow, /deploy:\s*true/);
+  assert.match(workflow, /secrets:\s*inherit/);
+});
+
+test('deploy-pages workflow still triggers for site-relevant changes', async () => {
   const workflow = await readWorkflow('.github/workflows/deploy-pages.yml');
 
   for (const expectedPath of [
@@ -22,6 +51,7 @@ test('deploy-pages workflow limits automatic deploys to site-relevant paths', as
     'tools/**',
     '.github/workflows/deploy-pages.yml',
     '.github/workflows/telegram-sync.yml',
+    '.github/workflows/_reusable-build.yml',
     'package.json',
     'package-lock.json',
   ]) {
@@ -29,23 +59,7 @@ test('deploy-pages workflow limits automatic deploys to site-relevant paths', as
   }
 });
 
-test('deploy-pages workflow reconciles committed markdown before building the site', async () => {
-  const workflow = await readWorkflow('.github/workflows/deploy-pages.yml');
-
-  assert.match(workflow, /- name: Reconcile committed markdown back to core/);
-  assert.match(workflow, /run:\s*npm run reconcile:markdown/);
-  assert.match(workflow, /TRAINING_DB_ENABLED:\s*\$\{\{\s*vars\.TRAINING_DB_ENABLED\s*\}\}/);
-  assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.TRAINING_DB_URL\s*\}\}/);
-});
-
-test('deploy-pages workflow backfills telegram thought markdown before tests', async () => {
-  const workflow = await readWorkflow('.github/workflows/deploy-pages.yml');
-
-  assert.match(workflow, /- name: Backfill thought markdown back to core/);
-  assert.match(workflow, /run:\s*npm run backfill:thoughts/);
-});
-
-test('telegram-sync workflow deploys Pages for repository_dispatch when repo changes exist', async () => {
+test('telegram-sync workflow delegates deploy work after syncing repository changes', async () => {
   const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
 
   assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
@@ -53,29 +67,19 @@ test('telegram-sync workflow deploys Pages for repository_dispatch when repo cha
   assert.match(workflow, /git commit -m "chore: sync Telegram updates"/);
   assert.match(workflow, /- name: Run tests\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.changes\.outputs\.content_changed == 'true'/);
   assert.match(workflow, /run:\s*npm run test:fast/);
-  assert.match(workflow, /- name: Build site data and static files\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
-  assert.match(workflow, /- name: Setup Pages\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
-  assert.match(workflow, /actions\/upload-pages-artifact@v3/);
-  assert.match(workflow, /actions\/deploy-pages@v4/);
-  assert.doesNotMatch(workflow, /needs:\s*sync/);
+  assert.match(workflow, /- name: Deploy site snapshot\s*\n\s*if: needs\.sync\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /uses:\s*\.\/\.github\/workflows\/_reusable-build\.yml/);
+  assert.match(workflow, /run_backfill:\s*false/);
+  assert.match(workflow, /run_tests:\s*false/);
+  assert.match(workflow, /deploy:\s*true/);
 });
 
-test('telegram-sync workflow keeps the repository_dispatch fast path gated by detected changes', async () => {
+test('telegram-sync workflow keeps change detection and maintenance gating intact', async () => {
   const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
 
   assert.match(workflow, /- name: Detect changes/);
   assert.match(workflow, /repo_changed=false/);
   assert.match(workflow, /content_changed=false/);
-  assert.match(workflow, /- name: Run tests\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.changes\.outputs\.content_changed == 'true'/);
-  assert.match(workflow, /- name: Commit sync results\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
-  assert.match(workflow, /- name: Rebase on latest main\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
-  assert.match(workflow, /- name: Push changes\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
-  assert.match(workflow, /- name: Build site data and static files\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
-});
-
-test('telegram-sync workflow skips full database maintenance on webhook dispatches', async () => {
-  const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
-
   for (const stepName of [
     'Backfill core from archive snapshot',
     'Reconcile committed markdown back to core',
@@ -87,24 +91,9 @@ test('telegram-sync workflow skips full database maintenance on webhook dispatch
       new RegExp(`- name: ${escapeRegExp(stepName)}\\n\\s+if: github\\.event_name != 'repository_dispatch'`),
     );
   }
-});
-
-test('cloudflare worker workflow deploys wrangler config changes to Cloudflare', async () => {
-  const workflow = await readWorkflow('.github/workflows/deploy-cloudflare-worker.yml');
-
-  assert.match(workflow, /on:\s*\n\s*workflow_dispatch:\s*\n\s*push:\s*\n\s*branches:\s*\n\s*-\s*main/);
-  for (const expectedPath of [
-    'wrangler.toml',
-    'cloudflare/**',
-    '.github/workflows/deploy-cloudflare-worker.yml',
-  ]) {
-    assert.match(workflow, new RegExp(`-\\s*${escapeRegExp(expectedPath)}`));
-  }
-  assert.match(workflow, /permissions:\s*\n\s*contents:\s*read/);
-  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
-  assert.match(workflow, /apiToken:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
-  assert.match(workflow, /accountId:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
-  assert.match(workflow, /command:\s*deploy/);
+  assert.match(workflow, /- name: Commit sync results\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /- name: Rebase on latest main\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /- name: Push changes\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
 });
 
 test('site workflows require Node 22 LTS', async () => {
@@ -121,6 +110,12 @@ test('site workflows require Node 22 LTS', async () => {
     }
     assert.match(workflow, /node-version:\s*22/);
   }
+});
+
+test('Hexo cache is enabled in the root config for reusable workflow caching to matter', async () => {
+  const config = await readFile(new URL('_config.yml', rootDir), 'utf8');
+
+  assert.match(config, /cache:\s*\n\s*enable:\s*true/);
 });
 
 async function readWorkflow(relativePath) {

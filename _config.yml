@@ -64,3 +64,6 @@ theme_config:
 marked:
   prependRoot: true
   postAsset: false
+
+cache:
+  enable: true
