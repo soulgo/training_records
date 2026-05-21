@@ -15,6 +15,7 @@ export async function backfillThoughtsToCore(options = {}) {
   const activeRootDir = options.rootDir ?? rootDir;
   const thoughtsDir = options.thoughtsDir ?? path.join(activeRootDir, 'source', '_posts');
   const env = options.env ?? process.env;
+  const stderr = options.stderr ?? process.stderr;
   const config = resolveTrainingCoreConfig(env);
   if (!config.enabled || !config.url) {
     return {
@@ -72,9 +73,16 @@ export async function backfillThoughtsToCore(options = {}) {
     };
   } catch (error) {
     if (transactionStarted) {
-      await client.query('ROLLBACK');
+      try {
+        await client.query('ROLLBACK');
+      } catch {}
     }
-    throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    stderr.write(`[backfill-thoughts-to-core] ${message}\n`);
+    return {
+      status: 'deferred',
+      error: message,
+    };
   } finally {
     await client.end();
   }

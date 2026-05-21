@@ -69,6 +69,36 @@ test('backfillThoughtsToCore imports telegram thought markdown into core.thought
   ]);
 });
 
+test('backfillThoughtsToCore defers instead of throwing when database is unavailable', async () => {
+  const stderrChunks = [];
+
+  const result = await backfillThoughtsToCore({
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return {
+        async connect() {
+          throw new Error('timeout expired');
+        },
+        async end() {},
+      };
+    },
+    stderr: {
+      write(chunk) {
+        stderrChunks.push(String(chunk));
+      },
+    },
+  });
+
+  assert.deepEqual(result, {
+    status: 'deferred',
+    error: 'timeout expired',
+  });
+  assert.match(stderrChunks.join(''), /timeout expired/);
+});
+
 async function fsMkdtemp(prefix) {
   return await import('node:fs/promises').then(({ mkdtemp }) => mkdtemp(path.join(os.tmpdir(), prefix)));
 }
