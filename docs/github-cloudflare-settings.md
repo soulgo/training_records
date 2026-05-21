@@ -206,14 +206,16 @@ TRAINING_DB_APP_NAME=training-records-dashboard
 
 - Secret: `GITHUB_TOKEN`
 - Secret: `TELEGRAM_SECRET_TOKEN`
-- Variable: `GITHUB_OWNER`
-- Variable: `GITHUB_REPO`
+- Variable: `GITHUB_OWNER`（可选；默认 `soulgo`）
+- Variable: `GITHUB_REPO`（可选；默认 `training_records`）
 - Durable Object binding: `TELEGRAM_ALBUM_BUFFER`
 
 当前仓库对应值：
 
 - `GITHUB_OWNER=soulgo`
 - `GITHUB_REPO=training_records`
+
+如果这两个变量未配置，当前 Worker 会回落到上述仓库默认值，避免 Telegram webhook 因变量缺失直接返回 500。若后续复制到其他仓库，必须显式配置这两个变量。
 
 `TELEGRAM_SECRET_TOKEN` 建议使用随机字符串，例如 PowerShell：
 

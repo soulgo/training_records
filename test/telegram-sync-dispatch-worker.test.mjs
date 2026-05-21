@@ -56,6 +56,41 @@ test('handleTelegramWebhook dispatches non-album telegram updates to GitHub imme
   });
 });
 
+test('handleTelegramWebhook falls back to the documented repository when owner and repo are omitted', async () => {
+  const calls = [];
+  const request = new Request('https://worker.example.com', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'X-Telegram-Bot-Api-Secret-Token': 'secret-token',
+    },
+    body: JSON.stringify({
+      update_id: 124,
+      message: {
+        message_id: 2,
+      },
+    }),
+  });
+
+  const response = await handleTelegramWebhook(
+    request,
+    {
+      GITHUB_TOKEN: 'github-token',
+      TELEGRAM_SECRET_TOKEN: 'secret-token',
+    },
+    {
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return new Response(null, { status: 204 });
+      },
+    },
+  );
+
+  assert.equal(response.status, 202);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://api.github.com/repos/soulgo/training_records/dispatches');
+});
+
 test('handleTelegramWebhook buffers album updates and dispatches them together after the alarm fires', async () => {
   const calls = [];
   const env = createEnv();

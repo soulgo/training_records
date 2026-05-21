@@ -1,4 +1,6 @@
 const GITHUB_API_BASE_URL = 'https://api.github.com';
+const DEFAULT_GITHUB_OWNER = 'soulgo';
+const DEFAULT_GITHUB_REPO = 'training_records';
 const TELEGRAM_SECRET_HEADER = 'X-Telegram-Bot-Api-Secret-Token';
 const ALBUM_BUFFER_DELAY_MS = 3_000;
 
@@ -145,7 +147,7 @@ export async function handleTelegramWebhook(request, env, options = {}) {
 }
 
 function validateRequiredConfig(env) {
-  for (const name of ['GITHUB_OWNER', 'GITHUB_REPO', 'GITHUB_TOKEN', 'TELEGRAM_SECRET_TOKEN']) {
+  for (const name of ['GITHUB_TOKEN', 'TELEGRAM_SECRET_TOKEN']) {
     if (!env?.[name]?.trim()) {
       return `missing_${name.toLowerCase()}`;
     }
@@ -162,8 +164,9 @@ async function safeReadText(response) {
 }
 
 async function dispatchTelegramUpdates({ fetchImpl, env, updates }) {
+  const { owner, repo } = resolveGithubRepository(env);
   return fetchImpl(
-    `${env.GITHUB_API_BASE_URL?.trim() || GITHUB_API_BASE_URL}/repos/${encodeURIComponent(env.GITHUB_OWNER)}/${encodeURIComponent(env.GITHUB_REPO)}/dispatches`,
+    `${env.GITHUB_API_BASE_URL?.trim() || GITHUB_API_BASE_URL}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dispatches`,
     {
       method: 'POST',
       headers: {
@@ -180,6 +183,13 @@ async function dispatchTelegramUpdates({ fetchImpl, env, updates }) {
       }),
     },
   );
+}
+
+function resolveGithubRepository(env) {
+  return {
+    owner: env?.GITHUB_OWNER?.trim() || DEFAULT_GITHUB_OWNER,
+    repo: env?.GITHUB_REPO?.trim() || DEFAULT_GITHUB_REPO,
+  };
 }
 
 function getAlbumBufferKey(update) {
