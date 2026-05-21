@@ -17,7 +17,6 @@ test('telegram sync entrypoint exits cleanly in webhook mode without queued work
     cwd: process.cwd(),
     encoding: 'utf8',
     env: {
-      ...process.env,
       TELEGRAM_BOT_TOKEN: 'token',
       AI_API_KEY: 'key',
       AI_BASE_URL: 'https://example.com/v1',
@@ -26,6 +25,33 @@ test('telegram sync entrypoint exits cleanly in webhook mode without queued work
       TRAINING_DB_ENABLED: 'false',
       TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       TELEGRAM_SYNC_TRANSPORT: 'webhook',
+    },
+  });
+
+  const report = JSON.parse(stdout);
+  assert.equal(report.changed, false);
+  assert.equal(report.updatesFetched, 0);
+});
+
+test('telegram sync entrypoint ignores empty repository dispatch payloads in webhook mode', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-empty-dispatch-'));
+  const dispatchPath = path.join(tempRoot, 'dispatch-event.json');
+  await writeFile(dispatchPath, JSON.stringify({ client_payload: {} }), 'utf8');
+
+  const stdout = execFileSync(process.execPath, ['tools/telegram-sync.mjs'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'false',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TELEGRAM_SYNC_TRANSPORT: 'webhook',
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+      GITHUB_EVENT_PATH: dispatchPath,
     },
   });
 
