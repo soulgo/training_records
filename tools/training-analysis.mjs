@@ -1,7 +1,11 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildTrainingSnapshot as buildTrainingSnapshotFromSource } from './training-snapshot.mjs';
+import {
+  buildTrainingSnapshot as buildTrainingSnapshotFromSource,
+  isIncompleteDatabaseSnapshotError,
+  isUnavailableDatabaseSnapshotError,
+} from './training-snapshot.mjs';
 import { buildTrainingAnalysisPrompt } from './training-prompt.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -16,11 +20,7 @@ export async function generateTrainingAnalysisReply(options = {}) {
   const trainingGoal = normalizeTrainingGoal(options.trainingGoal ?? rawEnv.TRAINING_ANALYSIS_GOAL);
   const snapshot =
     options.snapshot ??
-    (await (options.buildTrainingSnapshot ?? buildTrainingSnapshotFromSource)({
-      rootDir: options.rootDir ?? rootDir,
-      env: options.env ?? process.env,
-      now: options.now,
-    }));
+    (await loadSnapshotForAnalysis(options));
   const prompt = await buildTrainingAnalysisPrompt({
     env: options.env ?? process.env,
     trainingGoal,
@@ -42,6 +42,27 @@ export async function generateTrainingAnalysisReply(options = {}) {
     throw new Error('Training analysis returned empty content');
   }
   return reply;
+}
+
+async function loadSnapshotForAnalysis(options) {
+  const buildTrainingSnapshot = options.buildTrainingSnapshot ?? buildTrainingSnapshotFromSource;
+  const snapshotOptions = {
+    rootDir: options.rootDir ?? rootDir,
+    env: options.env ?? process.env,
+    now: options.now,
+  };
+
+  try {
+    return await buildTrainingSnapshot(snapshotOptions);
+  } catch (error) {
+    if (!canFallbackToMarkdownSnapshot(error, snapshotOptions.env)) {
+      throw error;
+    }
+    return buildTrainingSnapshot({
+      ...snapshotOptions,
+      source: 'markdown',
+    });
+  }
 }
 
 export async function loadTrainingAnalysisPrompt(env = process.env) {
@@ -190,6 +211,17 @@ function normalizeAnalysisEnv(env) {
     baseUrl: baseUrl.replace(/\/+$/, ''),
     model,
   };
+}
+
+function canFallbackToMarkdownSnapshot(error, env) {
+  if (
+    !isIncompleteDatabaseSnapshotError(error) &&
+    !isUnavailableDatabaseSnapshotError(error)
+  ) {
+    return false;
+  }
+
+  return String(env?.TRAINING_SNAPSHOT_SOURCE ?? '').trim().toLowerCase() === 'database';
 }
 
 async function requestTrainingAnalysis({ env, prompt, question, trainingGoal, focus, summary, fetchImpl }) {

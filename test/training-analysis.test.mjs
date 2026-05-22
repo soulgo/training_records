@@ -84,6 +84,45 @@ test('generateTrainingAnalysisReply sends time-window constraints to the model',
   assert.match(reply, /近7天训练稳定/);
 });
 
+test('generateTrainingAnalysisReply falls back to markdown snapshot when database snapshot is incomplete', async () => {
+  const calls = [];
+
+  const reply = await generateTrainingAnalysisReply({
+    env: {
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TRAINING_SNAPSHOT_SOURCE: 'database',
+    },
+    question: '分析最近半个月训练和饮食情况',
+    now: new Date('2026-05-16T00:00:00.000Z'),
+    buildTrainingSnapshot: async (options) => {
+      calls.push(options.source ?? 'default');
+      if ((options.source ?? 'default') === 'default') {
+        throw new Error('database snapshot is empty or missing measurements');
+      }
+      return buildSyntheticSnapshot();
+    },
+    fetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return {
+          choices: [
+            {
+              message: {
+                content: '数据结论：已回退到 Markdown 快照继续分析。',
+              },
+            },
+          ],
+        };
+      },
+    }),
+  });
+
+  assert.equal(reply, '数据结论：已回退到 Markdown 快照继续分析。');
+  assert.deepEqual(calls, ['default', 'markdown']);
+});
+
 test('loadTrainingAnalysisPrompt reads the compiled prompt by default', async () => {
   const prompt = await loadTrainingAnalysisPrompt({
     TRAINING_ANALYSIS_PROMPT_PATH: '',
