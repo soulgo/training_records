@@ -157,10 +157,45 @@ test('groups /thought and /随想 messages into thought batches and ignores norm
   assert.equal(batches[0].batchId, 'thought-11');
   assert.equal(batches[0].thought.command, '/thought');
   assert.equal(batches[0].thought.body, '今天训练后臀部发力更明显\n感觉动作路线更顺了');
+  assert.equal(batches[0].thought.thoughtModule, 'workout');
   assert.equal(batches[1].kind, 'thought');
   assert.equal(batches[1].batchId, 'thought-12');
   assert.equal(batches[1].thought.command, '/随想');
   assert.equal(batches[1].thought.body, '恢复节奏更稳了');
+  assert.equal(batches[1].thought.thoughtModule, 'workout');
+});
+
+test('groups module-scoped thought commands into module-specific thought batches', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 205,
+      message: {
+        message_id: 15,
+        date: 1_746_748_800,
+        chat: { id: 42 },
+        text: '/随想 杂七杂八 今天整理了一堆没来得及记的事',
+      },
+    },
+    {
+      update_id: 206,
+      message: {
+        message_id: 16,
+        date: 1_746_748_801,
+        chat: { id: 42 },
+        text: '/thought 锻炼 今天腿练得很实',
+      },
+    },
+  ]);
+
+  assert.equal(batches.length, 2);
+  assert.equal(batches[0].thought.thoughtModule, 'misc');
+  assert.equal(batches[0].thought.body, '今天整理了一堆没来得及记的事');
+  assert.equal(batches[1].thought.thoughtModule, 'workout');
+  assert.equal(batches[1].thought.body, '今天腿练得很实');
 });
 
 test('groups thought captions with images and albums without treating them as training screenshots', async () => {
@@ -175,7 +210,7 @@ test('groups thought captions with images and albums without treating them as tr
         message_id: 31,
         date: 1_746_748_800,
         chat: { id: 42 },
-        caption: '/随想 今天训练后的动作截图',
+        caption: '/随想 杂七杂八 今天训练后的动作截图',
         photo: [
           { file_id: 'small', file_unique_id: 'small-u', width: 90, height: 90, file_size: 1000 },
           { file_id: 'large', file_unique_id: 'large-u', width: 1280, height: 960, file_size: 8000 },
@@ -209,10 +244,12 @@ test('groups thought captions with images and albums without treating them as tr
   assert.equal(batches[0].kind, 'thought');
   assert.equal(batches[0].batchId, 'thought-31');
   assert.equal(batches[0].thought.command, '/随想');
+  assert.equal(batches[0].thought.thoughtModule, 'misc');
   assert.equal(batches[0].messages.length, 1);
   assert.equal(batches[1].kind, 'thought');
   assert.equal(batches[1].batchId, 'thought-32');
   assert.equal(batches[1].thought.command, '/thought');
+  assert.equal(batches[1].thought.thoughtModule, 'workout');
   assert.equal(batches[1].messages.length, 2);
 });
 
@@ -288,6 +325,36 @@ test('groups edited thought messages into thought_edit batches when the message 
   assert.equal(batches[0].kind, 'thought_edit');
   assert.equal(batches[0].thoughtEdit.targetMessageId, 126);
   assert.equal(batches[0].thoughtEdit.body, '今天骑行 40 公里，状态更顺了');
+  assert.equal(batches[0].thoughtEdit.thoughtModule, 'workout');
+});
+
+test('groups edited thought messages with a module token into thought_edit batches for module updates', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates(
+    [
+      {
+        update_id: 402,
+        edited_message: {
+          message_id: 126,
+          date: 1_746_748_800,
+          chat: { id: 42 },
+          text: '杂七杂八 今天把杂事也记一下',
+        },
+      },
+    ],
+    {
+      knownThoughtMessageKeys: ['42:126'],
+    },
+  );
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought_edit');
+  assert.equal(batches[0].thoughtEdit.targetMessageId, 126);
+  assert.equal(batches[0].thoughtEdit.body, '今天把杂事也记一下');
+  assert.equal(batches[0].thoughtEdit.thoughtModule, 'misc');
 });
 
 test('groups reply-based thought revisions into thought_edit batches when replying to a known thought', async () => {

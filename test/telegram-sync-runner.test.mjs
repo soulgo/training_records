@@ -1378,6 +1378,7 @@ test('runTelegramSync writes a /thought telegram message into source/_posts and 
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].kind, 'thought');
+  assert.equal(persistedBatches[0].thought.thoughtModule, 'workout');
   assert.equal(
     persistedBatches[0].thought.storage.markdownPath,
     'source/_posts/2026-05-14-telegram-thought-501.md',
@@ -1489,6 +1490,61 @@ test('runTelegramSync writes a /随想 image caption into source/_posts with dow
   assert.match(postContent, /photos:\n  - \/images\/thoughts\/2026\/05\/2026-05-14-telegram-thought-502-1\.jpg/);
   assert.match(postContent, /今天深蹲动作轨迹更稳了/);
   assert.equal(await readFile(imagePath, 'utf8'), 'fake image content');
+});
+
+test('runTelegramSync writes a module-scoped /随想 caption into source/_posts with module metadata', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-misc-'));
+  const persistedBatches = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 503,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想 杂七杂八 今天把零碎事情记一下',
+          photo: [{ file_id: 'photo-misc', file_unique_id: 'photo-misc-u' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [],
+    fetchTelegramFile: async () => ({
+      filePath: 'misc/file_503.jpg',
+      contentType: 'image/jpeg',
+      data: Buffer.from('fake image content'),
+    }),
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  const postPath = path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-503.md');
+  const postContent = await readFile(postPath, 'utf8');
+
+  assert.equal(result.batchResults[0].thought.thoughtModule, 'misc');
+  assert.equal(persistedBatches[0].thought.thoughtModule, 'misc');
+  assert.match(postContent, /thought_module: misc/);
+  assert.match(postContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
 });
 
 test('runTelegramSync writes a /thought album caption as one thought post with all photos', async () => {
