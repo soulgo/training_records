@@ -1,9 +1,10 @@
 ---
 date: 2026-05-21 14:38:38
 tags:
-  - 训练
+  - 杂七杂八
   - 随想
   - Telegram
+thought_module: misc
 telegram_message_id: 168
 telegram_chat_id: 6314355239
 photos:

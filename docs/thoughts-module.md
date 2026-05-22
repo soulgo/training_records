@@ -65,9 +65,11 @@
 /移动 杂七杂八
 /移动 <id> 锻炼
 /移动 <id> 杂七杂八
+/随想 <id> 锻炼
+/随想 <id> 杂七杂八
 ```
 
-`/移动 锻炼` 和 `/移动 杂七杂八` 需要回复原随想消息；`/移动 <id> 锻炼` 和 `/移动 <id> 杂七杂八` 直接按页面显示的 `#id` 定位。移动只更新 Markdown front matter 的 `thought_module` 和 tags，不改正文、图片、日期和文件名；DB 镜像同步更新 `core.thought.thought_module`。如果只发送 `/移动 <id>` 而没有目标模块，系统不会生成移动批次。
+`/移动 锻炼` 和 `/移动 杂七杂八` 需要回复原随想消息；`/移动 <id> 锻炼` 和 `/移动 <id> 杂七杂八` 直接按页面显示的 `#id` 定位。`/随想 <id> 锻炼` 和 `/随想 <id> 杂七杂八` 是兼容旧使用习惯的移动写法，等价于 `/移动 <id> ...`。移动只更新 Markdown front matter 的 `thought_module` 和 tags，不改正文、图片、日期和文件名；DB 镜像同步更新 `core.thought.thought_module`。如果只发送 `/移动 <id>` 或 `/随想 <id>` 而没有目标模块，系统不会生成移动批次。
 
 ## 3. Markdown Front Matter
 

@@ -237,15 +237,17 @@ npm run build
 
 ### 7.2.1 `/thought` 随想的当前规则
 
-- 入口命令是 Telegram 文本消息 `/thought 正文`
-- 当前只识别文字消息，不需要图片
+- 入口命令支持 `/thought 正文`、`/随想 正文`，也支持图片 caption 和相册 caption
+- 支持纯文字随想，也支持带图随想；识别为随想后不会进入训练截图 AI 识别
 - 同步时会生成 `source/_posts/YYYY-MM-DD-telegram-thought-<messageId>.md`
-- front matter 当前包含：`date`、`tags`、`telegram_message_id`、`telegram_chat_id`
+- front matter 当前包含：`date`、`tags`、`telegram_message_id`、`telegram_chat_id`，带图随想还会包含 `photos`
 - 当前不会为 Telegram 随想生成 `title`
 - “锻炼随想”列表页只展示时间、标签和正文，不展示标题，也没有“阅读全文”
 - 无标题 Telegram 随想的单篇详情页不会渲染空 H1
+- 当前还支持随想编辑、删除和移动；更完整的命令见 `docs/telegram-usage.md`
 
 更完整的维护说明见 `docs/thoughts-module.md`。
+用户使用说明见 `docs/telegram-usage.md`。
 
 ### 7.2.2 `/analysis` 训练分析的当前规则
 
@@ -314,6 +316,9 @@ npm run build
 
 - `docs/thoughts-module.md`
   锻炼随想模块与 Telegram `/thought` 的维护说明
+
+- `docs/telegram-usage.md`
+  Telegram 日常使用说明，包含图片发送、发送随想、编辑随想、删除随想、移动随想
 
 - `docs/telegram-analysis.md`
   Telegram `/analysis` / `/分析` 训练分析指令维护说明

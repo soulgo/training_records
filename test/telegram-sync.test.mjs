@@ -512,6 +512,30 @@ test('groups thought move commands by reply target and explicit message id', asy
   assert.equal(batches[1].thoughtMove.thoughtModule, 'workout');
 });
 
+test('groups legacy /随想 id module messages as thought move commands', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 424,
+      message: {
+        message_id: 714,
+        date: 1_746_748_900,
+        chat: { id: 42 },
+        text: '/随想 175 杂七杂八',
+      },
+    },
+  ]);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought_move');
+  assert.equal(batches[0].thoughtMove.command, '/随想');
+  assert.equal(batches[0].thoughtMove.targetMessageId, 175);
+  assert.equal(batches[0].thoughtMove.thoughtModule, 'misc');
+});
+
 test('skips thought move commands without a target module', async () => {
   const lib = await importTelegramSyncLib();
 

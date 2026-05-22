@@ -2187,6 +2187,76 @@ telegram_chat_id: 42
   assert.match(postContent, /应该回到锻炼随想的正文/);
 });
 
+test('runTelegramSync treats /随想 id module as a move instead of creating a new thought', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-legacy-move-'));
+  const postsDir = path.join(tempRoot, 'source', '_posts');
+  await mkdir(postsDir, { recursive: true });
+  await writeFile(
+    path.join(postsDir, '2026-05-22-telegram-thought-175.md'),
+    `---
+date: 2026-05-22 09:47:53
+tags:
+  - 训练
+  - 随想
+  - Telegram
+thought_module: workout
+telegram_message_id: 175
+telegram_chat_id: 42
+---
+
+利用欲望让自己努力，控制欲望让自己快乐
+`,
+    'utf8',
+  );
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 176,
+          date: Math.floor(new Date('2026-05-22T06:41:03Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/随想 175 杂七杂八',
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  const targetContent = await readFile(
+    path.join(postsDir, '2026-05-22-telegram-thought-175.md'),
+    'utf8',
+  );
+
+  assert.equal(result.batchResults[0].kind, 'thought_move');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
+  assert.match(targetContent, /thought_module: misc/);
+  assert.match(targetContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
+  assert.match(targetContent, /利用欲望让自己努力/);
+  await assert.rejects(
+    readFile(path.join(postsDir, '2026-05-22-telegram-thought-176.md'), 'utf8'),
+    /ENOENT/,
+  );
+});
+
 test('runTelegramSync keeps thought posts when database persistence fails and queues replay', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-fallback-'));
 

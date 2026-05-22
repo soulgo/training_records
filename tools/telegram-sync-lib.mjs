@@ -1332,24 +1332,29 @@ function parseThoughtMoveCommand(text) {
 
   const trimmedStart = text.trimStart();
   const match = trimmedStart.match(
-    /^(\/(?:move|移动)(?:@[A-Za-z0-9_]+)?)(?=$|\s)([\s\S]*)$/u,
+    /^(\/(?:move|移动|thought|随想)(?:@[A-Za-z0-9_]+)?)(?=$|\s)([\s\S]*)$/u,
   );
   if (!match) {
     return null;
   }
 
+  const command = match[1];
   const requestedTargetText = match[2].trim();
   const idAndModuleMatch = requestedTargetText.match(/^(\d+)\s+(\S+)$/u);
   if (idAndModuleMatch) {
     const thoughtModule = resolveThoughtModuleLabel(idAndModuleMatch[2]);
     return thoughtModule
       ? {
-          command: match[1],
+          command,
           requestedTargetText,
           targetMessageId: Number(idAndModuleMatch[1]),
           thoughtModule,
         }
       : null;
+  }
+
+  if (/^\/(?:thought|随想)(?:@[A-Za-z0-9_]+)?$/u.test(command)) {
+    return null;
   }
 
   const thoughtModule = resolveThoughtModuleLabel(requestedTargetText);
@@ -1358,7 +1363,7 @@ function parseThoughtMoveCommand(text) {
   }
 
   return {
-    command: match[1],
+    command,
     requestedTargetText,
     targetMessageId: null,
     thoughtModule,
