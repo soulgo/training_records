@@ -35,6 +35,7 @@ theme_config:
   nav:
     records: /
     thoughts: /thoughts/
+    misc: /misc/
     about: /about/
   posts_overview:
     show_all_posts: false

@@ -83,6 +83,74 @@ tags:
   });
 });
 
+test('thoughts and misc pages split thought posts by thought_module', () => {
+  withSharedSiteFixture(() => {
+    const workoutPostPath = path.join(rootDir, 'source', '_posts', '2026-05-14-telegram-thought-501.md');
+    const miscPostPath = path.join(rootDir, 'source', '_posts', '2026-05-15-telegram-thought-601.md');
+    const originalWorkoutPost = readOptionalFile(workoutPostPath);
+    const originalMiscPost = readOptionalFile(miscPostPath);
+
+    try {
+      writeFileSync(
+        workoutPostPath,
+        `---
+date: 2026-05-14 10:30:00
+tags:
+  - 训练
+  - 随想
+  - Telegram
+telegram_message_id: 501
+telegram_chat_id: 42
+---
+
+锻炼模块默认随想
+`,
+        'utf8',
+      );
+      writeFileSync(
+        miscPostPath,
+        `---
+date: 2026-05-15 10:30:00
+tags:
+  - 杂七杂八
+  - 随想
+  - Telegram
+thought_module: misc
+telegram_message_id: 601
+telegram_chat_id: 42
+---
+
+杂七杂八模块随想
+`,
+        'utf8',
+      );
+
+      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+
+      const thoughtsIndex = readFileSync(path.join(rootDir, 'public', 'thoughts', 'index.html'), 'utf8');
+      const miscIndex = readFileSync(path.join(rootDir, 'public', 'misc', 'index.html'), 'utf8');
+      const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+
+      assert.match(thoughtsIndex, /锻炼模块默认随想/);
+      assert.doesNotMatch(thoughtsIndex, /杂七杂八模块随想/);
+      assert.match(miscIndex, /杂七杂八模块随想/);
+      assert.doesNotMatch(miscIndex, /锻炼模块默认随想/);
+      assert.doesNotMatch(homepage, /锻炼模块默认随想/);
+      assert.doesNotMatch(homepage, /杂七杂八模块随想/);
+    } finally {
+      restoreOptionalFile(workoutPostPath, originalWorkoutPost);
+      restoreOptionalFile(miscPostPath, originalMiscPost);
+    }
+  });
+});
+
 test('thought detail page hides the title heading for telegram thoughts without front matter title', () => {
   withSharedSiteFixture(() => {
     const thoughtPostPath = path.join(rootDir, 'source', '_posts', '2026-05-14-telegram-thought-501.md');

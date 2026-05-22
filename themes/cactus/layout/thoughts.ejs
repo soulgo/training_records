@@ -1,19 +1,28 @@
 <%
+function resolveThoughtModule(post) {
+  if (post?.thought_module) {
+    return post.thought_module;
+  }
+  if (post?.tags?.findOne && post.tags.findOne({ name: '杂七杂八' })) {
+    return 'misc';
+  }
+  return 'workout';
+}
+
+const activeThoughtModule = page.thought_module || 'workout';
 const thoughts = site.posts
   .sort('date', 'desc')
-  .filter((post) => post?.tags?.findOne && post.tags.findOne({ name: '随想' }));
+  .filter((post) => post?.tags?.findOne && post.tags.findOne({ name: '随想' }))
+  .filter((post) => resolveThoughtModule(post) === activeThoughtModule);
+const emptyText = activeThoughtModule === 'misc'
+  ? '还没有杂七杂八。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/随想 杂七杂八 正文</code> 自动归档到这里。'
+  : '还没有锻炼随想。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/随想 锻炼 正文</code> 自动归档到这里。';
 %>
 
 <section class="thoughts-page">
-  <div class="thoughts-hero">
-    <span class="thoughts-kicker">Markdown · 随手更新 · 自动展示</span>
-    <h1><%= page.title %></h1>
-    <div class="thoughts-copy"><%- page.content %></div>
-  </div>
-
   <% if (!thoughts.length) { %>
     <div class="thoughts-empty">
-      <p>还没有锻炼随想。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/thought 正文</code> 自动归档到这里。</p>
+      <p><%- emptyText %></p>
     </div>
   <% } else { %>
     <div class="thoughts-list">

@@ -325,7 +325,7 @@ test('groups edited thought messages into thought_edit batches when the message 
   assert.equal(batches[0].kind, 'thought_edit');
   assert.equal(batches[0].thoughtEdit.targetMessageId, 126);
   assert.equal(batches[0].thoughtEdit.body, '今天骑行 40 公里，状态更顺了');
-  assert.equal(batches[0].thoughtEdit.thoughtModule, 'workout');
+  assert.equal(batches[0].thoughtEdit.thoughtModule, null);
 });
 
 test('groups edited thought messages with a module token into thought_edit batches for module updates', async () => {
@@ -386,6 +386,7 @@ test('groups reply-based thought revisions into thought_edit batches when replyi
     batches[0].thoughtEdit.body,
     '今天骑行 40 公里，温地公园是一个散步的好地方，\n高德地图骑行的公里数和华为手表骑行的公里数差别太大了，差了12公里多。',
   );
+  assert.equal(batches[0].thoughtEdit.thoughtModule, null);
 });
 
 test('groups explicit thought edit commands by target message id', async () => {

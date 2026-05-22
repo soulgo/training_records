@@ -165,6 +165,7 @@ test('persistNormalizedBatch mirrors thought create, edit, and delete batches in
       thought: {
         command: '/thought',
         body: '今天训练后臀部发力更明显',
+        thoughtModule: 'misc',
         tags: ['训练', '随想', 'Telegram'],
         telegramMessageId: 501,
         telegramChatId: 42,
@@ -209,6 +210,8 @@ test('persistNormalizedBatch mirrors thought create, edit, and delete batches in
         command: '/随想编',
         targetMessageId: 501,
         body: '更新后的正文',
+        thoughtModule: 'misc',
+        tags: ['杂七杂八', '随想', 'Telegram'],
         replacePhotos: false,
         telegramChatId: 42,
         messageDateUnix: 1778812200,
@@ -272,14 +275,16 @@ test('persistNormalizedBatch mirrors thought create, edit, and delete batches in
   assert.equal(thoughtWrites.length, 3);
   assert.equal(thoughtWrites[0][1][0], 501);
   assert.equal(thoughtWrites[0][1][4], '今天训练后臀部发力更明显');
-  assert.equal(thoughtWrites[0][1][7], 'source/_posts/2026-05-14-telegram-thought-501.md');
-  assert.deepEqual(JSON.parse(thoughtWrites[0][1][8]), [
+  assert.equal(thoughtWrites[0][1][5], 'misc');
+  assert.equal(thoughtWrites[0][1][8], 'source/_posts/2026-05-14-telegram-thought-501.md');
+  assert.deepEqual(JSON.parse(thoughtWrites[0][1][9]), [
     '/images/thoughts/2026/05/2026-05-14-telegram-thought-501-1.jpg',
   ]);
   assert.equal(thoughtWrites[1][1][4], '更新后的正文');
-  assert.equal(thoughtWrites[1][1][8], '[]');
+  assert.equal(thoughtWrites[1][1][5], 'misc');
+  assert.equal(thoughtWrites[1][1][9], '[]');
   assert.match(thoughtWrites[2][0], /status = excluded\.status/i);
-  assert.deepEqual(JSON.parse(thoughtWrites[2][1][6]), [
+  assert.deepEqual(JSON.parse(thoughtWrites[2][1][8]), [
     '/images/thoughts/2026/05/2026-05-14-telegram-thought-501-1.jpg',
   ]);
 });

@@ -566,6 +566,8 @@ function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {
       ...batch,
       thought: {
         ...batch.thought,
+        thoughtModule: writeResult.thoughtModule ?? batch.thought?.thoughtModule ?? 'workout',
+        tags: writeResult.tags ?? batch.thought?.tags ?? ['训练', '随想', 'Telegram'],
         storage,
       },
     };
@@ -576,6 +578,8 @@ function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {
       ...batch,
       thoughtEdit: {
         ...batch.thoughtEdit,
+        thoughtModule: writeResult.thoughtModule ?? batch.thoughtEdit?.thoughtModule ?? null,
+        tags: writeResult.tags ?? batch.thoughtEdit?.tags ?? null,
         storage,
       },
     };
@@ -586,6 +590,8 @@ function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {
       ...batch,
       thoughtDelete: {
         ...batch.thoughtDelete,
+        thoughtModule: writeResult.thoughtModule ?? batch.thoughtDelete?.thoughtModule ?? null,
+        tags: writeResult.tags ?? batch.thoughtDelete?.tags ?? null,
         storage,
       },
     };

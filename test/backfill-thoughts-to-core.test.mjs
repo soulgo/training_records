@@ -17,6 +17,7 @@ test('backfillThoughtsToCore imports telegram thought markdown into core.thought
       `  - 训练\n` +
       `  - 随想\n` +
       `  - Telegram\n` +
+      `thought_module: misc\n` +
       `telegram_message_id: 126\n` +
       `telegram_chat_id: 6314355239\n` +
       `photos:\n` +
@@ -63,10 +64,60 @@ test('backfillThoughtsToCore imports telegram thought markdown into core.thought
   assert.ok(thoughtInsert);
   assert.equal(thoughtInsert[1][0], 126);
   assert.equal(thoughtInsert[1][4], '今天骑行 40公里。');
-  assert.equal(thoughtInsert[1][7], 'source/_posts/2026-05-17-telegram-thought-126.md');
-  assert.deepEqual(JSON.parse(thoughtInsert[1][8]), [
+  assert.equal(thoughtInsert[1][5], 'misc');
+  assert.equal(thoughtInsert[1][8], 'source/_posts/2026-05-17-telegram-thought-126.md');
+  assert.deepEqual(JSON.parse(thoughtInsert[1][9]), [
     '/images/thoughts/2026/05/2026-05-17-telegram-thought-126-1.jpg',
   ]);
+});
+
+test('backfillThoughtsToCore treats legacy telegram thoughts without thought_module as workout', async () => {
+  const tempRoot = await fsMkdtemp('thoughts-backfill-legacy-');
+  const postsDir = path.join(tempRoot, 'source', '_posts');
+  await mkdir(postsDir, { recursive: true });
+  await writeFile(
+    path.join(postsDir, '2026-05-18-telegram-thought-127.md'),
+    `---\n` +
+      `tags:\n` +
+      `  - 训练\n` +
+      `  - 随想\n` +
+      `  - Telegram\n` +
+      `telegram_message_id: 127\n` +
+      `telegram_chat_id: 6314355239\n` +
+      `date: 2026-05-18 11:28:14\n` +
+      `---\n\n` +
+      `历史随想。\n`,
+    'utf8',
+  );
+
+  const calls = [];
+  const result = await backfillThoughtsToCore({
+    rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return {
+        async connect() {
+          calls.push(['connect']);
+        },
+        async query(sql, params) {
+          calls.push([sql, params]);
+          return { rows: [] };
+        },
+        async end() {
+          calls.push(['end']);
+        },
+      };
+    },
+  });
+
+  const thoughtInsert = calls.find(
+    ([sql]) => typeof sql === 'string' && /insert into core\.thought/i.test(sql),
+  );
+  assert.equal(result.status, 'stored');
+  assert.equal(thoughtInsert[1][5], 'workout');
 });
 
 test('backfillThoughtsToCore defers instead of throwing when database is unavailable', async () => {

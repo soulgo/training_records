@@ -1682,6 +1682,7 @@ tags:
   - 训练
   - 随想
   - Telegram
+thought_module: misc
 telegram_message_id: 126
 telegram_chat_id: 42
 ---
@@ -1744,6 +1745,8 @@ telegram_chat_id: 42
     'source/_posts/2026-05-17-telegram-thought-126.md',
   );
   assert.deepEqual(persistedBatches[0].thoughtEdit.storage.photoPaths, []);
+  assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, 'misc');
+  assert.match(postContent, /thought_module: misc/);
   assert.match(postContent, /今天骑行 40 公里，动作更顺/);
   assert.doesNotMatch(postContent, /旧正文/);
 });
@@ -1758,9 +1761,10 @@ test('runTelegramSync updates an existing telegram thought when a reply-based re
         `---
 date: 2026-05-18 09:59:00
 tags:
-  - 训练
+  - 杂七杂八
   - 随想
   - Telegram
+thought_module: misc
 telegram_message_id: 126
 telegram_chat_id: 42
 ---
@@ -1821,6 +1825,10 @@ telegram_chat_id: 42
   assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].kind, 'thought_edit');
+  assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, 'misc');
+  assert.deepEqual(persistedBatches[0].thoughtEdit.tags, ['杂七杂八', '随想', 'Telegram']);
+  assert.match(postContent, /thought_module: misc/);
+  assert.match(postContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
   assert.match(postContent, /高德地图骑行的公里数和华为手表骑行的公里数差别太大了/);
   assert.doesNotMatch(postContent, /旧正文/);
   await assert.rejects(
@@ -1880,7 +1888,7 @@ photos:
           message_id: 132,
           date: Math.floor(new Date('2026-05-18T02:59:00Z').getTime() / 1000),
           chat: { id: 42 },
-          caption: '/随想编 126 今天骑行 40 公里，补充图片',
+          caption: '/随想编 126 杂七杂八 今天骑行 40 公里，补充图片',
           photo: [{ file_id: 'new-photo', file_unique_id: 'new-photo-u' }],
         },
       },
@@ -1914,8 +1922,11 @@ photos:
   assert.equal(result.batchResults[0].kind, 'thought_edit');
   assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
   assert.equal(persistedBatches[0].thoughtEdit.replacePhotos, true);
+  assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, 'misc');
   assert.deepEqual(downloadedFileIds, ['new-photo']);
   assert.match(postContent, /今天骑行 40 公里，补充图片/);
+  assert.match(postContent, /thought_module: misc/);
+  assert.match(postContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
   assert.match(postContent, /photos:\n  - \/images\/thoughts\/2026\/05\/2026-05-17-telegram-thought-126-1\.png/);
   await assert.rejects(
     readFile(path.join(imageDir, '2026-05-17-telegram-thought-126-1.jpg'), 'utf8'),

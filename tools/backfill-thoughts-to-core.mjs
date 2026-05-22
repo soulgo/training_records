@@ -97,6 +97,7 @@ async function upsertThoughtFromMarkdown(client, thought, processedAt) {
         source_batch_id,
         command,
         body,
+        thought_module,
         tags_json,
         message_date_unix,
         markdown_path,
@@ -105,12 +106,13 @@ async function upsertThoughtFromMarkdown(client, thought, processedAt) {
         deleted_at,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb, 'active', null, $10)
+      values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10::jsonb, 'active', null, $11)
       on conflict (telegram_message_id) do update set
         telegram_chat_id = coalesce(excluded.telegram_chat_id, core.thought.telegram_chat_id),
         source_batch_id = coalesce(excluded.source_batch_id, core.thought.source_batch_id),
         command = excluded.command,
         body = excluded.body,
+        thought_module = excluded.thought_module,
         tags_json = excluded.tags_json,
         message_date_unix = coalesce(excluded.message_date_unix, core.thought.message_date_unix),
         markdown_path = excluded.markdown_path,
@@ -125,6 +127,7 @@ async function upsertThoughtFromMarkdown(client, thought, processedAt) {
       thought.sourceBatchId,
       '/thought',
       thought.body,
+      thought.thoughtModule,
       JSON.stringify(thought.tags),
       thought.messageDateUnix,
       thought.markdownPath,
@@ -147,9 +150,10 @@ function normalizeThoughtMarkdown(parsed, postPath, activeRootDir) {
   }
 
   const telegramChatId = parseBigIntValue(frontMatterData.telegram_chat_id);
+  const thoughtModule = normalizeThoughtModule(frontMatterData.thought_module);
   const tags = Array.isArray(frontMatterData.tags) && frontMatterData.tags.length > 0
     ? frontMatterData.tags
-    : ['训练', '随想', 'Telegram'];
+    : getThoughtTags(thoughtModule);
   const imageRefs = Array.isArray(frontMatterData.photos) ? frontMatterData.photos : [];
   const markdownPath = normalizePath(path.relative(activeRootDir, postPath));
 
@@ -158,6 +162,7 @@ function normalizeThoughtMarkdown(parsed, postPath, activeRootDir) {
     telegramChatId,
     sourceBatchId: null,
     body,
+    thoughtModule,
     tags,
     messageDateUnix: parseThoughtDateUnix(frontMatterData.date),
     markdownPath,
@@ -218,6 +223,16 @@ function parseThoughtDateUnix(value) {
 
 function normalizePath(filePath) {
   return filePath.split(path.sep).join('/');
+}
+
+function normalizeThoughtModule(value) {
+  return value === 'misc' ? 'misc' : 'workout';
+}
+
+function getThoughtTags(moduleKey) {
+  return normalizeThoughtModule(moduleKey) === 'misc'
+    ? ['杂七杂八', '随想', 'Telegram']
+    : ['训练', '随想', 'Telegram'];
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

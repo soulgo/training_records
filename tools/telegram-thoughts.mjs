@@ -7,11 +7,14 @@ export async function writeThoughtPostFile({ batch, thoughtsDir, rootDir, fetchT
   const postPath = path.join(thoughtsDir, draft.fileName);
 
   if (await fileExists(postPath)) {
+    const existingMetadata = await readThoughtMetadataFromPost(postPath);
     return {
       changed: false,
       status: 'duplicate',
       postPath,
-      photoPaths: await readThoughtPhotoPathsFromPost(postPath),
+      photoPaths: existingMetadata.photoPaths,
+      thoughtModule: existingMetadata.thoughtModule,
+      tags: existingMetadata.tags,
     };
   }
 
@@ -31,6 +34,8 @@ export async function writeThoughtPostFile({ batch, thoughtsDir, rootDir, fetchT
     status: 'written',
     postPath,
     photoPaths,
+    thoughtModule: post.thoughtModule,
+    tags: post.tags,
   };
 }
 
@@ -67,8 +72,14 @@ export async function editThoughtPost({ batch, thoughtsDir, rootDir, fetchTelegr
     });
   }
 
+  const nextThoughtModule = normalizeThoughtModule(
+    batch.thoughtEdit?.thoughtModule ?? target.frontMatter.thought_module,
+  );
+  const nextTags = getThoughtTags(nextThoughtModule);
   const nextContent = replaceMarkdownBody(target.raw, batch.thoughtEdit?.body ?? '', {
     photoPaths: nextPhotoPaths,
+    thoughtModule: nextThoughtModule,
+    tags: nextTags,
   });
   if (nextContent === target.raw) {
     if (batch.thoughtEdit?.replacePhotos && (nextPhotoPaths?.length ?? 0) > 0) {
@@ -78,6 +89,8 @@ export async function editThoughtPost({ batch, thoughtsDir, rootDir, fetchTelegr
         postPath: target.postPath,
         deletedPhotoPaths,
         photoPaths: nextPhotoPaths,
+        thoughtModule: nextThoughtModule,
+        tags: nextTags,
       };
     }
     return {
@@ -85,6 +98,9 @@ export async function editThoughtPost({ batch, thoughtsDir, rootDir, fetchTelegr
       status: 'unchanged',
       postPath: target.postPath,
       deletedPhotoPaths,
+      photoPaths: target.frontMatter.photos ?? [],
+      thoughtModule: nextThoughtModule,
+      tags: nextTags,
     };
   }
 
@@ -95,6 +111,8 @@ export async function editThoughtPost({ batch, thoughtsDir, rootDir, fetchTelegr
     postPath: target.postPath,
     deletedPhotoPaths,
     photoPaths: nextPhotoPaths ?? target.frontMatter.photos ?? [],
+    thoughtModule: nextThoughtModule,
+    tags: nextTags,
   };
 }
 
@@ -125,6 +143,8 @@ export async function deleteThoughtPost({ batch, thoughtsDir, rootDir }) {
     status: 'deleted',
     postPath: target.postPath,
     deletedPhotoPaths,
+    thoughtModule: normalizeThoughtModule(target.frontMatter.thought_module),
+    tags: normalizeThoughtTags(target.frontMatter.tags, target.frontMatter.thought_module),
   };
 }
 
@@ -149,13 +169,14 @@ function buildThoughtPost(batch, options = {}) {
   const message = resolveThoughtPostMessage(batch);
   const dateParts = formatThoughtDateParts(message.dateUnix);
   const fileName = `${dateParts.date}-telegram-thought-${message.messageId}.md`;
+  const thoughtModule = normalizeThoughtModule(thought.thoughtModule);
+  const tags = getThoughtTags(thoughtModule);
   const lines = [
     '---',
     `date: ${dateParts.dateTime}`,
     'tags:',
-    '  - 训练',
-    '  - 随想',
-    '  - Telegram',
+    ...tags.map((tag) => `  - ${tag}`),
+    `thought_module: ${thoughtModule}`,
     `telegram_message_id: ${message.messageId ?? ''}`,
     `telegram_chat_id: ${message.chatId ?? ''}`,
   ];
@@ -172,6 +193,8 @@ function buildThoughtPost(batch, options = {}) {
     content: lines.join('\n'),
     dateParts,
     message,
+    thoughtModule,
+    tags,
   };
 }
 
@@ -216,13 +239,36 @@ function normalizeThoughtFrontMatter(parsed) {
   };
 }
 
+function normalizeThoughtModule(value) {
+  return value === 'misc' ? 'misc' : 'workout';
+}
+
+function getThoughtTags(moduleKey) {
+  return moduleKey === 'misc'
+    ? ['杂七杂八', '随想', 'Telegram']
+    : ['训练', '随想', 'Telegram'];
+}
+
 async function readThoughtPhotoPathsFromPost(postPath) {
+  return (await readThoughtMetadataFromPost(postPath)).photoPaths;
+}
+
+async function readThoughtMetadataFromPost(postPath) {
   try {
     const raw = await readFile(postPath, 'utf8');
     const parsed = frontMatter.parse(raw);
-    return Array.isArray(parsed.photos) ? parsed.photos : [];
+    const thoughtModule = normalizeThoughtModule(parsed.thought_module);
+    return {
+      photoPaths: Array.isArray(parsed.photos) ? parsed.photos : [],
+      thoughtModule,
+      tags: normalizeThoughtTags(parsed.tags, thoughtModule),
+    };
   } catch {
-    return [];
+    return {
+      photoPaths: [],
+      thoughtModule: 'workout',
+      tags: getThoughtTags('workout'),
+    };
   }
 }
 
@@ -230,6 +276,10 @@ function replaceMarkdownBody(raw, nextBody, options = {}) {
   const split = frontMatter.split(raw);
   const parsed = frontMatter.parse(raw);
   const { _content, ...frontMatterData } = parsed ?? {};
+  if (options.thoughtModule) {
+    frontMatterData.thought_module = normalizeThoughtModule(options.thoughtModule);
+    frontMatterData.tags = normalizeThoughtTags(options.tags, frontMatterData.thought_module);
+  }
   if (Array.isArray(options.photoPaths)) {
     if (options.photoPaths.length > 0) {
       frontMatterData.photos = options.photoPaths;
@@ -241,6 +291,10 @@ function replaceMarkdownBody(raw, nextBody, options = {}) {
     separator: split.separator,
     prefixSeparator: split.prefixSeparator,
   })}\n${String(nextBody ?? '').trim()}\n`;
+}
+
+function normalizeThoughtTags(tags, moduleKey) {
+  return getThoughtTags(normalizeThoughtModule(moduleKey));
 }
 
 function resolveThoughtFrontMatterDateParts(frontMatterData) {

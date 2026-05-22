@@ -1,6 +1,3 @@
-const FINGERPRINT_RE = /^<!-- telegram-fingerprint: ([^ ]+) -->$/m;
-const TELEGRAM_SECTION_TAG = '<!-- telegram-sync-section -->';
-
 import {
   inferMealSlot,
   normalizeActivityType,
@@ -10,6 +7,22 @@ import {
   splitLevel4Blocks,
   toNullableNumber,
 } from './training-domain.mjs';
+
+const FINGERPRINT_RE = /^<!-- telegram-fingerprint: ([^ ]+) -->$/m;
+const TELEGRAM_SECTION_TAG = '<!-- telegram-sync-section -->';
+const DEFAULT_THOUGHT_MODULE = 'workout';
+const THOUGHT_MODULES = {
+  workout: {
+    key: 'workout',
+    labels: new Set(['锻炼', '锻炼随想']),
+    tags: ['训练', '随想', 'Telegram'],
+  },
+  misc: {
+    key: 'misc',
+    labels: new Set(['杂七杂八']),
+    tags: ['杂七杂八', '随想', 'Telegram'],
+  },
+};
 
 export function groupTelegramUpdates(updates, options = {}) {
   const batches = [];
@@ -427,7 +440,7 @@ function buildThoughtBatch(message) {
 }
 
 function buildThoughtEditBatch(message, options = {}) {
-  const body = extractEditedThoughtBody(message);
+  const parsedEditBody = extractEditedThoughtBody(message);
   const targetMessageId = normalizeMessageId(
     options.targetMessageId ?? message.replyToMessageId ?? message.messageId,
   );
@@ -442,7 +455,8 @@ function buildThoughtEditBatch(message, options = {}) {
         parseThoughtCommand(message.caption)?.command ??
         '/thought',
       targetMessageId,
-      body,
+      body: parsedEditBody.body,
+      thoughtModule: parsedEditBody.moduleExplicit ? normalizeThoughtModule(parsedEditBody.moduleKey) : null,
     },
   };
 }
@@ -456,6 +470,7 @@ function buildExplicitThoughtEditBatch(message, parsedThoughtEdit) {
       command: parsedThoughtEdit.command,
       targetMessageId: parsedThoughtEdit.targetMessageId,
       body: parsedThoughtEdit.body,
+      thoughtModule: parsedThoughtEdit.moduleExplicit ? normalizeThoughtModule(parsedThoughtEdit.moduleKey) : null,
       replacePhotos: message.photos.length > 0,
     },
   };
@@ -476,6 +491,7 @@ function buildExplicitThoughtEditBatchFromMessages(messages) {
       command: parsedThoughtEdit.command,
       targetMessageId: parsedThoughtEdit.targetMessageId,
       body: parsedThoughtEdit.body,
+      thoughtModule: parsedThoughtEdit.moduleExplicit ? normalizeThoughtModule(parsedThoughtEdit.moduleKey) : null,
       replacePhotos: messages.some((item) => (item.photos?.length ?? 0) > 0),
     },
   };
@@ -518,6 +534,7 @@ function buildThoughtBatchFromMessages(messages) {
     thought: {
       command: parsedThought.command,
       body: parsedThought.body,
+      thoughtModule: normalizeThoughtModule(parsedThought.moduleKey),
       sourceMessageId: message.messageId,
     },
   };
@@ -692,6 +709,7 @@ function buildSkippedBatchResult(batch, { reason, warnings = [], issues = [] }) 
 function analyzeThoughtBatch(batch) {
   const message = getThoughtSourceMessage(batch);
   const body = batch.thought?.body?.trim() ?? '';
+  const thoughtModule = normalizeThoughtModule(batch.thought?.thoughtModule);
 
   if (!body) {
     return buildSkippedBatchResult(batch, {
@@ -710,7 +728,8 @@ function analyzeThoughtBatch(batch) {
     thought: {
       command: batch.thought?.command ?? '/thought',
       body,
-      tags: ['训练', '随想', 'Telegram'],
+      thoughtModule,
+      tags: getThoughtModuleTags(thoughtModule),
       telegramMessageId: message?.messageId ?? null,
       telegramChatId: message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,
@@ -747,6 +766,7 @@ function analyzeThoughtEditBatch(batch) {
       command: batch.thoughtEdit?.command ?? '/thought',
       targetMessageId,
       body,
+      thoughtModule: normalizeThoughtModuleOrNull(batch.thoughtEdit?.thoughtModule),
       replacePhotos: Boolean(batch.thoughtEdit?.replacePhotos),
       telegramChatId: message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,
@@ -1163,10 +1183,7 @@ function parseThoughtCommand(text) {
     return null;
   }
 
-  return {
-    command: match[1],
-    body: match[2].trim(),
-  };
+  return buildThoughtCommandPayload(match[1], match[2]);
 }
 
 function parseThoughtEditCommand(text) {
@@ -1188,19 +1205,26 @@ function parseThoughtEditCommand(text) {
     return null;
   }
 
+  const parsedBody = parseThoughtModuleBody(bodyMatch[2]);
   return {
     command: match[1],
     targetMessageId: Number(bodyMatch[1]),
-    body: bodyMatch[2].trim(),
+    body: parsedBody.body,
+    moduleKey: parsedBody.moduleKey,
+    moduleExplicit: parsedBody.moduleExplicit,
   };
 }
 
 function extractEditedThoughtBody(message) {
   const parsedThought = parseThoughtCommand(message.text) ?? parseThoughtCommand(message.caption);
   if (parsedThought) {
-    return parsedThought.body;
+    return {
+      body: parsedThought.body,
+      moduleKey: parsedThought.moduleKey,
+      moduleExplicit: parsedThought.moduleExplicit,
+    };
   }
-  return (message.text?.trim() || message.caption?.trim() || '').trim();
+  return parseThoughtModuleBody(message.text?.trim() || message.caption?.trim() || '');
 }
 
 function parseThoughtDeleteCommand(text) {
@@ -1233,6 +1257,65 @@ function buildThoughtMessageKey(chatId, messageId) {
 function normalizeMessageId(value) {
   const number = Number(value);
   return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function buildThoughtCommandPayload(command, rawBody) {
+  const parsedBody = parseThoughtModuleBody(rawBody);
+  return {
+    command,
+    body: parsedBody.body,
+    moduleKey: parsedBody.moduleKey,
+    moduleExplicit: parsedBody.moduleExplicit,
+  };
+}
+
+function parseThoughtModuleBody(rawBody) {
+  const body = String(rawBody ?? '').trim();
+  const match = body.match(/^(\S+)(?:\s+([\s\S]*))?$/u);
+  if (!match) {
+    return {
+      moduleKey: DEFAULT_THOUGHT_MODULE,
+      moduleExplicit: false,
+      body,
+    };
+  }
+
+  const moduleKey = resolveThoughtModuleLabel(match[1]);
+  if (!moduleKey) {
+    return {
+      moduleKey: DEFAULT_THOUGHT_MODULE,
+      moduleExplicit: false,
+      body,
+    };
+  }
+
+  return {
+    moduleKey,
+    moduleExplicit: true,
+    body: (match[2] ?? '').trim(),
+  };
+}
+
+function resolveThoughtModuleLabel(label) {
+  const normalized = String(label ?? '').trim();
+  for (const module of Object.values(THOUGHT_MODULES)) {
+    if (module.labels.has(normalized)) {
+      return module.key;
+    }
+  }
+  return null;
+}
+
+function normalizeThoughtModule(value) {
+  return THOUGHT_MODULES[value]?.key ?? DEFAULT_THOUGHT_MODULE;
+}
+
+function normalizeThoughtModuleOrNull(value) {
+  return THOUGHT_MODULES[value]?.key ?? null;
+}
+
+function getThoughtModuleTags(moduleKey) {
+  return [...(THOUGHT_MODULES[normalizeThoughtModule(moduleKey)]?.tags ?? THOUGHT_MODULES.workout.tags)];
 }
 
 function findThoughtCommandEntry(messages) {

@@ -377,6 +377,7 @@ async function persistThoughtMirror(client, batch, processedAt) {
       sourceBatchId: batch.batchId,
       command: batch.thought?.command ?? '/thought',
       body: batch.thought?.body ?? '',
+      thoughtModule: normalizeThoughtModule(batch.thought?.thoughtModule),
       tags: batch.thought?.tags ?? ['训练', '随想', 'Telegram'],
       messageDateUnix: batch.thought?.messageDateUnix ?? null,
       markdownPath: batch.thought?.storage?.markdownPath ?? null,
@@ -394,7 +395,8 @@ async function persistThoughtMirror(client, batch, processedAt) {
       sourceBatchId: batch.batchId,
       command: batch.thoughtEdit?.command ?? '/thought',
       body: batch.thoughtEdit?.body ?? '',
-      tags: ['训练', '随想', 'Telegram'],
+      thoughtModule: batch.thoughtEdit?.thoughtModule ?? null,
+      tags: batch.thoughtEdit?.tags ?? null,
       messageDateUnix: batch.thoughtEdit?.messageDateUnix ?? null,
       markdownPath: batch.thoughtEdit?.storage?.markdownPath ?? null,
       imageRefs: batch.thoughtEdit?.storage?.photoPaths ?? null,
@@ -410,6 +412,8 @@ async function persistThoughtMirror(client, batch, processedAt) {
       chatId: batch.thoughtDelete?.telegramChatId,
       sourceBatchId: batch.batchId,
       command: batch.thoughtDelete?.command ?? '/随想删',
+      thoughtModule: batch.thoughtDelete?.thoughtModule ?? null,
+      tags: batch.thoughtDelete?.tags ?? null,
       messageDateUnix: batch.thoughtDelete?.messageDateUnix ?? null,
       markdownPath: batch.thoughtDelete?.storage?.markdownPath ?? null,
       deletedImageRefs: batch.thoughtDelete?.storage?.deletedPhotoPaths ?? [],
@@ -445,6 +449,7 @@ async function upsertThoughtMirror(client, thought) {
         source_batch_id,
         command,
         body,
+        thought_module,
         tags_json,
         message_date_unix,
         markdown_path,
@@ -453,17 +458,18 @@ async function upsertThoughtMirror(client, thought) {
         deleted_at,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, coalesce($9::jsonb, '[]'::jsonb), $10, null, $11)
+      values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, coalesce($10::jsonb, '[]'::jsonb), $11, null, $12)
       on conflict (telegram_message_id) do update set
         telegram_chat_id = coalesce(excluded.telegram_chat_id, core.thought.telegram_chat_id),
         source_batch_id = excluded.source_batch_id,
         command = excluded.command,
         body = excluded.body,
+        thought_module = coalesce(excluded.thought_module, core.thought.thought_module),
         tags_json = excluded.tags_json,
         message_date_unix = coalesce(excluded.message_date_unix, core.thought.message_date_unix),
         markdown_path = coalesce(excluded.markdown_path, core.thought.markdown_path),
         image_refs_json = case
-          when $9::jsonb is null then core.thought.image_refs_json
+          when $10::jsonb is null then core.thought.image_refs_json
           else excluded.image_refs_json
         end,
         status = excluded.status,
@@ -476,7 +482,8 @@ async function upsertThoughtMirror(client, thought) {
       thought.sourceBatchId ?? null,
       thought.command ?? '/thought',
       String(thought.body ?? '').trim(),
-      JSON.stringify(thought.tags ?? ['训练', '随想', 'Telegram']),
+      normalizeThoughtModuleOrNull(thought.thoughtModule) ?? 'workout',
+      JSON.stringify(thought.tags ?? getThoughtTags(thought.thoughtModule)),
       normalizeBigIntValue(thought.messageDateUnix),
       thought.markdownPath ?? null,
       Array.isArray(thought.imageRefs) ? JSON.stringify(thought.imageRefs) : null,
@@ -503,6 +510,7 @@ async function markThoughtMirrorDeleted(client, thought) {
         source_batch_id,
         command,
         body,
+        thought_module,
         tags_json,
         message_date_unix,
         markdown_path,
@@ -511,11 +519,14 @@ async function markThoughtMirrorDeleted(client, thought) {
         deleted_at,
         updated_at
       )
-      values ($1, $2, $3, $4, '', '["训练","随想","Telegram"]'::jsonb, $5, $6, $7::jsonb, 'deleted', $8, $9)
+      values ($1, $2, $3, $4, '', coalesce($5, 'workout'), coalesce($6::jsonb, '["训练","随想","Telegram"]'::jsonb), $7, $8, $9::jsonb, 'deleted', $10, $11)
       on conflict (telegram_message_id) do update set
         telegram_chat_id = coalesce(excluded.telegram_chat_id, core.thought.telegram_chat_id),
         source_batch_id = excluded.source_batch_id,
         command = excluded.command,
+        thought_module = coalesce(excluded.thought_module, core.thought.thought_module),
+        markdown_path = coalesce(excluded.markdown_path, core.thought.markdown_path),
+        image_refs_json = excluded.image_refs_json,
         status = excluded.status,
         deleted_at = excluded.deleted_at,
         updated_at = excluded.updated_at
@@ -525,6 +536,8 @@ async function markThoughtMirrorDeleted(client, thought) {
       normalizeBigIntValue(thought.chatId),
       thought.sourceBatchId ?? null,
       thought.command ?? '/随想删',
+      normalizeThoughtModuleOrNull(thought.thoughtModule),
+      thought.tags ? JSON.stringify(thought.tags) : null,
       normalizeBigIntValue(thought.messageDateUnix),
       thought.markdownPath ?? null,
       imageRefs,
@@ -911,6 +924,20 @@ function hasNutritionPayload(nutrition) {
 
 function isThoughtBatchKind(kind) {
   return kind === 'thought' || kind === 'thought_edit' || kind === 'thought_delete';
+}
+
+function normalizeThoughtModule(value) {
+  return value === 'misc' ? 'misc' : 'workout';
+}
+
+function normalizeThoughtModuleOrNull(value) {
+  return value === 'misc' || value === 'workout' ? value : null;
+}
+
+function getThoughtTags(moduleKey) {
+  return normalizeThoughtModule(moduleKey) === 'misc'
+    ? ['杂七杂八', '随想', 'Telegram']
+    : ['训练', '随想', 'Telegram'];
 }
 
 function normalizePositiveInteger(value) {
