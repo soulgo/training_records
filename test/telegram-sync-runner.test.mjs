@@ -2036,6 +2036,157 @@ photos:
   );
 });
 
+test('runTelegramSync moves a telegram thought to another module by reply command', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-move-reply-'));
+  const postsDir = path.join(tempRoot, 'source', '_posts');
+  await mkdir(postsDir, { recursive: true });
+  await writeFile(
+    path.join(postsDir, '2026-05-17-telegram-thought-126.md'),
+    `---
+date: 2026-05-17 11:28:14
+tags:
+  - 训练
+  - 随想
+  - Telegram
+thought_module: workout
+telegram_message_id: 126
+telegram_chat_id: 42
+---
+
+发错模块的正文
+`,
+    'utf8',
+  );
+
+  const persistedBatches = [];
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 811,
+          date: Math.floor(new Date('2026-05-17T03:45:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/移动 杂七杂八',
+          reply_to_message: {
+            message_id: 126,
+          },
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  const postContent = await readFile(
+    path.join(postsDir, '2026-05-17-telegram-thought-126.md'),
+    'utf8',
+  );
+
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_move');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches[0].kind, 'thought_move');
+  assert.equal(persistedBatches[0].thoughtMove.thoughtModule, 'misc');
+  assert.equal(
+    persistedBatches[0].thoughtMove.storage.markdownPath,
+    'source/_posts/2026-05-17-telegram-thought-126.md',
+  );
+  assert.match(postContent, /thought_module: misc/);
+  assert.match(postContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
+  assert.match(postContent, /发错模块的正文/);
+});
+
+test('runTelegramSync moves a telegram thought to another module by explicit id', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-move-id-'));
+  const postsDir = path.join(tempRoot, 'source', '_posts');
+  await mkdir(postsDir, { recursive: true });
+  await writeFile(
+    path.join(postsDir, '2026-05-18-telegram-thought-127.md'),
+    `---
+date: 2026-05-18 11:28:14
+tags:
+  - 杂七杂八
+  - 随想
+  - Telegram
+thought_module: misc
+telegram_message_id: 127
+telegram_chat_id: 42
+---
+
+应该回到锻炼随想的正文
+`,
+    'utf8',
+  );
+
+  const persistedBatches = [];
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 812,
+          date: Math.floor(new Date('2026-05-18T03:45:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/移动 127 锻炼',
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  const postContent = await readFile(
+    path.join(postsDir, '2026-05-18-telegram-thought-127.md'),
+    'utf8',
+  );
+
+  assert.equal(result.batchResults[0].kind, 'thought_move');
+  assert.equal(persistedBatches[0].thoughtMove.thoughtModule, 'workout');
+  assert.match(postContent, /thought_module: workout/);
+  assert.match(postContent, /tags:\n  - 训练\n  - 随想\n  - Telegram/);
+  assert.match(postContent, /应该回到锻炼随想的正文/);
+});
+
 test('runTelegramSync keeps thought posts when database persistence fails and queues replay', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-fallback-'));
 

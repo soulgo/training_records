@@ -269,10 +269,53 @@ test('persistNormalizedBatch mirrors thought create, edit, and delete batches in
     processedAt,
   });
 
+  await persistNormalizedBatch({
+    batch: {
+      kind: 'thought_move',
+      batchId: 'thought-move-133',
+      status: 'ready',
+      archivedDate: null,
+      warnings: [],
+      issues: [],
+      confidence: 1,
+      updateIds: [904],
+      recognitions: [],
+      messages: [
+        {
+          updateId: 904,
+          messageId: 133,
+          mediaGroupId: null,
+          chatId: 42,
+          caption: '',
+          text: '/移动 501 杂七杂八',
+          dateUnix: 1778985000,
+          photos: [],
+        },
+      ],
+      thoughtMove: {
+        command: '/移动',
+        targetMessageId: 501,
+        thoughtModule: 'misc',
+        tags: ['杂七杂八', '随想', 'Telegram'],
+        telegramChatId: 42,
+        messageDateUnix: 1778985000,
+        storage: {
+          markdownPath: 'source/_posts/2026-05-14-telegram-thought-501.md',
+          photoPaths: [],
+        },
+      },
+    },
+    env,
+    createClient() {
+      return fakeClient;
+    },
+    processedAt,
+  });
+
   const thoughtWrites = calls.filter(
     ([sql]) => typeof sql === 'string' && /insert into core\.thought/i.test(sql),
   );
-  assert.equal(thoughtWrites.length, 3);
+  assert.equal(thoughtWrites.length, 4);
   assert.equal(thoughtWrites[0][1][0], 501);
   assert.equal(thoughtWrites[0][1][4], '今天训练后臀部发力更明显');
   assert.equal(thoughtWrites[0][1][5], 'misc');
@@ -287,6 +330,8 @@ test('persistNormalizedBatch mirrors thought create, edit, and delete batches in
   assert.deepEqual(JSON.parse(thoughtWrites[2][1][8]), [
     '/images/thoughts/2026/05/2026-05-14-telegram-thought-501-1.jpg',
   ]);
+  assert.equal(thoughtWrites[3][1][4], '');
+  assert.equal(thoughtWrites[3][1][5], 'misc');
 });
 
 test('getLastProcessedTelegramUpdateId reads the max update id from ingest records', async () => {

@@ -148,6 +148,50 @@ export async function deleteThoughtPost({ batch, thoughtsDir, rootDir }) {
   };
 }
 
+export async function moveThoughtPost({ batch, thoughtsDir }) {
+  const target = await findThoughtPostByMessage({
+    thoughtsDir,
+    messageId: batch.thoughtMove?.targetMessageId,
+    chatId: batch.thoughtMove?.telegramChatId,
+  });
+
+  if (!target) {
+    return {
+      changed: false,
+      status: 'not_found',
+      postPath: null,
+    };
+  }
+
+  const nextThoughtModule = normalizeThoughtModule(batch.thoughtMove?.thoughtModule);
+  const nextTags = getThoughtTags(nextThoughtModule);
+  const nextContent = replaceMarkdownBody(target.raw, target.frontMatter._content ?? '', {
+    thoughtModule: nextThoughtModule,
+    tags: nextTags,
+  });
+
+  if (nextContent === target.raw) {
+    return {
+      changed: false,
+      status: 'unchanged',
+      postPath: target.postPath,
+      photoPaths: target.frontMatter.photos ?? [],
+      thoughtModule: nextThoughtModule,
+      tags: nextTags,
+    };
+  }
+
+  await writeFile(target.postPath, nextContent, 'utf8');
+  return {
+    changed: true,
+    status: 'updated',
+    postPath: target.postPath,
+    photoPaths: target.frontMatter.photos ?? [],
+    thoughtModule: nextThoughtModule,
+    tags: nextTags,
+  };
+}
+
 export async function readExistingThoughtMessageKeys(thoughtsDir) {
   const keys = new Set();
   for (const postPath of (await readDirRecursive(thoughtsDir)).filter((entry) => entry.endsWith('.md'))) {

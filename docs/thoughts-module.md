@@ -58,6 +58,17 @@
 
 `/随想删` 需要回复原随想消息；`/随想删 <id>` 直接按页面显示的 `#id` 定位。删除不需要模块参数，会按 `telegram_message_id` 删除 Markdown 和图片，并把 DB 行标记为 `deleted`。
 
+移动随想：
+
+```text
+/移动 锻炼
+/移动 杂七杂八
+/移动 <id> 锻炼
+/移动 <id> 杂七杂八
+```
+
+`/移动 锻炼` 和 `/移动 杂七杂八` 需要回复原随想消息；`/移动 <id> 锻炼` 和 `/移动 <id> 杂七杂八` 直接按页面显示的 `#id` 定位。移动只更新 Markdown front matter 的 `thought_module` 和 tags，不改正文、图片、日期和文件名；DB 镜像同步更新 `core.thought.thought_module`。如果只发送 `/移动 <id>` 而没有目标模块，系统不会生成移动批次。
+
 ## 3. Markdown Front Matter
 
 Telegram 随想写入：

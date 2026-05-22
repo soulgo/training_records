@@ -474,6 +474,64 @@ test('groups thought delete commands by reply target and explicit message id', a
   assert.equal(batches[1].thoughtDelete.targetMessageId, 127);
 });
 
+test('groups thought move commands by reply target and explicit message id', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 421,
+      message: {
+        message_id: 711,
+        date: 1_746_748_800,
+        chat: { id: 42 },
+        text: '/移动 杂七杂八',
+        reply_to_message: {
+          message_id: 126,
+        },
+      },
+    },
+    {
+      update_id: 422,
+      message: {
+        message_id: 712,
+        date: 1_746_748_900,
+        chat: { id: 42 },
+        text: '/移动 127 锻炼',
+      },
+    },
+  ]);
+
+  assert.equal(batches.length, 2);
+  assert.equal(batches[0].kind, 'thought_move');
+  assert.equal(batches[0].thoughtMove.targetMessageId, 126);
+  assert.equal(batches[0].thoughtMove.thoughtModule, 'misc');
+  assert.equal(batches[1].kind, 'thought_move');
+  assert.equal(batches[1].thoughtMove.targetMessageId, 127);
+  assert.equal(batches[1].thoughtMove.thoughtModule, 'workout');
+});
+
+test('skips thought move commands without a target module', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 423,
+      message: {
+        message_id: 713,
+        date: 1_746_748_900,
+        chat: { id: 42 },
+        text: '/移动 127',
+      },
+    },
+  ]);
+
+  assert.equal(batches.length, 0);
+});
+
 test('analyzes /analysis batches into ready analysis entries', async () => {
   const lib = await importTelegramSyncLib();
 

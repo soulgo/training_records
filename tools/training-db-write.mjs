@@ -419,6 +419,24 @@ async function persistThoughtMirror(client, batch, processedAt) {
       deletedImageRefs: batch.thoughtDelete?.storage?.deletedPhotoPaths ?? [],
       processedAt,
     });
+    return;
+  }
+
+  if (batch.kind === 'thought_move') {
+    await upsertThoughtMirror(client, {
+      messageId: batch.thoughtMove?.targetMessageId,
+      chatId: batch.thoughtMove?.telegramChatId,
+      sourceBatchId: batch.batchId,
+      command: batch.thoughtMove?.command ?? '/移动',
+      body: '',
+      thoughtModule: batch.thoughtMove?.thoughtModule ?? null,
+      tags: batch.thoughtMove?.tags ?? null,
+      messageDateUnix: batch.thoughtMove?.messageDateUnix ?? null,
+      markdownPath: batch.thoughtMove?.storage?.markdownPath ?? null,
+      imageRefs: batch.thoughtMove?.storage?.photoPaths ?? null,
+      status: 'active',
+      processedAt,
+    });
   }
 }
 
@@ -431,6 +449,9 @@ function getThoughtStorageWriteStatus(batch) {
   }
   if (batch.kind === 'thought_delete') {
     return batch.thoughtDelete?.storage?.writeStatus ?? null;
+  }
+  if (batch.kind === 'thought_move') {
+    return batch.thoughtMove?.storage?.writeStatus ?? null;
   }
   return null;
 }
@@ -923,7 +944,7 @@ function hasNutritionPayload(nutrition) {
 }
 
 function isThoughtBatchKind(kind) {
-  return kind === 'thought' || kind === 'thought_edit' || kind === 'thought_delete';
+  return kind === 'thought' || kind === 'thought_edit' || kind === 'thought_delete' || kind === 'thought_move';
 }
 
 function normalizeThoughtModule(value) {

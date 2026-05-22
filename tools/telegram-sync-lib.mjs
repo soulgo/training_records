@@ -44,6 +44,12 @@ export function groupTelegramUpdates(updates, options = {}) {
       knownThoughtMessageKeys.add(buildThoughtMessageKey(normalized.chatId, normalized.messageId));
     }
 
+    const thoughtMoveBatch = buildThoughtMoveBatch(normalized);
+    if (thoughtMoveBatch) {
+      batches.push(thoughtMoveBatch);
+      continue;
+    }
+
     const thoughtDeleteBatch = buildThoughtDeleteBatch(normalized);
     if (thoughtDeleteBatch) {
       batches.push(thoughtDeleteBatch);
@@ -144,6 +150,10 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
 
   if (batch.kind === 'thought_delete') {
     return analyzeThoughtDeleteBatch(batch);
+  }
+
+  if (batch.kind === 'thought_move') {
+    return analyzeThoughtMoveBatch(batch);
   }
 
   if (batch.kind === 'thought') {
@@ -536,6 +546,26 @@ function buildThoughtBatchFromMessages(messages) {
       body: parsedThought.body,
       thoughtModule: normalizeThoughtModule(parsedThought.moduleKey),
       sourceMessageId: message.messageId,
+    },
+  };
+}
+
+function buildThoughtMoveBatch(message) {
+  const parsedMove = parseThoughtMoveCommand(message.text);
+  if (!parsedMove) {
+    return null;
+  }
+
+  return {
+    kind: 'thought_move',
+    batchId: `thought-move-${message.messageId}`,
+    messages: [message],
+    thoughtMove: {
+      command: parsedMove.command,
+      targetMessageId: parsedMove.targetMessageId ?? message.replyToMessageId ?? null,
+      requestedTargetText: parsedMove.requestedTargetText,
+      replyToMessageId: message.replyToMessageId,
+      thoughtModule: parsedMove.thoughtModule,
     },
   };
 }
@@ -1186,6 +1216,42 @@ function parseThoughtCommand(text) {
   return buildThoughtCommandPayload(match[1], match[2]);
 }
 
+function analyzeThoughtMoveBatch(batch) {
+  const message = batch.messages?.[0] ?? null;
+  const targetMessageId = normalizeMessageId(batch.thoughtMove?.targetMessageId);
+  const thoughtModule = normalizeThoughtModuleOrNull(batch.thoughtMove?.thoughtModule);
+
+  if (!targetMessageId) {
+    return buildSkippedBatchResult(batch, {
+      reason: 'missing target thought message id',
+    });
+  }
+
+  if (!thoughtModule) {
+    return buildSkippedBatchResult(batch, {
+      reason: 'missing target thought module',
+    });
+  }
+
+  return {
+    status: 'ready',
+    kind: 'thought_move',
+    batchId: batch.batchId,
+    archivedDate: null,
+    warnings: [],
+    issues: [],
+    confidence: 1,
+    thoughtMove: {
+      command: batch.thoughtMove?.command ?? '/移动',
+      targetMessageId,
+      thoughtModule,
+      tags: getThoughtModuleTags(thoughtModule),
+      telegramChatId: message?.chatId ?? null,
+      messageDateUnix: message?.dateUnix ?? null,
+    },
+  };
+}
+
 function parseThoughtEditCommand(text) {
   if (typeof text !== 'string') {
     return null;
@@ -1257,6 +1323,46 @@ function buildThoughtMessageKey(chatId, messageId) {
 function normalizeMessageId(value) {
   const number = Number(value);
   return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function parseThoughtMoveCommand(text) {
+  if (typeof text !== 'string') {
+    return null;
+  }
+
+  const trimmedStart = text.trimStart();
+  const match = trimmedStart.match(
+    /^(\/(?:move|移动)(?:@[A-Za-z0-9_]+)?)(?=$|\s)([\s\S]*)$/u,
+  );
+  if (!match) {
+    return null;
+  }
+
+  const requestedTargetText = match[2].trim();
+  const idAndModuleMatch = requestedTargetText.match(/^(\d+)\s+(\S+)$/u);
+  if (idAndModuleMatch) {
+    const thoughtModule = resolveThoughtModuleLabel(idAndModuleMatch[2]);
+    return thoughtModule
+      ? {
+          command: match[1],
+          requestedTargetText,
+          targetMessageId: Number(idAndModuleMatch[1]),
+          thoughtModule,
+        }
+      : null;
+  }
+
+  const thoughtModule = resolveThoughtModuleLabel(requestedTargetText);
+  if (!thoughtModule) {
+    return null;
+  }
+
+  return {
+    command: match[1],
+    requestedTargetText,
+    targetMessageId: null,
+    thoughtModule,
+  };
 }
 
 function buildThoughtCommandPayload(command, rawBody) {

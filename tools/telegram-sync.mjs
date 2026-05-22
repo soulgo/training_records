@@ -35,6 +35,7 @@ import {
   writeThoughtPostFile,
   editThoughtPost,
   deleteThoughtPost,
+  moveThoughtPost,
   readExistingThoughtMessageKeys,
 } from './telegram-thoughts.mjs';
 
@@ -371,6 +372,49 @@ export async function runTelegramSync(options = {}) {
       continue;
     }
 
+    if (persistedBatch.kind === 'thought_move') {
+      const thoughtMoveResult = await moveThoughtPost({
+        batch: persistedBatch,
+        thoughtsDir,
+      });
+      const thoughtStorageBatch = attachThoughtStorageMetadata(
+        persistedBatch,
+        thoughtMoveResult,
+        activeRootDir,
+      );
+      changed ||= thoughtMoveResult.changed;
+
+      try {
+        const persistResult = await persistBatch({
+          batch: thoughtStorageBatch,
+          processedAt: now,
+          env: options.env ?? process.env,
+        });
+        changed ||= persistResult.status === 'stored';
+        batchResults.push({
+          ...thoughtStorageBatch,
+          postPath: thoughtMoveResult.postPath,
+          thoughtWriteStatus: thoughtMoveResult.status,
+          persistenceStatus: persistResult.status,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await appendPendingFallbackBatch(pendingQueuePath, {
+          batch: thoughtStorageBatch,
+          failedAt: now.toISOString(),
+          error: errorMessage,
+        });
+        batchResults.push({
+          ...thoughtStorageBatch,
+          postPath: thoughtMoveResult.postPath,
+          thoughtWriteStatus: thoughtMoveResult.status,
+          persistenceStatus: 'pending_replay',
+          persistenceError: errorMessage,
+        });
+      }
+      continue;
+    }
+
     try {
       const persistResult = await persistBatch({
         batch: persistedBatch,
@@ -548,7 +592,7 @@ function shouldRewriteTrainingMarkdown({ replayStoredImageAny, batchResults }) {
 }
 
 function isTrainingDataBatchKind(kind) {
-  return kind !== 'thought' && kind !== 'thought_edit' && kind !== 'thought_delete' && kind !== 'analysis';
+  return kind !== 'thought' && kind !== 'thought_edit' && kind !== 'thought_delete' && kind !== 'thought_move' && kind !== 'analysis';
 }
 
 function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {
@@ -592,6 +636,18 @@ function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {
         ...batch.thoughtDelete,
         thoughtModule: writeResult.thoughtModule ?? batch.thoughtDelete?.thoughtModule ?? null,
         tags: writeResult.tags ?? batch.thoughtDelete?.tags ?? null,
+        storage,
+      },
+    };
+  }
+
+  if (batch.kind === 'thought_move') {
+    return {
+      ...batch,
+      thoughtMove: {
+        ...batch.thoughtMove,
+        thoughtModule: writeResult.thoughtModule ?? batch.thoughtMove?.thoughtModule ?? null,
+        tags: writeResult.tags ?? batch.thoughtMove?.tags ?? null,
         storage,
       },
     };
