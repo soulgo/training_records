@@ -1,0 +1,57 @@
+name: CI Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 训练记录.md
+      - _config.yml
+      - source/**
+      - themes/**
+      - tools/**
+      - .github/actions/site-build/action.yml
+      - .github/workflows/deploy-pages.yml
+      - .github/workflows/telegram-sync.yml
+      - .github/workflows/ci-tests.yml
+      - package.json
+      - package-lock.json
+  pull_request:
+    paths:
+      - 训练记录.md
+      - _config.yml
+      - source/**
+      - themes/**
+      - tools/**
+      - .github/actions/site-build/action.yml
+      - .github/workflows/deploy-pages.yml
+      - .github/workflows/telegram-sync.yml
+      - .github/workflows/ci-tests.yml
+      - package.json
+      - package-lock.json
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test

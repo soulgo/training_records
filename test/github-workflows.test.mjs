@@ -40,8 +40,39 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /- name: Build and deploy site/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
-  assert.match(workflow, /run_tests:\s*'true'/);
+  assert.match(workflow, /run_tests:\s*'false'/);
   assert.match(workflow, /deploy:\s*'true'/);
+});
+
+test('ci-tests workflow runs npm test without deploying Pages', async () => {
+  const workflow = await readWorkflow('.github/workflows/ci-tests.yml');
+
+  assert.match(workflow, /name:\s*CI Tests/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /push:/);
+  assert.match(workflow, /pull_request:/);
+  for (const expectedPath of [
+    '训练记录.md',
+    '_config.yml',
+    'source/**',
+    'themes/**',
+    'tools/**',
+    '.github/actions/site-build/action.yml',
+    '.github/workflows/deploy-pages.yml',
+    '.github/workflows/telegram-sync.yml',
+    '.github/workflows/ci-tests.yml',
+    'package.json',
+    'package-lock.json',
+  ]) {
+    assert.match(workflow, new RegExp(`-\\s*${escapeRegExp(expectedPath)}`));
+  }
+  assert.match(workflow, /actions\/checkout@v4/);
+  assert.match(workflow, /actions\/setup-node@v4/);
+  assert.match(workflow, /node-version:\s*22/);
+  assert.match(workflow, /cache:\s*npm/);
+  assert.match(workflow, /run:\s*npm ci/);
+  assert.match(workflow, /run:\s*npm test/);
+  assert.doesNotMatch(workflow, /actions\/deploy-pages@v4/);
 });
 
 test('deploy-pages workflow still triggers for site-relevant changes', async () => {
