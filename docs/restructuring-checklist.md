@@ -138,23 +138,27 @@
 
 ### 4.1 创建 Reusable Workflow
 
-- [ ] **4.1.1** 创建 `.github/workflows/_reusable-build.yml`
-  - 包含：checkout → setup-node → npm ci → backfill → reconcile → build → upload artifact → deploy
+- [x] **4.1.1** 创建共享构建/部署入口
+  - 实际实现为 `.github/actions/site-build/action.yml` composite action，而不是 `.github/workflows/_reusable-build.yml`
+  - 包含：setup-node → npm ci → backfill → reconcile → build → upload artifact → deploy
   - 参数化：是否运行 backfill、是否运行 test、是否 deploy
-- [ ] **4.1.2** 简化 `deploy-pages.yml`，调用 reusable workflow
-- [ ] **4.1.3** 简化 `telegram-sync.yml` 中的 deploy 部分，调用 reusable workflow
+- [x] **4.1.2** 简化 `deploy-pages.yml`，调用共享构建/部署入口
+- [x] **4.1.3** 简化 `telegram-sync.yml` 中的 deploy 部分，调用共享构建/部署入口
 
 ### 4.2 添加缓存
 
-- [ ] **4.2.1** 在 `_config.yml` 中添加 `cache: enable: true`
-- [ ] **4.2.2** 在 reusable workflow 中添加 `actions/cache@v4` 缓存 `.hexo_cache` 目录
-- [ ] **4.2.3** 缓存 key 使用 `hashFiles('训练记录.md', 'source/_posts/**', 'themes/**')`
+- [x] **4.2.1** 在 `_config.yml` 中添加 `cache: enable: true`
+- [x] **4.2.2** 在共享构建/部署入口中添加 `actions/cache@v4` 缓存 `.hexo_cache` 目录
+- [x] **4.2.3** 缓存 key 使用 `hashFiles('训练记录.md', 'source/_posts/**', 'themes/**')`
 
 ### 4.3 验证
 
-- [ ] **4.3.1** 推送分支，确认 GitHub Actions 正常运行
+- [x] **4.3.1** 推送分支，确认 GitHub Actions 正常运行
+  - GitHub Actions `Deploy GitHub Pages` / `Telegram Sync` 最新 run 均已成功
 - [ ] **4.3.2** 确认构建时间比优化前减少 40%+
+  - 现有对比记录不足以证明已达到 40% 目标，继续保留为未完成
 - [ ] **4.3.3** 确认 GitHub Pages 部署成功
+  - `https://soulgo.chat` 可访问，返回 200
 
 ---
 

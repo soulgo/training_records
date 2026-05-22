@@ -134,27 +134,6 @@ function renderComparison(comparison, className) {
   return `<div class="${className} comparison-pill comparison-pill--${escapeHtml(comparison.direction)}"><div class="comparison-pill__summary"><span class="comparison-pill__arrow">${escapeHtml(comparison.arrow)}</span><span>${escapeHtml(comparison.text)}</span><span class="comparison-pill__label" aria-hidden="true">${escapeHtml(comparison.shortLabel)}</span></div>${valueMarkup}${strengthMarkup}</div>`;
 }
 
-function renderDayCard(day) {
-  const tags = (day.tags || []).length
-    ? `<div class="day-card__tags">${day.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>`
-    : '';
-
-  return `<article class="day-card">
-    <div class="day-card__header">
-      <h3>${escapeHtml(day.date)}</h3>
-      <span>${escapeHtml(day.weightLabel)}</span>
-    </div>
-    <ul class="day-card__stats">
-      <li>活动次数：<strong>${escapeHtml(day.activityCount)}</strong></li>
-      <li>训练消耗：<strong>${escapeHtml(day.trainingCaloriesLabel)}</strong></li>
-      <li>锻炼时长：<strong>${escapeHtml(day.workoutDurationLabel)}</strong></li>
-      <li>骑行里程：<strong>${escapeHtml(day.cyclingDistanceLabel)}</strong></li>
-      <li>饮食热量：<strong>${escapeHtml(day.nutritionCaloriesLabel)}</strong></li>
-    </ul>
-    ${tags}
-  </article>`;
-}
-
 function formatDailyRange(pageIndex, pageSize, total) {
   if (!total) {
     return '0 / 共 0 天';
