@@ -37,7 +37,12 @@
 - 并且画面里直接显示了文件名、标题或路径
 - 那么这些“显示在图片里的文字”仍然算图片内可见日期，可以用于 `detectedDate`
 
-这条规则写在 [prompts/telegram-training-image-recognition.md](/Users/soulgo/Desktop/training_records/prompts/telegram-training-image-recognition.md:12)。
+另外两类日期也属于当前支持范围：
+
+- 活动总览这类页面顶部的大号日期，如果可靠，属于截图画面内可见日期。
+- 如果截图画面里只出现 `5月22日` 这类月日，可以用 Telegram 消息年份补全；Telegram 消息时间只用于补全年份，不能单独当作图片日期。
+
+这些规则写在 [prompts/telegram-training-image-recognition.md](/Users/soulgo/Desktop/training_records/prompts/telegram-training-image-recognition.md:12)，事实源是 [prompts/_source/recognition-rules.json](/Users/soulgo/Desktop/training_records/prompts/_source/recognition-rules.json:17)。
 
 ## 3. Telegram `photo` 和 `document` 的差异
 
@@ -71,6 +76,8 @@
 - 截图顶部显示 `2026-05-14`
 - 文件名是 `2026-05-13 饮食记录.jpg`
 - 最终归档到 `2026-05-14`
+
+活动总览页同理：如果顶部大号日期显示 `2026年5月22日星期五`，可以作为 `detectedDate=2026-05-22`。
 
 ### 4.2 单张图片，图片内没日期，但 Telegram 原始文件名有日期
 
@@ -215,7 +222,8 @@
 3. 看 `warnings` 里有没有“图片内未见可靠日期”或“以 photo 形式发送”
 4. 看这条消息在 Telegram 里是按 `photo` 还是 `document` 发的
 5. 看图片里是否真的出现了可见日期，或者是否出现了相册详情页里的文件名日期
-6. 看同一相册里的多张图是不是混入了不同日期
+6. 如果只出现月日，看 Telegram 消息年份是否能补全为合法日期
+7. 看同一相册里的多张图是不是混入了不同日期
 
 ## 9. 改逻辑时要同步改哪些地方
 

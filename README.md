@@ -196,6 +196,12 @@ Markdown 推荐结构：
 - `tools/training-analysis.mjs`
   从 `TrainingSnapshot` 汇总最近 7/30 天数据，调用 AI 生成 Telegram 训练分析回复
 
+- `tools/prompt-generator.mjs`
+  从 `prompts/_source/*.json` 编译图片识别与训练分析的运行时 prompt
+
+- `prompts/_source/`
+  图片识别和 `/analysis` prompt 的结构化事实源；运行时 `prompts/*.md` 由这里生成
+
 - `cloudflare/telegram-sync-dispatch-worker.mjs`
   Cloudflare Worker 示例，用于把 Telegram webhook 转发成 GitHub `repository_dispatch`，并把相册消息按 `media_group_id` 聚合后再派发
 
@@ -259,7 +265,7 @@ npm run build
 - 不走图片识别，不写 `训练记录.md`，不写 `source/_posts`，不写 PostgreSQL
 - 基于现有 `TrainingSnapshot` 汇总最近 7/30 天数据，并通过 Telegram `sendMessage` 回发短建议
 - 用户明确问最近一周时，分析主结论只使用最近 7 天数据；用户明确问最近 30 天时才使用 30 天趋势
-- 输出约束由 `prompts/training-analysis.md` 维护
+- 输出约束由 `prompts/_source/analysis-rules.json` 和 `prompts/_source/shared-rules.json` 维护，再编译到 `prompts/training-analysis.md`
 
 更完整的维护说明见 `docs/telegram-analysis.md`。
 
@@ -308,8 +314,13 @@ npm run build
 - `.github/workflows/telegram-sync.yml`
   在 `repository_dispatch`、手动触发或 `训练记录.md` 的人工 push 时运行 Telegram 同步，并提交派生 Markdown；会跳过自身 bot push 造成的二次空跑
 
+相关文档：
+
 - `docs/telegram-date-resolution.md`
   Telegram 单张/多张图片的日期归档与跳过规则说明，包含 `photo` 与 `document` 的差异
+
+- `docs/telegram-recognition-prompt.md`
+  Telegram 图片识别 prompt 的结构化源、生成流程与维护规则
 
 - `docs/github-cloudflare-settings.md`
   GitHub Settings + Cloudflare Worker 的统一配置说明

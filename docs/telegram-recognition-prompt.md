@@ -29,6 +29,14 @@ node tools/prompt-generator.mjs
 - 新增识别字段时，需要同步修改 schema、`analyzeTelegramBatch()`、数据库/Markdown 写入逻辑和测试。
 - 不确定日期时宁可让 `detectedDate` 为 `null`，交给现有跳过/回退逻辑处理。
 
+当前日期识别口径：
+
+- `detectedDate` 只来自截图画面内可见内容。
+- 系统相册、文件详情或分享预览页里可见的文件名、标题、路径日期，也算画面内日期。
+- 活动总览顶部的大号日期如果可靠，可以用于 `detectedDate`。
+- Telegram 消息年份只用于补全截图内可见的月日，不能单独产生 `detectedDate`。
+- caption/text 和 Telegram 外部文件名不属于 `detectedDate` 来源；外部文件名只由程序后处理作为 `archivedDate` 回退。
+
 ## 本地验证
 
 改完结构化源并重新生成 prompt 后至少运行：

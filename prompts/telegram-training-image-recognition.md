@@ -16,6 +16,8 @@
 - 体脂秤截图的真实测量时间写入 `records.measurement.measuredAt`，不要为了归档日期而改写真实时间。
 - 次日清晨体脂秤是否归入前一日不由 AI 判断；图片本身只负责提供真实测量时间。
 - 如果图片只显示 `5月13日` 这类月日，可用 Telegram 消息年份补全年份；如果补全后日期不可能，填 `null`。
+- Telegram 消息年份只用于补全截图内可见的月日，例如消息时间是 `2026年5月22日星期五`，截图显示 `5月22日` 时可输出 `2026-05-22`。
+- 活动总览这类页面顶部的大号日期属于截图画面内可见日期；如果可靠，优先用于 `detectedDate`。
 - `dateEvidence` 写明截图内日期来源，例如 `image header: 2026-05-14`、`image shows 5月14日, year from telegram message`、`no reliable image date`。
 
 ## 日期规则（共享）
