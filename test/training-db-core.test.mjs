@@ -6,6 +6,7 @@ import {
   exportTrainingMarkdown,
   getLastProcessedTelegramUpdateId,
   persistNormalizedBatch,
+  readTrainingSnapshotFromDatabaseClient,
 } from '../tools/training-db-core.mjs';
 
 const normalizedBatch = {
@@ -72,6 +73,98 @@ const normalizedBatch = {
     },
   ],
 };
+
+test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before grouping rows', async () => {
+  const client = {
+    async query(sql) {
+      if (/from core\.training_day/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: new Date('2026-05-22T00:00:00.000Z'),
+              total_activities: 7,
+              total_duration_seconds: 8888,
+              training_calories: 1077,
+              workout_duration_minutes: 148,
+              active_hours: 14,
+              cycling_distance_km: 11.74,
+              intake_calories: 1385,
+              nutrition_details_json: ['早餐 597千卡'],
+            },
+          ],
+        };
+      }
+      if (/from core\.measurement/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: new Date('2026-05-22T00:00:00.000Z'),
+              measured_at: '2026-05-22',
+              body_score: 76,
+              weight_kg: 73.7,
+              bmi: 23.7,
+              body_fat_pct: 22.8,
+              skeletal_muscle_kg: 30.8,
+              visceral_fat_level: 9,
+              basal_metabolism_kcal: 1605,
+              body_water_pct: 50,
+              protein_pct: 23.1,
+              bone_mass_kg: 2.975,
+              fat_free_mass_kg: 56.9,
+              body_age: 31,
+              body_type: '肥胖型',
+            },
+          ],
+        };
+      }
+      if (/from core\.activity/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: new Date('2026-05-22T00:00:00.000Z'),
+              activity_time: '06:40',
+              activity_type: 'mixed_cardio',
+              raw_type: 'mixed_cardio',
+              detail: '总消耗375千卡，时长00:40:01，平均心率145次/分钟',
+              calories: 375,
+              heart_rate: 145,
+              distance_km: null,
+              avg_speed_kmh: null,
+              duration_text: '00:40:01',
+              duration_seconds: 2401,
+            },
+          ],
+        };
+      }
+      if (/from core\.meal/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: new Date('2026-05-22T00:00:00.000Z'),
+              meal_name: '早餐',
+              calories: 597,
+              recommended_min: 512,
+              recommended_max: 922,
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+  };
+
+  const snapshot = await readTrainingSnapshotFromDatabaseClient(
+    client,
+    new Date('2026-05-23T00:00:00.000Z'),
+  );
+  const day = snapshot.daily.find((entry) => entry.date === '2026-05-22');
+
+  assert.ok(day);
+  assert.equal(day.activities.length, 1);
+  assert.equal(day.nutrition.meals.length, 1);
+  assert.equal(day.measurement.weightKg, 73.7);
+  assert.equal(snapshot.charts.weightKg[0].date, '2026-05-22');
+});
 
 test('persistNormalizedBatch writes ingest and core records in one transaction', async () => {
   const calls = [];

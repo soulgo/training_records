@@ -1001,7 +1001,9 @@ function mergeDateSection(body, batchResult) {
     nextBody = upsertBlock(nextBody, /#### .*体脂秤.*(?:\n|$)/, renderMeasurementBlock(batchResult));
   }
   if (batchResult.activities?.length || batchResult.workoutDailySummary) {
-    nextBody = upsertBlock(nextBody, /#### .*运动截图记录(?:\n|$)/, renderActivitiesBlock(batchResult));
+    nextBody = upsertBlock(nextBody, /#### .*运动截图记录(?:\n|$)/, renderActivitiesBlock(batchResult), {
+      mergeBlock: mergeWorkoutBlock,
+    });
   }
   if (batchResult.nutrition?.meals?.length || batchResult.nutrition?.totalCalories !== null) {
     nextBody = upsertBlock(nextBody, /#### .*饮食截图记录(?:\n|$)/, renderNutritionBlock(batchResult));
@@ -1142,23 +1144,35 @@ function renderNutritionBlock(batchResult) {
   return lines.join('\n');
 }
 
-function upsertBlock(sectionBody, headingPattern, nextBlock) {
-  const blocks = splitLevel4Blocks(sectionBody);
-  const targetIndex = blocks.findIndex((block) => headingPattern.test(`${block.headingLine}\n`));
-  if (targetIndex === -1) {
+function upsertBlock(sectionBody, headingPattern, nextBlock, options = {}) {
+  const targetRange = findLevel4BlockRange(sectionBody, headingPattern);
+  if (!targetRange) {
     return `${sectionBody.trim()}\n\n${nextBlock}`.trim();
   }
 
-  const existingBlock = `${blocks[targetIndex].headingLine}\n${blocks[targetIndex].body}`.trim();
-  const mergedBlock = mergeBlock(existingBlock, nextBlock);
+  const originalChunk = sectionBody.slice(targetRange.start, targetRange.end);
+  const existingBlock = originalChunk.trim();
+  const merge = options.mergeBlock ?? mergeBlock;
+  const mergedBlock = merge(existingBlock, nextBlock);
   if (mergedBlock === existingBlock) {
     return sectionBody;
   }
 
-  const rebuiltBlocks = blocks.map((block, index) =>
-    index === targetIndex ? mergedBlock : `${block.headingLine}\n${block.body}`.trim(),
-  );
-  return rebuiltBlocks.join('\n\n').trim();
+  const separator = originalChunk.match(/\s*$/)?.[0] ?? '\n\n';
+  return `${sectionBody.slice(0, targetRange.start)}${mergedBlock}${separator}${sectionBody.slice(targetRange.end)}`.trim();
+}
+
+function findLevel4BlockRange(sectionBody, headingPattern) {
+  const matches = [...sectionBody.matchAll(/^#### .+$/gm)];
+  const targetIndex = matches.findIndex((match) => headingPattern.test(`${match[0]}\n`));
+  if (targetIndex === -1) {
+    return null;
+  }
+
+  return {
+    start: matches[targetIndex].index,
+    end: targetIndex + 1 < matches.length ? matches[targetIndex + 1].index : sectionBody.length,
+  };
 }
 
 function mergeBlock(existingBlock, nextBlock) {
@@ -1174,6 +1188,128 @@ function mergeBlock(existingBlock, nextBlock) {
   }
 
   return nextBlock.trim();
+}
+
+function mergeWorkoutBlock(existingBlock, nextBlock) {
+  const existing = splitWorkoutBlock(existingBlock);
+  const incoming = splitWorkoutBlock(nextBlock);
+  const summaryBody = incoming.summaryBody ?? existing.summaryBody;
+  const activityBody = incoming.activityBody
+    ? mergeActivityBodies(existing.activityBody, incoming.activityBody)
+    : existing.activityBody;
+  const lines = [existing.headingLine ?? incoming.headingLine ?? '#### 当日运动截图记录', '', TELEGRAM_SECTION_TAG];
+
+  if (summaryBody) {
+    lines.push('');
+    lines.push('##### 当日活动总览');
+    lines.push('');
+    lines.push(stripLevel5Heading(summaryBody, '当日活动总览').trim());
+  }
+
+  if (activityBody) {
+    lines.push('');
+    lines.push('##### 活动明细');
+    lines.push('');
+    lines.push(stripLevel5Heading(activityBody, '活动明细').trim());
+  }
+
+  return lines.join('\n').trim();
+}
+
+function splitWorkoutBlock(block) {
+  const [headingLine = '#### 当日运动截图记录', ...bodyLines] = block.trim().split(/\r?\n/);
+  const body = bodyLines.join('\n').trim();
+  return {
+    headingLine,
+    summaryBody: extractLevel5Body(body, '当日活动总览'),
+    activityBody: extractLevel5Body(body, '活动明细') ?? extractLegacyActivityBody(body),
+  };
+}
+
+function extractLevel5Body(content, heading) {
+  const block = splitLevel5Blocks(content).find((item) => item.heading === heading);
+  return block ? block.body.trim() : null;
+}
+
+function splitLevel5Blocks(content) {
+  const matches = [...content.matchAll(/^##### (.+)$/gm)];
+  return matches.map((match, index) => {
+    const start = match.index + match[0].length;
+    const end = index + 1 < matches.length ? matches[index + 1].index : content.length;
+    return {
+      headingLine: match[0],
+      heading: match[1].trim(),
+      body: content.slice(start, end).trim(),
+    };
+  });
+}
+
+function stripLevel5Heading(content, heading) {
+  const trimmed = content.trim();
+  const headingLine = `##### ${heading}`;
+  return trimmed.startsWith(headingLine) ? trimmed.slice(headingLine.length).trim() : trimmed;
+}
+
+function extractLegacyActivityBody(content) {
+  const entries = parseActivityEntries(content);
+  return entries.length ? renderActivityEntries(entries) : null;
+}
+
+function mergeActivityBodies(existingBody, incomingBody) {
+  const entriesByKey = new Map();
+  for (const entry of parseActivityEntries(existingBody ?? '')) {
+    entriesByKey.set(entry.key, entry);
+  }
+  for (const entry of parseActivityEntries(incomingBody ?? '')) {
+    entriesByKey.set(entry.key, entry);
+  }
+  const entries = [...entriesByKey.values()].sort((left, right) =>
+    left.time === right.time ? left.line.localeCompare(right.line) : left.time.localeCompare(right.time),
+  );
+  return entries.length ? renderActivityEntries(entries) : null;
+}
+
+function parseActivityEntries(content) {
+  const entries = [];
+  let pendingFingerprint = null;
+
+  for (const rawLine of String(content ?? '').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const fingerprint = line.match(/^<!-- telegram-fingerprint: ([^ ]+) -->$/)?.[1] ?? null;
+    if (fingerprint) {
+      pendingFingerprint = fingerprint.startsWith('a-') ? line : null;
+      continue;
+    }
+
+    const activityMatch = line.match(/^- (\d{2}:\d{2})\s+([^：]+)：(.+)$/);
+    if (!activityMatch) {
+      pendingFingerprint = null;
+      continue;
+    }
+
+    const [, time, type, detail] = activityMatch;
+    const normalizedType = normalizeActivityType(type);
+    entries.push({
+      key: `activity:${time}|${normalizedType}`,
+      time,
+      line: `- ${time} ${normalizedType}：${detail.trim()}`,
+      fingerprint: pendingFingerprint,
+    });
+    pendingFingerprint = null;
+  }
+
+  return entries;
+}
+
+function renderActivityEntries(entries) {
+  const lines = [];
+  for (const entry of entries) {
+    if (entry.fingerprint) {
+      lines.push(entry.fingerprint);
+    }
+    lines.push(entry.line);
+  }
+  return lines.join('\n');
 }
 
 function buildInboxEntry({ batch, recognitions, analyzed }) {

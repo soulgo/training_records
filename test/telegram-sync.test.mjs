@@ -1993,7 +1993,7 @@ test('uses image date over conflicting filename date and records a warning', asy
   assert.match(analyzed.warnings.join('\n'), /filename date\(s\) 2026-05-13 differ/i);
 });
 
-test('replaces telegram-managed blocks when a same-day screenshot is uploaded again', async () => {
+test('merges same-day workout updates without dropping prior activity or nutrition blocks', async () => {
   const lib = await importTelegramSyncLib();
 
   assert.ok(lib?.applyTelegramSyncToMarkdown, 'applyTelegramSyncToMarkdown export missing');
@@ -2031,30 +2031,104 @@ test('replaces telegram-managed blocks when a same-day screenshot is uploaded ag
       },
     ],
     nutrition: {
-      meals: [
-        { name: '晚餐', calories: 900, recommendedMin: 317, recommendedMax: 740 },
-      ],
-      totalCalories: 1428,
-      details: ['新晚餐 900 千卡'],
+      meals: [],
+      totalCalories: null,
+      details: [],
     },
     fingerprints: {
       measurement: [],
       activities: ['a-2026-05-09-19:13-力量训练-241'],
-      nutrition: ['n-2026-05-09-晚餐-900'],
+      nutrition: [],
     },
   };
 
   const result = lib.applyTelegramSyncToMarkdown(markdown, batchResult);
 
   assert.equal(result.changed, true);
-  assert.equal(result.markdown.includes('06:45 自由训练'), false);
-  assert.equal(result.markdown.includes('旧晚餐'), false);
+  assert.equal(result.markdown.includes('06:45 燃脂训练'), true);
+  assert.equal(result.markdown.includes('旧晚餐'), true);
   assert.equal(result.markdown.includes('19:13 力量训练'), true);
-  assert.equal(result.markdown.includes('新晚餐 900 千卡'), true);
-  assert.equal(result.markdown.includes('当日截图内已记录总热量：1428千卡'), true);
+  assert.equal(result.markdown.includes('当日截图内已记录总热量：1593千卡'), true);
+  assert.equal((result.markdown.match(/##### 活动明细/g) ?? []).length, 1);
 });
 
-test('replaces legacy same-day screenshot blocks instead of appending duplicates', async () => {
+test('merges same-day overview and measurement without dropping activity details or nutrition', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.applyTelegramSyncToMarkdown, 'applyTelegramSyncToMarkdown export missing');
+
+  const markdown = `
+### 2026-05-22
+
+#### 当日运动截图记录
+
+<!-- telegram-sync-section -->
+
+##### 活动明细
+
+<!-- telegram-fingerprint: a-2026-05-22-06:40-HIIT-375 -->
+- 06:40 HIIT：总消耗375千卡，时长00:40:01，平均心率145次/分钟
+<!-- telegram-fingerprint: a-2026-05-22-08:20-户外骑行-na -->
+- 08:20 户外骑行：距离3.14公里，时长00:12:41，均速14.85公里/小时
+
+#### 2026-05-22 饮食截图记录
+<!-- telegram-sync-section -->
+##### 餐次汇总
+
+<!-- telegram-fingerprint: n-2026-05-22-早餐-597 -->
+- 早餐：597千卡，建议范围512–922千卡
+<!-- telegram-fingerprint: n-2026-05-22-午餐-788 -->
+- 午餐：788千卡，建议范围615–1024千卡
+- 当日截图内已记录总热量：1385千卡
+`;
+
+  const batchResult = {
+    batchId: 'album-overview-measurement',
+    archivedDate: '2026-05-22',
+    measurement: {
+      measuredAt: '2026-05-22',
+      weightKg: 73.7,
+      bmi: 23.7,
+      bodyFatPct: 22.8,
+      skeletalMuscleKg: 30.8,
+      visceralFatLevel: 9,
+      basalMetabolismKcal: 1605,
+    },
+    workoutDailySummary: {
+      activityCaloriesKcal: 1077,
+      workoutDurationMinutes: 148,
+      activeHours: 14,
+    },
+    activities: [],
+    nutrition: {
+      meals: [],
+      totalCalories: null,
+      details: [],
+    },
+    fingerprints: {
+      measurement: ['m-2026-05-22-2026-05-22-73.7-22.8'],
+      workoutDailySummary: ['ws-2026-05-22-1077-148-14'],
+      activities: [],
+      nutrition: [],
+    },
+  };
+
+  const result = lib.applyTelegramSyncToMarkdown(markdown, batchResult);
+  const parsed = parseTrainingRecord(result.markdown);
+  const day = parsed.daily.find((entry) => entry.date === '2026-05-22');
+
+  assert.equal(result.changed, true);
+  assert.equal(result.markdown.includes('活动热量：1077千卡'), true);
+  assert.equal(result.markdown.includes('06:40 HIIT'), true);
+  assert.equal(result.markdown.includes('早餐：597千卡'), true);
+  assert.equal(result.markdown.includes('体重：73.7 kg'), true);
+  assert.equal(day.activities.length, 2);
+  assert.equal(day.nutrition.totalCalories, 1385);
+  assert.equal(day.measurement.weightKg, 73.7);
+  assert.equal(day.workoutSummary.workoutDurationMinutes, 148);
+});
+
+test('merges legacy same-day screenshot blocks without duplicating headings', async () => {
   const lib = await importTelegramSyncLib();
 
   assert.ok(lib?.applyTelegramSyncToMarkdown, 'applyTelegramSyncToMarkdown export missing');
@@ -2132,13 +2206,14 @@ test('replaces legacy same-day screenshot blocks instead of appending duplicates
   const day = parsed.daily.find((entry) => entry.date === '2026-05-13');
 
   assert.equal(result.changed, true);
-  assert.equal(result.markdown.includes('11:35 outdoor_cycling'), false);
+  assert.equal(result.markdown.includes('11:35 户外骑行'), true);
   assert.equal((result.markdown.match(/08:04 户外骑行/g) ?? []).length, 1);
-  assert.equal(day.activities.length, 2);
+  assert.equal(day.activities.length, 3);
   assert.deepEqual(day.workoutSummary.countsByType, {
-    户外骑行: 1,
+    户外骑行: 2,
     爬楼: 1,
   });
+  assert.equal(day.workoutSummary.activeHours, 21);
   assert.equal(day.nutrition.totalCalories, 969);
   assert.equal(day.nutrition.meals.length, 3);
 });

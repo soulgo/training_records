@@ -284,12 +284,12 @@ function buildTrainingSnapshotFromRows({
   mealRows,
   now,
 }) {
-  const measurementsByDate = groupBy(measurementRows, 'archived_date');
-  const activitiesByDate = groupBy(activityRows, 'archived_date');
-  const mealsByDate = groupBy(mealRows, 'archived_date');
+  const measurementsByDate = groupByDate(measurementRows, 'archived_date');
+  const activitiesByDate = groupByDate(activityRows, 'archived_date');
+  const mealsByDate = groupByDate(mealRows, 'archived_date');
 
   const daily = dayRows.map((row) => {
-    const archivedDate = row.archived_date;
+    const archivedDate = normalizeDateKey(row.archived_date);
     const measurements = (measurementsByDate.get(archivedDate) ?? []).map((measurement) => ({
       archivedDate,
       measuredAt: measurement.measured_at,
@@ -354,15 +354,28 @@ function buildTrainingSnapshotFromRows({
   );
 }
 
-function groupBy(rows, key) {
+function groupByDate(rows, key) {
   const map = new Map();
   for (const row of rows) {
-    const value = row[key];
+    const value = normalizeDateKey(row[key]);
     const items = map.get(value) ?? [];
     items.push(row);
     map.set(value, items);
   }
   return map;
+}
+
+function normalizeDateKey(value) {
+  if (value instanceof Date) {
+    return [
+      value.getFullYear(),
+      String(value.getMonth() + 1).padStart(2, '0'),
+      String(value.getDate()).padStart(2, '0'),
+    ].join('-');
+  }
+
+  const match = String(value ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : String(value ?? '');
 }
 
 function countActivitiesByType(activities) {
