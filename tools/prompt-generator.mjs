@@ -45,7 +45,9 @@ export async function generateAnalysisPrompt() {
     '',
     renderSection(analysis.outputRequirements),
     renderTimeWindowPolicies(analysis.timeWindowPolicies),
+    renderSection(analysis.dataReadingRules),
     renderSection(analysis.adviceGuidelines),
+    renderSection(analysis.sourceNote),
     renderSection(shared.nullConventions),
   ];
 

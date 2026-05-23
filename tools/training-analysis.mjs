@@ -53,15 +53,25 @@ async function loadSnapshotForAnalysis(options) {
   };
 
   try {
-    return await buildTrainingSnapshot(snapshotOptions);
+    const snapshot = await buildTrainingSnapshot(snapshotOptions);
+    return {
+      ...snapshot,
+      source: String(snapshotOptions.env?.TRAINING_SNAPSHOT_SOURCE ?? '').trim().toLowerCase() === 'database'
+        ? 'database'
+        : 'markdown',
+    };
   } catch (error) {
     if (!canFallbackToMarkdownSnapshot(error, snapshotOptions.env)) {
       throw error;
     }
-    return buildTrainingSnapshot({
+    const snapshot = await buildTrainingSnapshot({
       ...snapshotOptions,
       source: 'markdown',
     });
+    return {
+      ...snapshot,
+      source: 'fallback_markdown',
+    };
   }
 }
 
@@ -80,16 +90,35 @@ export function buildTrainingAnalysisSummary(snapshot, now = new Date()) {
   const measurements = daily
     .flatMap((day) => day.measurements ?? (day.measurement ? [day.measurement] : []))
     .filter(Boolean);
+  const source = normalizeSnapshotSource(snapshot?.source);
+  const coverage = buildCoverageSummary(daily, recent7, recent30);
+  const recent7Load = summarizeWindow(recent7);
+  const recent30Load = summarizeWindow(recent30);
+  const recent7Recovery = summarizeRecoverySignal(recent7);
+  const latestRecovery = summarizeRecoverySignal(daily.slice(-5));
+  const bodyCompositionRisk = assessBodyCompositionRisk(measurements, recent7);
+  const nutritionSignal = assessNutritionSignal(recent7, latestDay);
 
   return {
     generatedAt: toIsoString(now),
+    dataSource: source,
     totalDays: daily.length,
+    coverage,
     latestDate: latestDay?.date ?? null,
     latestMeasurement: normalizeMeasurement(latestMeasurement),
-    recent7: summarizeWindow(recent7),
-    recent30: summarizeWindow(recent30),
+    recent7: recent7Load,
+    recent30: recent30Load,
     measurementTrend7: summarizeMeasurementTrend(measurements.slice(-7)),
     measurementTrend30: summarizeMeasurementTrend(measurements.slice(-30)),
+    trainingLoad: buildTrainingLoadSummary(recent7, recent30),
+    strengthCardioBalance: buildStrengthCardioBalanceSummary(recent7, recent30),
+    bodyCompositionRisk,
+    nutritionSignal,
+    recoverySignal: {
+      recent7: recent7Recovery,
+      latest5: latestRecovery,
+      shouldRecover: recent7Recovery.shouldRecover || latestRecovery.shouldRecover,
+    },
     latestDays: daily.slice(-5).map((day) => ({
       date: day.date,
       weightKg: day.measurement?.weightKg ?? null,
@@ -101,6 +130,11 @@ export function buildTrainingAnalysisSummary(snapshot, now = new Date()) {
         .filter(([, count]) => Number(count) > 0)
         .map(([type, count]) => `${type}x${count}`),
       intakeCalories: toNumberOrNull(day.nutrition?.totalCalories),
+      workoutDetails: summarizeLatestActivityDetails(day.activities ?? []),
+      hasStrengthTraining: hasStrengthTraining(day),
+      hasCardio: hasCardioTraining(day),
+      hasHighIntensity: hasHighIntensityTraining(day),
+      nutritionComplete: hasNutritionRecord(day),
     })),
   };
 }
@@ -307,6 +341,308 @@ function summarizeWindow(days) {
     avgIntakeCalories: intakeValues.length ? roundTo(sum(intakeValues) / intakeValues.length, 1) : null,
     activityCounts,
   };
+}
+
+function buildCoverageSummary(daily, recent7, recent30) {
+  return {
+    totalDays: daily.length,
+    recent7: buildWindowCoverage(recent7),
+    recent30: buildWindowCoverage(recent30),
+    latest5: buildWindowCoverage(daily.slice(-5)),
+  };
+}
+
+function buildWindowCoverage(days) {
+  return {
+    days: days.length,
+    workoutDays: days.filter((day) => hasWorkoutRecord(day)).length,
+    measurementDays: days.filter((day) => Boolean(day.measurement)).length,
+    nutritionDays: days.filter((day) => hasNutritionRecord(day)).length,
+  };
+}
+
+function buildTrainingLoadSummary(recent7, recent30) {
+  return {
+    recent7: buildLoadMetrics(recent7),
+    recent30: buildLoadMetrics(recent30),
+  };
+}
+
+function buildLoadMetrics(days) {
+  const activeDays = days.filter((day) => hasWorkoutRecord(day));
+  const restStreakDays = getCurrentRestStreak(days);
+  const workoutStreakDays = getCurrentWorkoutStreak(days);
+
+  return {
+    days: days.length,
+    trainedDays: activeDays.length,
+    totalWorkoutMinutes: roundTo(sum(days.map(resolveWorkoutDurationMinutes)), 1),
+    avgWorkoutMinutesPerTrainedDay: activeDays.length
+      ? roundTo(sum(activeDays.map(resolveWorkoutDurationMinutes)) / activeDays.length, 1)
+      : null,
+    totalTrainingCalories: roundTo(sum(days.map((day) => day.workoutSummary?.trainingCalories)), 1),
+    avgTrainingCaloriesPerDay: average(days.map((day) => day.workoutSummary?.trainingCalories)),
+    totalCyclingKm: roundTo(sum(days.map((day) => day.workoutSummary?.cyclingDistanceKm)), 2),
+    activeHours: roundTo(sum(days.map((day) => day.workoutSummary?.activeHours)), 1),
+    workoutStreakDays,
+    restStreakDays,
+  };
+}
+
+function buildStrengthCardioBalanceSummary(recent7, recent30) {
+  return {
+    recent7: buildBalanceMetrics(recent7),
+    recent30: buildBalanceMetrics(recent30),
+  };
+}
+
+function buildBalanceMetrics(days) {
+  let strengthSessions = 0;
+  let cardioSessions = 0;
+  let hiitSessions = 0;
+  let strengthDays = 0;
+  let cardioDays = 0;
+  let hiitDays = 0;
+  let cyclingDays = 0;
+  const activityTypes = {};
+
+  for (const day of days) {
+    let hasStrength = false;
+    let hasCardio = false;
+    let hasHiit = false;
+    const typeEntries = Object.entries(day.workoutSummary?.countsByType ?? {});
+    for (const [type, count] of typeEntries) {
+      const normalizedType = String(type);
+      const numericCount = Number(count || 0);
+      if (numericCount <= 0) {
+        continue;
+      }
+      activityTypes[normalizedType] = (activityTypes[normalizedType] ?? 0) + numericCount;
+      if (normalizedType.includes('力量')) {
+        strengthSessions += numericCount;
+        hasStrength = true;
+      }
+      if (normalizedType.includes('骑行') || normalizedType.includes('有氧') || normalizedType.includes('燃脂')) {
+        cardioSessions += numericCount;
+        hasCardio = true;
+      }
+      if (normalizedType.includes('HIIT') || normalizedType.includes('间歇')) {
+        hiitSessions += numericCount;
+        hasHiit = true;
+      }
+    }
+    if ((day.workoutSummary?.cyclingDistanceKm ?? 0) > 0) {
+      cyclingDays += 1;
+      hasCardio = true;
+      if (!typeEntries.some(([type]) => /骑行|有氧|燃脂|跑|走/u.test(String(type)))) {
+        cardioSessions += 1;
+      }
+    }
+    if (hasStrength) {
+      strengthDays += 1;
+    }
+    if (hasCardio) {
+      cardioDays += 1;
+    }
+    if (hasHiit) {
+      hiitDays += 1;
+    }
+  }
+
+  return {
+    days: days.length,
+    strengthSessions,
+    cardioSessions,
+    hiitSessions,
+    strengthDays,
+    cardioDays,
+    hiitDays,
+    cyclingDays,
+    activityTypes,
+  };
+}
+
+function assessBodyCompositionRisk(measurements, recent7) {
+  const latest = measurements.at(-1) ?? null;
+  const previous = measurements.at(-2) ?? null;
+  const delta = summarizeMeasurementTrend(recent7.flatMap((day) => day.measurements ?? (day.measurement ? [day.measurement] : [])));
+  const weightDeltaKg = delta.weightDeltaKg;
+  const bodyFatDeltaPct = delta.bodyFatDeltaPct;
+  const skeletalMuscleDeltaKg = delta.skeletalMuscleDeltaKg;
+
+  if (!latest || !previous) {
+    return {
+      status: 'insufficient_data',
+      weightDeltaKg: null,
+      bodyFatDeltaPct: null,
+      skeletalMuscleDeltaKg: null,
+      note: '暂无足够数据',
+    };
+  }
+
+  if (
+    isFiniteNumber(weightDeltaKg) &&
+    weightDeltaKg < 0 &&
+    isFiniteNumber(skeletalMuscleDeltaKg) &&
+    skeletalMuscleDeltaKg < 0
+  ) {
+    return {
+      status: 'muscle_loss_risk',
+      weightDeltaKg,
+      bodyFatDeltaPct,
+      skeletalMuscleDeltaKg,
+      note: '体重下降伴随骨骼肌下降，优先保肌',
+    };
+  }
+
+  if (
+    isFiniteNumber(bodyFatDeltaPct) &&
+    bodyFatDeltaPct < 0 &&
+    (!isFiniteNumber(skeletalMuscleDeltaKg) || skeletalMuscleDeltaKg >= 0)
+  ) {
+    return {
+      status: 'fat_loss_good',
+      weightDeltaKg,
+      bodyFatDeltaPct,
+      skeletalMuscleDeltaKg,
+      note: '体脂下降且骨骼肌未明显流失',
+    };
+  }
+
+  return {
+    status: 'stalled',
+    weightDeltaKg,
+    bodyFatDeltaPct,
+    skeletalMuscleDeltaKg,
+    note: '变化不明显，继续看训练与饮食一致性',
+  };
+}
+
+function assessNutritionSignal(recent7, latestDay) {
+  const intakeValues = recent7.map((day) => day.nutrition?.totalCalories).filter(isFiniteNumber);
+  const avgIntakeCalories = intakeValues.length ? roundTo(sum(intakeValues) / intakeValues.length, 1) : null;
+  const nutritionDays = recent7.filter((day) => hasNutritionRecord(day)).length;
+  const trainingDays = recent7.filter((day) => hasWorkoutRecord(day)).length;
+  const highLoad = recent7.filter((day) => isHighLoadDay(day)).length;
+
+  const lowIntakeRisk =
+    isFiniteNumber(avgIntakeCalories) &&
+    isFiniteNumber(latestDay?.measurement?.weightKg) &&
+    avgIntakeCalories < latestDay.measurement.weightKg * 28;
+
+  return {
+    avgIntakeCalories,
+    nutritionDays,
+    lowIntakeRisk,
+    highLoadLowIntakeRisk: highLoad >= 3 && lowIntakeRisk,
+    note: lowIntakeRisk ? '训练量不低但摄入偏低，注意恢复与保肌' : '摄入暂无明显低于训练需求的信号',
+    trainingDays,
+  };
+}
+
+function summarizeRecoverySignal(days) {
+  const trainingDays = days.filter((day) => hasWorkoutRecord(day)).length;
+  const workoutStreakDays = getCurrentWorkoutStreak(days);
+  const restStreakDays = getCurrentRestStreak(days);
+  const latestDay = days.at(-1) ?? null;
+  const recentHighLoadDays = days.filter((day) => isHighLoadDay(day)).length;
+
+  return {
+    trainingDays,
+    workoutStreakDays,
+    restStreakDays,
+    recentHighLoadDays,
+    lastDayWasTraining: hasWorkoutRecord(latestDay),
+    shouldRecover: recentHighLoadDays >= 3 || workoutStreakDays >= 4,
+  };
+}
+
+function summarizeLatestActivityDetails(activities) {
+  return activities
+    .slice(0, 3)
+    .map((activity) => {
+      const time = normalizeActivityTimeForAnalysis(activity.time ?? activity.activityTime ?? '');
+      return [time, activity.type, activity.detail].filter(Boolean).join(' ');
+    })
+    .filter(Boolean);
+}
+
+function hasWorkoutRecord(day) {
+  return Boolean(day?.workoutSummary) && (
+    (day?.workoutSummary?.trainingCalories ?? 0) > 0 ||
+    (day?.activities?.length ?? 0) > 0 ||
+    (day?.workoutSummary?.workoutDurationMinutes ?? 0) > 0
+  );
+}
+
+function hasNutritionRecord(day) {
+  return Boolean(day?.nutrition) && (
+    (day?.nutrition?.meals?.length ?? 0) > 0 ||
+    day?.nutrition?.totalCalories !== null && day?.nutrition?.totalCalories !== undefined
+  );
+}
+
+function hasStrengthTraining(day) {
+  return Object.keys(day?.workoutSummary?.countsByType ?? {}).some((type) => String(type).includes('力量'));
+}
+
+function hasCardioTraining(day) {
+  return (
+    (day?.workoutSummary?.cyclingDistanceKm ?? 0) > 0 ||
+    Object.keys(day?.workoutSummary?.countsByType ?? {}).some((type) =>
+      /骑行|有氧|燃脂|跑|走|HIIT|间歇/u.test(String(type)),
+    )
+  );
+}
+
+function hasHighIntensityTraining(day) {
+  return Object.keys(day?.workoutSummary?.countsByType ?? {}).some((type) =>
+    /HIIT|间歇|冲刺/u.test(String(type)),
+  );
+}
+
+function isHighLoadDay(day) {
+  const workoutMinutes = resolveWorkoutDurationMinutes(day) ?? 0;
+  const trainingCalories = day?.workoutSummary?.trainingCalories ?? 0;
+  return workoutMinutes >= 60 || trainingCalories >= 350 || hasHighIntensityTraining(day);
+}
+
+function getCurrentWorkoutStreak(days) {
+  let streak = 0;
+  for (let index = days.length - 1; index >= 0; index -= 1) {
+    if (!hasWorkoutRecord(days[index])) {
+      break;
+    }
+    streak += 1;
+  }
+  return streak;
+}
+
+function getCurrentRestStreak(days) {
+  let streak = 0;
+  for (let index = days.length - 1; index >= 0; index -= 1) {
+    if (hasWorkoutRecord(days[index])) {
+      break;
+    }
+    streak += 1;
+  }
+  return streak;
+}
+
+function normalizeSnapshotSource(source) {
+  const normalized = String(source ?? '').trim().toLowerCase();
+  if (normalized === 'database' || normalized === 'markdown' || normalized === 'fallback_markdown') {
+    return normalized;
+  }
+  return 'unknown';
+}
+
+function normalizeActivityTimeForAnalysis(value) {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.match(/(\d{2}:\d{2})$/)?.[1] ?? trimmed;
 }
 
 function summarizeMeasurementTrend(measurements) {

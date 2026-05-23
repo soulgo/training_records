@@ -433,11 +433,18 @@ AI 返回内容必须是符合 schema 的 JSON 字符串。顶层字段：
 
 摘要结构由 `buildTrainingAnalysisSummary(snapshot, now)` 生成，包含：
 
+- `dataSource`
+- `coverage`
 - `latestMeasurement`
 - `recent7`
 - `recent30`
 - `measurementTrend7`
 - `measurementTrend30`
+- `trainingLoad`
+- `strengthCardioBalance`
+- `bodyCompositionRisk`
+- `nutritionSignal`
+- `recoverySignal`
 - 最近 5 天 `latestDays`
 
 ## 7. JS 模块导入接口

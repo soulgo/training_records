@@ -6,6 +6,7 @@ import {
   inferTrainingAnalysisFocus,
   loadTrainingAnalysisPrompt,
   normalizeTrainingGoal,
+  buildTrainingAnalysisSummary,
 } from '../tools/training-analysis.mjs';
 
 test('inferTrainingAnalysisFocus respects explicit recent-week requests', () => {
@@ -78,6 +79,14 @@ test('generateTrainingAnalysisReply sends time-window constraints to the model',
   assert.equal(requestPayload.model, 'gpt-test');
   const userMessage = requestPayload.messages.find((message) => message.role === 'user');
   assert.match(userMessage.content, /focus:/);
+  assert.match(userMessage.content, /data:/);
+  assert.match(userMessage.content, /"dataSource"\s*:\s*"database"/);
+  assert.match(userMessage.content, /"coverage"/);
+  assert.match(userMessage.content, /"trainingLoad"/);
+  assert.match(userMessage.content, /"strengthCardioBalance"/);
+  assert.match(userMessage.content, /"bodyCompositionRisk"/);
+  assert.match(userMessage.content, /"nutritionSignal"/);
+  assert.match(userMessage.content, /"recoverySignal"/);
   assert.match(userMessage.content, /"w"\s*:\s*"recent7"/);
   assert.match(userMessage.content, /"m"\s*:\s*"measurementTrend7"/);
   assert.match(userMessage.content, /"p"\s*:\s*"no_recent30"/);
@@ -86,6 +95,7 @@ test('generateTrainingAnalysisReply sends time-window constraints to the model',
 
 test('generateTrainingAnalysisReply falls back to markdown snapshot when database snapshot is incomplete', async () => {
   const calls = [];
+  let requestPayload = null;
 
   const reply = await generateTrainingAnalysisReply({
     env: {
@@ -131,6 +141,113 @@ test('loadTrainingAnalysisPrompt reads the compiled prompt by default', async ()
   assert.match(prompt, /训练数据分析助手/);
   assert.match(prompt, /## 输出要求/);
   assert.match(prompt, /## 回答时间窗策略（focus\.p 代码对照）/);
+  assert.match(prompt, /## 数据阅读规则/);
+  assert.match(prompt, /## 科学依据维护说明/);
+});
+
+test('buildTrainingAnalysisSummary exposes richer data signals', () => {
+  const payload = buildTrainingAnalysisSummary(buildSyntheticSnapshot(), new Date('2026-05-16T00:00:00.000Z'));
+
+  assert.equal(payload.dataSource, 'database');
+  assert.match(JSON.stringify(payload.coverage), /recent7/);
+  assert.match(JSON.stringify(payload.trainingLoad), /recent7/);
+  assert.match(JSON.stringify(payload.strengthCardioBalance), /recent7/);
+  assert.match(payload.bodyCompositionRisk.status, /fat_loss_good|muscle_loss_risk|stalled|insufficient_data/);
+  assert.equal(typeof payload.nutritionSignal.avgIntakeCalories === 'number' || payload.nutritionSignal.avgIntakeCalories === null, true);
+  assert.ok(Array.isArray(payload.latestDays));
+  assert.ok(payload.latestDays[0].workoutDetails.length <= 3);
+  assert.equal(typeof payload.latestDays[0].hasStrengthTraining, 'boolean');
+  assert.equal(typeof payload.latestDays[0].nutritionComplete, 'boolean');
+});
+
+test('buildTrainingAnalysisSummary marks muscle loss risk when weight and muscle both fall', () => {
+  const daily = [
+    {
+      date: '2026-05-01',
+      measurement: {
+        archivedDate: '2026-05-01',
+        weightKg: 76,
+        bodyFatPct: 24.5,
+        skeletalMuscleKg: 30,
+      },
+      workoutSummary: {
+        trainingCalories: 200,
+        workoutDurationMinutes: 30,
+        cyclingDistanceKm: 0,
+        countsByType: {},
+      },
+      nutrition: { totalCalories: 1500 },
+    },
+    {
+      date: '2026-05-08',
+      measurement: {
+        archivedDate: '2026-05-08',
+        weightKg: 75,
+        bodyFatPct: 24.4,
+        skeletalMuscleKg: 29.4,
+      },
+      workoutSummary: {
+        trainingCalories: 120,
+        workoutDurationMinutes: 18,
+        cyclingDistanceKm: 0,
+        countsByType: {},
+      },
+      nutrition: { totalCalories: 1400 },
+    },
+  ];
+
+  const payload = buildTrainingAnalysisSummary(
+    {
+      daily,
+      latest: {
+        daily: daily.at(-1),
+        measurement: daily.at(-1).measurement,
+      },
+      source: 'database',
+    },
+    new Date('2026-05-16T00:00:00.000Z'),
+  );
+
+  assert.equal(payload.bodyCompositionRisk.status, 'muscle_loss_risk');
+});
+
+test('buildTrainingAnalysisSummary marks recovery pressure on sustained load', () => {
+  const daily = Array.from({ length: 5 }, (_, index) => ({
+    date: `2026-05-0${index + 1}`,
+    measurement: {
+      archivedDate: `2026-05-0${index + 1}`,
+      weightKg: 75 - index * 0.1,
+      bodyFatPct: 24.5,
+      skeletalMuscleKg: 30,
+    },
+    workoutSummary: {
+      trainingCalories: 420,
+      workoutDurationMinutes: 75,
+      activeHours: 2,
+      cyclingDistanceKm: 3,
+      countsByType: {
+        力量训练: 1,
+        HIIT: 1,
+      },
+    },
+    nutrition: { totalCalories: 1450 },
+  }));
+
+  const payload = buildTrainingAnalysisSummary(
+    {
+      daily,
+      latest: {
+        daily: daily.at(-1),
+        measurement: daily.at(-1).measurement,
+      },
+      source: 'database',
+    },
+    new Date('2026-05-16T00:00:00.000Z'),
+  );
+
+  assert.equal(payload.recoverySignal.shouldRecover, true);
+  assert.equal(payload.strengthCardioBalance.recent7.hiitDays > 0, true);
+  assert.equal(payload.strengthCardioBalance.recent7.strengthDays > 0, true);
 });
 
 function buildSyntheticSnapshot() {
@@ -169,5 +286,6 @@ function buildSyntheticSnapshot() {
       daily: daily.at(-1),
       measurement: daily.at(-1).measurement,
     },
+    source: 'database',
   };
 }

@@ -44,8 +44,12 @@ test('generateAnalysisPrompt includes all key sections', async () => {
 
   assert.match(prompt, /训练数据分析助手/);
   assert.match(prompt, /## 输出要求/);
-  assert.match(prompt, /纯文本，不要 Markdown 表格，不要 JSON/);
-  assert.match(prompt, /控制在 1200 字以内/);
+  assert.match(prompt, /只能基于给到你的结构化证据说话/);
+  assert.match(prompt, /先判定证据质量，再下结论，再给行动/);
+  assert.match(prompt, /coverage\.recent7/);
+  assert.match(prompt, /trainingLoad\.recent7/);
+  assert.match(prompt, /bodyCompositionRisk/);
+  assert.match(prompt, /recoverySignal/);
   assert.match(prompt, /数据结论、恢复风险、饮食观察、下一步行动/);
   assert.match(prompt, /增肌减腹/);
   assert.match(prompt, /## 回答时间窗策略/);
@@ -54,6 +58,14 @@ test('generateAnalysisPrompt includes all key sections', async () => {
   assert.match(prompt, /`explicit_mixed`/);
   assert.match(prompt, /`near_term`/);
   assert.match(prompt, /`default_recent7`/);
+  assert.match(prompt, /## 数据阅读规则/);
+  assert.match(prompt, /先看 coverage/);
+  assert.match(prompt, /## 建议口径/);
+  assert.match(prompt, /每周 2 到 4 次力量训练/);
+  assert.match(prompt, /高强度间歇每周 1 到 2 次以内/);
+  assert.match(prompt, /## 科学依据维护说明/);
+  assert.match(prompt, /CDC 成人活动建议/);
+  assert.match(prompt, /ISSN 蛋白质立场声明/);
   assert.match(prompt, /## 建议口径/);
   assert.match(prompt, /力量训练.*每周 2 到 4 次/);
   assert.match(prompt, /蛋白质、蔬菜/);
