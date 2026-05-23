@@ -1,3 +1,5 @@
+import { appendMetric } from './lib/markdown-render.mjs';
+
 export { resolveTrainingCoreConfig } from './training-db-config.mjs';
 export {
   readTrainingSnapshotFromDatabase,
@@ -94,11 +96,4 @@ export function exportTrainingMarkdown(snapshot) {
   }
 
   return `${lines.join('\n').trim()}\n`;
-}
-
-function appendMetric(lines, label, value, suffix = '') {
-  if (value === null || value === undefined || value === '') {
-    return;
-  }
-  lines.push(`- ${label}：${value}${suffix}`);
 }

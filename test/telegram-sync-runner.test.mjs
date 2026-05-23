@@ -1753,6 +1753,113 @@ telegram_chat_id: 42
   assert.doesNotMatch(postContent, /旧正文/);
 });
 
+test('runTelegramSync keeps scanning same-id thought posts until the chat id matches', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-chat-match-'));
+  const postsDir = path.join(tempRoot, 'source', '_posts');
+  await mkdir(postsDir, { recursive: true });
+  await writeFile(
+    path.join(postsDir, '2026-05-16-telegram-thought-126.md'),
+    `---
+date: 2026-05-16 09:00:00
+tags:
+  - 训练
+  - 随想
+  - Telegram
+thought_module: workout
+telegram_message_id: 126
+telegram_chat_id: 41
+---
+
+别的 chat 的旧正文
+`,
+    'utf8',
+  );
+  await writeFile(
+    path.join(postsDir, '2026-05-17-telegram-thought-126.md'),
+    `---
+date: 2026-05-17 11:28:14
+tags:
+  - 杂七杂八
+  - 随想
+  - Telegram
+thought_module: misc
+telegram_message_id: 126
+telegram_chat_id: 42
+---
+
+目标旧正文
+`,
+    'utf8',
+  );
+  await writeFile(
+    path.join(postsDir, '2026-05-17-regular-note.md'),
+    `---
+date: 2026-05-17 12:00:00
+tags:
+  - 训练
+---
+
+普通文章
+`,
+    'utf8',
+  );
+
+  const persistedBatches = [];
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        edited_message: {
+          message_id: 126,
+          date: Math.floor(new Date('2026-05-17T03:40:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '正确 chat 的新正文',
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  const otherPostContent = await readFile(
+    path.join(postsDir, '2026-05-16-telegram-thought-126.md'),
+    'utf8',
+  );
+  const targetPostContent = await readFile(
+    path.join(postsDir, '2026-05-17-telegram-thought-126.md'),
+    'utf8',
+  );
+
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
+  assert.equal(
+    persistedBatches[0].thoughtEdit.storage.markdownPath,
+    'source/_posts/2026-05-17-telegram-thought-126.md',
+  );
+  assert.match(otherPostContent, /别的 chat 的旧正文/);
+  assert.match(targetPostContent, /正确 chat 的新正文/);
+  assert.doesNotMatch(targetPostContent, /目标旧正文/);
+});
+
 test('runTelegramSync updates an existing telegram thought when a reply-based revision targets it', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-reply-edit-'));
   const postsDir = path.join(tempRoot, 'source', '_posts');

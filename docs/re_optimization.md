@@ -139,10 +139,10 @@ test/
 
 ### 后续候选
 
-- Markdown 渲染中的 `appendMetric`
-- 目录递归读取
-- fallback 判断与 markdown 重建的部分条件
-- 更进一步的 Telegram thought 文件扫描策略
+- 已完成：Markdown 渲染中的 `appendMetric`
+- 已完成：目录递归读取
+- 已完成：fallback 判断与 markdown 重建的部分条件
+- 已完成：更进一步的 Telegram thought 文件扫描策略
 
 ## 验证结果
 

@@ -3,11 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { exportTrainingMarkdown, resolveTrainingCoreConfig } from './training-db-core.mjs';
-import {
-  buildTrainingSnapshot,
-  isIncompleteDatabaseSnapshotError,
-  isUnavailableDatabaseSnapshotError,
-} from './training-snapshot.mjs';
+import { canFallbackToMarkdownSnapshot, canUseDatabaseFallback } from './lib/snapshot-fallback.mjs';
+import { buildTrainingSnapshot } from './training-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -21,8 +18,10 @@ export async function exportDerivedTrainingMarkdown(options = {}) {
     ((await hasPendingTelegramFallbackBatches(activeRootDir)) ? 'markdown' : 'database');
   const buildSnapshot = options.buildTrainingSnapshot ?? buildTrainingSnapshot;
   const trainingDbConfig = resolveTrainingCoreConfig(options.env ?? process.env);
-  const canFallbackFromDatabase =
-    snapshotSource === 'database' && trainingDbConfig.enabled && Boolean(trainingDbConfig.url);
+  const canFallbackFromDatabase = canUseDatabaseFallback({
+    source: snapshotSource,
+    config: trainingDbConfig,
+  });
   const snapshotOptions = {
     source: snapshotSource,
     rootDir: activeRootDir,
@@ -35,7 +34,7 @@ export async function exportDerivedTrainingMarkdown(options = {}) {
   try {
     snapshot = await buildSnapshot(snapshotOptions);
   } catch (error) {
-    if (canFallbackFromDatabase && canUseMarkdownFallback(error)) {
+    if (canFallbackFromDatabase && canFallbackToMarkdownSnapshot(error)) {
       stderr.write(
         `[export-training-markdown] ${error.message}; falling back to markdown\n`,
       );
@@ -70,8 +69,4 @@ async function hasPendingTelegramFallbackBatches(rootDir) {
   } catch {
     return false;
   }
-}
-
-function canUseMarkdownFallback(error) {
-  return isIncompleteDatabaseSnapshotError(error) || isUnavailableDatabaseSnapshotError(error);
 }

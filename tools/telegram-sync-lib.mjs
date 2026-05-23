@@ -14,6 +14,7 @@ import {
   normalizeThoughtModuleOrNull,
   resolveThoughtModuleLabel,
 } from './lib/thought-modules.mjs';
+import { appendMetric } from './lib/markdown-render.mjs';
 
 const FINGERPRINT_RE = /^<!-- telegram-fingerprint: ([^ ]+) -->$/m;
 const TELEGRAM_SECTION_TAG = '<!-- telegram-sync-section -->';
@@ -1578,20 +1579,6 @@ function parseAnalysisCommand(text) {
     command: match[1],
     question: match[2].trim(),
   };
-}
-
-function appendMetric(lines, label, value, suffix = '') {
-  if (value === null || value === undefined || value === '') {
-    return;
-  }
-  lines.push(`- ${label}：${formatValue(value)}${suffix}`);
-}
-
-function formatValue(value) {
-  if (typeof value !== 'number') {
-    return String(value);
-  }
-  return Number.isInteger(value) ? String(value) : String(value);
 }
 
 function fingerprintComment(value) {

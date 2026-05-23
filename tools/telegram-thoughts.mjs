@@ -1,10 +1,11 @@
-import { access, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import frontMatter from 'hexo-front-matter';
 import {
   getThoughtModuleTags,
   normalizeThoughtModule,
 } from './lib/thought-modules.mjs';
+import { readDirRecursive } from './lib/fs-walk.mjs';
 
 export async function writeThoughtPostFile({ batch, thoughtsDir, rootDir, fetchTelegramFile }) {
   const draft = buildThoughtPost(batch);
@@ -198,7 +199,7 @@ export async function moveThoughtPost({ batch, thoughtsDir }) {
 
 export async function readExistingThoughtMessageKeys(thoughtsDir) {
   const keys = new Set();
-  for (const postPath of (await readDirRecursive(thoughtsDir)).filter((entry) => entry.endsWith('.md'))) {
+  for (const postPath of await readThoughtPostPaths(thoughtsDir)) {
     try {
       const raw = await readFile(postPath, 'utf8');
       const parsed = frontMatter.parse(raw);
@@ -251,12 +252,12 @@ async function findThoughtPostByMessage({ thoughtsDir, messageId, chatId }) {
     return null;
   }
 
-  const candidatePaths = await readDirRecursive(thoughtsDir);
   const suffix = `-telegram-thought-${messageId}.md`;
-  const directPath = candidatePaths.find((entry) => entry.endsWith(suffix)) ?? null;
-  const pathsToCheck = directPath ? [directPath] : candidatePaths;
+  const candidatePaths = await readThoughtPostPaths(thoughtsDir);
+  const directPaths = candidatePaths.filter((entry) => entry.endsWith(suffix));
+  const pathsToCheck = directPaths.length > 0 ? directPaths : candidatePaths;
 
-  for (const postPath of pathsToCheck.filter((entry) => entry.endsWith('.md'))) {
+  for (const postPath of pathsToCheck) {
     const raw = await readFile(postPath, 'utf8');
     const parsed = frontMatter.parse(raw);
     const frontMatterData = normalizeThoughtFrontMatter(parsed);
@@ -273,6 +274,16 @@ async function findThoughtPostByMessage({ thoughtsDir, messageId, chatId }) {
   }
 
   return null;
+}
+
+async function readThoughtPostPaths(thoughtsDir) {
+  return (await readDirRecursive(thoughtsDir, {
+    filter: (entryPath) => isThoughtPostPath(entryPath),
+  })).sort((left, right) => left.localeCompare(right));
+}
+
+function isThoughtPostPath(entryPath) {
+  return /(?:^|[/\\])[^/\\]+-telegram-thought-\d+\.md$/u.test(entryPath);
 }
 
 function normalizeThoughtFrontMatter(parsed) {
@@ -372,31 +383,6 @@ function resolveThoughtPhotoFilePaths({ rootDir, photos }) {
         : null,
     )
     .filter(Boolean);
-}
-
-async function readDirRecursive(dirPath) {
-  const results = [];
-
-  async function walk(currentDir) {
-    let entries;
-    try {
-      entries = await readdir(currentDir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-
-    for (const entry of entries) {
-      const entryPath = path.join(currentDir, entry.name);
-      if (entry.isDirectory()) {
-        await walk(entryPath);
-        continue;
-      }
-      results.push(entryPath);
-    }
-  }
-
-  await walk(dirPath);
-  return results;
 }
 
 async function writeThoughtImageFiles({

@@ -1,4 +1,4 @@
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,6 +10,7 @@ import {
   getThoughtModuleTags,
   normalizeThoughtModule,
 } from './lib/thought-modules.mjs';
+import { readDirRecursive } from './lib/fs-walk.mjs';
 
 const { Client } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -39,7 +40,7 @@ export async function backfillThoughtsToCore(options = {}) {
       }));
   const client = createClient(config);
   const processedAt = options.processedAt ?? new Date();
-  const thoughtFiles = (await readDirRecursive(thoughtsDir))
+  const thoughtFiles = (await readDirRecursive(thoughtsDir, { ignoreMissing: false }))
     .filter((filePath) => filePath.endsWith('.md'))
     .filter((filePath) => filePath.includes('-telegram-thought-'))
     .sort((left, right) => left.localeCompare(right));
@@ -172,22 +173,6 @@ function normalizeThoughtMarkdown(parsed, postPath, activeRootDir) {
     markdownPath,
     imageRefs,
   };
-}
-
-async function readDirRecursive(dirPath) {
-  const entries = await readdir(dirPath, { withFileTypes: true });
-  const result = [];
-
-  for (const entry of entries) {
-    const nextPath = path.join(dirPath, entry.name);
-    if (entry.isDirectory()) {
-      result.push(...(await readDirRecursive(nextPath)));
-    } else {
-      result.push(nextPath);
-    }
-  }
-
-  return result;
 }
 
 function parsePositiveInteger(value) {

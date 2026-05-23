@@ -9,11 +9,8 @@ import {
 } from './training-db-archive.mjs';
 import { buildDashboardViewModel } from './dashboard-view.mjs';
 import { resolveTrainingCoreConfig } from './training-db-core.mjs';
-import {
-  buildTrainingSnapshot,
-  isIncompleteDatabaseSnapshotError,
-  isUnavailableDatabaseSnapshotError,
-} from './training-snapshot.mjs';
+import { canFallbackToMarkdownSnapshot, canUseDatabaseFallback } from './lib/snapshot-fallback.mjs';
+import { buildTrainingSnapshot } from './training-snapshot.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..');
@@ -37,8 +34,10 @@ export async function generateTrainingData(options = {}) {
   const debugOutputPath = path.join(rootDir, '训练数据解析.md');
   const snapshotSource = resolveSnapshotSource(argv, env);
   const trainingDbConfig = resolveTrainingCoreConfig(env);
-  const canFallbackFromDatabase =
-    snapshotSource === 'database' && trainingDbConfig.enabled && Boolean(trainingDbConfig.url);
+  const canFallbackFromDatabase = canUseDatabaseFallback({
+    source: snapshotSource,
+    config: trainingDbConfig,
+  });
 
   const markdown = await readFile(recordPath, 'utf8');
   const snapshotOptions = {
@@ -52,7 +51,7 @@ export async function generateTrainingData(options = {}) {
   try {
     parsed = await buildSnapshot(snapshotOptions);
   } catch (error) {
-    if (canFallbackFromDatabase && canUseMarkdownFallback(error)) {
+    if (canFallbackFromDatabase && canFallbackToMarkdownSnapshot(error)) {
       stderr.write(
         `[generate-training-data] ${error.message}; falling back to markdown\n`,
       );
@@ -180,8 +179,4 @@ function resolveSnapshotSource(argv, env) {
   }
   const configured = String(env.TRAINING_SNAPSHOT_SOURCE ?? 'markdown').trim().toLowerCase();
   return configured === 'database' ? 'database' : 'markdown';
-}
-
-function canUseMarkdownFallback(error) {
-  return isIncompleteDatabaseSnapshotError(error) || isUnavailableDatabaseSnapshotError(error);
 }

@@ -14,15 +14,12 @@ import {
   persistNormalizedBatch as persistNormalizedBatchToDatabase,
   resolveTrainingCoreConfig,
 } from './training-db-core.mjs';
-import {
-  buildTrainingSnapshot as buildTrainingSnapshotFromSource,
-  isIncompleteDatabaseSnapshotError,
-  isUnavailableDatabaseSnapshotError,
-} from './training-snapshot.mjs';
+import { buildTrainingSnapshot as buildTrainingSnapshotFromSource } from './training-snapshot.mjs';
 import {
   generateTrainingAnalysisReply,
   splitTelegramMessage,
 } from './training-analysis.mjs';
+import { canFallbackToMarkdownSnapshot, canUseDatabaseFallback } from './lib/snapshot-fallback.mjs';
 import { buildRecognitionSchema } from './telegram-recognition-schema.mjs';
 import { fetchWithRetry } from './lib/http-retry.mjs';
 import {
@@ -121,12 +118,16 @@ export async function runTelegramSync(options = {}) {
     ((input) =>
       sendTelegramMessage({
         ...input,
-          botToken: env.botToken,
+        botToken: env.botToken,
       }));
   const shouldNotify =
     options.notifyTelegramSyncResult ??
     shouldNotifyTelegramSyncResult(env, options.env ?? process.env);
   const trainingDbConfig = resolveTrainingCoreConfig(options.env ?? process.env);
+  const canFallbackFromDatabase = canUseDatabaseFallback({
+    source: 'database',
+    config: trainingDbConfig,
+  });
 
   const dispatchUpdates = await resolveDispatchTelegramUpdates({
     repositoryDispatchEvent: options.repositoryDispatchEvent,
@@ -330,9 +331,7 @@ export async function runTelegramSync(options = {}) {
         ? exportMarkdown(snapshot)
         : rebuildMarkdownFromPersistedBatches(currentMarkdown, readyPersistedBatches);
     } catch (error) {
-      const canFallbackFromDatabase =
-        trainingDbConfig.enabled && Boolean(trainingDbConfig.url);
-      if (canFallbackFromDatabase && canRebuildMarkdownFromPersistedBatches(error)) {
+      if (canFallbackFromDatabase && canFallbackToMarkdownSnapshot(error)) {
         process.stderr.write(
           `[telegram-sync] ${error.message}; rebuilding markdown from persisted batches\n`,
         );
@@ -676,10 +675,6 @@ async function readLastProcessedUpdateIdForRun({
     );
     return 0;
   }
-}
-
-function canRebuildMarkdownFromPersistedBatches(error) {
-  return isIncompleteDatabaseSnapshotError(error) || isUnavailableDatabaseSnapshotError(error);
 }
 
 function loadRequiredEnv(env = process.env) {
