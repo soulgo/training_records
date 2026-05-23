@@ -46,6 +46,7 @@ const defaultRecognitionPromptPath = path.join(
   'prompts',
   'telegram-training-image-recognition.md',
 );
+const RECOGNITION_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 const fallbackRecognitionSystemPrompt =
   '你是训练记录截图结构化助手。只能输出符合 schema 的 JSON。识别类型只允许 measurement、workout、nutrition、unknown。workout 既可能是逐条活动明细截图，也可能是当日活动总览截图；总览图请提取活动热量、锻炼时长、活动小时数到 dailyWorkoutSummary。detectedDate 只能来自截图画面里的日期；若截图日期不可靠则 detectedDate 返回 null，并在 warnings 中说明。若截图是系统相册、文件详情或分享预览页，画面里明确显示的文件名、标题、路径中的日期也算画面内可见日期。';
 
@@ -122,8 +123,11 @@ export async function runTelegramSync(options = {}) {
     ((input) =>
       sendTelegramMessage({
         ...input,
-        botToken: env.botToken,
+          botToken: env.botToken,
       }));
+  const shouldNotify =
+    options.notifyTelegramSyncResult ??
+    shouldNotifyTelegramSyncResult(env, options.env ?? process.env);
   const trainingDbConfig = resolveTrainingCoreConfig(options.env ?? process.env);
 
   const dispatchUpdates = await resolveDispatchTelegramUpdates({
@@ -200,7 +204,17 @@ export async function runTelegramSync(options = {}) {
       continue;
     }
 
-    const recognitions = batch.kind === 'image' ? (await recognizeBatchRunner(batch, env)).filter(Boolean) : [];
+    let recognitions = [];
+    if (batch.kind === 'image') {
+      try {
+        recognitions = (await recognizeBatchRunner(batch, env)).filter(Boolean);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        process.stderr.write(
+          `[telegram-sync] image recognition failed for ${batch.batchId}: ${errorMessage}\n`,
+        );
+      }
+    }
     const analyzed = analyzeTelegramBatch(batch, recognitions, {
       minConfidence: 0.75,
     });
@@ -498,6 +512,13 @@ export async function runTelegramSync(options = {}) {
     await writeFile(recordPath, markdown, 'utf8');
   }
 
+  if (shouldNotify) {
+    await notifyTelegramSyncResult({
+      batchResults,
+      sendMessage,
+    });
+  }
+
   return {
     changed,
     fallbackUsed,
@@ -589,6 +610,129 @@ function shouldRewriteTrainingMarkdown({ replayStoredImageAny, batchResults }) {
       batch.status === 'ready' &&
       batch.persistenceStatus === 'stored',
   );
+}
+
+function shouldNotifyTelegramSyncResult(env, rawEnv) {
+  const flag = String(rawEnv.TELEGRAM_SYNC_NOTIFY ?? '').trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(flag)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(flag)) {
+    return false;
+  }
+
+  return rawEnv.GITHUB_ACTIONS === 'true' && env.syncTransport === 'webhook';
+}
+
+async function notifyTelegramSyncResult({ batchResults, sendMessage }) {
+  const messagesByChat = new Map();
+
+  for (const batch of batchResults ?? []) {
+    if (!shouldNotifyBatch(batch)) {
+      continue;
+    }
+
+    const chatId = getBatchChatId(batch);
+    if (chatId === null || chatId === undefined) {
+      continue;
+    }
+
+    const replyToMessageId = getBatchReplyMessageId(batch);
+    const text = formatTelegramSyncNotification(batch);
+    if (!text) {
+      continue;
+    }
+
+    if (!messagesByChat.has(chatId)) {
+      messagesByChat.set(chatId, []);
+    }
+    messagesByChat.get(chatId).push({
+      text,
+      replyToMessageId,
+    });
+  }
+
+  for (const [chatId, messages] of messagesByChat.entries()) {
+    for (const message of messages) {
+      try {
+        await sendMessage({
+          chatId,
+          text: message.text,
+          replyToMessageId: message.replyToMessageId,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        process.stderr.write(
+          `[telegram-sync] failed to send sync notification to ${chatId}: ${errorMessage}\n`,
+        );
+      }
+    }
+  }
+}
+
+function shouldNotifyBatch(batch) {
+  if (!batch || batch.kind === 'analysis') {
+    return false;
+  }
+
+  if (!isTrainingDataBatchKind(batch.kind)) {
+    return false;
+  }
+
+  if (!Array.isArray(batch.messages) || batch.messages.length === 0) {
+    return false;
+  }
+
+  return batch.status === 'ready' || batch.status === 'skipped' || batch.status === 'ignored';
+}
+
+function getBatchChatId(batch) {
+  return batch.messages?.find((message) => message.chatId !== null && message.chatId !== undefined)?.chatId ?? null;
+}
+
+function getBatchReplyMessageId(batch) {
+  return batch.messages?.[0]?.messageId ?? null;
+}
+
+function formatTelegramSyncNotification(batch) {
+  if (batch.status === 'ready') {
+    const dateText = formatChineseDate(batch.archivedDate);
+    const storageText = formatPersistenceStatus(batch.persistenceStatus);
+    return `解析成功，${storageText}${dateText ? ` ${dateText}数据` : ''}`;
+  }
+
+  if (batch.status === 'skipped') {
+    const reason = batch.reason ? `：${batch.reason}` : '';
+    return `解析未入库${reason}`;
+  }
+
+  if (batch.status === 'ignored') {
+    return `解析未处理：${batch.reason ?? 'ignored'}`;
+  }
+
+  return null;
+}
+
+function formatPersistenceStatus(status) {
+  if (status === 'stored' || status === 'unchanged') {
+    return '已入库';
+  }
+  if (status === 'fallback_markdown') {
+    return '已写入 Markdown，等待数据库重放';
+  }
+  if (status === 'pending_replay') {
+    return '已记录，等待数据库重放';
+  }
+  return '已处理';
+}
+
+function formatChineseDate(dateValue) {
+  const match = String(dateValue ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return '';
+  }
+
+  return `${Number(match[1])} 年 ${Number(match[2])} 月 ${Number(match[3])} 日`;
 }
 
 function isTrainingDataBatchKind(kind) {
@@ -756,7 +900,15 @@ async function recognizeBatch(batch, env) {
       return null;
     }
     const imageUrl = await resolveTelegramFileUrl(env.botToken, fileId);
-    return recognizeImageMessage(message, imageUrl, env);
+    try {
+      return await recognizeImageMessage(message, imageUrl, env);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      process.stderr.write(
+        `[telegram-sync] image recognition failed for ${message.messageId}: ${errorMessage}\n`,
+      );
+      return null;
+    }
   });
 
   return recognitions.filter(Boolean);
@@ -843,7 +995,7 @@ async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }
 }
 
 async function recognizeImageMessage(message, imageUrl, env) {
-  const response = await fetch(`${env.baseUrl}/chat/completions`, {
+  const response = await fetchRecognitionResponse(`${env.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -902,6 +1054,45 @@ async function recognizeImageMessage(message, imageUrl, env) {
     messageId: message.messageId,
     ...parsed,
   };
+}
+
+async function fetchRecognitionResponse(url, init, options = {}) {
+  const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? 3));
+  const baseDelayMs = Math.max(0, Math.floor(options.baseDelayMs ?? 350));
+  let lastResponse = null;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(url, init);
+      if (response.ok || !RECOGNITION_RETRYABLE_STATUSES.has(response.status) || attempt === maxAttempts) {
+        return response;
+      }
+      lastResponse = response;
+      process.stderr.write(
+        `[telegram-sync] AI recognition request failed with HTTP ${response.status}; retrying (${attempt}/${maxAttempts})\n`,
+      );
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+      process.stderr.write(
+        `[telegram-sync] AI recognition request failed: ${error instanceof Error ? error.message : String(error)}; retrying (${attempt}/${maxAttempts})\n`,
+      );
+    }
+
+    await delay(baseDelayMs * attempt);
+  }
+
+  if (lastResponse) {
+    return lastResponse;
+  }
+  throw lastError ?? new Error('AI recognition request failed');
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {

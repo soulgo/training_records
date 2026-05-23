@@ -93,6 +93,8 @@ test('loadRecognitionSystemPrompt reads the versioned Telegram image prompt', as
   assert.match(prompt, /不要从 caption\/text 或图片文件名推断/);
   assert.match(prompt, /records\.dailyWorkoutSummary/);
   assert.match(prompt, /kg = 斤 \* 0\.5/);
+  assert.match(prompt, /2026年5月22日星期五/);
+  assert.match(prompt, /活动总览这类页面顶部的大号日期/);
 });
 
 test('loadRecognitionSystemPrompt can be overridden for prompt experiments', async () => {
@@ -2555,4 +2557,259 @@ test('runTelegramSync ignores unauthorized /analysis commands without generating
   assert.equal(result.batchResults[0].reason, 'unauthorized chat');
   assert.equal(generated, false);
   assert.equal(sent, false);
+});
+
+test('runTelegramSync retries transient AI recognition failures and continues syncing', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-recognition-retry-'));
+  const persistedBatches = [];
+  const originalFetch = globalThis.fetch;
+  let aiAttempts = 0;
+
+  globalThis.fetch = async (url) => {
+    const requestUrl = String(url);
+
+    if (requestUrl.includes('/getFile?')) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            file_path: 'photos/file_801.jpg',
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      );
+    }
+
+    if (requestUrl.includes('/chat/completions')) {
+      aiAttempts += 1;
+      if (aiAttempts === 1) {
+        return new Response('upstream temporary failure', { status: 502 });
+      }
+
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  messageId: 801,
+                  imageType: 'measurement',
+                  detectedDate: '2026-05-18',
+                  dateEvidence: 'image header',
+                  confidence: 0.98,
+                  warnings: [],
+                  records: {
+                    measurement: {
+                      weightKg: 72,
+                      bodyFatPct: 23.7,
+                      measuredAt: '2026-05-18',
+                    },
+                    activities: [],
+                    meals: [],
+                    dailyWorkoutSummary: null,
+                  },
+                }),
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      );
+    }
+
+    throw new Error(`Unexpected fetch call: ${requestUrl}`);
+  };
+
+  try {
+    const result = await runTelegramSync({
+      rootDir: tempRoot,
+      env: {
+        TELEGRAM_BOT_TOKEN: 'token',
+        AI_API_KEY: 'key',
+        AI_BASE_URL: 'https://example.com/v1',
+        AI_MODEL: 'gpt-test',
+        TELEGRAM_ALLOWED_CHAT_IDS: '42',
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      getLastProcessedUpdateId: async () => 900,
+      fetchTelegramUpdates: async () => [
+        {
+          update_id: 901,
+          message: {
+            message_id: 801,
+            date: Math.floor(new Date('2026-05-18T02:30:00Z').getTime() / 1000),
+            chat: { id: 42 },
+            photo: [{ file_id: 'file-a', file_unique_id: 'uniq-a' }],
+          },
+        },
+      ],
+      persistNormalizedBatch: async ({ batch }) => {
+        persistedBatches.push(batch);
+        return { status: 'stored', archivedDate: batch.archivedDate };
+      },
+      buildTrainingSnapshot: async () => ({
+        generatedAt: '2026-05-18T00:00:00.000Z',
+        latest: {
+          measurement: null,
+          daily: { date: '2026-05-18' },
+        },
+        daily: [],
+        charts: {
+          weightKg: [],
+          bodyFatPct: [],
+          skeletalMuscleKg: [],
+          basalMetabolism: [],
+          visceralFatLevel: [],
+          intakeCalories: [],
+          trainingCalories: [],
+          cyclingDistanceKm: [],
+        },
+      }),
+      exportTrainingMarkdown: () => '### 2026-05-18\n',
+    });
+
+    assert.equal(result.changed, true);
+    assert.equal(result.batchResults[0].status, 'ready');
+    assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+    assert.equal(aiAttempts, 2);
+    assert.equal(persistedBatches.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('runTelegramSync sends Telegram result notification after storing an image batch', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notification-success-'));
+  const sentMessages = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 901,
+          date: Math.floor(new Date('2026-05-22T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          photo: [{ file_id: 'file-a', file_unique_id: 'uniq-a' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 901,
+        imageType: 'workout',
+        detectedDate: '2026-05-22',
+        dateEvidence: 'image header: 2026年5月22日星期五',
+        confidence: 0.98,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [],
+          totalCalories: null,
+          details: [],
+          dailyWorkoutSummary: {
+            activityCaloriesKcal: 1077,
+            workoutDurationMinutes: 148,
+            activeHours: 14,
+          },
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    buildTrainingSnapshot: async () => ({
+      generatedAt: '2026-05-22T00:00:00.000Z',
+      latest: { measurement: null, daily: { date: '2026-05-22' } },
+      daily: [],
+      charts: {
+        weightKg: [],
+        bodyFatPct: [],
+        skeletalMuscleKg: [],
+        basalMetabolism: [],
+        visceralFatLevel: [],
+        intakeCalories: [],
+        trainingCalories: [],
+        cyclingDistanceKm: [],
+      },
+    }),
+    exportTrainingMarkdown: () => '### 2026-05-22\n',
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9901 };
+    },
+  });
+
+  assert.equal(result.batchResults[0].status, 'ready');
+  assert.equal(sentMessages.length, 1);
+  assert.deepEqual(sentMessages[0], {
+    chatId: 42,
+    text: '解析成功，已入库 2026 年 5 月 22 日数据',
+    replyToMessageId: 901,
+  });
+});
+
+test('runTelegramSync sends Telegram result notification when an image batch is skipped', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notification-skipped-'));
+  const sentMessages = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 902,
+          date: Math.floor(new Date('2026-05-22T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          photo: [{ file_id: 'file-a', file_unique_id: 'uniq-a' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [],
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9902 };
+    },
+  });
+
+  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].chatId, 42);
+  assert.equal(sentMessages[0].replyToMessageId, 902);
+  assert.match(sentMessages[0].text, /解析未入库/);
+  assert.match(sentMessages[0].text, /no reliable image or filename date/);
 });
