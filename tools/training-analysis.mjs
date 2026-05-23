@@ -12,6 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const defaultQuestion = '请根据最近训练、体脂、饮食数据给出今天/明天的训练建议';
 const defaultTrainingGoal = '增肌减腹：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪；不追求单纯掉体重或局部减脂。';
+const ANALYSIS_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 export async function generateTrainingAnalysisReply(options = {}) {
   const rawEnv = options.env ?? process.env;
@@ -35,6 +36,8 @@ export async function generateTrainingAnalysisReply(options = {}) {
     focus,
     summary,
     fetchImpl: options.fetchImpl ?? fetch,
+    maxAttempts: options.maxAttempts,
+    baseDelayMs: options.baseDelayMs,
   });
 
   const reply = normalizeTelegramReply(content);
@@ -258,8 +261,18 @@ function canFallbackToMarkdownSnapshot(error, env) {
   return String(env?.TRAINING_SNAPSHOT_SOURCE ?? '').trim().toLowerCase() === 'database';
 }
 
-async function requestTrainingAnalysis({ env, prompt, question, trainingGoal, focus, summary, fetchImpl }) {
-  const response = await fetchImpl(`${env.baseUrl}/chat/completions`, {
+async function requestTrainingAnalysis({
+  env,
+  prompt,
+  question,
+  trainingGoal,
+  focus,
+  summary,
+  fetchImpl,
+  maxAttempts,
+  baseDelayMs,
+}) {
+  const response = await fetchTrainingAnalysisResponse(`${env.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -282,6 +295,10 @@ async function requestTrainingAnalysis({ env, prompt, question, trainingGoal, fo
         },
       ],
     }),
+  }, {
+    fetchImpl,
+    maxAttempts,
+    baseDelayMs,
   });
 
   if (!response.ok) {
@@ -294,6 +311,46 @@ async function requestTrainingAnalysis({ env, prompt, question, trainingGoal, fo
     throw new Error('Training analysis returned empty content');
   }
   return content;
+}
+
+async function fetchTrainingAnalysisResponse(url, init, options = {}) {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? 3));
+  const baseDelayMs = Math.max(0, Math.floor(options.baseDelayMs ?? 350));
+  let lastResponse = null;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetchImpl(url, init);
+      if (response.ok || !ANALYSIS_RETRYABLE_STATUSES.has(response.status) || attempt === maxAttempts) {
+        return response;
+      }
+      lastResponse = response;
+      process.stderr.write(
+        `[training-analysis] request failed with HTTP ${response.status}; retrying (${attempt}/${maxAttempts})\n`,
+      );
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+      process.stderr.write(
+        `[training-analysis] request failed: ${error instanceof Error ? error.message : String(error)}; retrying (${attempt}/${maxAttempts})\n`,
+      );
+    }
+
+    await delay(baseDelayMs * attempt);
+  }
+
+  if (lastResponse) {
+    return lastResponse;
+  }
+  throw lastError ?? new Error('Training analysis request failed');
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function normalizeTelegramReply(content) {

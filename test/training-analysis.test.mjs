@@ -133,6 +133,134 @@ test('generateTrainingAnalysisReply falls back to markdown snapshot when databas
   assert.deepEqual(calls, ['default', 'markdown']);
 });
 
+test('generateTrainingAnalysisReply retries transient 502 responses', async () => {
+  let attempts = 0;
+
+  const reply = await generateTrainingAnalysisReply({
+    env: {
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+    },
+    question: '分析最近7天训练',
+    snapshot: buildSyntheticSnapshot(),
+    now: new Date('2026-05-16T00:00:00.000Z'),
+    baseDelayMs: 0,
+    fetchImpl: async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        return { ok: false, status: 502 };
+      }
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: '数据结论：第二次请求成功。',
+                },
+              },
+            ],
+          };
+        },
+      };
+    },
+  });
+
+  assert.equal(reply, '数据结论：第二次请求成功。');
+  assert.equal(attempts, 2);
+});
+
+test('generateTrainingAnalysisReply preserves the final HTTP error after retry exhaustion', async () => {
+  let attempts = 0;
+
+  await assert.rejects(
+    generateTrainingAnalysisReply({
+      env: {
+        AI_API_KEY: 'key',
+        AI_BASE_URL: 'https://example.com/v1',
+        AI_MODEL: 'gpt-test',
+      },
+      question: '分析最近7天训练',
+      snapshot: buildSyntheticSnapshot(),
+      now: new Date('2026-05-16T00:00:00.000Z'),
+      baseDelayMs: 0,
+      fetchImpl: async () => {
+        attempts += 1;
+        return { ok: false, status: 502 };
+      },
+    }),
+    /Training analysis failed with HTTP 502/,
+  );
+
+  assert.equal(attempts, 3);
+});
+
+test('generateTrainingAnalysisReply does not retry non-retryable HTTP errors', async () => {
+  let attempts = 0;
+
+  await assert.rejects(
+    generateTrainingAnalysisReply({
+      env: {
+        AI_API_KEY: 'key',
+        AI_BASE_URL: 'https://example.com/v1',
+        AI_MODEL: 'gpt-test',
+      },
+      question: '分析最近7天训练',
+      snapshot: buildSyntheticSnapshot(),
+      now: new Date('2026-05-16T00:00:00.000Z'),
+      baseDelayMs: 0,
+      fetchImpl: async () => {
+        attempts += 1;
+        return { ok: false, status: 403 };
+      },
+    }),
+    /Training analysis failed with HTTP 403/,
+  );
+
+  assert.equal(attempts, 1);
+});
+
+test('generateTrainingAnalysisReply retries transient network errors', async () => {
+  let attempts = 0;
+
+  const reply = await generateTrainingAnalysisReply({
+    env: {
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+    },
+    question: '分析最近7天训练',
+    snapshot: buildSyntheticSnapshot(),
+    now: new Date('2026-05-16T00:00:00.000Z'),
+    baseDelayMs: 0,
+    fetchImpl: async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new Error('socket hang up');
+      }
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: '数据结论：网络重试后成功。',
+                },
+              },
+            ],
+          };
+        },
+      };
+    },
+  });
+
+  assert.equal(reply, '数据结论：网络重试后成功。');
+  assert.equal(attempts, 2);
+});
+
 test('loadTrainingAnalysisPrompt reads the compiled prompt by default', async () => {
   const prompt = await loadTrainingAnalysisPrompt({
     TRAINING_ANALYSIS_PROMPT_PATH: '',
