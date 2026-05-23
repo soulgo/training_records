@@ -1,6 +1,10 @@
 import { access, mkdir, readdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import frontMatter from 'hexo-front-matter';
+import {
+  getThoughtModuleTags,
+  normalizeThoughtModule,
+} from './lib/thought-modules.mjs';
 
 export async function writeThoughtPostFile({ batch, thoughtsDir, rootDir, fetchTelegramFile }) {
   const draft = buildThoughtPost(batch);
@@ -75,7 +79,7 @@ export async function editThoughtPost({ batch, thoughtsDir, rootDir, fetchTelegr
   const nextThoughtModule = normalizeThoughtModule(
     batch.thoughtEdit?.thoughtModule ?? target.frontMatter.thought_module,
   );
-  const nextTags = getThoughtTags(nextThoughtModule);
+  const nextTags = getThoughtModuleTags(nextThoughtModule);
   const nextContent = replaceMarkdownBody(target.raw, batch.thoughtEdit?.body ?? '', {
     photoPaths: nextPhotoPaths,
     thoughtModule: nextThoughtModule,
@@ -144,7 +148,7 @@ export async function deleteThoughtPost({ batch, thoughtsDir, rootDir }) {
     postPath: target.postPath,
     deletedPhotoPaths,
     thoughtModule: normalizeThoughtModule(target.frontMatter.thought_module),
-    tags: normalizeThoughtTags(target.frontMatter.tags, target.frontMatter.thought_module),
+    tags: getThoughtModuleTags(normalizeThoughtModule(target.frontMatter.thought_module)),
   };
 }
 
@@ -164,7 +168,7 @@ export async function moveThoughtPost({ batch, thoughtsDir }) {
   }
 
   const nextThoughtModule = normalizeThoughtModule(batch.thoughtMove?.thoughtModule);
-  const nextTags = getThoughtTags(nextThoughtModule);
+  const nextTags = getThoughtModuleTags(nextThoughtModule);
   const nextContent = replaceMarkdownBody(target.raw, target.frontMatter._content ?? '', {
     thoughtModule: nextThoughtModule,
     tags: nextTags,
@@ -214,7 +218,7 @@ function buildThoughtPost(batch, options = {}) {
   const dateParts = formatThoughtDateParts(message.dateUnix);
   const fileName = `${dateParts.date}-telegram-thought-${message.messageId}.md`;
   const thoughtModule = normalizeThoughtModule(thought.thoughtModule);
-  const tags = getThoughtTags(thoughtModule);
+  const tags = getThoughtModuleTags(thoughtModule);
   const lines = [
     '---',
     `date: ${dateParts.dateTime}`,
@@ -247,10 +251,12 @@ async function findThoughtPostByMessage({ thoughtsDir, messageId, chatId }) {
     return null;
   }
 
-  const directPath = await findThoughtPostPathById({ thoughtsDir, messageId });
-  const candidatePaths = directPath ? [directPath] : await readDirRecursive(thoughtsDir);
+  const candidatePaths = await readDirRecursive(thoughtsDir);
+  const suffix = `-telegram-thought-${messageId}.md`;
+  const directPath = candidatePaths.find((entry) => entry.endsWith(suffix)) ?? null;
+  const pathsToCheck = directPath ? [directPath] : candidatePaths;
 
-  for (const postPath of candidatePaths.filter((entry) => entry.endsWith('.md'))) {
+  for (const postPath of pathsToCheck.filter((entry) => entry.endsWith('.md'))) {
     const raw = await readFile(postPath, 'utf8');
     const parsed = frontMatter.parse(raw);
     const frontMatterData = normalizeThoughtFrontMatter(parsed);
@@ -269,32 +275,12 @@ async function findThoughtPostByMessage({ thoughtsDir, messageId, chatId }) {
   return null;
 }
 
-async function findThoughtPostPathById({ thoughtsDir, messageId }) {
-  const entries = await readDirRecursive(thoughtsDir);
-  const suffix = `-telegram-thought-${messageId}.md`;
-  return entries.find((entry) => entry.endsWith(suffix)) ?? null;
-}
-
 function normalizeThoughtFrontMatter(parsed) {
   const { _content = '', ...frontMatterData } = parsed ?? {};
   return {
     ...frontMatterData,
     _content,
   };
-}
-
-function normalizeThoughtModule(value) {
-  return value === 'misc' ? 'misc' : 'workout';
-}
-
-function getThoughtTags(moduleKey) {
-  return moduleKey === 'misc'
-    ? ['杂七杂八', '随想', 'Telegram']
-    : ['训练', '随想', 'Telegram'];
-}
-
-async function readThoughtPhotoPathsFromPost(postPath) {
-  return (await readThoughtMetadataFromPost(postPath)).photoPaths;
 }
 
 async function readThoughtMetadataFromPost(postPath) {
@@ -305,13 +291,13 @@ async function readThoughtMetadataFromPost(postPath) {
     return {
       photoPaths: Array.isArray(parsed.photos) ? parsed.photos : [],
       thoughtModule,
-      tags: normalizeThoughtTags(parsed.tags, thoughtModule),
+      tags: getThoughtModuleTags(thoughtModule),
     };
   } catch {
     return {
       photoPaths: [],
       thoughtModule: 'workout',
-      tags: getThoughtTags('workout'),
+      tags: getThoughtModuleTags('workout'),
     };
   }
 }
@@ -322,7 +308,7 @@ function replaceMarkdownBody(raw, nextBody, options = {}) {
   const { _content, ...frontMatterData } = parsed ?? {};
   if (options.thoughtModule) {
     frontMatterData.thought_module = normalizeThoughtModule(options.thoughtModule);
-    frontMatterData.tags = normalizeThoughtTags(options.tags, frontMatterData.thought_module);
+    frontMatterData.tags = getThoughtModuleTags(frontMatterData.thought_module);
   }
   if (Array.isArray(options.photoPaths)) {
     if (options.photoPaths.length > 0) {
@@ -335,10 +321,6 @@ function replaceMarkdownBody(raw, nextBody, options = {}) {
     separator: split.separator,
     prefixSeparator: split.prefixSeparator,
   })}\n${String(nextBody ?? '').trim()}\n`;
-}
-
-function normalizeThoughtTags(tags, moduleKey) {
-  return getThoughtTags(normalizeThoughtModule(moduleKey));
 }
 
 function resolveThoughtFrontMatterDateParts(frontMatterData) {

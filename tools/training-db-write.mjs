@@ -14,6 +14,12 @@ import {
   readArchiveTrainingSnapshotFromDatabase,
   readTrainingSnapshotFromDatabaseClient,
 } from './training-db-read.mjs';
+import {
+  getThoughtModuleTags,
+  isThoughtBatchKind,
+  normalizeThoughtModule,
+  normalizeThoughtModuleOrNull,
+} from './lib/thought-modules.mjs';
 
 const { Client } = pg;
 
@@ -378,7 +384,7 @@ async function persistThoughtMirror(client, batch, processedAt) {
       command: batch.thought?.command ?? '/thought',
       body: batch.thought?.body ?? '',
       thoughtModule: normalizeThoughtModule(batch.thought?.thoughtModule),
-      tags: batch.thought?.tags ?? ['训练', '随想', 'Telegram'],
+      tags: batch.thought?.tags ?? getThoughtModuleTags(batch.thought?.thoughtModule),
       messageDateUnix: batch.thought?.messageDateUnix ?? null,
       markdownPath: batch.thought?.storage?.markdownPath ?? null,
       imageRefs: batch.thought?.storage?.photoPaths ?? [],
@@ -395,7 +401,7 @@ async function persistThoughtMirror(client, batch, processedAt) {
       sourceBatchId: batch.batchId,
       command: batch.thoughtEdit?.command ?? '/thought',
       body: batch.thoughtEdit?.body ?? '',
-      thoughtModule: batch.thoughtEdit?.thoughtModule ?? null,
+      thoughtModule: normalizeThoughtModuleOrNull(batch.thoughtEdit?.thoughtModule),
       tags: batch.thoughtEdit?.tags ?? null,
       messageDateUnix: batch.thoughtEdit?.messageDateUnix ?? null,
       markdownPath: batch.thoughtEdit?.storage?.markdownPath ?? null,
@@ -412,7 +418,7 @@ async function persistThoughtMirror(client, batch, processedAt) {
       chatId: batch.thoughtDelete?.telegramChatId,
       sourceBatchId: batch.batchId,
       command: batch.thoughtDelete?.command ?? '/随想删',
-      thoughtModule: batch.thoughtDelete?.thoughtModule ?? null,
+      thoughtModule: normalizeThoughtModuleOrNull(batch.thoughtDelete?.thoughtModule),
       tags: batch.thoughtDelete?.tags ?? null,
       messageDateUnix: batch.thoughtDelete?.messageDateUnix ?? null,
       markdownPath: batch.thoughtDelete?.storage?.markdownPath ?? null,
@@ -429,7 +435,7 @@ async function persistThoughtMirror(client, batch, processedAt) {
       sourceBatchId: batch.batchId,
       command: batch.thoughtMove?.command ?? '/移动',
       body: '',
-      thoughtModule: batch.thoughtMove?.thoughtModule ?? null,
+      thoughtModule: normalizeThoughtModuleOrNull(batch.thoughtMove?.thoughtModule),
       tags: batch.thoughtMove?.tags ?? null,
       messageDateUnix: batch.thoughtMove?.messageDateUnix ?? null,
       markdownPath: batch.thoughtMove?.storage?.markdownPath ?? null,
@@ -504,7 +510,7 @@ async function upsertThoughtMirror(client, thought) {
       thought.command ?? '/thought',
       String(thought.body ?? '').trim(),
       normalizeThoughtModuleOrNull(thought.thoughtModule) ?? 'workout',
-      JSON.stringify(thought.tags ?? getThoughtTags(thought.thoughtModule)),
+      JSON.stringify(thought.tags ?? getThoughtModuleTags(thought.thoughtModule)),
       normalizeBigIntValue(thought.messageDateUnix),
       thought.markdownPath ?? null,
       Array.isArray(thought.imageRefs) ? JSON.stringify(thought.imageRefs) : null,
@@ -941,24 +947,6 @@ function hasNutritionPayload(nutrition) {
     nutrition?.totalCalories !== null ||
     (nutrition?.details?.length ?? 0) > 0
   );
-}
-
-function isThoughtBatchKind(kind) {
-  return kind === 'thought' || kind === 'thought_edit' || kind === 'thought_delete' || kind === 'thought_move';
-}
-
-function normalizeThoughtModule(value) {
-  return value === 'misc' ? 'misc' : 'workout';
-}
-
-function normalizeThoughtModuleOrNull(value) {
-  return value === 'misc' || value === 'workout' ? value : null;
-}
-
-function getThoughtTags(moduleKey) {
-  return normalizeThoughtModule(moduleKey) === 'misc'
-    ? ['杂七杂八', '随想', 'Telegram']
-    : ['训练', '随想', 'Telegram'];
 }
 
 function normalizePositiveInteger(value) {

@@ -1,4 +1,4 @@
-import { appendFile, access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,6 +24,7 @@ import {
   splitTelegramMessage,
 } from './training-analysis.mjs';
 import { buildRecognitionSchema } from './telegram-recognition-schema.mjs';
+import { fetchWithRetry } from './lib/http-retry.mjs';
 import {
   fetchTelegramUpdates,
   resolveDispatchTelegramUpdates,
@@ -38,6 +39,11 @@ import {
   moveThoughtPost,
   readExistingThoughtMessageKeys,
 } from './telegram-thoughts.mjs';
+import {
+  getThoughtModuleTags,
+  isThoughtBatchKind,
+  normalizeThoughtModule,
+} from './lib/thought-modules.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -46,7 +52,6 @@ const defaultRecognitionPromptPath = path.join(
   'prompts',
   'telegram-training-image-recognition.md',
 );
-const RECOGNITION_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 const fallbackRecognitionSystemPrompt =
   '你是训练记录截图结构化助手。只能输出符合 schema 的 JSON。识别类型只允许 measurement、workout、nutrition、unknown。workout 既可能是逐条活动明细截图，也可能是当日活动总览截图；总览图请提取活动热量、锻炼时长、活动小时数到 dailyWorkoutSummary。detectedDate 只能来自截图画面里的日期；若截图日期不可靠则 detectedDate 返回 null，并在 warnings 中说明。若截图是系统相册、文件详情或分享预览页，画面里明确显示的文件名、标题、路径中的日期也算画面内可见日期。';
 
@@ -95,19 +100,12 @@ export async function runTelegramSync(options = {}) {
       }));
   const exportMarkdown = options.exportTrainingMarkdown ?? exportTrainingMarkdownFromSnapshot;
   const onFallbackMarkdownWritten = options.onFallbackMarkdownWritten ?? null;
-  const writeThoughtPost =
-    options.writeThoughtPost ??
-    ((input) =>
-      writeThoughtPostFile({
-        ...input,
-        rootDir: activeRootDir,
-        fetchTelegramFile:
-          options.fetchTelegramFile ??
-          ((fileId) =>
-            fetchTelegramFile({
-              botToken: env.botToken,
-              fileId,
-            })),
+  const fetchTelegramFileById =
+    options.fetchTelegramFile ??
+    ((fileId) =>
+      fetchTelegramFile({
+        botToken: env.botToken,
+        fileId,
       }));
   const generateAnalysisReply =
     options.generateTrainingAnalysisReply ??
@@ -246,186 +244,21 @@ export async function runTelegramSync(options = {}) {
       continue;
     }
 
-    if (persistedBatch.kind === 'thought') {
-      const thoughtWriteResult = await writeThoughtPost({
+    if (isThoughtBatchKind(persistedBatch.kind)) {
+      const thoughtResult = await handleThoughtSyncBatch({
         batch: persistedBatch,
+        kind: persistedBatch.kind,
         thoughtsDir,
-      });
-      const thoughtStorageBatch = attachThoughtStorageMetadata(
-        persistedBatch,
-        thoughtWriteResult,
         activeRootDir,
-      );
-      changed ||= thoughtWriteResult.changed;
-
-      try {
-        const persistResult = await persistBatch({
-          batch: thoughtStorageBatch,
-          processedAt: now,
-          env: options.env ?? process.env,
-        });
-        changed ||= persistResult.status === 'stored';
-        batchResults.push({
-          ...thoughtStorageBatch,
-          postPath: thoughtWriteResult.postPath,
-          thoughtWriteStatus: thoughtWriteResult.status,
-          persistenceStatus: persistResult.status,
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        await appendPendingFallbackBatch(pendingQueuePath, {
-          batch: thoughtStorageBatch,
-          failedAt: now.toISOString(),
-          error: errorMessage,
-        });
-        batchResults.push({
-          ...thoughtStorageBatch,
-          postPath: thoughtWriteResult.postPath,
-          thoughtWriteStatus: thoughtWriteResult.status,
-          persistenceStatus: 'pending_replay',
-          persistenceError: errorMessage,
-        });
-      }
-      continue;
-    }
-
-    if (persistedBatch.kind === 'thought_edit') {
-      const thoughtEditResult = await editThoughtPost({
-        batch: persistedBatch,
-        thoughtsDir,
-        rootDir: activeRootDir,
-        fetchTelegramFile:
-          options.fetchTelegramFile ??
-          ((fileId) =>
-            fetchTelegramFile({
-              botToken: env.botToken,
-              fileId,
-            })),
+        now,
+        env,
+        persistBatch,
+        appendPendingFallbackBatch,
+        pendingQueuePath,
+        fetchTelegramFile: fetchTelegramFileById,
       });
-      const thoughtStorageBatch = attachThoughtStorageMetadata(
-        persistedBatch,
-        thoughtEditResult,
-        activeRootDir,
-      );
-      changed ||= thoughtEditResult.changed;
-
-      try {
-        const persistResult = await persistBatch({
-          batch: thoughtStorageBatch,
-          processedAt: now,
-          env: options.env ?? process.env,
-        });
-        changed ||= persistResult.status === 'stored';
-        batchResults.push({
-          ...thoughtStorageBatch,
-          postPath: thoughtEditResult.postPath,
-          thoughtWriteStatus: thoughtEditResult.status,
-          persistenceStatus: persistResult.status,
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        await appendPendingFallbackBatch(pendingQueuePath, {
-          batch: thoughtStorageBatch,
-          failedAt: now.toISOString(),
-          error: errorMessage,
-        });
-        batchResults.push({
-          ...thoughtStorageBatch,
-          postPath: thoughtEditResult.postPath,
-          thoughtWriteStatus: thoughtEditResult.status,
-          persistenceStatus: 'pending_replay',
-          persistenceError: errorMessage,
-        });
-      }
-      continue;
-    }
-
-    if (persistedBatch.kind === 'thought_delete') {
-      const thoughtDeleteResult = await deleteThoughtPost({
-        batch: persistedBatch,
-        thoughtsDir,
-        rootDir: activeRootDir,
-      });
-      const thoughtStorageBatch = attachThoughtStorageMetadata(
-        persistedBatch,
-        thoughtDeleteResult,
-        activeRootDir,
-      );
-      changed ||= thoughtDeleteResult.changed;
-
-      try {
-        const persistResult = await persistBatch({
-          batch: thoughtStorageBatch,
-          processedAt: now,
-          env: options.env ?? process.env,
-        });
-        changed ||= persistResult.status === 'stored';
-        batchResults.push({
-          ...thoughtStorageBatch,
-          postPath: thoughtDeleteResult.postPath,
-          thoughtWriteStatus: thoughtDeleteResult.status,
-          deletedPhotoPaths: thoughtDeleteResult.deletedPhotoPaths ?? [],
-          persistenceStatus: persistResult.status,
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        await appendPendingFallbackBatch(pendingQueuePath, {
-          batch: thoughtStorageBatch,
-          failedAt: now.toISOString(),
-          error: errorMessage,
-        });
-        batchResults.push({
-          ...thoughtStorageBatch,
-          postPath: thoughtDeleteResult.postPath,
-          thoughtWriteStatus: thoughtDeleteResult.status,
-          deletedPhotoPaths: thoughtDeleteResult.deletedPhotoPaths ?? [],
-          persistenceStatus: 'pending_replay',
-          persistenceError: errorMessage,
-        });
-      }
-      continue;
-    }
-
-    if (persistedBatch.kind === 'thought_move') {
-      const thoughtMoveResult = await moveThoughtPost({
-        batch: persistedBatch,
-        thoughtsDir,
-      });
-      const thoughtStorageBatch = attachThoughtStorageMetadata(
-        persistedBatch,
-        thoughtMoveResult,
-        activeRootDir,
-      );
-      changed ||= thoughtMoveResult.changed;
-
-      try {
-        const persistResult = await persistBatch({
-          batch: thoughtStorageBatch,
-          processedAt: now,
-          env: options.env ?? process.env,
-        });
-        changed ||= persistResult.status === 'stored';
-        batchResults.push({
-          ...thoughtStorageBatch,
-          postPath: thoughtMoveResult.postPath,
-          thoughtWriteStatus: thoughtMoveResult.status,
-          persistenceStatus: persistResult.status,
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        await appendPendingFallbackBatch(pendingQueuePath, {
-          batch: thoughtStorageBatch,
-          failedAt: now.toISOString(),
-          error: errorMessage,
-        });
-        batchResults.push({
-          ...thoughtStorageBatch,
-          postPath: thoughtMoveResult.postPath,
-          thoughtWriteStatus: thoughtMoveResult.status,
-          persistenceStatus: 'pending_replay',
-          persistenceError: errorMessage,
-        });
-      }
+      changed ||= thoughtResult.changed;
+      batchResults.push(thoughtResult.batchResult);
       continue;
     }
 
@@ -441,7 +274,7 @@ export async function runTelegramSync(options = {}) {
         ...persistedBatch,
         persistenceStatus: persistResult.status,
       });
-      } catch (error) {
+    } catch (error) {
       if (analyzed.status === 'ready') {
         const applied = applyTelegramSyncToMarkdown(await getFallbackMarkdown(), persistedBatch);
         fallbackMarkdown = applied.markdown;
@@ -750,48 +583,52 @@ function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {
   };
 
   if (batch.kind === 'thought') {
+    const nextModule = normalizeThoughtModule(writeResult.thoughtModule ?? batch.thought?.thoughtModule);
     return {
       ...batch,
       thought: {
         ...batch.thought,
-        thoughtModule: writeResult.thoughtModule ?? batch.thought?.thoughtModule ?? 'workout',
-        tags: writeResult.tags ?? batch.thought?.tags ?? ['训练', '随想', 'Telegram'],
+        thoughtModule: nextModule,
+        tags: writeResult.tags ?? batch.thought?.tags ?? getThoughtModuleTags(nextModule),
         storage,
       },
     };
   }
 
   if (batch.kind === 'thought_edit') {
+    const nextModule = normalizeThoughtModule(writeResult.thoughtModule ?? batch.thoughtEdit?.thoughtModule);
     return {
       ...batch,
       thoughtEdit: {
         ...batch.thoughtEdit,
-        thoughtModule: writeResult.thoughtModule ?? batch.thoughtEdit?.thoughtModule ?? null,
-        tags: writeResult.tags ?? batch.thoughtEdit?.tags ?? null,
+        thoughtModule: nextModule,
+        tags: writeResult.tags ?? batch.thoughtEdit?.tags ?? getThoughtModuleTags(nextModule),
         storage,
       },
     };
   }
 
   if (batch.kind === 'thought_delete') {
+    const nextModule = normalizeThoughtModule(writeResult.thoughtModule ?? batch.thoughtDelete?.thoughtModule);
     return {
       ...batch,
       thoughtDelete: {
         ...batch.thoughtDelete,
-        thoughtModule: writeResult.thoughtModule ?? batch.thoughtDelete?.thoughtModule ?? null,
-        tags: writeResult.tags ?? batch.thoughtDelete?.tags ?? null,
+        thoughtModule: nextModule,
+        tags: writeResult.tags ?? batch.thoughtDelete?.tags ?? getThoughtModuleTags(nextModule),
         storage,
       },
     };
   }
 
   if (batch.kind === 'thought_move') {
+    const nextModule = normalizeThoughtModule(writeResult.thoughtModule ?? batch.thoughtMove?.thoughtModule);
     return {
       ...batch,
       thoughtMove: {
         ...batch.thoughtMove,
-        thoughtModule: writeResult.thoughtModule ?? batch.thoughtMove?.thoughtModule ?? null,
-        tags: writeResult.tags ?? batch.thoughtMove?.tags ?? null,
+        thoughtModule: nextModule,
+        tags: writeResult.tags ?? batch.thoughtMove?.tags ?? getThoughtModuleTags(nextModule),
         storage,
       },
     };
@@ -995,7 +832,7 @@ async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }
 }
 
 async function recognizeImageMessage(message, imageUrl, env) {
-  const response = await fetchRecognitionResponse(`${env.baseUrl}/chat/completions`, {
+  const response = await fetchWithRetry(`${env.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -1037,6 +874,10 @@ async function recognizeImageMessage(message, imageUrl, env) {
         },
       ],
     }),
+  }, {
+    retryableStatuses: new Set([429, 500, 502, 503, 504]),
+    logPrefix: '[telegram-sync] AI recognition',
+    finalErrorMessage: 'AI recognition request failed',
   });
 
   if (!response.ok) {
@@ -1056,43 +897,112 @@ async function recognizeImageMessage(message, imageUrl, env) {
   };
 }
 
-async function fetchRecognitionResponse(url, init, options = {}) {
-  const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? 3));
-  const baseDelayMs = Math.max(0, Math.floor(options.baseDelayMs ?? 350));
-  let lastResponse = null;
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      const response = await fetch(url, init);
-      if (response.ok || !RECOGNITION_RETRYABLE_STATUSES.has(response.status) || attempt === maxAttempts) {
-        return response;
-      }
-      lastResponse = response;
-      process.stderr.write(
-        `[telegram-sync] AI recognition request failed with HTTP ${response.status}; retrying (${attempt}/${maxAttempts})\n`,
-      );
-    } catch (error) {
-      lastError = error;
-      if (attempt === maxAttempts) {
-        throw error;
-      }
-      process.stderr.write(
-        `[telegram-sync] AI recognition request failed: ${error instanceof Error ? error.message : String(error)}; retrying (${attempt}/${maxAttempts})\n`,
-      );
-    }
-
-    await delay(baseDelayMs * attempt);
+async function handleThoughtSyncBatch({
+  batch,
+  kind,
+  thoughtsDir,
+  activeRootDir,
+  now,
+  env,
+  persistBatch,
+  appendPendingFallbackBatch,
+  pendingQueuePath,
+  fetchTelegramFile,
+}) {
+  const thoughtWriteResult = await writeThoughtArtifact({
+    batch,
+    kind,
+    thoughtsDir,
+    activeRootDir,
+    fetchTelegramFile,
+    env,
+  });
+  const thoughtStorageBatch = attachThoughtStorageMetadata(
+    batch,
+    thoughtWriteResult,
+    activeRootDir,
+  );
+  const baseBatchResult = {
+    ...thoughtStorageBatch,
+    postPath: thoughtWriteResult.postPath,
+    thoughtWriteStatus: thoughtWriteResult.status,
+  };
+  if (Array.isArray(thoughtWriteResult.deletedPhotoPaths)) {
+    baseBatchResult.deletedPhotoPaths = thoughtWriteResult.deletedPhotoPaths;
   }
 
-  if (lastResponse) {
-    return lastResponse;
+  try {
+    const persistResult = await persistBatch({
+      batch: thoughtStorageBatch,
+      processedAt: now,
+      env,
+    });
+    return {
+      changed: thoughtWriteResult.changed || persistResult.status === 'stored',
+      batchResult: {
+        ...baseBatchResult,
+        persistenceStatus: persistResult.status,
+      },
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    await appendPendingFallbackBatch(pendingQueuePath, {
+      batch: thoughtStorageBatch,
+      failedAt: now.toISOString(),
+      error: errorMessage,
+    });
+    return {
+      changed: thoughtWriteResult.changed,
+      batchResult: {
+        ...baseBatchResult,
+        persistenceStatus: 'pending_replay',
+        persistenceError: errorMessage,
+      },
+    };
   }
-  throw lastError ?? new Error('AI recognition request failed');
 }
 
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function writeThoughtArtifact({
+  batch,
+  kind,
+  thoughtsDir,
+  activeRootDir,
+  fetchTelegramFile,
+}) {
+  if (kind === 'thought') {
+    return writeThoughtPostFile({
+      batch,
+      thoughtsDir,
+      rootDir: activeRootDir,
+      fetchTelegramFile,
+    });
+  }
+
+  if (kind === 'thought_edit') {
+    return editThoughtPost({
+      batch,
+      thoughtsDir,
+      rootDir: activeRootDir,
+      fetchTelegramFile,
+    });
+  }
+
+  if (kind === 'thought_delete') {
+    return deleteThoughtPost({
+      batch,
+      thoughtsDir,
+      rootDir: activeRootDir,
+    });
+  }
+
+  if (kind === 'thought_move') {
+    return moveThoughtPost({
+      batch,
+      thoughtsDir,
+    });
+  }
+
+  throw new Error(`Unsupported thought batch kind: ${kind}`);
 }
 
 if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {

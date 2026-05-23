@@ -7,6 +7,8 @@ import {
   isUnavailableDatabaseSnapshotError,
 } from './training-snapshot.mjs';
 import { buildTrainingAnalysisPrompt } from './training-prompt.mjs';
+import { roundTo } from './training-domain.mjs';
+import { fetchWithRetry } from './lib/http-retry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -272,7 +274,7 @@ async function requestTrainingAnalysis({
   maxAttempts,
   baseDelayMs,
 }) {
-  const response = await fetchTrainingAnalysisResponse(`${env.baseUrl}/chat/completions`, {
+  const response = await fetchWithRetry(`${env.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -299,6 +301,9 @@ async function requestTrainingAnalysis({
     fetchImpl,
     maxAttempts,
     baseDelayMs,
+    retryableStatuses: ANALYSIS_RETRYABLE_STATUSES,
+    logPrefix: '[training-analysis]',
+    finalErrorMessage: 'Training analysis request failed',
   });
 
   if (!response.ok) {
@@ -311,46 +316,6 @@ async function requestTrainingAnalysis({
     throw new Error('Training analysis returned empty content');
   }
   return content;
-}
-
-async function fetchTrainingAnalysisResponse(url, init, options = {}) {
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const maxAttempts = Math.max(1, Math.floor(options.maxAttempts ?? 3));
-  const baseDelayMs = Math.max(0, Math.floor(options.baseDelayMs ?? 350));
-  let lastResponse = null;
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      const response = await fetchImpl(url, init);
-      if (response.ok || !ANALYSIS_RETRYABLE_STATUSES.has(response.status) || attempt === maxAttempts) {
-        return response;
-      }
-      lastResponse = response;
-      process.stderr.write(
-        `[training-analysis] request failed with HTTP ${response.status}; retrying (${attempt}/${maxAttempts})\n`,
-      );
-    } catch (error) {
-      lastError = error;
-      if (attempt === maxAttempts) {
-        throw error;
-      }
-      process.stderr.write(
-        `[training-analysis] request failed: ${error instanceof Error ? error.message : String(error)}; retrying (${attempt}/${maxAttempts})\n`,
-      );
-    }
-
-    await delay(baseDelayMs * attempt);
-  }
-
-  if (lastResponse) {
-    return lastResponse;
-  }
-  throw lastError ?? new Error('Training analysis request failed');
-}
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function normalizeTelegramReply(content) {
@@ -770,11 +735,6 @@ function toNumberOrNull(value) {
 
 function isFiniteNumber(value) {
   return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
-}
-
-function roundTo(value, precision) {
-  const factor = 10 ** precision;
-  return Math.round(Number(value) * factor) / factor;
 }
 
 function toIsoString(value) {

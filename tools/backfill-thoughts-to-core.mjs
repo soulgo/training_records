@@ -6,6 +6,10 @@ import frontMatter from 'hexo-front-matter';
 import pg from 'pg';
 
 import { resolveTrainingCoreConfig } from './training-db-core.mjs';
+import {
+  getThoughtModuleTags,
+  normalizeThoughtModule,
+} from './lib/thought-modules.mjs';
 
 const { Client } = pg;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -153,7 +157,7 @@ function normalizeThoughtMarkdown(parsed, postPath, activeRootDir) {
   const thoughtModule = normalizeThoughtModule(frontMatterData.thought_module);
   const tags = Array.isArray(frontMatterData.tags) && frontMatterData.tags.length > 0
     ? frontMatterData.tags
-    : getThoughtTags(thoughtModule);
+    : getThoughtModuleTags(thoughtModule);
   const imageRefs = Array.isArray(frontMatterData.photos) ? frontMatterData.photos : [];
   const markdownPath = normalizePath(path.relative(activeRootDir, postPath));
 
@@ -223,16 +227,6 @@ function parseThoughtDateUnix(value) {
 
 function normalizePath(filePath) {
   return filePath.split(path.sep).join('/');
-}
-
-function normalizeThoughtModule(value) {
-  return value === 'misc' ? 'misc' : 'workout';
-}
-
-function getThoughtTags(moduleKey) {
-  return normalizeThoughtModule(moduleKey) === 'misc'
-    ? ['杂七杂八', '随想', 'Telegram']
-    : ['训练', '随想', 'Telegram'];
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

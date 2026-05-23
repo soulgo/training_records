@@ -7,22 +7,16 @@ import {
   splitLevel4Blocks,
   toNullableNumber,
 } from './training-domain.mjs';
+import {
+  DEFAULT_THOUGHT_MODULE,
+  getThoughtModuleTags,
+  normalizeThoughtModule,
+  normalizeThoughtModuleOrNull,
+  resolveThoughtModuleLabel,
+} from './lib/thought-modules.mjs';
 
 const FINGERPRINT_RE = /^<!-- telegram-fingerprint: ([^ ]+) -->$/m;
 const TELEGRAM_SECTION_TAG = '<!-- telegram-sync-section -->';
-const DEFAULT_THOUGHT_MODULE = 'workout';
-const THOUGHT_MODULES = {
-  workout: {
-    key: 'workout',
-    labels: new Set(['锻炼', '锻炼随想']),
-    tags: ['训练', '随想', 'Telegram'],
-  },
-  misc: {
-    key: 'misc',
-    labels: new Set(['杂七杂八']),
-    tags: ['杂七杂八', '随想', 'Telegram'],
-  },
-};
 
 export function groupTelegramUpdates(updates, options = {}) {
   const batches = [];
@@ -585,10 +579,6 @@ function buildAnalysisBatch(message) {
       question: parsedAnalysis.question,
     },
   };
-}
-
-function hasRecognizableImage(message) {
-  return Boolean((message?.photo?.length ?? 0) > 0 || normalizeTelegramImageDocument(message?.document));
 }
 
 function normalizeTelegramImageDocument(document) {
@@ -1541,28 +1531,6 @@ function parseThoughtModuleBody(rawBody) {
     moduleExplicit: true,
     body: (match[2] ?? '').trim(),
   };
-}
-
-function resolveThoughtModuleLabel(label) {
-  const normalized = String(label ?? '').trim();
-  for (const module of Object.values(THOUGHT_MODULES)) {
-    if (module.labels.has(normalized)) {
-      return module.key;
-    }
-  }
-  return null;
-}
-
-function normalizeThoughtModule(value) {
-  return THOUGHT_MODULES[value]?.key ?? DEFAULT_THOUGHT_MODULE;
-}
-
-function normalizeThoughtModuleOrNull(value) {
-  return THOUGHT_MODULES[value]?.key ?? null;
-}
-
-function getThoughtModuleTags(moduleKey) {
-  return [...(THOUGHT_MODULES[normalizeThoughtModule(moduleKey)]?.tags ?? THOUGHT_MODULES.workout.tags)];
 }
 
 function findThoughtCommandEntry(messages) {
