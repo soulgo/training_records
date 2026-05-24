@@ -13,6 +13,14 @@
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-05-24
+
+### Changed
+
+- 优化训练看板指标卡片的数据变化提示样式，使用更明显的底色、边框与状态色提升变化感知。
+- 提升首页顶部导航的字号、字重和颜色对比度，增强中文菜单可读性。
+- 同步项目包版本号到 `1.1.1`。
+
 ## [1.1.0] - 2026-05-24
 
 ### Added
@@ -27,6 +35,7 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/soulgo/training_records/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/soulgo/training_records/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/soulgo/training_records/releases/tag/v1.0.0
