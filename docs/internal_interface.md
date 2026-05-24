@@ -169,6 +169,7 @@ Worker 环境变量：
 | 分组入口 | `groupTelegramUpdates(updates, options)` |
 | 运行入口 | `runTelegramSync(options)` |
 | 授权 | 仅处理 `TELEGRAM_ALLOWED_CHAT_IDS` 中的 chat |
+| 命令注册 | `src/telegram/command-registry.mjs` |
 
 系统只处理 Telegram `message` 和 `edited_message`。未授权 chat 会生成 `status: "ignored"`、`reason: "unauthorized chat"`，不会识别图片、写文件或写数据库。
 
@@ -186,6 +187,9 @@ Worker 环境变量：
 | 输入 | Telegram 图片消息或相册 |
 | AI schema | `buildRecognitionSchema()` |
 | 归档目标 | PostgreSQL `core.*`，失败时回退 `训练记录.md` |
+| 识别服务 | `src/ai/recognition-service.mjs` |
+| Prompt metadata | `prompts/*.md` 顶部可含 `prompt-metadata` header，运行时会剥离后再发送给模型 |
+| 识别缓存 | 默认关闭；开启后按 `file_unique_id + promptVersion + schemaVersion + model` 复用结果 |
 
 批次分析结果主要字段：
 
@@ -211,6 +215,7 @@ Worker 环境变量：
 - 同一批次识别出多个不同截图日期时返回 `skipped`。
 - 无可靠截图日期或文件名日期时返回 `skipped`。
 - 数据库写入失败时，图片批次会写入 `训练记录.md`，并将批次追加到 `runtime/telegram-sync-pending.ndjson` 等待重放。
+- cache key 形如 `telegram:file_unique_id:<file_unique_id>:prompt:<prompt_version>:schema:<schema_version>:model:<model>`，prompt/schema/model 任一变化都会自动 miss。
 
 ### 4.3 随想命令
 
@@ -232,6 +237,24 @@ Worker 环境变量：
 | `/随想删 <id>` | `可对外` | 删除随想 | 同 `thought-delete` |
 | `/move <id> 杂七杂八` | `可对外` | 移动随想到目标模块 | 中文别名 `/移动` |
 | `/移动 <id> 杂七杂八` | `可对外` | 移动随想到目标模块 | `/move` 中文别名 |
+
+命令路由采用声明式 registry，优先级保持为：
+
+1. `move`
+2. `delete`
+3. `analysis`
+4. `explicit_edit`
+5. `edited_message`
+6. `reply_edit`
+7. `thought`
+8. `image`
+
+registry 目前只负责把现有别名映射到既有 batch 形状，不改变：
+
+- Telegram command alias
+- reply 行为
+- batch 顶层字段
+- `thought_module` 默认值
 | `/随想 <id> 锻炼` | `可对外` | 兼容旧习惯的移动写法 | 等价于 `/移动 <id> 锻炼` |
 
 随想文件契约：
@@ -501,6 +524,7 @@ AI 返回内容必须是符合 schema 的 JSON 字符串。顶层字段：
 - `source` 为 `markdown` 或未指定时读取 `训练记录.md`。
 - 数据库源为空或缺少 measurement 时抛出 `database snapshot is empty or missing measurements`。
 - 数据库连接或查询失败时包装为 `database snapshot unavailable: ...`。
+- `readTrainingSnapshotFromDatabase(options)` 支持可选 `dateFrom` / `dateTo`，格式为 `YYYY-MM-DD`；不传时仍是全量，传入后只裁剪 `daily` 窗口并据此生成窗口内 `latest` / `charts`。
 
 #### `generateTrainingData(options = {})`
 
@@ -709,6 +733,8 @@ AI 返回内容必须是符合 schema 的 JSON 字符串。顶层字段：
 | `source/images/thoughts/YYYY/MM/*` | `可对外` | Telegram 随想图片 | 随想图片本地资源 |
 | `runtime/telegram-sync-pending.ndjson` | `内部稳定` | `runTelegramSync` | 数据库失败后待重放 batch 队列 |
 | `runtime/training-db-sync.ndjson` | `内部实现` | `appendTrainingArchiveFailureLog` | archive 归档失败日志 |
+| `prompts/telegram-training-image-recognition.md` | `内部稳定` | `tools/prompt-generator.mjs` | 图片识别 prompt 运行时文件，文件头可带版本 metadata |
+| `prompts/training-analysis.md` | `内部稳定` | `tools/prompt-generator.mjs` | 训练分析 prompt 运行时文件，文件头可带版本 metadata |
 
 运行时队列说明：
 
@@ -729,9 +755,12 @@ AI 返回内容必须是符合 schema 的 JSON 字符串。顶层字段：
 | `TELEGRAM_SYNC_TRANSPORT` | `可对外` | `poll` | `sync:telegram` | `webhook` 时使用 repository_dispatch updates |
 | `TELEGRAM_SYNC_NOTIFY` | `内部稳定` | CI webhook 默认通知 | `sync:telegram` | 控制是否回发同步结果 |
 | `TELEGRAM_RECOGNITION_PROMPT_PATH` | `内部稳定` | `prompts/telegram-training-image-recognition.md` | 图片识别 | 覆盖识别 prompt |
+| `TELEGRAM_RECOGNITION_CACHE_ENABLED` | `内部稳定` | `false` | 图片识别 | 开启后尝试复用相同 `file_unique_id`、prompt/schema/model 的识别结果 |
 | `AI_API_KEY` | `可对外` | 无 | 图片识别、训练分析 | AI API key |
 | `AI_BASE_URL` | `可对外` | 无 | 图片识别、训练分析 | Chat Completions base URL，例如 `https://api.openai.com/v1` |
 | `AI_MODEL` | `可对外` | 无 | 图片识别、训练分析 | 模型名 |
+| `AI_PROVIDER` | `内部稳定` | `openai-compatible` | 图片识别、训练分析 | AI provider 适配层入口 |
+| `AI_TIMEOUT_MS` | `内部稳定` | 现有请求语义 | 图片识别、训练分析 | 可选请求超时，未配置时不改变旧行为 |
 | `AI_CONCURRENCY` | `内部稳定` | `3` | 图片识别 | 并发识别图片数 |
 
 ### 10.2 训练分析

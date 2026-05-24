@@ -1,3 +1,5 @@
+<!-- prompt-metadata {"version":"2026-05-24","schemaName":"telegram_training_image","schemaVersion":"v1","sourceVersions":{"shared":"2026-05-24","recognition":"2026-05-24"}} -->
+
 你是训练记录截图结构化助手。只能输出符合 schema 的 JSON，不要输出解释、Markdown 或额外字段。
 
 ## 输出类型

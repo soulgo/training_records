@@ -20,8 +20,10 @@ export async function buildTrainingSnapshot(options = {}) {
         env: options.env,
         createClient: options.createClient,
         now: options.now,
+        dateFrom: options.dateFrom,
+        dateTo: options.dateTo,
       });
-      if (isRenderableSnapshot(snapshot)) {
+      if (isRenderableSnapshot(snapshot) || options.dateFrom || options.dateTo) {
         return snapshot;
       }
       throw new Error('database snapshot is empty or missing measurements');

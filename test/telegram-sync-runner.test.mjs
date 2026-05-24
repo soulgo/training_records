@@ -11,6 +11,7 @@ import {
   runTelegramSync,
   shouldPersistTelegramArtifacts,
 } from '../tools/telegram-sync.mjs';
+import { buildRecognitionCacheKey, isRecognitionCacheEnabled } from '../src/ai/recognition-service.mjs';
 
 test('telegram sync entrypoint exits cleanly in webhook mode without queued work', () => {
   const stdout = execFileSync(process.execPath, ['tools/telegram-sync.mjs'], {
@@ -108,6 +109,21 @@ test('loadRecognitionSystemPrompt can be overridden for prompt experiments', asy
     }),
     'custom prompt',
   );
+});
+
+test('recognition cache key changes with prompt schema and model versions', () => {
+  assert.equal(
+    buildRecognitionCacheKey({
+      fileUniqueId: 'uniq-a',
+      promptVersion: '2026-05-24',
+      schemaVersion: 'v1',
+      model: 'gpt-test',
+    }),
+    'telegram:file_unique_id:uniq-a:prompt:2026-05-24:schema:v1:model:gpt-test',
+  );
+  assert.equal(buildRecognitionCacheKey({ fileUniqueId: 'uniq-a' }), null);
+  assert.equal(isRecognitionCacheEnabled({ TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true' }), true);
+  assert.equal(isRecognitionCacheEnabled({ TELEGRAM_RECOGNITION_CACHE_ENABLED: '' }), false);
 });
 
 test('runTelegramSync persists ready batches to the database and exports derived markdown', async () => {
@@ -2712,12 +2728,25 @@ test('runTelegramSync retries transient AI recognition failures and continues sy
                   warnings: [],
                   records: {
                     measurement: {
+                      bodyScore: null,
                       weightKg: 72,
+                      bmi: null,
                       bodyFatPct: 23.7,
+                      skeletalMuscleKg: null,
+                      visceralFatLevel: null,
+                      basalMetabolismKcal: null,
+                      bodyWaterPct: null,
+                      proteinPct: null,
+                      boneMassKg: null,
+                      fatFreeMassKg: null,
+                      bodyAge: null,
+                      bodyType: null,
                       measuredAt: '2026-05-18',
                     },
                     activities: [],
                     meals: [],
+                    totalCalories: null,
+                    details: [],
                     dailyWorkoutSummary: null,
                   },
                 }),
@@ -2791,6 +2820,102 @@ test('runTelegramSync retries transient AI recognition failures and continues sy
     assert.equal(result.batchResults[0].persistenceStatus, 'stored');
     assert.equal(aiAttempts, 2);
     assert.equal(persistedBatches.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('runTelegramSync skips malformed recognition responses after logging the recognition failure', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-recognition-errors-'));
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url) => {
+    const requestUrl = String(url);
+
+    if (requestUrl.includes('/getFile?')) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            file_path: 'photos/file_802.jpg',
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      );
+    }
+
+    if (requestUrl.includes('/chat/completions')) {
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: '',
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      );
+    }
+
+    throw new Error(`Unexpected fetch call: ${requestUrl}`);
+  };
+
+  try {
+    const result = await runTelegramSync({
+      rootDir: tempRoot,
+      env: {
+        TELEGRAM_BOT_TOKEN: 'token',
+        AI_API_KEY: 'key',
+        AI_BASE_URL: 'https://example.com/v1',
+        AI_MODEL: 'gpt-test',
+        TELEGRAM_ALLOWED_CHAT_IDS: '42',
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      getLastProcessedUpdateId: async () => 900,
+      fetchTelegramUpdates: async () => [
+        {
+          update_id: 901,
+          message: {
+            message_id: 802,
+            date: Math.floor(new Date('2026-05-18T02:30:00Z').getTime() / 1000),
+            chat: { id: 42 },
+            photo: [{ file_id: 'file-b', file_unique_id: 'uniq-b' }],
+          },
+        },
+      ],
+      persistNormalizedBatch: async () => ({ status: 'stored', archivedDate: '2026-05-18' }),
+      buildTrainingSnapshot: async () => ({
+        generatedAt: '2026-05-18T00:00:00.000Z',
+        latest: { measurement: null, daily: { date: '2026-05-18' } },
+        daily: [],
+        charts: {
+          weightKg: [],
+          bodyFatPct: [],
+          skeletalMuscleKg: [],
+          basalMetabolism: [],
+          visceralFatLevel: [],
+          intakeCalories: [],
+          trainingCalories: [],
+          cyclingDistanceKm: [],
+        },
+      }),
+    });
+
+    assert.equal(result.batchResults[0].status, 'skipped');
+    assert.match(result.batchResults[0].reason, /missing recognition/);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -342,6 +342,12 @@ npm run build
 - `docs/telegram-analysis.md`
   Telegram `/analysis` / `/分析` 训练分析指令维护说明
 
+- `docs/telegram-command-registry.md`
+  Telegram command registry 的优先级、alias、兼容策略、rollback 和验证说明
+
+- `src/telegram/command-registry.mjs`
+  Telegram 命令声明式注册表，保持现有 alias、优先级和 batch 形状不变，只作为同步路由的内部扩展点
+
 页面展示数据来源取决于 `TRAINING_SNAPSHOT_SOURCE`：
 
 - `markdown`
@@ -365,6 +371,8 @@ npm run build
 
 - `AI_BASE_URL`
 - `AI_MODEL`
+- `AI_PROVIDER`（可选，默认 `openai-compatible`）
+- `AI_TIMEOUT_MS`（可选，默认沿用现有请求语义）
 - `AI_CONCURRENCY`
 - `TRAINING_ANALYSIS_GOAL`
 - `TELEGRAM_ALLOWED_CHAT_IDS`
@@ -399,6 +407,7 @@ npm run build
 - `/thought` 随想当前写入 `source/_posts` 时不生成 `title`；如果后续要恢复标题或调整 permalink，请同步修改模板、同步逻辑和测试
 - `/analysis` 训练分析只回发 Telegram，不写 docs、Markdown 或数据库；如果后续改成持久化报告，请同步修改文档、workflow 和测试
 - `/analysis` 默认按“增肌减腹”给建议；如果阶段目标改变，请优先改 `TRAINING_ANALYSIS_GOAL`，并同步 `docs/telegram-analysis.md`
+- AI 调用现在通过统一 provider adapter 进入；如果需要回滚到旧实现，删除 `AI_PROVIDER` 覆盖配置即可，默认仍走兼容的 Chat Completions 请求
 - 如果你在 PG 故障期间又手工改了同一天的 Markdown，后续补偿入库时要注意冲突口径
 - 继续 v2 H1-H6 前，先运行 H7 targeted tests：`node --test test/telegram-sync.test.mjs test/training-analysis.test.mjs test/training-db-core.test.mjs test/dashboard-view.test.mjs`
 

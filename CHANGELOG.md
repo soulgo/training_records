@@ -13,6 +13,16 @@
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-05-24
+
+### Changed
+
+- 完成中优先级的 M1/M2/M4/M6：统一 AI provider 调用入口，补齐 prompt/schema 版本化，加入默认关闭的图片识别缓存设计，并为数据库读取增加可选时间窗口。
+- 生成的识别与分析 prompt 现在会写入版本 metadata，运行时会自动剥离，避免污染模型输入。
+- Telegram 识别结果缓存 key 已与 prompt/schema/model 绑定，保证版本变化自动 miss。
+- `readTrainingSnapshotFromDatabase` 现在支持 `dateFrom` / `dateTo`，默认行为保持全量兼容。
+- 同步项目包版本号到 `1.1.3`。
+
 ## [1.1.2] - 2026-05-24
 
 ### Changed
@@ -42,7 +52,8 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.3...HEAD
+[1.1.3]: https://github.com/soulgo/training_records/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/soulgo/training_records/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/soulgo/training_records/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/soulgo/training_records/compare/v1.0.0...v1.1.0

@@ -404,3 +404,81 @@ test('buildTrainingSnapshot throws when database read fails in database mode', a
     /db unavailable|database snapshot/i,
   );
 });
+
+test('buildTrainingSnapshot can return a filtered database window', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'training-snapshot-window-'));
+  await mkdir(path.join(rootDir, 'source', '_data'), { recursive: true });
+  await writeFile(path.join(rootDir, '训练记录.md'), sampleMarkdown, 'utf8');
+
+  const snapshot = await buildTrainingSnapshot({
+    source: 'database',
+    rootDir,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return {
+        async connect() {},
+        async end() {},
+        async query(sql) {
+          if (/from core\.training_day/i.test(sql)) {
+            return {
+              rows: [
+                {
+                  archived_date: '2026-05-08',
+                  total_activities: 1,
+                  total_duration_seconds: 600,
+                  training_calories: 120,
+                  workout_duration_minutes: 10,
+                  active_hours: 1,
+                  cycling_distance_km: 0,
+                  intake_calories: 800,
+                },
+                {
+                  archived_date: '2026-05-09',
+                  total_activities: 2,
+                  total_duration_seconds: 1200,
+                  training_calories: 240,
+                  workout_duration_minutes: 20,
+                  active_hours: 2,
+                  cycling_distance_km: 1.2,
+                  intake_calories: 900,
+                },
+              ],
+            };
+          }
+          if (/from core\.measurement/i.test(sql)) {
+            return {
+              rows: [
+                {
+                  archived_date: '2026-05-09',
+                  measured_at: '2026-05-09 06:42',
+                  body_score: 74,
+                  weight_kg: '72.85',
+                  bmi: '23.5',
+                  body_fat_pct: '22.8',
+                  skeletal_muscle_kg: '30.45',
+                  visceral_fat_level: '8',
+                  basal_metabolism_kcal: 1587,
+                  body_water_pct: null,
+                  protein_pct: null,
+                  bone_mass_kg: null,
+                  fat_free_mass_kg: null,
+                  body_age: null,
+                  body_type: null,
+                },
+              ],
+            };
+          }
+          return { rows: [] };
+        },
+      };
+    },
+    dateFrom: '2026-05-09',
+    dateTo: '2026-05-09',
+  });
+
+  assert.deepEqual(snapshot.daily.map((day) => day.date), ['2026-05-09']);
+  assert.equal(snapshot.charts.trainingCalories.length, 1);
+});

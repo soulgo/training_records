@@ -8,6 +8,7 @@ import {
   getLastProcessedTelegramUpdateId,
   persistNormalizedBatch,
   readTrainingSnapshotFromDatabaseClient,
+  readTrainingSnapshotFromDatabase,
 } from '../tools/training-db-core.mjs';
 
 const normalizedBatch = {
@@ -165,6 +166,85 @@ test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before gr
   assert.equal(day.nutrition.meals.length, 1);
   assert.equal(day.measurement.weightKg, 73.7);
   assert.equal(snapshot.charts.weightKg[0].date, '2026-05-22');
+});
+
+test('readTrainingSnapshotFromDatabase can limit daily rows by date window', async () => {
+  const queries = [];
+  const snapshot = await readTrainingSnapshotFromDatabase({
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return {
+        async connect() {},
+        async end() {},
+        async query(sql) {
+          queries.push(sql);
+          if (/from core\.training_day/i.test(sql)) {
+            return {
+              rows: [
+                {
+                  archived_date: '2026-05-08',
+                  total_activities: 1,
+                  total_duration_seconds: 600,
+                  training_calories: 120,
+                  workout_duration_minutes: 10,
+                  active_hours: 1,
+                  cycling_distance_km: 0,
+                  intake_calories: 800,
+                },
+                {
+                  archived_date: '2026-05-09',
+                  total_activities: 2,
+                  total_duration_seconds: 1200,
+                  training_calories: 240,
+                  workout_duration_minutes: 20,
+                  active_hours: 2,
+                  cycling_distance_km: 1.2,
+                  intake_calories: 900,
+                },
+              ],
+            };
+          }
+          if (/from core\.measurement/i.test(sql)) {
+            return {
+              rows: [
+                {
+                  archived_date: '2026-05-09',
+                  measured_at: '2026-05-09 06:42',
+                  body_score: 74,
+                  weight_kg: '72.85',
+                  bmi: '23.5',
+                  body_fat_pct: '22.8',
+                  skeletal_muscle_kg: '30.45',
+                  visceral_fat_level: '8',
+                  basal_metabolism_kcal: 1587,
+                  body_water_pct: null,
+                  protein_pct: null,
+                  bone_mass_kg: null,
+                  fat_free_mass_kg: null,
+                  body_age: null,
+                  body_type: null,
+                },
+              ],
+            };
+          }
+          if (/from core\.activity/i.test(sql) || /from core\.meal/i.test(sql)) {
+            return { rows: [] };
+          }
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+      };
+    },
+    dateFrom: '2026-05-09',
+    dateTo: '2026-05-09',
+  });
+
+  assert.deepEqual(snapshot.daily.map((day) => day.date), ['2026-05-09']);
+  assert.equal(snapshot.latest.daily?.date, '2026-05-09');
+  assert.equal(snapshot.charts.trainingCalories.length, 1);
+  assert.ok(queries.some((sql) => /from core\.training_day/i.test(sql)));
 });
 
 test('persistNormalizedBatch writes ingest and core records in one transaction', async () => {

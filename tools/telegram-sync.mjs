@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { createAiProvider } from '../src/ai/provider.mjs';
 import {
   applyTelegramSyncToMarkdown,
   analyzeTelegramBatch,
@@ -20,8 +21,6 @@ import {
   splitTelegramMessage,
 } from './training-analysis.mjs';
 import { canFallbackToMarkdownSnapshot, canUseDatabaseFallback } from './lib/snapshot-fallback.mjs';
-import { buildRecognitionSchema } from './telegram-recognition-schema.mjs';
-import { fetchWithRetry } from './lib/http-retry.mjs';
 import {
   fetchTelegramUpdates,
   resolveDispatchTelegramUpdates,
@@ -41,6 +40,8 @@ import {
   isThoughtBatchKind,
   normalizeThoughtModule,
 } from './lib/thought-modules.mjs';
+import { getRecognitionPromptMetadata, stripPromptMetadataHeader } from './prompt-generator.mjs';
+import { recognizeTelegramImageMessage } from '../src/ai/recognition-service.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -59,13 +60,15 @@ export async function main() {
 }
 
 export async function runTelegramSync(options = {}) {
-  const env = loadRequiredEnv(options.env ?? process.env);
+  const rawEnv = options.env ?? process.env;
+  const env = loadRequiredEnv(rawEnv);
   const activeRootDir = options.rootDir ?? rootDir;
   const recordPath = path.join(activeRootDir, '训练记录.md');
   const thoughtsDir = path.join(activeRootDir, 'source', '_posts');
   const runtimeDir = path.join(activeRootDir, 'runtime');
   const pendingQueuePath = path.join(runtimeDir, 'telegram-sync-pending.ndjson');
   const now = options.now ?? new Date();
+  const aiProvider = options.aiProvider ?? createAiProvider(rawEnv);
   const readLastProcessedUpdateId =
     options.getLastProcessedUpdateId ??
     (() => getLastProcessedTelegramUpdateId({ env: options.env ?? process.env }));
@@ -79,7 +82,7 @@ export async function runTelegramSync(options = {}) {
       }));
   const recognizeBatchRunner =
     options.recognizeBatch ??
-    ((batch) => recognizeBatch(batch, env));
+    ((batch) => recognizeBatch(batch, env, { aiProvider, rawEnv }));
   const persistBatch =
     options.persistNormalizedBatch ??
     ((input) =>
@@ -110,8 +113,9 @@ export async function runTelegramSync(options = {}) {
       generateTrainingAnalysisReply({
         ...input,
         rootDir: activeRootDir,
-        env: options.env ?? process.env,
+        env: rawEnv,
         now,
+        aiProvider,
       }));
   const sendMessage =
     options.sendTelegramMessage ??
@@ -412,7 +416,7 @@ export async function loadRecognitionSystemPrompt(env = process.env) {
 
   try {
     const prompt = await readFile(promptPath, 'utf8');
-    const trimmed = prompt.trim();
+    const trimmed = stripPromptMetadataHeader(prompt).trim();
     return trimmed || fallbackRecognitionSystemPrompt;
   } catch {
     return fallbackRecognitionSystemPrompt;
@@ -725,7 +729,10 @@ function loadRequiredEnv(env = process.env) {
   };
 }
 
-async function recognizeBatch(batch, env) {
+async function recognizeBatch(batch, env, options = {}) {
+  const aiProvider = options.aiProvider ?? createAiProvider(env);
+  const promptMetadata = await getRecognitionPromptMetadata();
+  const systemPrompt = await loadRecognitionSystemPrompt(options.rawEnv ?? process.env);
   const recognitions = await mapWithConcurrency(batch.messages, env.aiConcurrency, async (message) => {
     const fileId = message.photos.at(-1)?.fileId;
     if (!fileId) {
@@ -733,7 +740,14 @@ async function recognizeBatch(batch, env) {
     }
     const imageUrl = await resolveTelegramFileUrl(env.botToken, fileId);
     try {
-      return await recognizeImageMessage(message, imageUrl, env);
+      return await recognizeTelegramImageMessage({
+        aiProvider,
+        message,
+        imageUrl,
+        systemPrompt,
+        promptMetadata,
+        env: options.rawEnv ?? process.env,
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       process.stderr.write(
@@ -824,72 +838,6 @@ async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }
       parts: 1,
     };
   }
-}
-
-async function recognizeImageMessage(message, imageUrl, env) {
-  const response = await fetchWithRetry(`${env.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${env.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: env.model,
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'telegram_training_image',
-          strict: true,
-          schema: buildRecognitionSchema(),
-        },
-      },
-      messages: [
-        {
-          role: 'system',
-          content: await loadRecognitionSystemPrompt(env),
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: [
-                `caption: ${message.caption || '(empty)'}`,
-                `text: ${message.text || '(empty)'}`,
-                '将图片识别为训练系统可写回的结构化结果。',
-              ].join('\n'),
-            },
-            {
-              type: 'image_url',
-              image_url: {
-                url: imageUrl,
-              },
-            },
-          ],
-        },
-      ],
-    }),
-  }, {
-    retryableStatuses: new Set([429, 500, 502, 503, 504]),
-    logPrefix: '[telegram-sync] AI recognition',
-    finalErrorMessage: 'AI recognition request failed',
-  });
-
-  if (!response.ok) {
-    throw new Error(`AI recognition failed with HTTP ${response.status}`);
-  }
-
-  const payload = await response.json();
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error('AI recognition returned empty content');
-  }
-
-  const parsed = JSON.parse(content);
-  return {
-    messageId: message.messageId,
-    ...parsed,
-  };
 }
 
 async function handleThoughtSyncBatch({

@@ -12,13 +12,52 @@ export async function loadStructuredSource(name) {
   return JSON.parse(raw);
 }
 
+export async function getStructuredSourceMetadata(name) {
+  const source = await loadStructuredSource(name);
+  return source.metadata ?? {};
+}
+
+export async function getRecognitionPromptMetadata() {
+  const [sharedMetadata, recognitionMetadata] = await Promise.all([
+    getStructuredSourceMetadata('shared-rules'),
+    getStructuredSourceMetadata('recognition-rules'),
+  ]);
+
+  return {
+    version: recognitionMetadata.version ?? sharedMetadata.version ?? '',
+    schemaName: recognitionMetadata.schemaName ?? 'telegram_training_image',
+    schemaVersion: recognitionMetadata.schemaVersion ?? 'v1',
+    sourceVersions: {
+      shared: sharedMetadata.version ?? null,
+      recognition: recognitionMetadata.version ?? null,
+    },
+  };
+}
+
+export async function getAnalysisPromptMetadata() {
+  const [sharedMetadata, analysisMetadata] = await Promise.all([
+    getStructuredSourceMetadata('shared-rules'),
+    getStructuredSourceMetadata('analysis-rules'),
+  ]);
+
+  return {
+    version: analysisMetadata.version ?? sharedMetadata.version ?? '',
+    sourceVersions: {
+      shared: sharedMetadata.version ?? null,
+      analysis: analysisMetadata.version ?? null,
+    },
+  };
+}
+
 export async function generateRecognitionPrompt() {
   const [shared, recognition] = await Promise.all([
     loadStructuredSource('shared-rules'),
     loadStructuredSource('recognition-rules'),
   ]);
+  const metadata = buildRecognitionPromptMetadata(shared.metadata, recognition.metadata);
 
   const sections = [
+    renderPromptMetadataHeader(metadata),
     recognition.role,
     '',
     renderSection(recognition.outputType),
@@ -39,8 +78,10 @@ export async function generateAnalysisPrompt() {
     loadStructuredSource('shared-rules'),
     loadStructuredSource('analysis-rules'),
   ]);
+  const metadata = buildAnalysisPromptMetadata(shared.metadata, analysis.metadata);
 
   const sections = [
+    renderPromptMetadataHeader(metadata),
     analysis.role,
     '',
     renderSection(analysis.outputRequirements),
@@ -71,6 +112,10 @@ export async function writePromptFiles() {
   return {
     recognition: path.join(outputDir, 'telegram-training-image-recognition.md'),
     analysis: path.join(outputDir, 'training-analysis.md'),
+    metadata: {
+      recognition: await getRecognitionPromptMetadata(),
+      analysis: await getAnalysisPromptMetadata(),
+    },
   };
 }
 
@@ -91,6 +136,45 @@ export function getTimeWindowPolicies() {
   };
 }
 
+export function stripPromptMetadataHeader(content) {
+  return String(content ?? '').replace(/^<!-- prompt-metadata .*? -->\r?\n/, '');
+}
+
+export function parsePromptMetadataHeader(content) {
+  const match = String(content ?? '').match(/^<!-- prompt-metadata (.*?) -->\r?\n/);
+  if (!match) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return {};
+  }
+}
+
+function buildRecognitionPromptMetadata(sharedMetadata = {}, recognitionMetadata = {}) {
+  return {
+    version: recognitionMetadata.version ?? sharedMetadata.version ?? '',
+    schemaName: recognitionMetadata.schemaName ?? 'telegram_training_image',
+    schemaVersion: recognitionMetadata.schemaVersion ?? 'v1',
+    sourceVersions: {
+      shared: sharedMetadata.version ?? null,
+      recognition: recognitionMetadata.version ?? null,
+    },
+  };
+}
+
+function buildAnalysisPromptMetadata(sharedMetadata = {}, analysisMetadata = {}) {
+  return {
+    version: analysisMetadata.version ?? sharedMetadata.version ?? '',
+    sourceVersions: {
+      shared: sharedMetadata.version ?? null,
+      analysis: analysisMetadata.version ?? null,
+    },
+  };
+}
+
 function renderSection(section) {
   if (!section) return '';
   const lines = [`## ${section.title}`];
@@ -102,6 +186,14 @@ function renderSection(section) {
   }
   lines.push('');
   return lines.join('\n');
+}
+
+function renderPromptMetadataHeader(metadata) {
+  if (!metadata || Object.keys(metadata).length === 0) {
+    return '';
+  }
+
+  return `<!-- prompt-metadata ${JSON.stringify(metadata)} -->\n`;
 }
 
 function renderTimeWindowPolicies(policies) {

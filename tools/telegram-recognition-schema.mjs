@@ -1,3 +1,6 @@
+export const RECOGNITION_SCHEMA_NAME = 'telegram_training_image';
+export const RECOGNITION_SCHEMA_VERSION = 'v1';
+
 export function buildRecognitionSchema() {
   return {
     type: 'object',

@@ -8,6 +8,7 @@ import {
   normalizeTrainingGoal,
   buildTrainingAnalysisSummary,
 } from '../tools/training-analysis.mjs';
+import { stripPromptMetadataHeader } from '../tools/prompt-generator.mjs';
 
 test('inferTrainingAnalysisFocus respects explicit recent-week requests', () => {
   const focus = inferTrainingAnalysisFocus('分析近一周训练及体脂数据，提供快速瘦腹建议。');
@@ -399,6 +400,12 @@ test('loadTrainingAnalysisPrompt reads the compiled prompt by default', async ()
   assert.match(prompt, /## 回答时间窗策略（focus\.p 代码对照）/);
   assert.match(prompt, /## 数据阅读规则/);
   assert.match(prompt, /## 科学依据维护说明/);
+});
+
+test('analysis prompt metadata header is stripped at runtime', () => {
+  const prompt = `${'<!-- prompt-metadata {"version":"2026-05-24"} -->\n'}训练数据分析助手`;
+
+  assert.equal(stripPromptMetadataHeader(prompt), '训练数据分析助手');
 });
 
 test('buildTrainingAnalysisSummary exposes richer data signals', () => {

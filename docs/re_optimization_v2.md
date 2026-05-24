@@ -11,6 +11,7 @@
 版本记录：
 
 - `1.1.2`：补充 H7 targeted tests 的完成状态，并同步版本到 `1.1.2`。
+- `1.1.3`：完成中优先级的 M1/M2/M4/M6，补齐统一 AI provider、prompt/schema 版本化、识别缓存和数据库读取窗口，并同步版本到 `1.1.3`。
 
 本轮文档细化后的核心原则：
 
@@ -49,7 +50,7 @@
 | --- | --- | --- |
 | `tools/telegram-sync.mjs` | Telegram 同步主流程、AI 调用、DB 持久化、fallback、通知 | 应用编排和基础设施混在一起，后续新增命令会继续膨胀 |
 | `tools/telegram-sync-lib.mjs` | update 分组、命令解析、识别归一、Markdown 渲染 | 领域逻辑、Telegram 逻辑和 Markdown 输出耦合 |
-| `tools/training-analysis.mjs` | summary、意图识别、AI 请求、回复切分 | AI provider 不可替换，分析策略难独立测试 |
+| `tools/training-analysis.mjs` | summary、意图识别、AI 请求、回复切分 | AI provider 可替换性弱，分析策略难独立测试 |
 | `tools/training-db-write.mjs` | ingest、core、thought、transaction、SQL | SQL 与业务合并，repository 边界不清晰 |
 | `themes/cactus/layout/dashboard.ejs` | 页面渲染、指标计算、HTML 构造 | EJS 过重，数据 view model 和模板职责未完全分离 |
 
@@ -412,15 +413,23 @@ Cloudflare 控制台中的以下变量和 binding 第一阶段不得要求改名
 | --- | --- |
 | 目标 | 统一图片识别和训练分析的 AI 调用 |
 | 代码范围 | `src/ai/provider.mjs`、`src/ai/openai-compatible-provider.mjs`、识别和分析调用点 |
-| 实施方式 | 当前 Chat Completions 兼容接口作为默认 provider |
+| 实施方式 | 当前 Chat Completions 兼容接口作为默认 provider，分析和图片识别都走同一 adapter |
 | 禁止事项 | 不要求新增 GitHub Variables，不要求修改 `AI_BASE_URL`、`AI_MODEL` |
 | 风险 | 中 |
 | 验收命令 | `node --test test/training-analysis.test.mjs test/telegram-sync-runner.test.mjs` |
 
+执行状态：
+
+| 项 | 内容 |
+| --- | --- |
+| 状态 | 已完成 |
+| 完成日期 | 2026-05-24 |
+| 说明 | 图片识别与训练分析都通过统一 AI provider adapter 走 Chat Completions 兼容入口，默认 provider 仍为 `openai-compatible`，未要求新增 GitHub Variables |
+
 默认策略：
 
 - 未配置 `AI_PROVIDER` 时，使用 `openai-compatible`。
-- 未配置 `AI_TIMEOUT_MS` 时，使用当前 fetch 行为或内部默认值。
+- 未配置 `AI_TIMEOUT_MS` 时，保持当前请求超时语义，不要求新增变量。
 - 所有新增 env 都必须有代码默认值。
 
 ### M2：Prompt/schema 版本化
@@ -443,6 +452,14 @@ Cloudflare 控制台中的以下变量和 binding 第一阶段不得要求改名
   "schemaVersion": "v1"
 }
 ```
+
+执行状态：
+
+| 项 | 内容 |
+| --- | --- |
+| 状态 | 已完成 |
+| 完成日期 | 2026-05-24 |
+| 说明 | `prompts/_source/*.json` 已加入 metadata，`tools/prompt-generator.mjs` 会生成带版本 header 的 prompt，运行时会剥离 header 后再交给模型 |
 
 ### M3：AI schema validator
 
@@ -485,13 +502,21 @@ telegram:file_unique_id:<file_unique_id>:prompt:<prompt_version>:schema:<schema_
 - 开启后命中缓存不得调用 AI。
 - prompt/schema/model 变化必须自动 miss。
 
+执行状态：
+
+| 项 | 内容 |
+| --- | --- |
+| 状态 | 已完成 |
+| 完成日期 | 2026-05-24 |
+| 说明 | 新增 `src/ai/recognition-service.mjs`，默认关闭缓存，缓存 key 绑定 file_unique_id、promptVersion、schemaVersion 和 model；开启后命中缓存可直接回放识别结果 |
+
 ### M5：command registry 声明式化
 
 | 项 | 内容 |
 | --- | --- |
 | 目标 | 新增 Telegram 命令时只注册，不改主 if/else 流程 |
-| 代码范围 | `src/telegram/command-registry.mjs` |
-| 实施方式 | 先把现有命令声明成 registry，batch shape 保持不变 |
+| 代码范围 | `src/telegram/command-registry.mjs`、`tools/telegram-sync-lib.mjs` |
+| 实施方式 | 先把现有命令声明成 registry，group 入口消费 registry，batch shape 保持不变 |
 | 禁止事项 | 不改变命令优先级，不改变旧别名 |
 | 风险 | 中 |
 | 验收命令 | `node --test test/telegram-sync.test.mjs test/telegram-sync-runner.test.mjs` |
@@ -506,6 +531,13 @@ telegram:file_unique_id:<file_unique_id>:prompt:<prompt_version>:schema:<schema_
 6. reply edit
 7. thought
 8. image
+
+当前实现说明：
+
+- 命令注册表放在 `src/telegram/command-registry.mjs`
+- `tools/telegram-sync-lib.mjs` 只负责按优先级消费 registry，不再手写主路由分支
+- `batch.kind`、alias、reply 行为和图片分组结构保持不变
+- 默认无额外 feature flag，属于内部声明式重排，不影响现有同步结果
 
 ### M6：数据库读取窗口设计
 
@@ -523,6 +555,14 @@ telegram:file_unique_id:<file_unique_id>:prompt:<prompt_version>:schema:<schema_
 - 不传日期参数时结果完全兼容。
 - 传日期参数时只返回窗口内 daily。
 - latest 和 charts 在窗口模式下语义明确，不能影响完整导出。
+
+执行状态：
+
+| 项 | 内容 |
+| --- | --- |
+| 状态 | 已完成 |
+| 完成日期 | 2026-05-24 |
+| 说明 | `readTrainingSnapshotFromDatabase` 现已支持 `dateFrom` / `dateTo`，默认仍返回完整结果；窗口模式下只裁剪 daily，并保持 latest/charts 语义清晰 |
 
 ## 7. 低优先级任务
 

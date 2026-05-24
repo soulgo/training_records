@@ -11,6 +11,14 @@ async function importTelegramSyncLib() {
   }
 }
 
+async function importTelegramCommandRegistry() {
+  try {
+    return await import('../src/telegram/command-registry.mjs');
+  } catch {
+    return null;
+  }
+}
+
 test('groups album document images and applies filename date when screenshots are undated', async () => {
   const lib = await importTelegramSyncLib();
 
@@ -301,8 +309,25 @@ test('groups /analysis text messages into analysis batches', async () => {
 
 test('groups supported Telegram command aliases without changing routed batch shape', async () => {
   const lib = await importTelegramSyncLib();
+  const registry = await importTelegramCommandRegistry();
 
   assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+  assert.ok(registry?.getTelegramCommandRegistry, 'getTelegramCommandRegistry export missing');
+
+  const commandRegistry = registry.getTelegramCommandRegistry();
+  assert.deepEqual(
+    commandRegistry.map((entry) => entry.name),
+    ['move', 'delete', 'analysis', 'explicit_edit', 'edited_message', 'reply_edit', 'thought', 'image'],
+  );
+  assert.deepEqual(
+    commandRegistry.map((entry) => entry.priority),
+    [1, 2, 3, 4, 5, 6, 7, 8],
+  );
+  assert.deepEqual(commandRegistry[0].aliases, ['/move', '/移动', '/thought', '/随想']);
+  assert.deepEqual(commandRegistry[1].aliases, ['/thought-delete', '/thoughtdel', '/delete-thought', '/删随想', '/随想删']);
+  assert.deepEqual(commandRegistry[2].aliases, ['/analysis', '/分析']);
+  assert.deepEqual(commandRegistry[3].aliases, ['/thought-edit', '/thoughtedit', '/edit-thought', '/编随想', '/随想编']);
+  assert.deepEqual(commandRegistry[6].aliases, ['/thought', '/随想']);
 
   const fixtures = [
     {

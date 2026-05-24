@@ -9,11 +9,17 @@ import {
   generateAnalysisPrompt,
   getTimeWindowPolicies,
   loadStructuredSource,
+  parsePromptMetadataHeader,
+  stripPromptMetadataHeader,
 } from '../tools/prompt-generator.mjs';
 
 test('generateRecognitionPrompt includes all key constraints', async () => {
   const prompt = await generateRecognitionPrompt();
 
+  assert.match(prompt, /^<!-- prompt-metadata /);
+  assert.equal(parsePromptMetadataHeader(prompt).version, '2026-05-24');
+  assert.equal(parsePromptMetadataHeader(prompt).schemaName, 'telegram_training_image');
+  assert.equal(parsePromptMetadataHeader(prompt).schemaVersion, 'v1');
   assert.match(prompt, /只能输出符合 schema 的 JSON/);
   assert.match(prompt, /## 输出类型/);
   assert.match(prompt, /`imageType` 只能是：/);
@@ -42,6 +48,8 @@ test('generateRecognitionPrompt includes all key constraints', async () => {
 test('generateAnalysisPrompt includes all key sections', async () => {
   const prompt = await generateAnalysisPrompt();
 
+  assert.match(prompt, /^<!-- prompt-metadata /);
+  assert.equal(parsePromptMetadataHeader(prompt).version, '2026-05-24');
   assert.match(prompt, /训练数据分析助手/);
   assert.match(prompt, /## 输出要求/);
   assert.match(prompt, /只能基于给到你的结构化证据说话/);
@@ -140,4 +148,14 @@ test('generated prompts are deterministic', async () => {
   ]);
 
   assert.equal(first, second);
+});
+
+test('prompt metadata header can be parsed and stripped', () => {
+  const header = '<!-- prompt-metadata {"version":"2026-05-24","schemaName":"telegram_training_image"} -->\nhello';
+
+  assert.deepEqual(parsePromptMetadataHeader(header), {
+    version: '2026-05-24',
+    schemaName: 'telegram_training_image',
+  });
+  assert.equal(stripPromptMetadataHeader(header), 'hello');
 });

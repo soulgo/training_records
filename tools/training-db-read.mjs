@@ -88,6 +88,8 @@ export async function readTrainingSnapshotFromDatabase(options = {}) {
     createClient,
     config,
     now: options.now,
+    dateFrom: options.dateFrom,
+    dateTo: options.dateTo,
   });
 }
 
@@ -110,6 +112,8 @@ export async function readArchiveTrainingSnapshotFromDatabase(options = {}) {
     createClient,
     config,
     now: options.now,
+    dateFrom: options.dateFrom,
+    dateTo: options.dateTo,
   });
 }
 
@@ -157,7 +161,7 @@ export async function readTrainingSnapshotFromDatabaseClient(client, now) {
   });
 }
 
-async function readTrainingSnapshotFromDatabaseWithClients({ createClient, config, now }) {
+async function readTrainingSnapshotFromDatabaseWithClients({ createClient, config, now, dateFrom, dateTo }) {
   const clients = Array.from({ length: 4 }, () => createClient(config));
 
   try {
@@ -176,6 +180,8 @@ async function readTrainingSnapshotFromDatabaseWithClients({ createClient, confi
       activityRows: activityResult.rows,
       mealRows: mealResult.rows,
       now,
+      dateFrom,
+      dateTo,
     });
   } finally {
     await Promise.allSettled(clients.map((client) => client.end?.()));
@@ -252,7 +258,13 @@ export async function readArchiveTrainingSnapshotFromDatabaseClient(client, now)
   });
 }
 
-async function readArchiveTrainingSnapshotFromDatabaseWithClients({ createClient, config, now }) {
+async function readArchiveTrainingSnapshotFromDatabaseWithClients({
+  createClient,
+  config,
+  now,
+  dateFrom,
+  dateTo,
+}) {
   const clients = Array.from({ length: 4 }, () => createClient(config));
 
   try {
@@ -271,6 +283,8 @@ async function readArchiveTrainingSnapshotFromDatabaseWithClients({ createClient
       activityRows: activityResult.rows,
       mealRows: mealResult.rows,
       now,
+      dateFrom,
+      dateTo,
     });
   } finally {
     await Promise.allSettled(clients.map((client) => client.end?.()));
@@ -283,12 +297,18 @@ function buildTrainingSnapshotFromRows({
   activityRows,
   mealRows,
   now,
+  dateFrom,
+  dateTo,
 }) {
-  const measurementsByDate = groupByDate(measurementRows, 'archived_date');
-  const activitiesByDate = groupByDate(activityRows, 'archived_date');
-  const mealsByDate = groupByDate(mealRows, 'archived_date');
+  const filteredDayRows = filterRowsByDateWindow(dayRows, 'archived_date', dateFrom, dateTo);
+  const filteredMeasurementRows = filterRowsByDateWindow(measurementRows, 'archived_date', dateFrom, dateTo);
+  const filteredActivityRows = filterRowsByDateWindow(activityRows, 'archived_date', dateFrom, dateTo);
+  const filteredMealRows = filterRowsByDateWindow(mealRows, 'archived_date', dateFrom, dateTo);
+  const measurementsByDate = groupByDate(filteredMeasurementRows, 'archived_date');
+  const activitiesByDate = groupByDate(filteredActivityRows, 'archived_date');
+  const mealsByDate = groupByDate(filteredMealRows, 'archived_date');
 
-  const daily = dayRows.map((row) => {
+  const daily = filteredDayRows.map((row) => {
     const archivedDate = normalizeDateKey(row.archived_date);
     const measurements = (measurementsByDate.get(archivedDate) ?? []).map((measurement) => ({
       archivedDate,
@@ -352,6 +372,23 @@ function buildTrainingSnapshotFromRows({
     daily,
     now?.toISOString?.() ?? new Date().toISOString(),
   );
+}
+
+function filterRowsByDateWindow(rows, key, dateFrom, dateTo) {
+  if (!dateFrom && !dateTo) {
+    return rows;
+  }
+
+  return rows.filter((row) => {
+    const archivedDate = normalizeDateKey(row[key]);
+    if (dateFrom && archivedDate < dateFrom) {
+      return false;
+    }
+    if (dateTo && archivedDate > dateTo) {
+      return false;
+    }
+    return true;
+  });
 }
 
 function groupByDate(rows, key) {

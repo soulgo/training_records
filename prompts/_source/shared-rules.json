@@ -1,6 +1,10 @@
 {
   "_description": "Shared rules referenced by both recognition and analysis prompts. Edit here, then regenerate prompts via `node tools/prompt-generator.mjs`.",
 
+  "metadata": {
+    "version": "2026-05-24"
+  },
+
   "nullConventions": {
     "title": "空值约定",
     "rules": [

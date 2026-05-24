@@ -2,6 +2,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { stripPromptMetadataHeader } from './prompt-generator.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const defaultPromptPath = path.join(rootDir, 'prompts', 'training-analysis.md');
@@ -21,7 +23,7 @@ export async function loadBasePrompt(env) {
   const promptPath = env.TRAINING_ANALYSIS_PROMPT_PATH?.trim() || defaultPromptPath;
   try {
     const content = await readFile(promptPath, 'utf8');
-    const trimmed = content.trim();
+    const trimmed = stripPromptMetadataHeader(content).trim();
     if (trimmed) {
       return trimmed;
     }
@@ -30,7 +32,7 @@ export async function loadBasePrompt(env) {
   if (promptPath !== defaultPromptPath) {
     try {
       const content = await readFile(defaultPromptPath, 'utf8');
-      const trimmed = content.trim();
+      const trimmed = stripPromptMetadataHeader(content).trim();
       if (trimmed) {
         return trimmed;
       }

@@ -15,9 +15,105 @@ import {
   resolveThoughtModuleLabel,
 } from './lib/thought-modules.mjs';
 import { appendMetric } from './lib/markdown-render.mjs';
+import { createTelegramCommandResolver } from '../src/telegram/command-registry.mjs';
 
 const FINGERPRINT_RE = /^<!-- telegram-fingerprint: ([^ ]+) -->$/m;
 const TELEGRAM_SECTION_TAG = '<!-- telegram-sync-section -->';
+
+const telegramCommandResolver = createTelegramCommandResolver({
+  move: {
+    match(normalized) {
+      return parseThoughtMoveCommand(normalized.text);
+    },
+    build(normalized) {
+      return buildThoughtMoveBatch(normalized);
+    },
+  },
+  delete: {
+    match(normalized) {
+      return parseThoughtDeleteCommand(normalized.text);
+    },
+    build(normalized) {
+      return buildThoughtDeleteBatch(normalized);
+    },
+  },
+  analysis: {
+    match(normalized) {
+      return parseAnalysisCommand(normalized.text);
+    },
+    build(normalized) {
+      return buildAnalysisBatch(normalized);
+    },
+  },
+  explicit_edit: {
+    match(normalized, context) {
+      if (normalized.updateType !== 'message' || normalized.mediaGroupId) {
+        return null;
+      }
+      return (
+        context.parsedThoughtEdit ??
+        parseThoughtEditCommand(normalized.text) ??
+        parseThoughtEditCommand(normalized.caption)
+      );
+    },
+    build(normalized, context, parsedThoughtEdit) {
+      return buildExplicitThoughtEditBatch(normalized, parsedThoughtEdit);
+    },
+  },
+  edited_message: {
+    match(normalized, context) {
+      if (normalized.updateType !== 'edited_message') {
+        return null;
+      }
+      return context.knownThoughtMessageKeys.has(buildThoughtMessageKey(normalized.chatId, normalized.messageId))
+        ? { targetMessageId: normalized.messageId }
+        : null;
+    },
+    build(normalized) {
+      return buildThoughtEditBatch(normalized);
+    },
+  },
+  reply_edit: {
+    match(normalized, context) {
+      const parsedThought =
+        context.parsedThought ??
+        parseThoughtCommand(normalized.text) ??
+        parseThoughtCommand(normalized.caption);
+      if (
+        !parsedThought ||
+        !normalized.replyToMessageId ||
+        !context.knownThoughtMessageKeys.has(buildThoughtMessageKey(normalized.chatId, normalized.replyToMessageId))
+      ) {
+        return null;
+      }
+      return { targetMessageId: normalized.replyToMessageId };
+    },
+    build(normalized) {
+      return buildThoughtEditBatch(normalized, {
+        targetMessageId: normalized.replyToMessageId,
+      });
+    },
+  },
+  thought: {
+    match(normalized, context) {
+      if (normalized.updateType !== 'message' || normalized.mediaGroupId) {
+        return null;
+      }
+      return context.parsedThought ?? parseThoughtCommand(normalized.text) ?? parseThoughtCommand(normalized.caption);
+    },
+    build(normalized) {
+      return buildThoughtBatch(normalized);
+    },
+    effects(normalized) {
+      return [
+        {
+          type: 'knownThoughtMessageKey',
+          key: buildThoughtMessageKey(normalized.chatId, normalized.messageId),
+        },
+      ];
+    },
+  },
+});
 
 export function groupTelegramUpdates(updates, options = {}) {
   const batches = [];
@@ -39,47 +135,19 @@ export function groupTelegramUpdates(updates, options = {}) {
       knownThoughtMessageKeys.add(buildThoughtMessageKey(normalized.chatId, normalized.messageId));
     }
 
-    const thoughtMoveBatch = buildThoughtMoveBatch(normalized);
-    if (thoughtMoveBatch) {
-      batches.push(thoughtMoveBatch);
-      continue;
-    }
-
-    const thoughtDeleteBatch = buildThoughtDeleteBatch(normalized);
-    if (thoughtDeleteBatch) {
-      batches.push(thoughtDeleteBatch);
-      continue;
-    }
-
-    const analysisBatch = buildAnalysisBatch(normalized);
-    if (analysisBatch) {
-      batches.push(analysisBatch);
-      continue;
-    }
-
-    if (parsedThoughtEdit && normalized.updateType === 'message' && !normalized.mediaGroupId) {
-      const thoughtEditBatch = buildExplicitThoughtEditBatch(normalized, parsedThoughtEdit);
-      batches.push(thoughtEditBatch);
-      continue;
-    }
-
-    if (normalized.updateType === 'edited_message') {
-      if (knownThoughtMessageKeys.has(buildThoughtMessageKey(normalized.chatId, normalized.messageId))) {
-        const thoughtEditBatch = buildThoughtEditBatch(normalized);
-        batches.push(thoughtEditBatch);
+    const resolution = telegramCommandResolver.resolve(normalized, {
+      knownThoughtMessageKeys,
+      parsedThought,
+      parsedThoughtEdit,
+      buildThoughtMessageKey,
+    });
+    if (resolution) {
+      for (const effect of resolution.effects ?? []) {
+        if (effect?.type === 'knownThoughtMessageKey' && effect.key) {
+          knownThoughtMessageKeys.add(effect.key);
+        }
       }
-      continue;
-    }
-
-    if (
-      parsedThought &&
-      normalized.replyToMessageId &&
-      knownThoughtMessageKeys.has(buildThoughtMessageKey(normalized.chatId, normalized.replyToMessageId))
-    ) {
-      const thoughtEditBatch = buildThoughtEditBatch(normalized, {
-        targetMessageId: normalized.replyToMessageId,
-      });
-      batches.push(thoughtEditBatch);
+      batches.push(resolution.batch);
       continue;
     }
 
@@ -95,13 +163,6 @@ export function groupTelegramUpdates(updates, options = {}) {
         batches.push(batch);
       }
       batch.messages.push(normalized);
-      continue;
-    }
-
-    const thoughtBatch = buildThoughtBatch(normalized);
-    if (thoughtBatch) {
-      batches.push(thoughtBatch);
-      knownThoughtMessageKeys.add(buildThoughtMessageKey(normalized.chatId, normalized.messageId));
       continue;
     }
 

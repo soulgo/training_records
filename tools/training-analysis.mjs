@@ -8,7 +8,7 @@ import {
 } from './training-snapshot.mjs';
 import { buildTrainingAnalysisPrompt } from './training-prompt.mjs';
 import { roundTo } from './training-domain.mjs';
-import { fetchWithRetry } from './lib/http-retry.mjs';
+import { createAiProvider } from '../src/ai/provider.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -18,9 +18,9 @@ const ANALYSIS_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 export async function generateTrainingAnalysisReply(options = {}) {
   const rawEnv = options.env ?? process.env;
-  const env = normalizeAnalysisEnv(rawEnv);
   const question = normalizeAnalysisQuestion(options.question);
   const trainingGoal = normalizeTrainingGoal(options.trainingGoal ?? rawEnv.TRAINING_ANALYSIS_GOAL);
+  const aiProvider = options.aiProvider ?? createAiProvider(rawEnv);
   const snapshot =
     options.snapshot ??
     (await loadSnapshotForAnalysis(options));
@@ -31,10 +31,9 @@ export async function generateTrainingAnalysisReply(options = {}) {
   const summary = buildTrainingAnalysisSummary(snapshot, options.now ?? new Date());
   const focus = inferTrainingAnalysisFocus(question);
   const content = await requestTrainingAnalysis({
-    env,
+    aiProvider,
     prompt,
     question,
-    trainingGoal,
     focus,
     summary,
     fetchImpl: options.fetchImpl ?? fetch,
@@ -242,28 +241,6 @@ export function splitTelegramMessage(text, maxLength = 3900) {
   return parts;
 }
 
-function normalizeAnalysisEnv(env) {
-  const apiKey = env.AI_API_KEY;
-  const baseUrl = env.AI_BASE_URL;
-  const model = env.AI_MODEL;
-
-  for (const [name, value] of [
-    ['AI_API_KEY', apiKey],
-    ['AI_BASE_URL', baseUrl],
-    ['AI_MODEL', model],
-  ]) {
-    if (!value) {
-      throw new Error(`Missing required environment variable: ${name}`);
-    }
-  }
-
-  return {
-    apiKey,
-    baseUrl: baseUrl.replace(/\/+$/, ''),
-    model,
-  };
-}
-
 function canFallbackToMarkdownSnapshot(error, env) {
   if (
     !isIncompleteDatabaseSnapshotError(error) &&
@@ -276,40 +253,30 @@ function canFallbackToMarkdownSnapshot(error, env) {
 }
 
 async function requestTrainingAnalysis({
-  env,
+  aiProvider,
   prompt,
   question,
-  trainingGoal,
   focus,
   summary,
   fetchImpl,
   maxAttempts,
   baseDelayMs,
 }) {
-  const response = await fetchWithRetry(`${env.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${env.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: env.model,
-      messages: [
-        {
-          role: 'system',
-          content: prompt,
-        },
-        {
-          role: 'user',
-          content: [
-            `Q: ${question}`,
-            `focus: ${JSON.stringify(focus)}`,
-            `data: ${JSON.stringify(summary)}`,
-          ].join('\n'),
-        },
-      ],
-    }),
-  }, {
+  const response = await aiProvider.requestChatCompletion({
+    messages: [
+      {
+        role: 'system',
+        content: prompt,
+      },
+      {
+        role: 'user',
+        content: [
+          `Q: ${question}`,
+          `focus: ${JSON.stringify(focus)}`,
+          `data: ${JSON.stringify(summary)}`,
+        ].join('\n'),
+      },
+    ],
     fetchImpl,
     maxAttempts,
     baseDelayMs,
