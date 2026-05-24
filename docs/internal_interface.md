@@ -73,6 +73,21 @@
 - `import:markdown` / `reconcile:markdown` 以 Markdown 解析结果为准，会按日期重写 `core.training_day`、`core.measurement`、`core.activity`、`core.meal`。
 - `export:markdown` 默认从数据库导出；如果 `runtime/telegram-sync-pending.ndjson` 非空，会改用 Markdown 源，避免数据库未补偿时覆盖回退内容。
 
+### 2.4 Targeted Tests
+
+v2 第一阶段 H7 已补充一组迁移保护测试，后续 H1-H6 每次迁移前后建议先跑：
+
+```bash
+node --test test/telegram-sync.test.mjs test/training-analysis.test.mjs test/training-db-core.test.mjs test/dashboard-view.test.mjs
+```
+
+这组测试锁定：
+
+- Telegram command alias 和 batch 顶层 shape
+- `/analysis` intent 与时间窗优先级
+- `persistNormalizedBatch` 事务 rollback 和 `payload_hash` unchanged 行为
+- dashboard view model 的 overview card、chart window 与顶层字段契约
+
 ## 3. HTTP Webhook
 
 ### 3.1 Cloudflare Worker Telegram Webhook
@@ -206,10 +221,17 @@ Worker 环境变量：
 | `/thought 锻炼 <正文>` / `/随想 锻炼 <正文>` | `可对外` | 新增锻炼随想 | 模块为 `workout`，tags 为 `训练`、`随想`、`Telegram` |
 | `/thought 杂七杂八 <正文>` / `/随想 杂七杂八 <正文>` | `可对外` | 新增杂项随想 | 模块为 `misc`，tags 为 `杂七杂八`、`随想`、`Telegram` |
 | `/thought-edit <id> <正文>` | `可对外` | 显式按 Telegram message id 编辑随想 | 中文别名见下方 |
+| `/thoughtedit <id> <正文>` | `可对外` | 编辑随想 | `/thought-edit` 兼容别名 |
+| `/edit-thought <id> <正文>` | `可对外` | 编辑随想 | `/thought-edit` 兼容别名 |
+| `/编随想 <id> <正文>` | `可对外` | 编辑随想 | `/thought-edit` 中文别名 |
 | `/随想编 <id> <正文>` | `可对外` | 编辑随想 | 同 `thought-edit` |
 | `/thought-delete <id>` | `可对外` | 删除随想 | 可回复目标消息，也可显式传 id |
+| `/thoughtdel <id>` | `可对外` | 删除随想 | `/thought-delete` 兼容别名 |
+| `/delete-thought <id>` | `可对外` | 删除随想 | `/thought-delete` 兼容别名 |
+| `/删随想 <id>` | `可对外` | 删除随想 | `/thought-delete` 中文别名 |
 | `/随想删 <id>` | `可对外` | 删除随想 | 同 `thought-delete` |
 | `/move <id> 杂七杂八` | `可对外` | 移动随想到目标模块 | 中文别名 `/移动` |
+| `/移动 <id> 杂七杂八` | `可对外` | 移动随想到目标模块 | `/move` 中文别名 |
 | `/随想 <id> 锻炼` | `可对外` | 兼容旧习惯的移动写法 | 等价于 `/移动 <id> 锻炼` |
 
 随想文件契约：
@@ -658,6 +680,7 @@ AI 返回内容必须是符合 schema 的 JSON 字符串。顶层字段：
 
 - `persistNormalizedBatch` 以 batch JSON 的 SHA-256 作为 `payload_hash`。
 - 已存在且 hash 相同的 batch 返回 `unchanged`。
+- 写入过程包在事务中，core 写入失败时会执行 `ROLLBACK`，不会提交半批次。
 - `telegram_message` 和 `telegram_recognition` 通过 `batch_id` 级联关联 batch。
 - `getLastProcessedTelegramUpdateId` 读取 `telegram_message.update_id` 最大值，作为轮询 offset 的依据。
 
@@ -764,6 +787,7 @@ AI 返回内容必须是符合 schema 的 JSON 字符串。顶层字段：
 
 变更接口后请同步检查：
 
+- 修改高风险边界时，先补或更新 targeted tests，并记录到 `docs/re_optimization_v2.md`。
 - 新增或修改 npm script：更新第 2 节。
 - 修改 Worker 请求、响应或环境变量：更新第 3 节和第 10 节。
 - 修改 Telegram 命令解析：更新第 4 节。

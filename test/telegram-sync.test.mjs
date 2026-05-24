@@ -299,6 +299,162 @@ test('groups /analysis text messages into analysis batches', async () => {
   assert.equal(batches[1].analysis.question, '最近饮食怎么样');
 });
 
+test('groups supported Telegram command aliases without changing routed batch shape', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const fixtures = [
+    {
+      text: '/thought-edit 126 修订后的正文',
+      kind: 'thought_edit',
+      payloadKey: 'thoughtEdit',
+      command: '/thought-edit',
+      targetMessageId: 126,
+      body: '修订后的正文',
+    },
+    {
+      text: '/thoughtedit 127 修订后的正文',
+      kind: 'thought_edit',
+      payloadKey: 'thoughtEdit',
+      command: '/thoughtedit',
+      targetMessageId: 127,
+      body: '修订后的正文',
+    },
+    {
+      text: '/edit-thought 128 杂七杂八 修订后的正文',
+      kind: 'thought_edit',
+      payloadKey: 'thoughtEdit',
+      command: '/edit-thought',
+      targetMessageId: 128,
+      body: '修订后的正文',
+      thoughtModule: 'misc',
+    },
+    {
+      text: '/编随想 129 修订后的正文',
+      kind: 'thought_edit',
+      payloadKey: 'thoughtEdit',
+      command: '/编随想',
+      targetMessageId: 129,
+      body: '修订后的正文',
+    },
+    {
+      text: '/随想编 130 锻炼 修订后的正文',
+      kind: 'thought_edit',
+      payloadKey: 'thoughtEdit',
+      command: '/随想编',
+      targetMessageId: 130,
+      body: '修订后的正文',
+      thoughtModule: 'workout',
+    },
+    {
+      text: '/thought-delete 126',
+      kind: 'thought_delete',
+      payloadKey: 'thoughtDelete',
+      command: '/thought-delete',
+      targetMessageId: 126,
+    },
+    {
+      text: '/thoughtdel 127',
+      kind: 'thought_delete',
+      payloadKey: 'thoughtDelete',
+      command: '/thoughtdel',
+      targetMessageId: 127,
+    },
+    {
+      text: '/delete-thought 128',
+      kind: 'thought_delete',
+      payloadKey: 'thoughtDelete',
+      command: '/delete-thought',
+      targetMessageId: 128,
+    },
+    {
+      text: '/删随想 129',
+      kind: 'thought_delete',
+      payloadKey: 'thoughtDelete',
+      command: '/删随想',
+      targetMessageId: 129,
+    },
+    {
+      text: '/随想删 130',
+      kind: 'thought_delete',
+      payloadKey: 'thoughtDelete',
+      command: '/随想删',
+      targetMessageId: 130,
+    },
+    {
+      text: '/move 126 杂七杂八',
+      kind: 'thought_move',
+      payloadKey: 'thoughtMove',
+      command: '/move',
+      targetMessageId: 126,
+      thoughtModule: 'misc',
+    },
+    {
+      text: '/移动 127 锻炼',
+      kind: 'thought_move',
+      payloadKey: 'thoughtMove',
+      command: '/移动',
+      targetMessageId: 127,
+      thoughtModule: 'workout',
+    },
+    {
+      text: '/analysis 今天怎么练',
+      kind: 'analysis',
+      payloadKey: 'analysis',
+      command: '/analysis',
+      question: '今天怎么练',
+    },
+    {
+      text: '/分析 最近饮食怎么样',
+      kind: 'analysis',
+      payloadKey: 'analysis',
+      command: '/分析',
+      question: '最近饮食怎么样',
+    },
+  ];
+
+  for (const [index, fixture] of fixtures.entries()) {
+    const messageId = 800 + index;
+    const [batch] = lib.groupTelegramUpdates([
+      {
+        update_id: 700 + index,
+        message: {
+          message_id: messageId,
+          date: 1_746_748_800 + index,
+          chat: { id: 42 },
+          text: fixture.text,
+        },
+      },
+    ]);
+
+    assert.ok(batch, `expected batch for ${fixture.text}`);
+    assert.equal(batch.kind, fixture.kind, fixture.text);
+    assert.deepEqual(
+      Object.keys(batch).sort(),
+      ['batchId', 'kind', 'messages', fixture.payloadKey].sort(),
+      fixture.text,
+    );
+    assert.equal(batch.messages.length, 1, fixture.text);
+    assert.equal(batch.messages[0].messageId, messageId, fixture.text);
+
+    const payload = batch[fixture.payloadKey];
+    assert.equal(payload.command, fixture.command, fixture.text);
+    if ('targetMessageId' in fixture) {
+      assert.equal(payload.targetMessageId, fixture.targetMessageId, fixture.text);
+    }
+    if ('body' in fixture) {
+      assert.equal(payload.body, fixture.body, fixture.text);
+    }
+    if ('thoughtModule' in fixture) {
+      assert.equal(payload.thoughtModule, fixture.thoughtModule, fixture.text);
+    }
+    if ('question' in fixture) {
+      assert.equal(payload.question, fixture.question, fixture.text);
+    }
+  }
+});
+
 test('groups edited thought messages into thought_edit batches when the message is already a known thought', async () => {
   const lib = await importTelegramSyncLib();
 

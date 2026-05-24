@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 
 import {
   backfillCoreFromLatestArchiveSnapshot,
@@ -207,6 +208,94 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.ok(calls.some(([sql]) => /insert into core\.meal/i.test(sql)));
   assert.equal(calls.at(-2)[0], 'COMMIT');
   assert.equal(calls.at(-1)[0], 'end');
+});
+
+test('persistNormalizedBatch rolls back the transaction when a core write fails', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash\s+from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/insert into core\.training_day/i.test(sql)) {
+        throw new Error('core write failed');
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  await assert.rejects(
+    persistNormalizedBatch({
+      batch: normalizedBatch,
+      env: {
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      createClient() {
+        return fakeClient;
+      },
+      processedAt: new Date('2026-05-13T00:00:00.000Z'),
+    }),
+    /core write failed/,
+  );
+
+  const statements = calls.map(([sql]) => sql);
+  assert.equal(statements.includes('BEGIN'), true);
+  assert.equal(statements.includes('ROLLBACK'), true);
+  assert.equal(statements.includes('COMMIT'), false);
+  assert.equal(calls.at(-1)[0], 'end');
+  assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)));
+});
+
+test('persistNormalizedBatch returns unchanged and rolls back when payload hash matches', async () => {
+  const calls = [];
+  const expectedPayloadHash = createHash('sha256')
+    .update(JSON.stringify(normalizedBatch), 'utf8')
+    .digest('hex');
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash\s+from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [{ payload_hash: expectedPayloadHash }] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: normalizedBatch,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  assert.equal(result.status, 'unchanged');
+  assert.equal(result.batchId, normalizedBatch.batchId);
+  assert.equal(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)), false);
+  assert.deepEqual(
+    calls.map(([sql]) => sql),
+    ['connect', 'BEGIN', calls[2][0], 'ROLLBACK', 'end'],
+  );
 });
 
 test('persistNormalizedBatch mirrors thought create, edit, and delete batches into core.thought', async () => {

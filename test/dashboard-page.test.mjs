@@ -196,7 +196,7 @@ test('homepage uses root-relative asset and navigation paths for custom domain d
 test('homepage footer renders the version from the changelog', () => {
   const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
 
-  assert.match(homepage, /<span class="footer-version"[^>]*>v1\.1\.1<\/span>/);
+  assert.match(homepage, /<span class="footer-version"[^>]*>v1\.1\.2<\/span>/);
 });
 
 test('homepage removes the dashboard hero intro and shows trained day count card', () => {

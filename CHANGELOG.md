@@ -13,6 +13,13 @@
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-05-24
+
+### Changed
+
+- 补充高风险 targeted tests，先锁定 Telegram 命令路由、训练分析意图、数据库事务回滚和 dashboard view model 契约。
+- 同步项目包版本号到 `1.1.2`。
+
 ## [1.1.1] - 2026-05-24
 
 ### Changed
@@ -35,7 +42,8 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/soulgo/training_records/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/soulgo/training_records/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/soulgo/training_records/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/soulgo/training_records/releases/tag/v1.0.0

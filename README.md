@@ -35,6 +35,12 @@
 - 专门的 OCR 服务后端
 - 管理后台
 
+当前 v2 第一阶段重构状态：
+
+- 已完成 H7 targeted tests，先锁定后续渐进服务化会触碰的高风险行为
+- 已覆盖 Telegram 命令 alias 与 batch shape、`/analysis` intent、数据库事务 rollback / `payload_hash` unchanged、dashboard view model contract
+- 尚未开始 `src/` 骨架与生产代码迁移；`tools/*.mjs`、npm scripts、workflow、Cloudflare、DB schema 和 Hexo 输出结构保持不变
+
 ## 3. 整体流程
 
 ```mermaid
@@ -394,6 +400,7 @@ npm run build
 - `/analysis` 训练分析只回发 Telegram，不写 docs、Markdown 或数据库；如果后续改成持久化报告，请同步修改文档、workflow 和测试
 - `/analysis` 默认按“增肌减腹”给建议；如果阶段目标改变，请优先改 `TRAINING_ANALYSIS_GOAL`，并同步 `docs/telegram-analysis.md`
 - 如果你在 PG 故障期间又手工改了同一天的 Markdown，后续补偿入库时要注意冲突口径
+- 继续 v2 H1-H6 前，先运行 H7 targeted tests：`node --test test/telegram-sync.test.mjs test/training-analysis.test.mjs test/training-db-core.test.mjs test/dashboard-view.test.mjs`
 
 ## 13. 一句话总结
 

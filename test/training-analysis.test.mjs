@@ -76,6 +76,34 @@ test('inferTrainingAnalysisFocus classifies nutrition questions without training
   assert.equal(focus.responseMode, 'nutrition_review');
 });
 
+test('inferTrainingAnalysisFocus keeps mixed time-window requests explicit', () => {
+  const focus = inferTrainingAnalysisFocus('对比最近7天和最近30天的训练负荷');
+
+  assert.equal(focus.w, 'explicit_mixed');
+  assert.equal(focus.m, 'explicit_mixed');
+  assert.equal(focus.q, '用户同时点名最近7天和最近30天');
+  assert.equal(focus.p, 'explicit_mixed');
+  assert.equal(focus.intent, 'training_plan');
+  assert.equal(focus.responseMode, 'training_plan');
+});
+
+test('inferTrainingAnalysisFocus prioritizes nutrition intent over body composition terms', () => {
+  const focus = inferTrainingAnalysisFocus('最近饮食和热量对体脂变化有什么影响？');
+
+  assert.equal(focus.w, 'recent7');
+  assert.equal(focus.intent, 'nutrition');
+  assert.equal(focus.responseMode, 'nutrition_review');
+});
+
+test('inferTrainingAnalysisFocus prioritizes discomfort intent over recovery wording', () => {
+  const focus = inferTrainingAnalysisFocus('膝盖有点痛，恢复训练怎么安排？');
+
+  assert.equal(focus.w, 'recent7');
+  assert.equal(focus.q, '疼痛/不适问题默认最近7天');
+  assert.equal(focus.intent, 'pain_discomfort');
+  assert.equal(focus.responseMode, 'symptom_triage');
+});
+
 test('normalizeTrainingGoal defaults to muscle gain and belly-fat reduction', () => {
   const goal = normalizeTrainingGoal('');
 
