@@ -193,6 +193,12 @@ test('homepage uses root-relative asset and navigation paths for custom domain d
   assert.doesNotMatch(homepage, /(?:href|src)="\/training_records\//);
 });
 
+test('homepage footer renders the version from the changelog', () => {
+  const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
+
+  assert.match(homepage, /<span class="footer-version"[^>]*>v1\.1\.0<\/span>/);
+});
+
 test('homepage removes the dashboard hero intro and shows trained day count card', () => {
   const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
 

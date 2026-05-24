@@ -1,10 +1,14 @@
 <footer id="footer">
   <div class="footer-left">
+    <% var currentVersion = typeof siteVersion === 'function' ? siteVersion() : '' %>
     <%= __('footer.copyright') %> &copy;
     <% var endYear = (theme.copyright && theme.copyright.end_year) ? theme.copyright.end_year : new Date().getFullYear() %>
     <% var startYear = (theme.copyright && theme.copyright.start_year) ? theme.copyright.start_year : new Date().getFullYear() %>
     <%= startYear >= endYear ? endYear : startYear + "-" + endYear %>
     <%= config.author || config.title %>
+    <% if (currentVersion) { %>
+      <span class="footer-version" aria-label="站点版本 v<%= currentVersion %>" title="CHANGELOG.md">v<%= currentVersion %></span>
+    <% } %>
   </div>
   <div class="footer-right">
     <nav>
