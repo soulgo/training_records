@@ -55,6 +55,7 @@ test('ci-tests workflow runs npm test without deploying Pages', async () => {
     '训练记录.md',
     '_config.yml',
     'source/**',
+    'test/**',
     'themes/**',
     'tools/**',
     '.github/actions/site-build/action.yml',
@@ -67,6 +68,7 @@ test('ci-tests workflow runs npm test without deploying Pages', async () => {
     assert.match(workflow, new RegExp(`-\\s*${escapeRegExp(expectedPath)}`));
   }
   assert.match(workflow, /actions\/checkout@v4/);
+  assert.doesNotMatch(workflow, /ref:\s*main/);
   assert.match(workflow, /actions\/setup-node@v4/);
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /cache:\s*npm/);

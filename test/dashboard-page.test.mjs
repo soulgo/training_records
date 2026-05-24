@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -10,6 +11,8 @@ import { withSharedSiteFixture } from './shared-site-fixture.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
+const require = createRequire(import.meta.url);
+const { readLatestChangelogVersion } = require('../tools/changelog-version.cjs');
 const trainingDataPath = path.join(rootDir, 'source', '_data', 'training.json');
 const dashboardViewPath = path.join(rootDir, 'source', '_data', 'dashboardView.json');
 
@@ -195,8 +198,13 @@ test('homepage uses root-relative asset and navigation paths for custom domain d
 
 test('homepage footer renders the version from the changelog', () => {
   const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
+  const latestRelease = readLatestChangelogVersion(rootDir);
 
-  assert.match(homepage, /<span class="footer-version"[^>]*>v1\.1\.2<\/span>/);
+  assert.ok(latestRelease, 'expected a released version in CHANGELOG.md');
+  assert.match(
+    homepage,
+    new RegExp(`<span class="footer-version"[^>]*>v${latestRelease.version.replace(/\./g, '\\.')}<\\/span>`),
+  );
 });
 
 test('homepage removes the dashboard hero intro and shows trained day count card', () => {

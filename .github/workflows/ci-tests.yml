@@ -9,6 +9,7 @@ on:
       - 训练记录.md
       - _config.yml
       - source/**
+      - test/**
       - themes/**
       - tools/**
       - .github/actions/site-build/action.yml
@@ -22,6 +23,7 @@ on:
       - 训练记录.md
       - _config.yml
       - source/**
+      - test/**
       - themes/**
       - tools/**
       - .github/actions/site-build/action.yml
@@ -40,9 +42,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
