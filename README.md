@@ -265,6 +265,8 @@ npm run build
 - 不走图片识别，不写 `训练记录.md`，不写 `source/_posts`，不写 PostgreSQL
 - 基于现有 `TrainingSnapshot` 汇总最近 7/30 天数据，并通过 Telegram `sendMessage` 回发短建议
 - 用户明确问最近一周时，分析主结论只使用最近 7 天数据；用户明确问最近 30 天时才使用 30 天趋势
+- 会根据问题类型自适应组织回复：训练安排、饮食、体脂/体重趋势、恢复疲劳、疼痛/不适和综合复盘分别聚焦不同证据
+- 疼痛/不适类问题按教练 + 分诊建议回答，结合近期训练负荷和最近动作细节，但不做医学诊断
 - 输出约束由 `prompts/_source/analysis-rules.json` 和 `prompts/_source/shared-rules.json` 维护，再编译到 `prompts/training-analysis.md`
 
 更完整的维护说明见 `docs/telegram-analysis.md`。

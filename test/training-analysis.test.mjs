@@ -16,6 +16,8 @@ test('inferTrainingAnalysisFocus respects explicit recent-week requests', () => 
   assert.equal(focus.m, 'measurementTrend7');
   assert.equal(focus.q, '最近7天');
   assert.equal(focus.p, 'no_recent30');
+  assert.equal(focus.intent, 'body_composition');
+  assert.equal(focus.responseMode, 'body_composition_review');
 });
 
 test('inferTrainingAnalysisFocus uses 30-day data only when requested', () => {
@@ -25,6 +27,53 @@ test('inferTrainingAnalysisFocus uses 30-day data only when requested', () => {
   assert.equal(focus.m, 'measurementTrend30');
   assert.equal(focus.q, '最近30天');
   assert.equal(focus.p, 'recent7_supplement');
+  assert.equal(focus.intent, 'body_composition');
+  assert.equal(focus.responseMode, 'body_composition_review');
+});
+
+test('inferTrainingAnalysisFocus classifies pain and discomfort questions for symptom triage', () => {
+  const focus = inferTrainingAnalysisFocus('右臂肱二头肌区域展开整个手臂以后出现轻微疼痛，无红肿及发热症状。');
+
+  assert.equal(focus.w, 'recent7');
+  assert.equal(focus.m, 'measurementTrend7');
+  assert.equal(focus.q, '疼痛/不适问题默认最近7天');
+  assert.equal(focus.p, 'default_recent7');
+  assert.equal(focus.intent, 'pain_discomfort');
+  assert.equal(focus.responseMode, 'symptom_triage');
+});
+
+test('inferTrainingAnalysisFocus keeps near-term training questions on training plan mode', () => {
+  const focus = inferTrainingAnalysisFocus('今天怎么练，安排一下训练计划');
+
+  assert.equal(focus.w, 'recent7');
+  assert.equal(focus.q, '今天/明天训练建议');
+  assert.equal(focus.p, 'near_term');
+  assert.equal(focus.intent, 'training_plan');
+  assert.equal(focus.responseMode, 'training_plan');
+});
+
+test('inferTrainingAnalysisFocus does not treat body-part training plans as pain triage', () => {
+  const focus = inferTrainingAnalysisFocus('今天练肩怎么安排？');
+
+  assert.equal(focus.w, 'recent7');
+  assert.equal(focus.q, '今天/明天训练建议');
+  assert.equal(focus.intent, 'training_plan');
+  assert.equal(focus.responseMode, 'training_plan');
+});
+
+test('inferTrainingAnalysisFocus recognizes soreness with a body-part context', () => {
+  const focus = inferTrainingAnalysisFocus('昨天练完以后背有点酸，今天还能继续练吗？');
+
+  assert.equal(focus.intent, 'pain_discomfort');
+  assert.equal(focus.responseMode, 'symptom_triage');
+});
+
+test('inferTrainingAnalysisFocus classifies nutrition questions without training plan mode', () => {
+  const focus = inferTrainingAnalysisFocus('最近饮食怎么样，蛋白质够不够？');
+
+  assert.equal(focus.w, 'recent7');
+  assert.equal(focus.intent, 'nutrition');
+  assert.equal(focus.responseMode, 'nutrition_review');
 });
 
 test('normalizeTrainingGoal defaults to muscle gain and belly-fat reduction', () => {
@@ -90,7 +139,58 @@ test('generateTrainingAnalysisReply sends time-window constraints to the model',
   assert.match(userMessage.content, /"w"\s*:\s*"recent7"/);
   assert.match(userMessage.content, /"m"\s*:\s*"measurementTrend7"/);
   assert.match(userMessage.content, /"p"\s*:\s*"no_recent30"/);
+  assert.match(userMessage.content, /"intent"\s*:\s*"body_composition"/);
+  assert.match(userMessage.content, /"responseMode"\s*:\s*"body_composition_review"/);
   assert.match(reply, /近7天训练稳定/);
+});
+
+test('generateTrainingAnalysisReply sends pain intent with recent load and latest workout details', async () => {
+  let requestPayload = null;
+
+  const reply = await generateTrainingAnalysisReply({
+    env: {
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+    },
+    question: '右臂肱二头肌区域展开整个手臂以后出现轻微疼痛，无红肿及发热症状。',
+    snapshot: buildSyntheticSnapshot(),
+    now: new Date('2026-05-16T00:00:00.000Z'),
+    fetchImpl: async (url, init) => {
+      assert.equal(url, 'https://example.com/v1/chat/completions');
+      requestPayload = JSON.parse(init.body);
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: [
+                    '现状判断：更像近期上肢参与动作后的局部负荷反应，但不能诊断。',
+                    '今天处理：暂停上肢大负荷，保留无痛低强度活动。',
+                  ].join('\n'),
+                },
+              },
+            ],
+          };
+        },
+      };
+    },
+  });
+
+  const userMessage = requestPayload.messages.find((message) => message.role === 'user');
+  assert.match(userMessage.content, /右臂肱二头肌/);
+  assert.match(userMessage.content, /"intent"\s*:\s*"pain_discomfort"/);
+  assert.match(userMessage.content, /"responseMode"\s*:\s*"symptom_triage"/);
+  assert.match(userMessage.content, /"trainingLoad"/);
+  assert.match(userMessage.content, /"recent7"/);
+  assert.match(userMessage.content, /"recoverySignal"/);
+  assert.match(userMessage.content, /"latestDays"/);
+  assert.match(userMessage.content, /"workoutDetails"/);
+  assert.match(userMessage.content, /"hasStrengthTraining"/);
+  assert.match(userMessage.content, /"hasHighIntensity"/);
+  assert.match(reply, /局部负荷反应/);
 });
 
 test('generateTrainingAnalysisReply falls back to markdown snapshot when database snapshot is incomplete', async () => {

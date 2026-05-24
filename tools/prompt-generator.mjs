@@ -44,6 +44,7 @@ export async function generateAnalysisPrompt() {
     analysis.role,
     '',
     renderSection(analysis.outputRequirements),
+    renderSection(analysis.intentGuidelines),
     renderTimeWindowPolicies(analysis.timeWindowPolicies),
     renderSection(analysis.dataReadingRules),
     renderSection(analysis.adviceGuidelines),

@@ -50,7 +50,12 @@ test('generateAnalysisPrompt includes all key sections', async () => {
   assert.match(prompt, /trainingLoad\.recent7/);
   assert.match(prompt, /bodyCompositionRisk/);
   assert.match(prompt, /recoverySignal/);
-  assert.match(prompt, /数据结论、恢复风险、饮食观察、下一步行动/);
+  assert.match(prompt, /按问题类型组织回复/);
+  assert.match(prompt, /## 问题类型与回复结构/);
+  assert.match(prompt, /`pain_discomfort`/);
+  assert.match(prompt, /`symptom_triage`/);
+  assert.match(prompt, /现状判断、可能训练诱因、今天怎么处理、何时就医/);
+  assert.doesNotMatch(prompt, /固定包含 4 段/);
   assert.match(prompt, /增肌减腹/);
   assert.match(prompt, /## 回答时间窗策略/);
   assert.match(prompt, /`no_recent30`/);
@@ -107,6 +112,7 @@ test('generated analysis prompt loads correctly from structured source', async (
 
   assert.equal(typeof analysis.role, 'string');
   assert.equal(analysis.outputRequirements.title, '输出要求');
+  assert.equal(analysis.intentGuidelines.title, '问题类型与回复结构');
   assert.equal(analysis.adviceGuidelines.title, '建议口径');
   assert.equal(typeof analysis.timeWindowPolicies.no_recent30, 'string');
   assert.ok(Array.isArray(analysis.outputRequirements.rules));
