@@ -1,5 +1,4 @@
 ---
-date: 2026-05-24 21:43:46
 tags:
   - 训练
   - 随想
@@ -7,6 +6,7 @@ tags:
 thought_module: workout
 telegram_message_id: 220
 telegram_chat_id: 6314355239
+date: 2026-05-24 21:43:46
 ---
 
-测试新版本 1.1.3
+编辑测试新版本 1.1.3
