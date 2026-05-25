@@ -3292,6 +3292,133 @@ test('runTelegramSync normalizes object recognition details before batch analysi
   }
 });
 
+test('runTelegramSync normalizes null recognition details without dropping workout activities', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-workout-details-'));
+  const persistedBatches = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (url) => {
+    const requestUrl = String(url);
+
+    if (requestUrl.includes('/getFile?')) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            file_path: 'photos/file_806.jpg',
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      );
+    }
+
+    if (requestUrl.includes('/chat/completions')) {
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  imageType: 'workout',
+                  detectedDate: '2026-05-24',
+                  dateEvidence: 'image header: 5月24日',
+                  confidence: 0.96,
+                  warnings: [],
+                  records: {
+                    measurement: null,
+                    activities: [
+                      {
+                        time: '10:46',
+                        type: 'HIIT',
+                        detail: '总消耗419千卡，时长00:47:28，平均心率140次/分钟',
+                      },
+                    ],
+                    meals: [],
+                    totalCalories: null,
+                    details: null,
+                    dailyWorkoutSummary: null,
+                  },
+                }),
+              },
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      );
+    }
+
+    throw new Error(`Unexpected fetch call: ${requestUrl}`);
+  };
+
+  try {
+    const result = await runTelegramSync({
+      rootDir: tempRoot,
+      env: {
+        TELEGRAM_BOT_TOKEN: 'token',
+        AI_API_KEY: 'key',
+        AI_BASE_URL: 'https://example.com/v1',
+        AI_MODEL: 'gpt-test',
+        TELEGRAM_ALLOWED_CHAT_IDS: '42',
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      getLastProcessedUpdateId: async () => 900,
+      fetchTelegramUpdates: async () => [
+        {
+          update_id: 901,
+          message: {
+            message_id: 806,
+            date: Math.floor(new Date('2026-05-24T02:46:00Z').getTime() / 1000),
+            chat: { id: 42 },
+            photo: [{ file_id: 'file-f', file_unique_id: 'uniq-f' }],
+          },
+        },
+      ],
+      persistNormalizedBatch: async ({ batch }) => {
+        persistedBatches.push(batch);
+        return { status: 'stored', archivedDate: batch.archivedDate };
+      },
+      buildTrainingSnapshot: async () => ({
+        generatedAt: '2026-05-24T00:00:00.000Z',
+        latest: {
+          measurement: null,
+          daily: { date: '2026-05-24' },
+        },
+        daily: [],
+        charts: {
+          weightKg: [],
+          bodyFatPct: [],
+          skeletalMuscleKg: [],
+          basalMetabolism: [],
+          visceralFatLevel: [],
+          intakeCalories: [],
+          trainingCalories: [],
+          cyclingDistanceKm: [],
+        },
+      }),
+      exportTrainingMarkdown: () => '### 2026-05-24\n',
+    });
+
+    assert.equal(result.batchResults[0].status, 'ready');
+    assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+    assert.equal(persistedBatches.length, 1);
+    assert.equal(persistedBatches[0].activities.length, 1);
+    assert.equal(persistedBatches[0].activities[0].type, 'HIIT');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('runTelegramSync skips malformed recognition responses after logging the recognition failure', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-recognition-errors-'));
   const originalFetch = globalThis.fetch;

@@ -114,6 +114,59 @@ test('groups album document images and applies filename date when screenshots ar
   assert.equal(analyzed.activities.length, 1);
 });
 
+test('uses meal calories as nutrition total when recognition omits totalCalories', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const updates = [
+    {
+      update_id: 151,
+      message: {
+        message_id: 51,
+        media_group_id: 'album-meal-total',
+        date: 1_748_044_800,
+        chat: { id: 42 },
+        document: {
+          file_id: 'file-a',
+          file_unique_id: 'uniq-a',
+          file_name: '饮食记录 2026-05-24.jpg',
+          mime_type: 'image/jpeg',
+        },
+      },
+    },
+  ];
+
+  const [batch] = lib.groupTelegramUpdates(updates);
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 51,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no visible image date',
+      confidence: 0.97,
+      warnings: ['仅显示餐次汇总与食物明细，未见当日总热量'],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [
+          { name: '午餐', calories: 580, recommendedMin: 616, recommendedMax: 1026 },
+          { name: '早餐', calories: 114, recommendedMin: 513, recommendedMax: 924 },
+          { name: '晚餐', calories: 244, recommendedMin: 308, recommendedMax: 719 },
+        ],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: null,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-24');
+  assert.equal(analyzed.nutrition.totalCalories, 938);
+});
+
 test('groups /thought and /随想 messages into thought batches and ignores normal text', async () => {
   const lib = await importTelegramSyncLib();
 

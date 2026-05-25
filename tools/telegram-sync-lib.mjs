@@ -983,17 +983,30 @@ function normalizeNutrition(meals, totalCalories, details) {
     existing.recommendedMax = next.recommendedMax;
   }
   const normalizedDetails = [...new Set((details ?? []).map((item) => item.trim()).filter(Boolean))];
+  const normalizedMeals = ['早餐', '午餐', '晚餐', '加餐']
+    .map((name) => mealMap.get(name))
+    .filter(Boolean)
+    .map((meal) => ({
+      ...meal,
+      calories: roundTo(meal.calories, 2),
+    }));
+  const normalizedTotalCalories =
+    totalCalories === null || totalCalories === undefined
+      ? sumMealCalories(normalizedMeals)
+      : Number(totalCalories);
   return {
-    meals: ['早餐', '午餐', '晚餐', '加餐']
-      .map((name) => mealMap.get(name))
-      .filter(Boolean)
-      .map((meal) => ({
-        ...meal,
-        calories: roundTo(meal.calories, 2),
-      })),
-    totalCalories: totalCalories === null || totalCalories === undefined ? null : Number(totalCalories),
+    meals: normalizedMeals,
+    totalCalories: normalizedTotalCalories,
     details: normalizedDetails,
   };
+}
+
+function sumMealCalories(meals) {
+  if (!meals.length) {
+    return null;
+  }
+  const total = meals.reduce((sum, meal) => sum + Number(meal.calories ?? 0), 0);
+  return roundTo(total, 2);
 }
 
 function calculateBatchConfidence(recognitions) {

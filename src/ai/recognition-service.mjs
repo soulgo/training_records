@@ -292,6 +292,10 @@ function normalizeRecognitionDetails(details) {
     return details;
   }
 
+  if (details === null || details === undefined) {
+    return [];
+  }
+
   if (typeof details === 'string') {
     const trimmed = details.trim();
     return trimmed ? [trimmed] : [];
