@@ -13,6 +13,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复 Telegram 训练图片识别在 OpenAI 兼容接口不支持 `json_schema` structured output 时被 400 拒绝的问题：保留严格 schema 优先策略，并在兼容性错误时自动降级到 `json_object` 重试，避免 `missing recognition` 导致图片批次无法入库。
+
 ## [1.1.4] - 2026-05-25
 
 ### Fixed

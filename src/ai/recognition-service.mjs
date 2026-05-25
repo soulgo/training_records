@@ -184,43 +184,16 @@ async function requestRecognition({
   schemaName,
   schemaVersion,
 }) {
-  const response = await aiProvider.requestChatCompletion({
-    responseFormat: {
-      type: 'json_schema',
-      json_schema: {
-        name: schemaName,
-        strict: true,
-        schema: buildRecognitionSchema(),
-      },
-    },
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt,
-      },
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: [
-              `caption: ${message.caption || '(empty)'}`,
-              `text: ${message.text || '(empty)'}`,
-              '将图片识别为训练系统可写回的结构化结果。',
-            ].join('\n'),
-          },
-          {
-            type: 'image_url',
-            image_url: {
-              url: imageUrl,
-            },
-          },
-        ],
-      },
-    ],
+  const requestInput = {
+    messages: buildRecognitionMessages({ imageUrl, message, systemPrompt }),
     retryableStatuses: RECOGNITION_RETRYABLE_STATUSES,
     logPrefix: '[telegram-sync] AI recognition',
     finalErrorMessage: 'AI recognition request failed',
+  };
+  const response = await requestRecognitionWithFormatFallback({
+    aiProvider,
+    requestInput,
+    schemaName,
   });
 
   if (!response.ok) {
@@ -258,6 +231,115 @@ async function requestRecognition({
       schemaVersion,
     });
   }
+}
+
+async function requestRecognitionWithFormatFallback({
+  aiProvider,
+  requestInput,
+  schemaName,
+}) {
+  const strictResponse = await aiProvider.requestChatCompletion({
+    ...requestInput,
+    responseFormat: buildStrictRecognitionResponseFormat(schemaName),
+  });
+  if (strictResponse.ok) {
+    return strictResponse;
+  }
+
+  const strictDetails = await summarizeRecognitionFailure(strictResponse);
+  if (!shouldRetryWithJsonObjectFormat(strictResponse.status, strictDetails)) {
+    throwRecognitionHttpError(strictResponse.status, strictDetails);
+  }
+
+  const jsonObjectResponse = await aiProvider.requestChatCompletion({
+    ...requestInput,
+    responseFormat: {
+      type: 'json_object',
+    },
+  });
+  if (jsonObjectResponse.ok) {
+    return jsonObjectResponse;
+  }
+
+  const jsonObjectDetails = await summarizeRecognitionFailure(jsonObjectResponse);
+  if (!shouldRetryWithoutResponseFormat(jsonObjectResponse.status, jsonObjectDetails)) {
+    throwRecognitionHttpError(jsonObjectResponse.status, jsonObjectDetails);
+  }
+
+  return aiProvider.requestChatCompletion(requestInput);
+}
+
+function buildStrictRecognitionResponseFormat(schemaName) {
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name: schemaName,
+      strict: true,
+      schema: buildRecognitionSchema(),
+    },
+  };
+}
+
+function buildRecognitionMessages({ imageUrl, message, systemPrompt }) {
+  return [
+    {
+      role: 'system',
+      content: systemPrompt,
+    },
+    {
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: [
+            `caption: ${message.caption || '(empty)'}`,
+            `text: ${message.text || '(empty)'}`,
+            '将图片识别为训练系统可写回的结构化结果。',
+          ].join('\n'),
+        },
+        {
+          type: 'image_url',
+          image_url: {
+            url: imageUrl,
+          },
+        },
+      ],
+    },
+  ];
+}
+
+function shouldRetryWithJsonObjectFormat(status, details) {
+  return status === 400 && isResponseFormatCompatibilityError(details);
+}
+
+function shouldRetryWithoutResponseFormat(status, details) {
+  return status === 400 && isResponseFormatCompatibilityError(details);
+}
+
+function isResponseFormatCompatibilityError(details) {
+  const normalized = String(details ?? '').toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return (
+    normalized.includes('response_format') ||
+    normalized.includes('json_schema') ||
+    normalized.includes('json object') ||
+    normalized.includes('structured output') ||
+    normalized.includes('structured outputs') ||
+    /missing required parameter:.*name/.test(normalized)
+  );
+}
+
+function throwRecognitionHttpError(status, details) {
+  const error = new Error(
+    details
+      ? `AI recognition failed with HTTP ${status}: ${details}`
+      : `AI recognition failed with HTTP ${status}`,
+  );
+  error.status = status;
+  error.responseDetails = details;
+  throw error;
 }
 
 async function summarizeRecognitionFailure(response) {

@@ -2999,6 +2999,155 @@ test('runTelegramSync falls back to inline image data when AI rejects a Telegram
   }
 });
 
+test('runTelegramSync retries recognition with json_object when json_schema response format is rejected', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-json-format-fallback-'));
+  const persistedBatches = [];
+  const originalFetch = globalThis.fetch;
+  const responseFormats = [];
+
+  globalThis.fetch = async (url, init = {}) => {
+    const requestUrl = String(url);
+
+    if (requestUrl.includes('/getFile?')) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            file_path: 'photos/file_804.jpg',
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      );
+    }
+
+    if (requestUrl.includes('/chat/completions')) {
+      const body = JSON.parse(init.body);
+      responseFormats.push(body.response_format?.type ?? null);
+
+      if (body.response_format?.type === 'json_schema') {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: "Missing required parameter: 'response_format.json_schema.name'.",
+            },
+          }),
+          {
+            status: 400,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        );
+      }
+
+      if (body.response_format?.type === 'json_object') {
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    imageType: 'workout',
+                    detectedDate: '2026-05-18',
+                    dateEvidence: 'image header: 2026-05-18',
+                    confidence: 0.98,
+                    warnings: [],
+                    records: {
+                      measurement: null,
+                      activities: [],
+                      meals: [],
+                      totalCalories: null,
+                      details: [],
+                      dailyWorkoutSummary: {
+                        activityCaloriesKcal: 402,
+                        workoutDurationMinutes: 30,
+                        activeHours: 16,
+                      },
+                    },
+                  }),
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        );
+      }
+
+      throw new Error(`Unexpected response format: ${body.response_format?.type}`);
+    }
+
+    throw new Error(`Unexpected fetch call: ${requestUrl}`);
+  };
+
+  try {
+    const result = await runTelegramSync({
+      rootDir: tempRoot,
+      env: {
+        TELEGRAM_BOT_TOKEN: 'token',
+        AI_API_KEY: 'key',
+        AI_BASE_URL: 'https://example.com/v1',
+        AI_MODEL: 'gpt-test',
+        TELEGRAM_ALLOWED_CHAT_IDS: '42',
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      getLastProcessedUpdateId: async () => 900,
+      fetchTelegramUpdates: async () => [
+        {
+          update_id: 901,
+          message: {
+            message_id: 804,
+            date: Math.floor(new Date('2026-05-18T02:30:00Z').getTime() / 1000),
+            chat: { id: 42 },
+            photo: [{ file_id: 'file-d', file_unique_id: 'uniq-d' }],
+          },
+        },
+      ],
+      persistNormalizedBatch: async ({ batch }) => {
+        persistedBatches.push(batch);
+        return { status: 'stored', archivedDate: batch.archivedDate };
+      },
+      buildTrainingSnapshot: async () => ({
+        generatedAt: '2026-05-18T00:00:00.000Z',
+        latest: {
+          measurement: null,
+          daily: { date: '2026-05-18' },
+        },
+        daily: [],
+        charts: {
+          weightKg: [],
+          bodyFatPct: [],
+          skeletalMuscleKg: [],
+          basalMetabolism: [],
+          visceralFatLevel: [],
+          intakeCalories: [],
+          trainingCalories: [],
+          cyclingDistanceKm: [],
+        },
+      }),
+      exportTrainingMarkdown: () => '### 2026-05-18\n',
+    });
+
+    assert.deepEqual(responseFormats, ['json_schema', 'json_object']);
+    assert.equal(result.batchResults[0].status, 'ready');
+    assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+    assert.equal(persistedBatches.length, 1);
+    assert.equal(persistedBatches[0].archivedDate, '2026-05-18');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('runTelegramSync skips malformed recognition responses after logging the recognition failure', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-recognition-errors-'));
   const originalFetch = globalThis.fetch;
