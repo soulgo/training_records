@@ -84,11 +84,12 @@ async function readBodyFeedbackFromMarkdown(rootDir) {
   const entries = [];
   for (const postPath of postPaths) {
     try {
-      const parsed = frontMatter.parse(await readFile(postPath, 'utf8'));
+      const raw = await readFile(postPath, 'utf8');
+      const parsed = frontMatter.parse(raw);
       if (parsed.thought_module !== 'body_feedback') {
         continue;
       }
-      const dateParts = normalizeFeedbackDateParts(parsed.date);
+      const dateParts = normalizeFeedbackDateParts(extractRawFrontMatterValue(raw, 'date') ?? parsed.date);
       entries.push({
         date: dateParts.date,
         time: dateParts.time,
@@ -107,10 +108,6 @@ async function readBodyFeedbackFromMarkdown(rootDir) {
 }
 
 function normalizeFeedbackDateParts(value) {
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return formatFeedbackDateParts(value);
-  }
-
   const text = String(value ?? '').trim();
   const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}))?/);
   if (match) {
@@ -118,6 +115,10 @@ function normalizeFeedbackDateParts(value) {
       date: match[1],
       time: match[2] ?? null,
     };
+  }
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return formatFeedbackDateParts(value);
   }
 
   const parsed = new Date(text);
@@ -168,4 +169,9 @@ function toNumberOrNull(value) {
 
 function toPortableRelativePath(value) {
   return String(value ?? '').split(path.sep).join('/');
+}
+
+function extractRawFrontMatterValue(raw, key) {
+  const match = String(raw ?? '').match(new RegExp(`^${key}:\\s*(.+)$`, 'm'));
+  return match?.[1]?.trim() ?? null;
 }
