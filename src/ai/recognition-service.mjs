@@ -3,6 +3,7 @@ import pg from 'pg';
 import {
   extractAiResponseContent,
   parseAiJsonContent,
+  validateAiJsonValue,
   AiProviderError,
   AiSchemaError,
 } from './schema-validator.mjs';
@@ -216,10 +217,9 @@ async function requestRecognition({
   });
 
   try {
-    return parseAiJsonContent(content, buildRecognitionSchema(), {
+    return parseRecognitionContent(content, {
       schemaName,
       schemaVersion,
-      allowAdditionalProperties: true,
     });
   } catch (error) {
     if (error instanceof AiProviderError || error instanceof AiSchemaError) {
@@ -231,6 +231,84 @@ async function requestRecognition({
       schemaVersion,
     });
   }
+}
+
+function parseRecognitionContent(content, { schemaName, schemaVersion }) {
+  const value = parseAiJsonContentToValue(content, { schemaName, schemaVersion });
+  const normalized = normalizeRecognitionPayload(value);
+
+  validateAiJsonValue(normalized, buildRecognitionSchema(), {
+    schemaName,
+    schemaVersion,
+    allowAdditionalProperties: true,
+  });
+
+  return normalized;
+}
+
+function parseAiJsonContentToValue(content, { schemaName, schemaVersion }) {
+  const normalizedContent = typeof content === 'string' ? content.trim() : content;
+
+  if (normalizedContent === '' || normalizedContent === null || normalizedContent === undefined) {
+    throw new AiProviderError(`${schemaName} returned empty content`, {
+      schemaName,
+      schemaVersion,
+      path: '$',
+    });
+  }
+
+  if (typeof normalizedContent !== 'string') {
+    return normalizedContent;
+  }
+
+  try {
+    return JSON.parse(normalizedContent);
+  } catch (error) {
+    throw new AiSchemaError(`${schemaName} returned invalid JSON`, {
+      cause: error,
+      schemaName,
+      schemaVersion,
+      path: '$',
+    });
+  }
+}
+
+function normalizeRecognitionPayload(value) {
+  if (!isPlainObject(value) || !isPlainObject(value.records)) {
+    return value;
+  }
+
+  return {
+    ...value,
+    records: {
+      ...value.records,
+      details: normalizeRecognitionDetails(value.records.details),
+    },
+  };
+}
+
+function normalizeRecognitionDetails(details) {
+  if (Array.isArray(details)) {
+    return details;
+  }
+
+  if (typeof details === 'string') {
+    const trimmed = details.trim();
+    return trimmed ? [trimmed] : [];
+  }
+
+  if (isPlainObject(details)) {
+    return Object.values(details)
+      .flatMap((item) => normalizeRecognitionDetails(item))
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return details;
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 async function requestRecognitionWithFormatFallback({
