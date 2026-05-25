@@ -151,6 +151,20 @@ test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before gr
           ],
         };
       }
+      if (/from core\.thought/i.test(sql)) {
+        return {
+          rows: [
+            {
+              telegram_message_id: 610,
+              telegram_chat_id: 42,
+              body: '训练后右膝外侧酸胀',
+              message_date_unix: 1779445200,
+              markdown_path: 'source/_posts/2026-05-22-telegram-thought-610.md',
+              updated_at: '2026-05-22T18:20:00.000+08:00',
+            },
+          ],
+        };
+      }
       throw new Error(`Unexpected SQL: ${sql}`);
     },
   };
@@ -165,6 +179,9 @@ test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before gr
   assert.equal(day.activities.length, 1);
   assert.equal(day.nutrition.meals.length, 1);
   assert.equal(day.measurement.weightKg, 73.7);
+  assert.equal(snapshot.bodyFeedback.length, 1);
+  assert.equal(snapshot.bodyFeedback[0].date, '2026-05-22');
+  assert.equal(snapshot.bodyFeedback[0].body, '训练后右膝外侧酸胀');
   assert.equal(snapshot.charts.weightKg[0].date, '2026-05-22');
 });
 
@@ -233,6 +250,28 @@ test('readTrainingSnapshotFromDatabase can limit daily rows by date window', asy
           if (/from core\.activity/i.test(sql) || /from core\.meal/i.test(sql)) {
             return { rows: [] };
           }
+          if (/from core\.thought/i.test(sql)) {
+            return {
+              rows: [
+                {
+                  telegram_message_id: 608,
+                  telegram_chat_id: 42,
+                  body: '窗口外反馈',
+                  message_date_unix: 1778198400,
+                  markdown_path: 'source/_posts/2026-05-08-telegram-thought-608.md',
+                  updated_at: '2026-05-08T08:00:00.000+08:00',
+                },
+                {
+                  telegram_message_id: 609,
+                  telegram_chat_id: 42,
+                  body: '窗口内反馈',
+                  message_date_unix: 1778284800,
+                  markdown_path: 'source/_posts/2026-05-09-telegram-thought-609.md',
+                  updated_at: '2026-05-09T08:00:00.000+08:00',
+                },
+              ],
+            };
+          }
           throw new Error(`Unexpected SQL: ${sql}`);
         },
       };
@@ -242,6 +281,7 @@ test('readTrainingSnapshotFromDatabase can limit daily rows by date window', asy
   });
 
   assert.deepEqual(snapshot.daily.map((day) => day.date), ['2026-05-09']);
+  assert.deepEqual(snapshot.bodyFeedback.map((entry) => entry.body), ['窗口内反馈']);
   assert.equal(snapshot.latest.daily?.date, '2026-05-09');
   assert.equal(snapshot.charts.trainingCalories.length, 1);
   assert.ok(queries.some((sql) => /from core\.training_day/i.test(sql)));

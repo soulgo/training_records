@@ -102,6 +102,7 @@ export function buildTrainingAnalysisSummary(snapshot, now = new Date()) {
   const latestRecovery = summarizeRecoverySignal(daily.slice(-5));
   const bodyCompositionRisk = assessBodyCompositionRisk(measurements, recent7);
   const nutritionSignal = assessNutritionSignal(recent7, latestDay);
+  const bodyFeedback = summarizeBodyFeedback(snapshot?.bodyFeedback ?? [], recent7, daily.slice(-5));
 
   return {
     generatedAt: toIsoString(now),
@@ -118,6 +119,7 @@ export function buildTrainingAnalysisSummary(snapshot, now = new Date()) {
     strengthCardioBalance: buildStrengthCardioBalanceSummary(recent7, recent30),
     bodyCompositionRisk,
     nutritionSignal,
+    bodyFeedback,
     recoverySignal: {
       recent7: recent7Recovery,
       latest5: latestRecovery,
@@ -135,6 +137,7 @@ export function buildTrainingAnalysisSummary(snapshot, now = new Date()) {
         .map(([type, count]) => `${type}x${count}`),
       intakeCalories: toNumberOrNull(day.nutrition?.totalCalories),
       workoutDetails: summarizeLatestActivityDetails(day.activities ?? []),
+      bodyFeedback: bodyFeedback.byDate[day.date] ?? [],
       hasStrengthTraining: hasStrengthTraining(day),
       hasCardio: hasCardioTraining(day),
       hasHighIntensity: hasHighIntensityTraining(day),
@@ -625,6 +628,49 @@ function summarizeLatestActivityDetails(activities) {
       return [time, activity.type, activity.detail].filter(Boolean).join(' ');
     })
     .filter(Boolean);
+}
+
+function summarizeBodyFeedback(entries, recent7Days, latest5Days) {
+  const normalizedEntries = (entries ?? [])
+    .map(normalizeBodyFeedbackEntry)
+    .filter((entry) => entry.date && entry.body)
+    .sort((left, right) => compareBodyFeedbackEntries(left, right));
+  const recent7Dates = new Set(recent7Days.map((day) => day.date));
+  const latest5Dates = new Set(latest5Days.map((day) => day.date));
+  const recent7 = normalizedEntries.filter((entry) => recent7Dates.has(entry.date));
+  const latest = [...normalizedEntries]
+    .sort((left, right) => compareBodyFeedbackEntries(right, left))
+    .slice(0, 5);
+  const byDate = {};
+
+  for (const entry of normalizedEntries.filter((item) => latest5Dates.has(item.date))) {
+    const dayEntries = byDate[entry.date] ?? [];
+    dayEntries.push(entry);
+    byDate[entry.date] = dayEntries.slice(-3);
+  }
+
+  return {
+    total: normalizedEntries.length,
+    recent7,
+    latest,
+    byDate,
+    hasRecentDiscomfort: recent7.length > 0,
+  };
+}
+
+function normalizeBodyFeedbackEntry(entry) {
+  return {
+    date: String(entry?.date ?? '').trim(),
+    time: entry?.time ? String(entry.time).trim() : null,
+    body: String(entry?.body ?? '').trim(),
+    telegramMessageId: toNumberOrNull(entry?.telegramMessageId),
+    markdownPath: entry?.markdownPath ?? null,
+    source: entry?.source ?? null,
+  };
+}
+
+function compareBodyFeedbackEntries(left, right) {
+  return `${left.date} ${left.time ?? ''}`.localeCompare(`${right.date} ${right.time ?? ''}`);
 }
 
 function hasWorkoutRecord(day) {

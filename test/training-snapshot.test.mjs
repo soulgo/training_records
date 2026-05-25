@@ -43,8 +43,27 @@ const sampleMarkdown = `
 
 test('buildTrainingSnapshot reads the canonical snapshot from markdown', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'training-snapshot-md-'));
-  await mkdir(path.join(rootDir, 'source', '_data'), { recursive: true });
+  await mkdir(path.join(rootDir, 'source', '_posts'), { recursive: true });
   await writeFile(path.join(rootDir, '训练记录.md'), sampleMarkdown, 'utf8');
+  await writeFile(
+    path.join(rootDir, 'source', '_posts', '2026-05-09-telegram-thought-610.md'),
+    [
+      '---',
+      'date: 2026-05-09 22:15:00',
+      'tags:',
+      '  - 身体反馈',
+      '  - 随想',
+      '  - Telegram',
+      'thought_module: body_feedback',
+      'telegram_message_id: 610',
+      'telegram_chat_id: 42',
+      '---',
+      '',
+      '硬拉后右侧腰背有点刺痛',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
 
   const snapshot = await buildTrainingSnapshot({
     source: 'markdown',
@@ -57,6 +76,11 @@ test('buildTrainingSnapshot reads the canonical snapshot from markdown', async (
   assert.equal(snapshot.latest.daily?.workoutSummary.trainingCalories, 643);
   assert.equal(snapshot.latest.daily?.nutrition.totalCalories, 1593);
   assert.equal(snapshot.charts.weightKg.length, 1);
+  assert.equal(snapshot.bodyFeedback.length, 1);
+  assert.equal(snapshot.bodyFeedback[0].date, '2026-05-09');
+  assert.equal(snapshot.bodyFeedback[0].time, '22:15');
+  assert.equal(snapshot.bodyFeedback[0].body, '硬拉后右侧腰背有点刺痛');
+  assert.equal(snapshot.bodyFeedback[0].telegramMessageId, 610);
 });
 
 async function waitForCondition(predicate, timeoutMs = 1000) {
@@ -161,6 +185,20 @@ test('buildTrainingSnapshot can hydrate the canonical snapshot from core tables'
             ],
           };
         }
+        if (/from core\.thought/i.test(sql)) {
+          return {
+            rows: [
+              {
+                telegram_message_id: 610,
+                telegram_chat_id: 42,
+                body: '硬拉后右侧腰背有点刺痛',
+                message_date_unix: 1778336100,
+                markdown_path: 'source/_posts/2026-05-09-telegram-thought-610.md',
+                updated_at: '2026-05-09T22:15:00.000+08:00',
+              },
+            ],
+          };
+        }
         throw new Error(`Unexpected SQL: ${sql}`);
       },
     };
@@ -190,7 +228,12 @@ test('buildTrainingSnapshot can hydrate the canonical snapshot from core tables'
       recommendedMax: 740,
     },
   ]);
+  assert.equal(snapshot.bodyFeedback.length, 1);
+  assert.equal(snapshot.bodyFeedback[0].date, '2026-05-09');
+  assert.equal(snapshot.bodyFeedback[0].time, '22:15');
+  assert.equal(snapshot.bodyFeedback[0].body, '硬拉后右侧腰背有点刺痛');
   assert.ok(queryLog.some((sql) => /from core\.training_day/i.test(sql)));
+  assert.ok(queryLog.some((sql) => /from core\.thought/i.test(sql)));
 });
 
 test('buildTrainingSnapshot starts database reads in parallel with independent clients', async () => {
@@ -271,6 +314,9 @@ test('buildTrainingSnapshot starts database reads in parallel with independent c
           if (/from core\.meal/i.test(sql)) {
             return { rows: [] };
           }
+          if (/from core\.thought/i.test(sql)) {
+            return { rows: [] };
+          }
           throw new Error(`Unexpected SQL: ${sql}`);
         } finally {
           activeQueries -= 1;
@@ -292,8 +338,8 @@ test('buildTrainingSnapshot starts database reads in parallel with independent c
     now: new Date('2026-05-13T00:00:00.000Z'),
   });
 
-  await waitForCondition(() => startedQueries === 4);
-  assert.equal(startedQueries, 4);
+  await waitForCondition(() => startedQueries === 5);
+  assert.equal(startedQueries, 5);
   releaseQueries();
   const snapshot = await snapshotPromise;
 
@@ -302,7 +348,7 @@ test('buildTrainingSnapshot starts database reads in parallel with independent c
     ['2026-04-06', '2026-05-09'],
   );
   assert.equal(snapshot.daily[0].workoutSummary.trainingCalories, 402);
-  assert.equal(maxActiveQueries, 4);
+  assert.equal(maxActiveQueries, 5);
 });
 
 test('buildTrainingSnapshot throws when database snapshot is empty in database mode', async () => {

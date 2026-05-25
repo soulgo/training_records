@@ -423,6 +423,37 @@ test('buildTrainingAnalysisSummary exposes richer data signals', () => {
   assert.equal(typeof payload.latestDays[0].nutritionComplete, 'boolean');
 });
 
+test('buildTrainingAnalysisSummary exposes recent body feedback with date context', () => {
+  const snapshot = buildSyntheticSnapshot();
+  snapshot.bodyFeedback = [
+    {
+      date: '2026-05-10',
+      time: '22:15',
+      body: '硬拉后右侧腰背有点刺痛',
+      telegramMessageId: 610,
+      source: 'database',
+    },
+    {
+      date: '2026-05-15',
+      time: '08:20',
+      body: '早起膝盖外侧酸胀，走路不明显',
+      telegramMessageId: 615,
+      source: 'database',
+    },
+  ];
+
+  const payload = buildTrainingAnalysisSummary(snapshot, new Date('2026-05-16T00:00:00.000Z'));
+
+  assert.equal(payload.bodyFeedback.total, 2);
+  assert.equal(payload.bodyFeedback.recent7.length, 2);
+  assert.equal(payload.bodyFeedback.hasRecentDiscomfort, true);
+  assert.deepEqual(payload.bodyFeedback.latest.map((entry) => entry.date), ['2026-05-15', '2026-05-10']);
+  assert.equal(payload.bodyFeedback.latest[0].body, '早起膝盖外侧酸胀，走路不明显');
+  const latestDay = payload.latestDays.find((day) => day.date === '2026-05-15');
+  assert.equal(latestDay.bodyFeedback.length, 1);
+  assert.equal(latestDay.bodyFeedback[0].time, '08:20');
+});
+
 test('buildTrainingAnalysisSummary marks muscle loss risk when weight and muscle both fall', () => {
   const daily = [
     {

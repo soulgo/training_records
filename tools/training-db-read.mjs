@@ -68,6 +68,20 @@ const TRAINING_MEAL_QUERY = `
   from core.meal
   order by archived_date asc, meal_name asc
 `;
+const BODY_FEEDBACK_QUERY = `
+  select
+    telegram_message_id,
+    telegram_chat_id,
+    body,
+    message_date_unix,
+    markdown_path,
+    updated_at
+  from core.thought
+  where thought_module = 'body_feedback'
+    and status = 'active'
+  order by coalesce(message_date_unix, extract(epoch from updated_at)) asc,
+    telegram_message_id asc
+`;
 
 export async function readTrainingSnapshotFromDatabase(options = {}) {
   const config = resolveTrainingCoreConfig(options.env);
@@ -151,27 +165,30 @@ export async function readTrainingSnapshotFromDatabaseClient(client, now) {
   const measurementResult = await client.query(TRAINING_MEASUREMENT_QUERY);
   const activityResult = await client.query(TRAINING_ACTIVITY_QUERY);
   const mealResult = await client.query(TRAINING_MEAL_QUERY);
+  const bodyFeedbackResult = await client.query(BODY_FEEDBACK_QUERY);
 
   return buildTrainingSnapshotFromRows({
     dayRows: dayResult.rows,
     measurementRows: measurementResult.rows,
     activityRows: activityResult.rows,
     mealRows: mealResult.rows,
+    bodyFeedbackRows: bodyFeedbackResult.rows,
     now,
   });
 }
 
 async function readTrainingSnapshotFromDatabaseWithClients({ createClient, config, now, dateFrom, dateTo }) {
-  const clients = Array.from({ length: 4 }, () => createClient(config));
+  const clients = Array.from({ length: 5 }, () => createClient(config));
 
   try {
     await Promise.all(clients.map((client) => client.connect()));
 
-    const [dayResult, measurementResult, activityResult, mealResult] = await Promise.all([
+    const [dayResult, measurementResult, activityResult, mealResult, bodyFeedbackResult] = await Promise.all([
       clients[0].query(TRAINING_DAY_QUERY),
       clients[1].query(TRAINING_MEASUREMENT_QUERY),
       clients[2].query(TRAINING_ACTIVITY_QUERY),
       clients[3].query(TRAINING_MEAL_QUERY),
+      clients[4].query(BODY_FEEDBACK_QUERY),
     ]);
 
     return buildTrainingSnapshotFromRows({
@@ -179,6 +196,7 @@ async function readTrainingSnapshotFromDatabaseWithClients({ createClient, confi
       measurementRows: measurementResult.rows,
       activityRows: activityResult.rows,
       mealRows: mealResult.rows,
+      bodyFeedbackRows: bodyFeedbackResult.rows,
       now,
       dateFrom,
       dateTo,
@@ -296,6 +314,7 @@ function buildTrainingSnapshotFromRows({
   measurementRows,
   activityRows,
   mealRows,
+  bodyFeedbackRows = [],
   now,
   dateFrom,
   dateTo,
@@ -304,6 +323,7 @@ function buildTrainingSnapshotFromRows({
   const filteredMeasurementRows = filterRowsByDateWindow(measurementRows, 'archived_date', dateFrom, dateTo);
   const filteredActivityRows = filterRowsByDateWindow(activityRows, 'archived_date', dateFrom, dateTo);
   const filteredMealRows = filterRowsByDateWindow(mealRows, 'archived_date', dateFrom, dateTo);
+  const filteredBodyFeedbackRows = filterFeedbackRowsByDateWindow(bodyFeedbackRows, dateFrom, dateTo);
   const measurementsByDate = groupByDate(filteredMeasurementRows, 'archived_date');
   const activitiesByDate = groupByDate(filteredActivityRows, 'archived_date');
   const mealsByDate = groupByDate(filteredMealRows, 'archived_date');
@@ -368,10 +388,13 @@ function buildTrainingSnapshotFromRows({
     };
   });
 
-  return buildTrainingSnapshotFromDaily(
+  return {
+    ...buildTrainingSnapshotFromDaily(
     daily,
     now?.toISOString?.() ?? new Date().toISOString(),
-  );
+    ),
+    bodyFeedback: filteredBodyFeedbackRows.map(normalizeBodyFeedbackRow),
+  };
 }
 
 function filterRowsByDateWindow(rows, key, dateFrom, dateTo) {
@@ -421,6 +444,76 @@ function countActivitiesByType(activities) {
     countsByType[activity.type] = (countsByType[activity.type] ?? 0) + 1;
   }
   return countsByType;
+}
+
+function filterFeedbackRowsByDateWindow(rows, dateFrom, dateTo) {
+  if (!dateFrom && !dateTo) {
+    return rows;
+  }
+
+  return rows.filter((row) => {
+    const archivedDate = normalizeBodyFeedbackRow(row).date;
+    if (dateFrom && archivedDate < dateFrom) {
+      return false;
+    }
+    if (dateTo && archivedDate > dateTo) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function normalizeBodyFeedbackRow(row) {
+  const dateParts = normalizeBodyFeedbackDateParts(row.message_date_unix, row.updated_at);
+  return {
+    date: dateParts.date,
+    time: dateParts.time,
+    body: String(row.body ?? '').trim(),
+    telegramMessageId: toNullableNumber(row.telegram_message_id),
+    telegramChatId: toNullableNumber(row.telegram_chat_id),
+    markdownPath: row.markdown_path ?? null,
+    source: 'database',
+  };
+}
+
+function normalizeBodyFeedbackDateParts(messageDateUnix, updatedAt) {
+  const fromUnix = toNullableNumber(messageDateUnix);
+  if (fromUnix !== null) {
+    return formatDatePartsInShanghai(new Date(fromUnix * 1000));
+  }
+
+  const fallback = new Date(updatedAt ?? '');
+  if (!Number.isNaN(fallback.getTime())) {
+    return formatDatePartsInShanghai(fallback);
+  }
+
+  return {
+    date: '',
+    time: null,
+  };
+}
+
+function formatDatePartsInShanghai(date) {
+  const formatter = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(date)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value]),
+  );
+
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}`,
+  };
 }
 
 const ARCHIVE_TRAINING_DAY_QUERY = `
