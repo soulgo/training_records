@@ -82,7 +82,7 @@ export async function runTelegramSync(options = {}) {
       }));
   const recognizeBatchRunner =
     options.recognizeBatch ??
-    ((batch) => recognizeBatch(batch, env, { aiProvider, rawEnv }));
+    ((batch) => recognizeBatch(batch, env, { aiProvider, rawEnv, fetchTelegramFileById }));
   const persistBatch =
     options.persistNormalizedBatch ??
     ((input) =>
@@ -733,6 +733,7 @@ async function recognizeBatch(batch, env, options = {}) {
   const aiProvider = options.aiProvider ?? createAiProvider(env);
   const promptMetadata = await getRecognitionPromptMetadata();
   const systemPrompt = await loadRecognitionSystemPrompt(options.rawEnv ?? process.env);
+  const fetchTelegramFileById = options.fetchTelegramFileById ?? null;
   const recognitions = await mapWithConcurrency(batch.messages, env.aiConcurrency, async (message) => {
     const fileId = message.photos.at(-1)?.fileId;
     if (!fileId) {
@@ -749,6 +750,28 @@ async function recognizeBatch(batch, env, options = {}) {
         env: options.rawEnv ?? process.env,
       });
     } catch (error) {
+      if (error?.status === 400 && fetchTelegramFileById) {
+        const inlineImageUrl = await buildInlineTelegramImageUrl(fetchTelegramFileById, fileId);
+        if (inlineImageUrl) {
+          try {
+            return await recognizeTelegramImageMessage({
+              aiProvider,
+              message,
+              imageUrl: inlineImageUrl,
+              systemPrompt,
+              promptMetadata,
+              env: options.rawEnv ?? process.env,
+            });
+          } catch (inlineError) {
+            const originalMessage = error instanceof Error ? error.message : String(error);
+            const inlineMessage = inlineError instanceof Error ? inlineError.message : String(inlineError);
+            process.stderr.write(
+              `[telegram-sync] inline image retry failed for ${message.messageId}: ${inlineMessage} (original: ${originalMessage})\n`,
+            );
+            return null;
+          }
+        }
+      }
       const errorMessage = error instanceof Error ? error.message : String(error);
       process.stderr.write(
         `[telegram-sync] image recognition failed for ${message.messageId}: ${errorMessage}\n`,
@@ -758,6 +781,57 @@ async function recognizeBatch(batch, env, options = {}) {
   });
 
   return recognitions.filter(Boolean);
+}
+
+async function buildInlineTelegramImageUrl(fetchTelegramFileById, fileId) {
+  try {
+    const file = await fetchTelegramFileById(fileId);
+    const contentType = normalizeInlineImageContentType(file);
+    if (!contentType || !(file?.data instanceof Uint8Array) || file.data.length === 0) {
+      return null;
+    }
+    return `data:${contentType};base64,${Buffer.from(file.data).toString('base64')}`;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeInlineImageContentType(file) {
+  const rawContentType = String(file?.contentType ?? '')
+    .split(';', 1)[0]
+    .trim()
+    .toLowerCase();
+  if (rawContentType.startsWith('image/')) {
+    return rawContentType;
+  }
+
+  const filePath = String(file?.filePath ?? '').toLowerCase();
+  if (filePath.endsWith('.png')) {
+    return 'image/png';
+  }
+  if (filePath.endsWith('.webp')) {
+    return 'image/webp';
+  }
+  if (filePath.endsWith('.gif')) {
+    return 'image/gif';
+  }
+  if (filePath.endsWith('.bmp')) {
+    return 'image/bmp';
+  }
+  if (filePath.endsWith('.heic')) {
+    return 'image/heic';
+  }
+  if (filePath.endsWith('.heif')) {
+    return 'image/heif';
+  }
+  if (filePath.endsWith('.tif') || filePath.endsWith('.tiff')) {
+    return 'image/tiff';
+  }
+  if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+    return 'image/jpeg';
+  }
+
+  return null;
 }
 
 async function readMarkdownOrDefault(recordPath) {

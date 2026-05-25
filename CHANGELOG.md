@@ -13,6 +13,17 @@
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-05-25
+
+### Fixed
+
+- 修复 Telegram 训练图片识别在上游 AI 拒绝 Telegram 文件直链时的回退路径：会下载图片并以内联图片数据重试，不影响 `/analysis` 与 `/thought` 的独立分支处理。
+- 补充 Telegram 图片识别失败时的上游错误摘要，便于直接从日志定位 400 类识别失败原因。
+
+### Changed
+
+- 同步项目包版本号到 `1.1.4`。
+
 ## [1.1.3] - 2026-05-24
 
 ### Changed
@@ -52,7 +63,8 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.3...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.4...HEAD
+[1.1.4]: https://github.com/soulgo/training_records/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/soulgo/training_records/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/soulgo/training_records/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/soulgo/training_records/compare/v1.1.0...v1.1.1

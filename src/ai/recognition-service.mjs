@@ -224,7 +224,15 @@ async function requestRecognition({
   });
 
   if (!response.ok) {
-    throw new Error(`AI recognition failed with HTTP ${response.status}`);
+    const details = await summarizeRecognitionFailure(response);
+    const error = new Error(
+      details
+        ? `AI recognition failed with HTTP ${response.status}: ${details}`
+        : `AI recognition failed with HTTP ${response.status}`,
+    );
+    error.status = response.status;
+    error.responseDetails = details;
+    throw error;
   }
 
   const payload = await response.json();
@@ -250,6 +258,36 @@ async function requestRecognition({
       schemaVersion,
     });
   }
+}
+
+async function summarizeRecognitionFailure(response) {
+  try {
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.toLowerCase().includes('application/json')) {
+      const payload = await response.json();
+      const message =
+        payload?.error?.message ??
+        payload?.message ??
+        payload?.detail ??
+        payload?.details ??
+        null;
+      return summarizeErrorText(message);
+    }
+
+    return summarizeErrorText(await response.text());
+  } catch {
+    return null;
+  }
+}
+
+function summarizeErrorText(value) {
+  const text = String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) {
+    return null;
+  }
+  return text.length > 240 ? `${text.slice(0, 237)}...` : text;
 }
 
 function stripRecognitionRuntimeMetadata(recognition) {

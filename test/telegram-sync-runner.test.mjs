@@ -2825,6 +2825,180 @@ test('runTelegramSync retries transient AI recognition failures and continues sy
   }
 });
 
+test('runTelegramSync falls back to inline image data when AI rejects a Telegram file URL', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-inline-image-fallback-'));
+  const persistedBatches = [];
+  const originalFetch = globalThis.fetch;
+  let remoteUrlAttempts = 0;
+  let inlineUrlAttempts = 0;
+
+  globalThis.fetch = async (url, init = {}) => {
+    const requestUrl = String(url);
+
+    if (requestUrl.includes('/getFile?')) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            file_path: 'photos/file_803.jpg',
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      );
+    }
+
+    if (requestUrl.includes('/file/bottoken/photos/file_803.jpg')) {
+      return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
+        status: 200,
+        headers: {
+          'content-type': 'image/jpeg',
+        },
+      });
+    }
+
+    if (requestUrl.includes('/chat/completions')) {
+      const body = JSON.parse(init.body);
+      const imagePart = body.messages?.[1]?.content?.find((part) => part.type === 'image_url');
+      const imageUrl = imagePart?.image_url?.url ?? '';
+
+      if (imageUrl === 'https://api.telegram.org/file/bottoken/photos/file_803.jpg') {
+        remoteUrlAttempts += 1;
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: 'remote image URL is not accessible',
+            },
+          }),
+          {
+            status: 400,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        );
+      }
+
+      if (imageUrl.startsWith('data:image/jpeg;base64,')) {
+        inlineUrlAttempts += 1;
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    messageId: 803,
+                    imageType: 'measurement',
+                    detectedDate: '2026-05-18',
+                    dateEvidence: 'image header',
+                    confidence: 0.98,
+                    warnings: [],
+                    records: {
+                      measurement: {
+                        bodyScore: null,
+                        weightKg: 72,
+                        bmi: null,
+                        bodyFatPct: 23.7,
+                        skeletalMuscleKg: null,
+                        visceralFatLevel: null,
+                        basalMetabolismKcal: null,
+                        bodyWaterPct: null,
+                        proteinPct: null,
+                        boneMassKg: null,
+                        fatFreeMassKg: null,
+                        bodyAge: null,
+                        bodyType: null,
+                        measuredAt: '2026-05-18',
+                      },
+                      activities: [],
+                      meals: [],
+                      totalCalories: null,
+                      details: [],
+                      dailyWorkoutSummary: null,
+                    },
+                  }),
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        );
+      }
+
+      throw new Error(`Unexpected image URL: ${imageUrl}`);
+    }
+
+    throw new Error(`Unexpected fetch call: ${requestUrl}`);
+  };
+
+  try {
+    const result = await runTelegramSync({
+      rootDir: tempRoot,
+      env: {
+        TELEGRAM_BOT_TOKEN: 'token',
+        AI_API_KEY: 'key',
+        AI_BASE_URL: 'https://example.com/v1',
+        AI_MODEL: 'gpt-test',
+        TELEGRAM_ALLOWED_CHAT_IDS: '42',
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      getLastProcessedUpdateId: async () => 900,
+      fetchTelegramUpdates: async () => [
+        {
+          update_id: 901,
+          message: {
+            message_id: 803,
+            date: Math.floor(new Date('2026-05-18T02:30:00Z').getTime() / 1000),
+            chat: { id: 42 },
+            photo: [{ file_id: 'file-c', file_unique_id: 'uniq-c' }],
+          },
+        },
+      ],
+      persistNormalizedBatch: async ({ batch }) => {
+        persistedBatches.push(batch);
+        return { status: 'stored', archivedDate: batch.archivedDate };
+      },
+      buildTrainingSnapshot: async () => ({
+        generatedAt: '2026-05-18T00:00:00.000Z',
+        latest: {
+          measurement: null,
+          daily: { date: '2026-05-18' },
+        },
+        daily: [],
+        charts: {
+          weightKg: [],
+          bodyFatPct: [],
+          skeletalMuscleKg: [],
+          basalMetabolism: [],
+          visceralFatLevel: [],
+          intakeCalories: [],
+          trainingCalories: [],
+          cyclingDistanceKm: [],
+        },
+      }),
+      exportTrainingMarkdown: () => '### 2026-05-18\n',
+    });
+
+    assert.equal(result.changed, true);
+    assert.equal(result.batchResults[0].status, 'ready');
+    assert.equal(remoteUrlAttempts, 1);
+    assert.equal(inlineUrlAttempts, 1);
+    assert.equal(persistedBatches.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('runTelegramSync skips malformed recognition responses after logging the recognition failure', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-recognition-errors-'));
   const originalFetch = globalThis.fetch;
