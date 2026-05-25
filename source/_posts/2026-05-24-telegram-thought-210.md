@@ -1,9 +1,9 @@
 ---
 tags:
-  - 训练
+  - 身体反馈
   - 随想
   - Telegram
-thought_module: workout
+thought_module: body_feedback
 telegram_message_id: 210
 telegram_chat_id: 6314355239
 date: 2026-05-24 10:03:37
