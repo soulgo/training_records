@@ -1,0 +1,265 @@
+# 系统架构总览
+
+本项目是一个以 `TrainingSnapshot` 为统一中间层的训练记录系统。核心链路是：从 `训练记录.md` 或 PostgreSQL `core.*` 读取训练数据，生成 `source/_data/training.json` 和 `source/_data/dashboardView.json`，再由 Hexo + `themes/cactus` 渲染为静态站点并发布到 GitHub Pages。
+
+除手工维护 Markdown 外，系统还支持 Telegram 自动同步：Telegram Bot update 可经 Cloudflare Worker 转发为 GitHub `repository_dispatch`，由 GitHub Actions 执行 `npm run sync:telegram`，调用 AI 识别训练截图或处理 `/thought`、`/analysis` 等命令，并优先写入 PostgreSQL。数据库不可用时，训练图片批次会回退写 `训练记录.md`，随想批次会保留 `source/_posts` 产物并追加待补偿队列。
+
+以下内容基于当前仓库中的源码、配置、SQL、GitHub Actions 和 Hexo 主题静态分析。GitHub/Cloudflare 控制台设置、线上 DNS/CDN 状态、Secrets/Variables 实际值、PostgreSQL 实例运行状态均无法从本地仓库直接确认，本文标记为“待人工确认”。
+
+## 技术栈
+
+| 层级 | 技术/文件 | 说明 |
+| --- | --- | --- |
+| 运行时 | Node.js 22 | GitHub Actions 使用 `actions/setup-node@v4`，`node-version: 22` |
+| 站点生成 | Hexo 7、`hexo-cli`、EJS、Stylus | `package.json` 脚本通过 `tools/run-hexo-command.mjs` 调用 Hexo |
+| 前端展示 | `themes/cactus/layout/dashboard.ejs`、`themes/cactus/source/js/training-dashboard.js`、Chart.js CDN | 首页看板读取 `site.data.training` 和 `site.data.dashboardView` |
+| 数据库 | PostgreSQL、`pg` | SQL schema 位于 `sql/training_records/*.sql` 和 `sql/pgsql17.sql` |
+| 自动化 | GitHub Actions | CI、Pages 部署、Telegram 同步、Cloudflare Worker 部署 |
+| 边缘入口 | Cloudflare Worker + Durable Object | `cloudflare/telegram-sync-dispatch-worker.mjs` 和 `wrangler.toml` |
+| 外部服务 | Telegram Bot API、OpenAI-compatible Chat Completions、GitHub API、GitHub Pages | 通过源码中的 `fetch` 调用和 workflow 确认 |
+
+## 目录结构
+
+| 路径 | 作用 |
+| --- | --- |
+| `训练记录.md` | 人工可读训练记录，也是数据库失败时训练数据回退写入点 |
+| `训练数据解析.md` | `npm run build:data` 生成的调试文档 |
+| `_config.yml` | Hexo 站点配置、主题配置、URL、导航、CNAME 对应站点信息 |
+| `source/` | Hexo 内容源；包含首页、随想页、关于页、`source/_posts`、`source/images`、`source/CNAME` |
+| `source/_data/` | Hexo 数据文件输出目录，包含 `training.json` 和 `dashboardView.json` |
+| `themes/cactus/` | 当前 Hexo 主题、EJS 模板、Stylus 样式、前端 JS |
+| `tools/` | 训练解析、数据库读写、Telegram 同步、AI prompt、Hexo 命令封装等 Node 脚本 |
+| `src/ai/` | AI provider、OpenAI-compatible adapter、识别 schema 校验 |
+| `src/telegram/` | Telegram 命令注册与解析入口 |
+| `cloudflare/` | Telegram webhook dispatch Worker |
+| `.github/actions/site-build/` | 复用的站点构建和 Pages 部署 composite action |
+| `.github/workflows/` | CI、Pages、Telegram Sync、Cloudflare Worker 部署流程 |
+| `sql/training_records/` | PostgreSQL `core`、`ingest`、`archive` schema 拆分 SQL |
+| `runtime/` | 本地/CI 运行时队列和失败日志；当前包括 `telegram-sync-pending.ndjson` |
+| `public/` | Hexo 静态站点输出目录，由构建生成并上传 Pages artifact |
+| `docs/` | 设计、接口、配置和架构文档 |
+
+## 核心模块
+
+### 训练数据与看板
+
+| 模块 | 入口/导出 | 依赖 | 作用 |
+| --- | --- | --- | --- |
+| `tools/training-domain.mjs` | 日期、活动、数值、日级快照工具函数 | 无业务模块依赖 | 训练领域基础归一化 |
+| `tools/training-parser.mjs` | `parseTrainingRecord` | `training-domain.mjs` | 将 `训练记录.md` 解析为 `TrainingSnapshot` |
+| `tools/training-snapshot.mjs` | `buildTrainingSnapshot` | `training-parser.mjs`、`training-db-core.mjs` | 根据 `TRAINING_SNAPSHOT_SOURCE` 从 Markdown 或 PostgreSQL 构建快照 |
+| `tools/dashboard-view.mjs` | `buildDashboardViewModel` | `tools/lib/format.mjs` | 从 `TrainingSnapshot` 构造首页看板视图模型 |
+| `tools/generate-training-data.mjs` | `generateTrainingData` | snapshot、view model、archive DB | 写出 `source/_data/*.json` 和 `训练数据解析.md`，并尝试写入 `archive.*` |
+| `tools/run-hexo-command.mjs` | Hexo command wrapper | `hexo` | 以 Node API 调用 Hexo `generate`、`server`、`clean` |
+
+### 数据库访问
+
+| 模块 | 作用 |
+| --- | --- |
+| `tools/training-db-config.mjs` | 解析 `TRAINING_DB_ENABLED`、`TRAINING_DB_URL`、`TRAINING_DB_TIMEOUT_MS`、`TRAINING_DB_APP_NAME` |
+| `tools/training-db-core.mjs` | DB facade/barrel，聚合 read/write，并提供 `exportTrainingMarkdown` |
+| `tools/training-db-read.mjs` | 从 PostgreSQL `core.*` 或 `archive.*` 读取 `TrainingSnapshot`，读取最后 Telegram update id |
+| `tools/training-db-write.mjs` | 写入 `ingest.telegram_*`、`core.training_*`、`core.thought`，导入 Markdown 到 core |
+| `tools/training-db-archive.mjs` | 构建数据时写入 `archive.training_*` 和 parse run/snapshot，失败写 `runtime/training-db-sync.ndjson` |
+| `tools/backfill-*.mjs`、`tools/import-training-markdown.mjs`、`tools/export-training-markdown.mjs`、`tools/reconcile-training-markdown-to-core.mjs` | 数据库与 Markdown 之间的回填、导入、导出、对账脚本 |
+
+### Telegram、AI 与随想
+
+| 模块 | 作用 |
+| --- | --- |
+| `tools/telegram-sync.mjs` | `npm run sync:telegram` 主入口；读取 poll 或 repository_dispatch updates，处理批次、AI 识别、数据库写入、Markdown 回退、通知 |
+| `tools/telegram-sync-lib.mjs` | Telegram update 分组、命令解析、批次分析、训练 Markdown 合并、指纹去重 |
+| `tools/telegram-transport.mjs` | Telegram Bot API：`getUpdates`、`sendMessage`、`getFile`、文件下载、dispatch payload 读取 |
+| `tools/telegram-thoughts.mjs` | 写入、编辑、删除、移动随想 Markdown 和图片 |
+| `tools/training-analysis.mjs` | `/analysis` 训练分析；读取快照，构造上下文，调用 AI 回发建议 |
+| `tools/prompt-generator.mjs`、`prompts/` | 生成和读取图片识别、训练分析 prompt |
+| `src/ai/provider.mjs` | AI provider 工厂，默认 `openai-compatible` |
+| `src/ai/openai-compatible-provider.mjs` | 调用 `${AI_BASE_URL}/chat/completions`，支持重试和可选超时 |
+| `src/ai/recognition-service.mjs` | Telegram 图片识别、JSON schema 校验、数据库识别缓存读取 |
+| `src/ai/schema-validator.mjs` | AI 返回内容 JSON 和 schema 校验 |
+| `src/telegram/command-registry.mjs` | `/move`、`/thought-delete`、`/analysis`、`/thought-edit`、`/thought` 等命令优先级 |
+
+### Cloudflare Worker
+
+`cloudflare/telegram-sync-dispatch-worker.mjs` 是 Telegram webhook 边缘入口：
+
+1. 校验 HTTP method 为 `POST`。
+2. 校验 `X-Telegram-Bot-Api-Secret-Token` 与 `TELEGRAM_SECRET_TOKEN`。
+3. 对带 `media_group_id` 的相册 update，使用 Durable Object binding `TELEGRAM_ALBUM_BUFFER` 聚合 3 秒。
+4. 调用 GitHub API `/repos/{owner}/{repo}/dispatches`，发送 `event_type: telegram_update`。
+5. `GITHUB_OWNER`、`GITHUB_REPO` 默认分别为 `soulgo`、`training_records`。
+
+`wrangler.toml` 已确认配置 Worker 名称 `telegram-sync-dispatch`、入口 `cloudflare/telegram-sync-dispatch-worker.mjs`、Durable Object binding `TELEGRAM_ALBUM_BUFFER`。Cloudflare 控制台中的实际变量、Secret、路由和域名绑定状态：待人工确认。
+
+## 数据流
+
+### 页面构建数据流
+
+1. `npm run build:data` 执行 `tools/generate-training-data.mjs`。
+2. `generateTrainingData` 读取 `训练记录.md`，并根据 `TRAINING_SNAPSHOT_SOURCE` 调用 `buildTrainingSnapshot`：
+   - `markdown`：`tools/training-parser.mjs` 解析 `训练记录.md`。
+   - `database`：`tools/training-db-read.mjs` 读取 PostgreSQL `core.*`。
+3. 生成统一 `TrainingSnapshot`。
+4. 写出 `source/_data/training.json`。
+5. 调用 `buildDashboardViewModel` 写出 `source/_data/dashboardView.json`。
+6. 写出 `训练数据解析.md` 作为排查输出。
+7. 尝试通过 `training-db-archive.mjs` 写入 `archive.*`；失败时追加 `runtime/training-db-sync.ndjson`，不阻断主输出。
+8. `npm run build:site` 执行 `tools/run-hexo-command.mjs generate`。
+9. Hexo 使用 `_config.yml`、`source/` 和 `themes/cactus` 生成 `public/`。
+10. GitHub Pages workflow 上传并部署 `public/`。
+
+### Telegram 自动同步数据流
+
+1. Telegram Bot update 进入 Cloudflare Worker 或由 `getUpdates` 轮询。
+2. Webhook 模式下 Worker dispatch 到 GitHub `repository_dispatch`，触发 `.github/workflows/telegram-sync.yml`。
+3. `telegram-sync.yml` 设置 `TELEGRAM_SYNC_TRANSPORT=webhook` 并运行 `npm run sync:telegram`。
+4. `tools/telegram-transport.mjs` 读取 dispatch payload 或调用 Telegram API。
+5. `tools/telegram-sync-lib.mjs` 分组 update，解析命令、图片、随想和分析请求。
+6. 图片批次调用 `src/ai/recognition-service.mjs`，经 `src/ai/provider.mjs` 和 `openai-compatible-provider.mjs` 请求 AI Chat Completions。
+7. 可选读取 PostgreSQL `ingest.telegram_recognition` 作为识别缓存，取决于 `TELEGRAM_RECOGNITION_CACHE_ENABLED`。
+8. ready 批次优先通过 `tools/training-db-write.mjs` 写入 `ingest.*` 与 `core.*`。
+9. PostgreSQL 写入失败时，训练批次回退写 `训练记录.md`，待补偿记录追加到 `runtime/telegram-sync-pending.ndjson`。
+10. `/thought` 批次写入 `source/_posts` 和 `source/images`；数据库失败时保留 Markdown 并进入待补偿队列。
+11. `/analysis` 读取 `TrainingSnapshot`，调用 AI 生成回复，通过 Telegram `sendMessage` 回发；按文档和代码语义不写 Markdown、`source/_posts` 或 PostgreSQL。
+12. 若仓库内容变化，workflow 提交 `训练记录.md`、`source/_posts`、`source/images`，并在同一 workflow 中调用共享 site-build action 构建并部署 Pages。
+
+## 数据存储方式
+
+| 存储 | 类型 | 写入来源 | 读取/消费方 |
+| --- | --- | --- | --- |
+| `训练记录.md` | Markdown 源数据 | 人工编辑、Telegram DB 失败回退、DB 导出 | `training-parser.mjs`、人工维护 |
+| `source/_posts/*.md` | Hexo 文章/随想 | 人工编辑、`telegram-thoughts.mjs` | Hexo posts、`thoughts.ejs` |
+| `source/images/thoughts/**` | 随想图片 | `telegram-thoughts.mjs` 下载 Telegram 文件 | Hexo 静态资源、随想页 |
+| `source/_data/training.json` | Hexo data JSON | `generate-training-data.mjs` | `dashboard.ejs`、外部读取 |
+| `source/_data/dashboardView.json` | Hexo view model JSON | `dashboard-view.mjs` | `dashboard.ejs` |
+| `训练数据解析.md` | 调试 Markdown | `generate-training-data.mjs` | 人工排查 |
+| `runtime/telegram-sync-pending.ndjson` | 待补偿队列 | `telegram-sync.mjs` | 后续同步重放 |
+| `runtime/training-db-sync.ndjson` | archive 失败日志 | `training-db-archive.mjs` | 人工排查 |
+| PostgreSQL `ingest.telegram_batch/message/recognition` | 原始同步/识别入库 | `training-db-write.mjs` | 去重、缓存、审计 |
+| PostgreSQL `core.training_day/activity/measurement/meal/thought` | 主结构化数据 | `training-db-write.mjs`、backfill/import | `training-db-read.mjs`、站点构建、分析 |
+| PostgreSQL `archive.training_*` | 构建快照归档 | `training-db-archive.mjs` | 历史快照、审计 |
+| Cloudflare Durable Object `TELEGRAM_ALBUM_BUFFER` | 临时相册聚合状态 | Cloudflare Worker | Worker alarm dispatch |
+| `.hexo_cache` | Hexo cache | Hexo/GitHub Actions cache | 构建提速 |
+| `public/` | 静态站点输出 | Hexo generate | GitHub Pages artifact |
+
+## API 调用链
+
+| 调用链 | 触发 | 说明 |
+| --- | --- | --- |
+| `tools/telegram-transport.mjs -> https://api.telegram.org/bot*/getUpdates` | poll 模式 | 拉取 Telegram update |
+| `tools/telegram-transport.mjs -> https://api.telegram.org/bot*/sendMessage` | 同步结果通知、`/analysis` 回复 | 回发 Telegram 消息 |
+| `tools/telegram-transport.mjs -> getFile/file download` | 图片识别、随想图片保存 | 获取 Telegram 图片 URL 或二进制 |
+| `src/ai/openai-compatible-provider.mjs -> ${AI_BASE_URL}/chat/completions` | 图片识别、训练分析 | 默认 provider 为 `openai-compatible` |
+| `cloudflare/telegram-sync-dispatch-worker.mjs -> https://api.github.com/repos/{owner}/{repo}/dispatches` | Telegram webhook | 触发 GitHub `repository_dispatch` |
+| `pg.Client` | DB 读写 | 连接 `TRAINING_DB_URL` 指向的 PostgreSQL |
+
+## Hexo 构建流程
+
+| npm script | 实际命令 | 作用 |
+| --- | --- | --- |
+| `build:data` | `node tools/generate-training-data.mjs` | 生成 `source/_data` 和解析调试文件 |
+| `build:site` | `node tools/run-hexo-command.mjs generate` | 调用 Hexo 生成 `public/` |
+| `build` | `npm run build:data && npm run build:site` | 完整构建 |
+| `server` | `npm run build:data && node tools/run-hexo-command.mjs server` | 本地开发服务 |
+| `clean` | `node tools/run-hexo-command.mjs clean` | Hexo 清理 |
+
+Hexo 站点配置 `_config.yml` 指定：
+
+- `source_dir: source`
+- `public_dir: public`
+- `theme: cactus`
+- `url: https://soulgo.chat`
+- `permalink: thoughts/:year/:month/:day/:title/`
+- `theme_config.nav` 包含 `records`、`thoughts`、`misc`、`about`
+
+首页 `source/index.md` 使用 `layout: dashboard`。`themes/cactus/layout/dashboard.ejs` 读取 `site.data.training` 和 `site.data.dashboardView`，输出指标卡、趋势图 canvas、每日记录分页数据，并加载 Chart.js CDN 与 `/js/training-dashboard.js`。
+
+随想页 `source/thoughts/index.md` 和 `source/misc/index.md` 使用 `layout: thoughts`。`themes/cactus/layout/thoughts.ejs` 过滤带 `随想` tag 的 posts，并按 `thought_module` 区分锻炼随想和杂项随想。
+
+## GitHub Actions
+
+| Workflow/Action | 触发 | 关键步骤 | 输出 |
+| --- | --- | --- | --- |
+| `.github/workflows/ci-tests.yml` | push main、PR、手动 | checkout、setup Node 22、`npm ci`、`npm test` | 测试结果 |
+| `.github/actions/site-build/action.yml` | 被 workflow 调用 | setup Node、cache `.hexo_cache`、`npm ci`、可选 backfill/reconcile/tests、`npm run build`、可选 Pages deploy | `public/` artifact 和 Pages 部署 |
+| `.github/workflows/deploy-pages.yml` | push main 站点相关路径、手动 | 设置 `TRAINING_DB_*`、`TRAINING_SNAPSHOT_SOURCE`，调用 site-build | GitHub Pages |
+| `.github/workflows/telegram-sync.yml` | 手动、`训练记录.md` push、`repository_dispatch: telegram_update` | backfill、`npm run sync:telegram`、可选 export、检测变更、test:fast、commit/push、site-build | 内容同步和 Pages 部署 |
+| `.github/workflows/deploy-cloudflare-worker.yml` | push main 的 Worker 配置相关路径、手动 | `cloudflare/wrangler-action@v3 deploy` | Cloudflare Worker 部署 |
+
+## 配置文件与环境变量作用域
+
+| 变量/配置 | 作用域 | 使用位置 |
+| --- | --- | --- |
+| `_config.yml` | Hexo 站点 | Hexo generate、主题配置、站点 URL |
+| `themes/cactus/_config.yml` | 主题默认值 | 被主题脚本 merge，根 `_config.yml` 覆盖部分配置 |
+| `source/CNAME` | GitHub Pages 自定义域名 | 当前值 `soulgo.chat` |
+| `wrangler.toml` | Cloudflare Worker 部署 | Worker 入口、compatibility date、Durable Object binding |
+| `TELEGRAM_BOT_TOKEN` | GitHub Actions/本地 sync | Telegram API |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | GitHub Actions/本地 sync | 同步白名单 |
+| `TELEGRAM_POLL_LIMIT` | GitHub Actions/本地 sync | `getUpdates` limit，默认 20 |
+| `TELEGRAM_SYNC_TRANSPORT` | GitHub Actions/本地 sync | `webhook` 时读取 dispatch payload，否则 poll |
+| `TELEGRAM_SYNC_NOTIFY` | GitHub Actions/本地 sync | 控制同步结果通知 |
+| `TELEGRAM_RECOGNITION_PROMPT_PATH` | sync | 覆盖识别 prompt |
+| `TELEGRAM_RECOGNITION_CACHE_ENABLED` | sync/AI recognition | 开启数据库识别缓存 |
+| `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` | sync/analysis | AI Chat Completions 必需配置 |
+| `AI_PROVIDER` | sync/analysis | 默认 `openai-compatible` |
+| `AI_TIMEOUT_MS` | sync/analysis | 可选 AI 请求超时 |
+| `AI_CONCURRENCY` | sync | 图片识别并发，默认 3 |
+| `TRAINING_ANALYSIS_GOAL` | `/analysis` | 覆盖训练分析长期目标 |
+| `TRAINING_ANALYSIS_PROMPT_PATH` | `/analysis` | 覆盖训练分析 prompt |
+| `TRAINING_DB_ENABLED` | 所有 DB 读写 | 是否启用 PostgreSQL |
+| `TRAINING_DB_URL` | 所有 DB 读写 | PostgreSQL connection string |
+| `TRAINING_DB_TIMEOUT_MS` | 所有 DB 读写 | pg connection timeout，默认 3000 |
+| `TRAINING_DB_APP_NAME` | 所有 DB 读写 | pg application_name，默认 `training-records-dashboard` |
+| `TRAINING_DB_LOG_PATH` | archive failure log | 默认 `runtime/training-db-sync.ndjson` |
+| `TRAINING_SNAPSHOT_SOURCE` | build:data、snapshot、analysis | `markdown` 或 `database`，默认 `markdown` |
+| `GITHUB_TOKEN` | Cloudflare Worker | 调用 GitHub repository_dispatch |
+| `GITHUB_OWNER`、`GITHUB_REPO` | Cloudflare Worker | dispatch 目标仓库，默认 `soulgo/training_records` |
+| `GITHUB_API_BASE_URL` | Cloudflare Worker | 默认 `https://api.github.com` |
+| `TELEGRAM_SECRET_TOKEN` | Cloudflare Worker | Telegram webhook secret header 校验 |
+| `TELEGRAM_ALBUM_BUFFER` | Cloudflare Worker | Durable Object binding |
+| `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` | GitHub Actions | Wrangler 部署 Worker |
+| `GITHUB_EVENT_NAME`、`GITHUB_EVENT_PATH` | GitHub Actions | 读取 `repository_dispatch` payload |
+| `GITHUB_ACTIONS`、`GITHUB_ACTOR` | GitHub Actions | 运行上下文、archive 运行人 |
+
+实际 GitHub Secrets/Variables、Cloudflare Secrets/Variables 是否已配置：待人工确认。
+
+## 部署方式
+
+### 本地开发
+
+1. `npm ci`
+2. `npm run build:data`
+3. `npm run server`
+4. Hexo server 从 `source/`、`source/_data/` 和 `themes/cactus` 渲染本地页面。
+
+本地是否连接 PostgreSQL 取决于 `TRAINING_DB_ENABLED`、`TRAINING_DB_URL` 和 `TRAINING_SNAPSHOT_SOURCE`。默认 `TRAINING_SNAPSHOT_SOURCE=markdown`，不依赖 PostgreSQL 构建页面。
+
+### GitHub Pages
+
+`deploy-pages.yml` 在 main 分支站点相关文件变更后触发，调用 `.github/actions/site-build`。该 action 执行依赖安装、可选回填/对账、构建数据、Hexo 生成、上传 `public/` 并部署 GitHub Pages。
+
+`source/CNAME` 当前为 `soulgo.chat`。GitHub Pages 自定义域名是否已在 GitHub Settings 启用：待人工确认。
+
+### Telegram webhook 与 Cloudflare
+
+Cloudflare Worker 已在仓库中存在并可由 `deploy-cloudflare-worker.yml` 通过 Wrangler 部署。Worker 接收 Telegram webhook 后转发到 GitHub repository dispatch。Worker route、Telegram webhook URL、Cloudflare DNS/CDN 是否绑定 `soulgo.chat`：待人工确认。
+
+## 自动化流程
+
+1. **CI Tests**：代码或配置变更后运行完整 `npm test`。
+2. **Deploy GitHub Pages**：站点相关变更后构建 `source/_data`、Hexo 静态文件并部署 Pages。
+3. **Telegram Sync**：Telegram update 或 `训练记录.md` push 后同步数据、提交内容变更，并在同一 workflow 中构建部署站点。
+4. **Deploy Cloudflare Worker**：Worker 或 Wrangler 配置变更后部署 Cloudflare Worker。
+5. **共享 site-build action**：统一 Node setup、Hexo cache、依赖安装、backfill/reconcile、测试、构建和 Pages deploy 步骤。
+
+## 待人工确认清单
+
+- GitHub Pages 是否实际启用，并绑定 `soulgo.chat`。
+- `soulgo.chat` 的 DNS 是否由 Cloudflare 托管，是否启用 CDN/proxy。
+- Cloudflare Worker 是否已部署到生产环境，以及 route/webhook URL。
+- Cloudflare Worker runtime Secrets/Variables：`GITHUB_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`GITHUB_OWNER`、`GITHUB_REPO`、`GITHUB_API_BASE_URL`。
+- Durable Object binding `TELEGRAM_ALBUM_BUFFER` 是否在已部署 Worker 上生效。
+- GitHub Actions Secrets/Variables：`TELEGRAM_BOT_TOKEN`、`AI_API_KEY`、`TRAINING_DB_URL`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`AI_BASE_URL`、`AI_MODEL`、`TRAINING_DB_ENABLED` 等。
+- PostgreSQL 实例是否在线、schema 是否已按 `sql/pgsql17.sql` 或拆分 SQL 初始化、当前账号权限是否满足读写。
+- Telegram Bot webhook 是否指向 Cloudflare Worker，且 secret header 与 Cloudflare 配置一致。
