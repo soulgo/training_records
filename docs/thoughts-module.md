@@ -1,9 +1,10 @@
 # 多模块随想维护说明
 
-这份文档说明当前随想系统的页面、Telegram 同步、Markdown 兼容层和 PostgreSQL 镜像口径。当前有两个随想模块：
+这份文档说明当前随想系统的页面、Telegram 同步、Markdown 兼容层和 PostgreSQL 镜像口径。当前有三个随想模块：
 
 - 锻炼随想：路径 `/thoughts/`，模块键 `workout`
 - 杂七杂八：路径 `/misc/`，模块键 `misc`
+- 身体反馈：路径 `/body-feedback/`，模块键 `body_feedback`
 
 两个模块共用同一套 Telegram 写入、编辑、删除、带图、pending queue 和 DB 镜像逻辑，只在命令解析和页面过滤时按模块分流。
 
@@ -11,13 +12,14 @@
 
 - `source/thoughts/index.md`：锻炼随想页面，`layout: thoughts`，未声明模块时默认 `workout`
 - `source/misc/index.md`：杂七杂八页面，`layout: thoughts`，`thought_module: misc`
+- `source/body-feedback/index.md`：身体反馈页面，`layout: thoughts`，`thought_module: body_feedback`
 - `themes/cactus/layout/thoughts.ejs`：共用列表 layout，读取 `page.thought_module || 'workout'` 过滤文章
 - `themes/cactus/source/css/thoughts.styl`：共用卡片样式
 - `_config.yml` 和 `themes/cactus/languages/zh-CN.yml`：导航入口和中文文案
 
 列表页只展示短内容卡片：时间、标签、Telegram message id、正文和图片预览。不再展示顶部截图式说明区，也不展示“阅读全文”。详情页对没有 `title` 的 Telegram 随想做兼容，不渲染空 H1。
 
-首页和归档继续把带 `随想` 标签的文章排除在普通文章列表之外，因此两个随想模块都不会混入首页文章流。
+首页和归档继续把带 `随想` 标签的文章排除在普通文章列表之外，因此三个随想模块都不会混入首页文章流。
 
 ## 2. Telegram 命令
 
@@ -30,6 +32,8 @@
 /thought 锻炼 正文
 /随想 杂七杂八 正文
 /thought 杂七杂八 正文
+/随想 身体反馈 正文
+/thought 身体反馈 正文
 ```
 
 路由规则：
@@ -37,6 +41,7 @@
 - `/随想 正文` 和 `/thought 正文` 默认进入 `workout`
 - 命令后的第一个空格分隔 token 是 `锻炼` 或 `锻炼随想` 时进入 `workout`
 - 命令后的第一个空格分隔 token 是 `杂七杂八` 时进入 `misc`
+- 命令后的第一个空格分隔 token 是 `身体反馈` 时进入 `body_feedback`
 - 只识别第一个 token；未识别 token 会被当作正文，模块仍为 `workout`
 - 图片 caption 和相册 caption 走同一套解析；识别为随想后不会进入训练截图 AI 识别
 
@@ -45,9 +50,10 @@
 ```text
 /随想编 <id> <完整正文>
 /随想编 <id> 杂七杂八 <完整正文>
+/随想编 <id> 身体反馈 <完整正文>
 ```
 
-支持三种编辑入口：直接编辑原 Telegram 消息、回复已有随想发送 `/随想` 或 `/thought` 修订版、使用 `/随想编 <id>` 显式按 ID 编辑。编辑时如果没有显式模块 token，会保留目标 Markdown 里的 `thought_module`；如果显式写了 `锻炼`、`锻炼随想` 或 `杂七杂八`，会同步更新 `thought_module` 和 tags。
+支持三种编辑入口：直接编辑原 Telegram 消息、回复已有随想发送 `/随想` 或 `/thought` 修订版、使用 `/随想编 <id>` 显式按 ID 编辑。编辑时如果没有显式模块 token，会保留目标 Markdown 里的 `thought_module`；如果显式写了 `锻炼`、`锻炼随想`、`杂七杂八` 或 `身体反馈`，会同步更新 `thought_module` 和 tags。
 
 删除随想：
 
@@ -63,13 +69,16 @@
 ```text
 /移动 锻炼
 /移动 杂七杂八
+/移动 身体反馈
 /移动 <id> 锻炼
 /移动 <id> 杂七杂八
+/移动 <id> 身体反馈
 /随想 <id> 锻炼
 /随想 <id> 杂七杂八
+/随想 <id> 身体反馈
 ```
 
-`/移动 锻炼` 和 `/移动 杂七杂八` 需要回复原随想消息；`/移动 <id> 锻炼` 和 `/移动 <id> 杂七杂八` 直接按页面显示的 `#id` 定位。`/随想 <id> 锻炼` 和 `/随想 <id> 杂七杂八` 是兼容旧使用习惯的移动写法，等价于 `/移动 <id> ...`。移动只更新 Markdown front matter 的 `thought_module` 和 tags，不改正文、图片、日期和文件名；DB 镜像同步更新 `core.thought.thought_module`。如果只发送 `/移动 <id>` 或 `/随想 <id>` 而没有目标模块，系统不会生成移动批次。
+`/移动 锻炼`、`/移动 杂七杂八` 和 `/移动 身体反馈` 需要回复原随想消息；`/移动 <id> 锻炼`、`/移动 <id> 杂七杂八` 和 `/移动 <id> 身体反馈` 直接按页面显示的 `#id` 定位。`/随想 <id> 锻炼`、`/随想 <id> 杂七杂八` 和 `/随想 <id> 身体反馈` 是兼容旧使用习惯的移动写法，等价于 `/移动 <id> ...`。移动只更新 Markdown front matter 的 `thought_module` 和 tags，不改正文、图片、日期和文件名；DB 镜像同步更新 `core.thought.thought_module`。如果只发送 `/移动 <id>` 或 `/随想 <id>` 而没有目标模块，系统不会生成移动批次。
 
 ## 3. Markdown Front Matter
 
@@ -109,6 +118,21 @@ telegram_chat_id: 42
 ---
 ```
 
+身体反馈示例：
+
+```yaml
+---
+date: 2026-05-14 10:30:00
+tags:
+  - 身体反馈
+  - 随想
+  - Telegram
+thought_module: body_feedback
+telegram_message_id: 504
+telegram_chat_id: 42
+---
+```
+
 历史 Telegram 随想如果没有 `thought_module`，运行时默认视为 `workout`，不会批量改写旧文件。图片继续写到 `source/images/thoughts/YYYY/MM/`，front matter 的 `photos` 保存 `/images/thoughts/...` 引用。
 
 ## 4. 数据库镜像
@@ -116,7 +140,7 @@ telegram_chat_id: 42
 `core.thought` 是随想正文镜像表，保存正文、模块、Telegram 元数据、Markdown 路径和图片引用，不保存图片二进制。关键字段：
 
 - `telegram_message_id`：稳定定位 ID，也是页面显示的 `#id`
-- `thought_module`：`workout` 或 `misc`，默认 `workout`
+- `thought_module`：`workout`、`misc` 或 `body_feedback`，默认 `workout`
 - `tags_json`：页面标签镜像
 - `markdown_path`：对应 Markdown 路径
 - `image_refs_json`：有序图片引用
@@ -148,6 +172,7 @@ where thought_module is null;
 - `themes/cactus/source/css/thoughts.styl`
 - `source/thoughts/index.md`
 - `source/misc/index.md`
+- `source/body-feedback/index.md`
 - `_config.yml`
 - `themes/cactus/languages/zh-CN.yml`
 - `sql/pgsql17.sql`

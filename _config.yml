@@ -36,6 +36,7 @@ theme_config:
     records: /
     thoughts: /thoughts/
     misc: /misc/
+    body_feedback: /body-feedback/
     about: /about/
   posts_overview:
     show_all_posts: false

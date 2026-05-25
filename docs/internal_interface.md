@@ -225,6 +225,7 @@ Worker 环境变量：
 | `/随想 <正文>` | `可对外` | 新增随想 | `/thought` 中文别名 |
 | `/thought 锻炼 <正文>` / `/随想 锻炼 <正文>` | `可对外` | 新增锻炼随想 | 模块为 `workout`，tags 为 `训练`、`随想`、`Telegram` |
 | `/thought 杂七杂八 <正文>` / `/随想 杂七杂八 <正文>` | `可对外` | 新增杂项随想 | 模块为 `misc`，tags 为 `杂七杂八`、`随想`、`Telegram` |
+| `/thought 身体反馈 <正文>` / `/随想 身体反馈 <正文>` | `可对外` | 新增身体反馈 | 模块为 `body_feedback`，tags 为 `身体反馈`、`随想`、`Telegram` |
 | `/thought-edit <id> <正文>` | `可对外` | 显式按 Telegram message id 编辑随想 | 中文别名见下方 |
 | `/thoughtedit <id> <正文>` | `可对外` | 编辑随想 | `/thought-edit` 兼容别名 |
 | `/edit-thought <id> <正文>` | `可对外` | 编辑随想 | `/thought-edit` 兼容别名 |
@@ -237,6 +238,7 @@ Worker 环境变量：
 | `/随想删 <id>` | `可对外` | 删除随想 | 同 `thought-delete` |
 | `/move <id> 杂七杂八` | `可对外` | 移动随想到目标模块 | 中文别名 `/移动` |
 | `/移动 <id> 杂七杂八` | `可对外` | 移动随想到目标模块 | `/move` 中文别名 |
+| `/移动 <id> 身体反馈` | `可对外` | 移动随想到身体反馈模块 | `/move` 中文别名 |
 
 命令路由采用声明式 registry，优先级保持为：
 
@@ -256,13 +258,14 @@ registry 目前只负责把现有别名映射到既有 batch 形状，不改变�
 - batch 顶层字段
 - `thought_module` 默认值
 | `/随想 <id> 锻炼` | `可对外` | 兼容旧习惯的移动写法 | 等价于 `/移动 <id> 锻炼` |
+| `/随想 <id> 身体反馈` | `可对外` | 兼容旧习惯的移动写法 | 等价于 `/移动 <id> 身体反馈` |
 
 随想文件契约：
 
 - Markdown 写入 `source/_posts/YYYY-MM-DD-telegram-thought-<message_id>.md`。
 - 图片写入 `source/images/thoughts/YYYY/MM/`，front matter 的 `photos` 保存 `/images/thoughts/...` 公共路径。
 - front matter 必含 `date`、`tags`、`thought_module`、`telegram_message_id`、`telegram_chat_id`。
-- `thought_module` 只支持 `workout` 和 `misc`，历史缺省按 `workout` 兼容。
+- `thought_module` 只支持 `workout`、`misc` 和 `body_feedback`，历史缺省按 `workout` 兼容。
 - 数据库镜像表是 `core.thought`，删除命令在数据库中保存 `status: "deleted"`。
 
 ### 4.4 训练分析命令
@@ -411,7 +414,7 @@ registry 目前只负责把现有别名映射到既有 batch 形状，不改变�
 | `telegramChatId` / `telegram_chat_id` | `number \| null` | Telegram chat id |
 | `command` | `string` | 触发命令，如 `/thought`、`/随想编` |
 | `body` | `string` | 随想正文 |
-| `thoughtModule` / `thought_module` | `workout \| misc` | 随想模块 |
+| `thoughtModule` / `thought_module` | `workout \| misc \| body_feedback` | 随想模块 |
 | `tags` / `tags_json` | `string[]` | Hexo tags |
 | `messageDateUnix` / `message_date_unix` | `number \| null` | 原 Telegram 消息时间 |
 | `markdownPath` / `markdown_path` | `string \| null` | Markdown 文件路径 |

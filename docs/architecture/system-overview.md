@@ -170,11 +170,11 @@ Hexo 站点配置 `_config.yml` 指定：
 - `theme: cactus`
 - `url: https://soulgo.chat`
 - `permalink: thoughts/:year/:month/:day/:title/`
-- `theme_config.nav` 包含 `records`、`thoughts`、`misc`、`about`
+- `theme_config.nav` 包含 `records`、`thoughts`、`misc`、`body_feedback`、`about`
 
 首页 `source/index.md` 使用 `layout: dashboard`。`themes/cactus/layout/dashboard.ejs` 读取 `site.data.training` 和 `site.data.dashboardView`，输出指标卡、趋势图 canvas、每日记录分页数据，并加载 Chart.js CDN 与 `/js/training-dashboard.js`。
 
-随想页 `source/thoughts/index.md` 和 `source/misc/index.md` 使用 `layout: thoughts`。`themes/cactus/layout/thoughts.ejs` 过滤带 `随想` tag 的 posts，并按 `thought_module` 区分锻炼随想和杂项随想。
+随想页 `source/thoughts/index.md`、`source/misc/index.md` 和 `source/body-feedback/index.md` 使用 `layout: thoughts`。`themes/cactus/layout/thoughts.ejs` 过滤带 `随想` tag 的 posts，并按 `thought_module` 区分锻炼随想、杂项随想和身体反馈。
 
 ## GitHub Actions
 

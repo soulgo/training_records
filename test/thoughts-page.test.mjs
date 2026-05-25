@@ -83,12 +83,14 @@ tags:
   });
 });
 
-test('thoughts and misc pages split thought posts by thought_module', () => {
+test('thought module pages split thought posts by thought_module', () => {
   withSharedSiteFixture(() => {
     const workoutPostPath = path.join(rootDir, 'source', '_posts', '2026-05-14-telegram-thought-501.md');
     const miscPostPath = path.join(rootDir, 'source', '_posts', '2026-05-15-telegram-thought-601.md');
+    const bodyFeedbackPostPath = path.join(rootDir, 'source', '_posts', '2026-05-16-telegram-thought-701.md');
     const originalWorkoutPost = readOptionalFile(workoutPostPath);
     const originalMiscPost = readOptionalFile(miscPostPath);
+    const originalBodyFeedbackPost = readOptionalFile(bodyFeedbackPostPath);
 
     try {
       writeFileSync(
@@ -124,6 +126,23 @@ telegram_chat_id: 42
 `,
         'utf8',
       );
+      writeFileSync(
+        bodyFeedbackPostPath,
+        `---
+date: 2026-05-16 10:30:00
+tags:
+  - 身体反馈
+  - 随想
+  - Telegram
+thought_module: body_feedback
+telegram_message_id: 701
+telegram_chat_id: 42
+---
+
+身体反馈模块随想
+`,
+        'utf8',
+      );
 
       execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
         cwd: rootDir,
@@ -136,17 +155,25 @@ telegram_chat_id: 42
 
       const thoughtsIndex = readFileSync(path.join(rootDir, 'public', 'thoughts', 'index.html'), 'utf8');
       const miscIndex = readFileSync(path.join(rootDir, 'public', 'misc', 'index.html'), 'utf8');
+      const bodyFeedbackIndex = readFileSync(path.join(rootDir, 'public', 'body-feedback', 'index.html'), 'utf8');
       const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
 
       assert.match(thoughtsIndex, /锻炼模块默认随想/);
       assert.doesNotMatch(thoughtsIndex, /杂七杂八模块随想/);
+      assert.doesNotMatch(thoughtsIndex, /身体反馈模块随想/);
       assert.match(miscIndex, /杂七杂八模块随想/);
       assert.doesNotMatch(miscIndex, /锻炼模块默认随想/);
+      assert.doesNotMatch(miscIndex, /身体反馈模块随想/);
+      assert.match(bodyFeedbackIndex, /身体反馈模块随想/);
+      assert.doesNotMatch(bodyFeedbackIndex, /锻炼模块默认随想/);
+      assert.doesNotMatch(bodyFeedbackIndex, /杂七杂八模块随想/);
       assert.doesNotMatch(homepage, /锻炼模块默认随想/);
       assert.doesNotMatch(homepage, /杂七杂八模块随想/);
+      assert.doesNotMatch(homepage, /身体反馈模块随想/);
     } finally {
       restoreOptionalFile(workoutPostPath, originalWorkoutPost);
       restoreOptionalFile(miscPostPath, originalMiscPost);
+      restoreOptionalFile(bodyFeedbackPostPath, originalBodyFeedbackPost);
     }
   });
 });

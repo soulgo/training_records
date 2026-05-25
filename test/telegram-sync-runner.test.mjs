@@ -1565,6 +1565,58 @@ test('runTelegramSync writes a module-scoped /随想 caption into source/_posts 
   assert.match(postContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
 });
 
+test('runTelegramSync writes a body feedback /随想 caption into source/_posts with module metadata', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-body-feedback-'));
+  const persistedBatches = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 504,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/随想 身体反馈 今天硬拉后右侧腰背有点刺痛',
+        },
+      },
+    ],
+    recognizeBatch: async () => {
+      throw new Error('recognizeBatch should not run for thought-only sync');
+    },
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  const postPath = path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-504.md');
+  const postContent = await readFile(postPath, 'utf8');
+
+  assert.equal(result.batchResults[0].thought.thoughtModule, 'body_feedback');
+  assert.equal(persistedBatches[0].thought.thoughtModule, 'body_feedback');
+  assert.match(postContent, /thought_module: body_feedback/);
+  assert.match(postContent, /tags:\n  - 身体反馈\n  - 随想\n  - Telegram/);
+  assert.match(postContent, /今天硬拉后右侧腰背有点刺痛/);
+});
+
 test('runTelegramSync writes a /thought album caption as one thought post with all photos', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-album-'));
   const downloadedFileIds = [];

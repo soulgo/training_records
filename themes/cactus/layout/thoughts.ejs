@@ -3,20 +3,26 @@ function resolveThoughtModule(post) {
   if (post?.thought_module) {
     return post.thought_module;
   }
+  if (post?.tags?.findOne && post.tags.findOne({ name: '身体反馈' })) {
+    return 'body_feedback';
+  }
   if (post?.tags?.findOne && post.tags.findOne({ name: '杂七杂八' })) {
     return 'misc';
   }
   return 'workout';
 }
 
+const thoughtModuleEmptyTexts = {
+  workout: '还没有锻炼随想。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/随想 锻炼 正文</code> 自动归档到这里。',
+  misc: '还没有杂七杂八。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/随想 杂七杂八 正文</code> 自动归档到这里。',
+  body_feedback: '还没有身体反馈。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/随想 身体反馈 正文</code> 自动归档到这里。',
+};
 const activeThoughtModule = page.thought_module || 'workout';
 const thoughts = site.posts
   .sort('date', 'desc')
   .filter((post) => post?.tags?.findOne && post.tags.findOne({ name: '随想' }))
   .filter((post) => resolveThoughtModule(post) === activeThoughtModule);
-const emptyText = activeThoughtModule === 'misc'
-  ? '还没有杂七杂八。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/随想 杂七杂八 正文</code> 自动归档到这里。'
-  : '还没有锻炼随想。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/随想 锻炼 正文</code> 自动归档到这里。';
+const emptyText = thoughtModuleEmptyTexts[activeThoughtModule] || thoughtModuleEmptyTexts.workout;
 %>
 
 <section class="thoughts-page">

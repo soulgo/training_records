@@ -11,6 +11,11 @@ const THOUGHT_MODULES = {
     labels: new Set(['杂七杂八']),
     tags: ['杂七杂八', '随想', 'Telegram'],
   },
+  body_feedback: {
+    key: 'body_feedback',
+    labels: new Set(['身体反馈']),
+    tags: ['身体反馈', '随想', 'Telegram'],
+  },
 };
 
 export function resolveThoughtModuleLabel(label) {

@@ -254,7 +254,7 @@ npm run build
 - 同步时会生成 `source/_posts/YYYY-MM-DD-telegram-thought-<messageId>.md`
 - front matter 当前包含：`date`、`tags`、`telegram_message_id`、`telegram_chat_id`，带图随想还会包含 `photos`
 - 当前不会为 Telegram 随想生成 `title`
-- “锻炼随想”列表页只展示时间、标签和正文，不展示标题，也没有“阅读全文”
+- “锻炼随想”“杂七杂八”“身体反馈”列表页只展示时间、标签和正文，不展示标题，也没有“阅读全文”
 - 无标题 Telegram 随想的单篇详情页不会渲染空 H1
 - 当前还支持随想编辑、删除和移动；更完整的命令见 `docs/telegram-usage.md`
 

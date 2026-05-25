@@ -250,13 +250,24 @@ test('groups module-scoped thought commands into module-specific thought batches
         text: '/thought 锻炼 今天腿练得很实',
       },
     },
+    {
+      update_id: 207,
+      message: {
+        message_id: 17,
+        date: 1_746_748_802,
+        chat: { id: 42 },
+        text: '/随想 身体反馈 今天硬拉后右侧腰背有点刺痛',
+      },
+    },
   ]);
 
-  assert.equal(batches.length, 2);
+  assert.equal(batches.length, 3);
   assert.equal(batches[0].thought.thoughtModule, 'misc');
   assert.equal(batches[0].thought.body, '今天整理了一堆没来得及记的事');
   assert.equal(batches[1].thought.thoughtModule, 'workout');
   assert.equal(batches[1].thought.body, '今天腿练得很实');
+  assert.equal(batches[2].thought.thoughtModule, 'body_feedback');
+  assert.equal(batches[2].thought.body, '今天硬拉后右侧腰背有点刺痛');
 });
 
 test('groups thought captions with images and albums without treating them as training screenshots', async () => {
@@ -467,6 +478,14 @@ test('groups supported Telegram command aliases without changing routed batch sh
       command: '/move',
       targetMessageId: 126,
       thoughtModule: 'misc',
+    },
+    {
+      text: '/移动 131 身体反馈',
+      kind: 'thought_move',
+      payloadKey: 'thoughtMove',
+      command: '/移动',
+      targetMessageId: 131,
+      thoughtModule: 'body_feedback',
     },
     {
       text: '/移动 127 锻炼',

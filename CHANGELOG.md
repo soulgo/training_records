@@ -13,6 +13,13 @@
 
 ## [Unreleased]
 
+## [1.1.5] - 2026-05-25
+
+### Added
+
+- 新增“身体反馈”随想模块：支持站点 `/body-feedback/` 页面，并通过 Telegram `/随想 身体反馈 内容`、`/thought 身体反馈 内容` 归档锻炼过程中的不适、疼痛、疲劳和恢复异常。
+- 支持按既有 ID 方式编辑、删除和移动身体反馈随想，`/移动 <id> 身体反馈` 与 `/随想 <id> 身体反馈` 会同步更新模块和标签。
+
 ### Fixed
 
 - 修复 Telegram 训练图片识别在上游返回 `records.details: null` 时整张运动明细图被 schema 校验丢弃的问题，避免 HIIT 等活动明细缺失导致活动次数为 0。
@@ -20,6 +27,10 @@
 - 修复 Telegram 训练图片识别在上游返回 `records.details` 为对象或字符串时被本地 schema 校验整体拒绝的问题：识别服务会先归一为字符串数组，再执行严格校验，避免 `missing recognition` 导致图片批次无法入库。
 - 修复 Telegram 训练图片识别在 OpenAI 兼容接口不支持 `json_schema` structured output 时被 400 拒绝的问题：保留严格 schema 优先策略，并在兼容性错误时自动降级到 `json_object` 重试，避免 `missing recognition` 导致图片批次无法入库。
 - 补充 Telegram 图片识别 `json_object` 降级请求中的小写 `json` 明确提示，兼容要求消息正文必须包含 `json` 关键字的上游接口。
+
+### Changed
+
+- 同步项目包版本号到 `1.1.5`。
 
 ## [1.1.4] - 2026-05-25
 
@@ -71,7 +82,8 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.4...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.5...HEAD
+[1.1.5]: https://github.com/soulgo/training_records/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/soulgo/training_records/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/soulgo/training_records/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/soulgo/training_records/compare/v1.1.1...v1.1.2

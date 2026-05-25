@@ -72,7 +72,7 @@ training_day/activity/measurement/meal/thought" style="rounded=1;whiteSpace=wrap
 parse snapshot / run / training_*" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontColor=#000000;strokeWidth=1" vertex="1" parent="g-data"><mxGeometry x="1280" y="870" width="330" height="60" as="geometry"/></mxCell>
         <mxCell id="front-config" value="_config.yml + themes/cactus/_config.yml
 站点与主题配置" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontColor=#000000;strokeWidth=1" vertex="1" parent="g-front"><mxGeometry x="40" y="1040" width="300" height="70" as="geometry"/></mxCell>
-        <mxCell id="front-source" value="source/index.md / thoughts / misc / about
+        <mxCell id="front-source" value="source/index.md / thoughts / misc / body-feedback / about
 Hexo 内容入口" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontColor=#000000;strokeWidth=1" vertex="1" parent="g-front"><mxGeometry x="380" y="1040" width="320" height="70" as="geometry"/></mxCell>
         <mxCell id="front-theme" value="themes/cactus/layout/*.ejs
 dashboard.ejs / thoughts.ejs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-front"><mxGeometry x="740" y="1040" width="320" height="70" as="geometry"/></mxCell>
