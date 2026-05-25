@@ -295,6 +295,7 @@ function buildRecognitionMessages({ imageUrl, message, systemPrompt }) {
             `caption: ${message.caption || '(empty)'}`,
             `text: ${message.text || '(empty)'}`,
             '将图片识别为训练系统可写回的结构化结果。',
+            'Return only valid json.',
           ].join('\n'),
         },
         {

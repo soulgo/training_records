@@ -3046,6 +3046,28 @@ test('runTelegramSync retries recognition with json_object when json_schema resp
       }
 
       if (body.response_format?.type === 'json_object') {
+        const userText = (body.messages ?? [])
+          .filter((message) => message.role === 'user')
+          .flatMap((message) => message.content ?? [])
+          .map((part) => part?.text ?? '')
+          .join('\n');
+        if (!/\bjson\b/.test(userText)) {
+          return new Response(
+            JSON.stringify({
+              error: {
+                message:
+                  "Response input messages must contain the word 'json' in some form to use 'response_format' of type 'json_object'.",
+              },
+            }),
+            {
+              status: 400,
+              headers: {
+                'content-type': 'application/json',
+              },
+            },
+          );
+        }
+
         return new Response(
           JSON.stringify({
             choices: [
