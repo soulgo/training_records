@@ -1,433 +1,239 @@
-# training_records
+# 健身训练记录看板
 
-这是一个围绕 `训练记录.md`、PostgreSQL 和 GitHub Pages 运转的训练记录系统。
+这是一个用 Markdown、PostgreSQL、Telegram Bot、AI 图片识别、Hexo 和 GitHub Pages 组成的个人训练记录系统。它的核心目标是把训练截图、体脂秤截图、饮食截图和日常身体反馈归档成统一的 `TrainingSnapshot`，再生成可浏览的静态训练看板。
 
-当前系统的核心思路是：
+系统当前没有独立后台、OCR 服务后台或管理后台。主要维护入口是 `训练记录.md`、Telegram Bot、npm scripts、GitHub Actions 和 `docs/` 文档。
 
-- `TrainingSnapshot` 作为统一中间层
-- `markdown` 与 `database` 两种数据来源并存
-- Telegram 自动同步优先写 PostgreSQL；图片批次失败时回退写 `训练记录.md`，`/thought` 批次保留 `source/_posts` 并进入待补偿队列
-- Telegram `/analysis` / `/分析` 可基于现有 `TrainingSnapshot` 生成临时训练建议并直接回发到 Telegram，默认长期目标是“增肌减腹”
+## 核心功能
 
-## 1. 系统目标
+- 从 `训练记录.md` 解析训练、体脂和饮食记录。
+- 从 PostgreSQL `core.*` 读取结构化训练数据。
+- 通过 Telegram 发送训练、饮食、体脂截图，并调用 AI 识别归档。
+- Telegram `/随想` / `/thought` 生成站点随想文章，支持编辑、删除、移动和带图。
+- Telegram `/分析` / `/analysis` 基于训练快照生成训练建议，只回发 Telegram，不写入数据。
+- Telegram `/ai` / `/智能助手` 调用 MCP 工具查询历史、同步状态或生成综合回答。
+- PostgreSQL 写入失败时，图片批次回退写 `训练记录.md`，随想批次保留 Markdown 并进入待补偿队列。
+- 生成 `source/_data/training.json` 和 `source/_data/dashboardView.json`，由 Hexo 渲染为 GitHub Pages 静态站点。
 
-- 用截图、文字反馈和手工补充持续维护训练、饮食、体脂与恢复记录
-- 用 PostgreSQL `core.*` 作为自动同步后的主结构化数据层
-- 用 `训练记录.md` 作为人工可读、人工修订和故障回退层
-- 用 Hexo + GitHub Pages 持续生成可浏览的静态站点
+## 技术栈
 
-## 2. 当前能力边界
+| 层级 | 技术 |
+| --- | --- |
+| 运行时 | Node.js 22、ESM |
+| 静态站点 | Hexo 7、EJS、Stylus、Chart.js CDN |
+| 数据库 | PostgreSQL、`pg` |
+| 自动化 | GitHub Actions、GitHub Pages |
+| Telegram 入口 | Telegram Bot API、Cloudflare Worker、Durable Object |
+| AI | OpenAI-compatible Chat Completions |
+| Agent 工具 | 本地 MCP stdio server |
 
-当前仓库已经实现：
+## 系统架构简述
 
-- `训练记录.md` 到 canonical snapshot 的解析
-- PostgreSQL `core.*` 到 canonical snapshot 的读取
-- Telegram 图片识别结果优先写 PostgreSQL，失败时回退写 Markdown
-- Telegram `/thought` 文字随想直接写 `source/_posts/*.md`，并同步入库或进入待补偿队列
-- Telegram `/analysis` / `/分析` 训练分析指令直接回发建议，不写 Markdown、docs 或数据库
-- PostgreSQL 恢复后自动重放待补偿批次
-- snapshot 到 Hexo 页面展示的转换
-- GitHub Actions 自动测试、构建和发布 GitHub Pages
-
-当前仓库仍然没有实现：
-
-- 独立截图上传后台
-- 专门的 OCR 服务后端
-- 管理后台
-
-当前 v2 第一阶段重构状态：
-
-- 已完成 H7 targeted tests，先锁定后续渐进服务化会触碰的高风险行为
-- 已覆盖 Telegram 命令 alias 与 batch shape、`/analysis` intent、数据库事务 rollback / `payload_hash` unchanged、dashboard view model contract
-- 尚未开始 `src/` 骨架与生产代码迁移；`tools/*.mjs`、npm scripts、workflow、Cloudflare、DB schema 和 Hexo 输出结构保持不变
-
-## 3. 整体流程
+`TrainingSnapshot` 是系统统一中间层。页面构建、训练分析、MCP 查询和 Markdown/数据库互导都围绕它工作。
 
 ```mermaid
 flowchart TD
-    A["训练截图 / 饮食截图 / 体脂秤截图"] --> B["Telegram Bot / AI 识别"]
-    T["/thought 文字随想"] --> T1["写入 source/_posts/*.md"]
-    X["/analysis 或 /分析 问题"] --> X1["TrainingSnapshot + AI 分析"]
-    X1 --> X2["Telegram sendMessage 回发建议"]
-    B --> C["写入 PostgreSQL core.*"]
-    T1 --> C
-    C --> D["tools/training-snapshot.mjs 构建 TrainingSnapshot"]
-    D --> E["source/_data/training.json + dashboardView.json"]
-    E --> F["Hexo 生成 public/"]
-    F --> G["GitHub Pages"]
-    C -. 图片批次 PG 临时失败 .-> H["回退写 训练记录.md"]
-    C -. /thought PG 临时失败 .-> Q["写入 runtime/telegram-sync-pending.ndjson"]
-    H -. PG 恢复后自动补偿 .-> C
-    Q -. PG 恢复后自动补偿 .-> C
+  A["训练记录.md"] --> S["TrainingSnapshot"]
+  DB["PostgreSQL core.*"] --> S
+  TG["Telegram 图片/命令"] --> W["Cloudflare Worker"]
+  W --> GH["GitHub repository_dispatch"]
+  GH --> SYNC["npm run sync:telegram"]
+  SYNC --> AI["AI 图片识别/分析"]
+  SYNC --> DB
+  SYNC -. "DB 失败" .-> A
+  SYNC --> P["source/_posts / source/images"]
+  S --> DATA["source/_data/training.json + dashboardView.json"]
+  DATA --> HEXO["Hexo generate"]
+  HEXO --> PAGES["GitHub Pages"]
 ```
 
-## 4. 输入类型与归档口径
+## 项目目录结构
 
-### 4.1 体脂秤截图
+```text
+.
+├── README.md
+├── 训练记录.md
+├── 训练数据解析.md
+├── CHANGELOG.md
+├── _config.yml
+├── docs/
+├── prompts/
+├── source/
+├── themes/cactus/
+├── tools/
+├── src/
+├── cloudflare/
+├── sql/
+├── runtime/
+├── test/
+└── .github/
+```
 
-优先提取：
+关键目录说明：
 
-- 测量时间
-- 身体得分
-- 体重
-- BMI
-- 体脂率
-- 骨骼肌量
-- 内脏脂肪等级
-- 基础代谢率
-- 水分率
-- 蛋白质率
-- 骨盐量
-- 去脂体重
-- 身体年龄
-- 身体类型
+- `训练记录.md`：人工可读训练记录，也是数据库失败时训练数据回退写入点。
+- `训练数据解析.md`：`npm run build:data` 生成的解析排查输出，不建议手工维护。
+- `source/`：Hexo 内容源，包含首页、随想页、文章、图片和 CNAME。
+- `source/_data/`：构建生成的 `training.json` 与 `dashboardView.json`。
+- `tools/`：CLI 入口和核心编排脚本。
+- `src/`：AI、Telegram、MCP 等内部模块。
+- `cloudflare/`：Telegram webhook 转 GitHub dispatch 的 Worker。
+- `sql/`：PostgreSQL 初始化 SQL。
+- `runtime/`：待补偿队列和归档失败日志。
+- `docs/`：维护文档入口。
 
-归档规则：
+## 快速开始
 
-- 默认归入截图对应日期
-- 如果明确说明“次日清晨称重用于前一日状态收尾”，则归档到前一日
-- 即使归档到前一日，也必须保留真实测量时间
+环境要求：
 
-### 4.2 运动截图
+- Node.js 22
+- npm
+- 可选：PostgreSQL 17 或兼容版本
+- 可选：Telegram Bot、Cloudflare Worker、GitHub Pages 配置
 
-优先提取：
-
-- 训练日期与时间
-- 训练类型
-- 时长
-- 距离
-- 消耗热量
-- 均速
-- 心率等关键指标
-
-当前常见类型：
-
-- 燃脂训练
-- 力量训练
-- 户外骑行
-- 爬楼
-
-归档规则：
-
-- 按当天时间顺序写入
-- 同一天多次训练全部保留
-- 华为运动健康中的“自由训练”统一归为“燃脂训练”，必要时保留原始类型
-
-### 4.3 饮食截图
-
-优先提取：
-
-- 记录日期
-- 餐次
-- 每餐建议热量范围
-- 每餐实际热量
-- 食物名称
-- 食物重量或份量
-- 单项热量
-- 当日总热量
-
-归档规则：
-
-- 先写餐次汇总，再写明细
-- 超出建议范围的餐次可以额外标记
-
-### 4.4 文字反馈
-
-常见内容：
-
-- 疼痛、酸胀、疲劳
-- 恢复情况
-- 饮食异常
-- 补剂使用
-- 对训练强度的主观感受
-
-这部分应归到对应日期，不要散落在页面文案里。
-
-## 5. 数据源设计
-
-当前系统分为两层事实源：
-
-- `core.*`
-  Telegram 自动同步后的主结构化数据层
-- `训练记录.md`
-  人工可读、人工修订、以及 PostgreSQL 失败时的回退落地点
-
-Markdown 推荐结构：
-
-- 每天一个 `### YYYY-MM-DD`
-- 同一天内部按主题拆成 `####`
-- 标题和字段口径尽量保持稳定，便于解析
-
-当前 Markdown 解析重点识别：
-
-- 包含“体脂秤”的 `####` 区块
-- 包含“运动截图记录”的 `####` 区块
-- 包含“饮食截图记录”的 `####` 区块
-
-## 6. 核心文件职责
-
-- `训练记录.md`
-  人工主文档，也是 PostgreSQL 失败时的回退落地点
-
-- `source/_data/training.json`
-  统一 snapshot 数据
-
-- `source/_data/dashboardView.json`
-  仪表盘视图模型
-
-- `tools/training-domain.mjs`
-  共享领域工具，供解析器、Telegram 同步和快照构建复用
-
-- `tools/training-parser.mjs`
-  把 Markdown 解析为 canonical snapshot
-
-- `tools/training-snapshot.mjs`
-  从 `markdown` 或 `database` source 构建统一 `TrainingSnapshot`
-
-- `tools/training-db-core.mjs`
-  负责 `ingest.* / core.*` 的持久化、读取和 Markdown 导出
-
-- `tools/generate-training-data.mjs`
-  生成 `training.json` 与 `dashboardView.json`
-
-- `tools/import-training-markdown.mjs`
-  把 Markdown 回填到 PostgreSQL `core.*`
-
-- `tools/export-training-markdown.mjs`
-  从 PostgreSQL 导出派生 `训练记录.md`
-
-- `tools/telegram-sync.mjs`
-  处理 Telegram 同步、图片识别、`/thought` 随想写入、`/analysis` 分析回复、DB 优先写入、Markdown 回退和待补偿重放
-
-- `tools/training-analysis.mjs`
-  从 `TrainingSnapshot` 汇总最近 7/30 天数据，调用 AI 生成 Telegram 训练分析回复
-
-- `tools/prompt-generator.mjs`
-  从 `prompts/_source/*.json` 编译图片识别与训练分析的运行时 prompt
-
-- `prompts/_source/`
-  图片识别和 `/analysis` prompt 的结构化事实源；运行时 `prompts/*.md` 由这里生成
-
-- `cloudflare/telegram-sync-dispatch-worker.mjs`
-  Cloudflare Worker 示例，用于把 Telegram webhook 转发成 GitHub `repository_dispatch`，并把相册消息按 `media_group_id` 聚合后再派发
-
-- `themes/cactus/layout/dashboard.ejs`
-  首页模板
-
-- `themes/cactus/source/js/training-dashboard.js`
-  首页图表和分页脚本
-
-## 7. 日常维护流程
-
-### 7.1 本地手工维护
-
-如果你是直接编辑内容：
-
-1. 更新 [训练记录.md](/C:/Users/ljq90/Desktop/project_test/健身锻炼/训练记录.md)
-2. 如需同步到数据库，执行 `npm run import:markdown`
-3. 本地检查：
+安装依赖：
 
 ```bash
-npm test
+npm ci
+```
+
+本地构建：
+
+```bash
 npm run build
 ```
 
-### 7.2 Telegram 自动同步
+本地预览：
 
-`npm run sync:telegram` 的行为是：
+```bash
+npm run server
+```
 
-1. 接收 GitHub `repository_dispatch` 传入的 Telegram update，或在轮询模式下拉 Telegram 消息
-   Cloudflare webhook 接入已支持把同一相册的多条 update 聚合后一次 dispatch
-2. 如果是截图消息，则调用 AI 识别图片并归档训练/饮食/体脂数据
-3. 如果是 `/thought 正文` 文字消息，则直接生成 `source/_posts/YYYY-MM-DD-telegram-thought-<messageId>.md`
-4. 如果是 `/analysis 问题` 或 `/分析 问题`，则读取现有 `TrainingSnapshot`，调用 AI 生成短建议并回发 Telegram
-5. 如果是 `/ai 问题` 或 `/智能助手 问题`，则按问题调用 MCP 工具并回发 Telegram，不写数据库或 Markdown
-6. 图片和 `/thought` ready 批次优先写 PostgreSQL
-7. 图片批次在 PostgreSQL 失败时会回退写 `训练记录.md`
-8. `/thought` 批次在 PostgreSQL 失败时会保留已写出的随想 Markdown，并把待补偿记录写入队列
-9. 失败批次写入 `runtime/telegram-sync-pending.ndjson`
-10. PostgreSQL 恢复后，下次同步会先重放待补偿批次
+默认数据源是 Markdown。未配置 PostgreSQL 时，本地页面仍可从 `训练记录.md` 构建。
 
-### 7.2.1 `/thought` 随想的当前规则
+## 配置方式
 
-- 入口命令支持 `/thought 正文`、`/随想 正文`，也支持图片 caption 和相册 caption
-- 支持纯文字随想，也支持带图随想；识别为随想后不会进入训练截图 AI 识别
-- 同步时会生成 `source/_posts/YYYY-MM-DD-telegram-thought-<messageId>.md`
-- front matter 当前包含：`date`、`tags`、`telegram_message_id`、`telegram_chat_id`，带图随想还会包含 `photos`
-- 当前不会为 Telegram 随想生成 `title`
-- “锻炼随想”“杂七杂八”“身体反馈”列表页只展示时间、标签和正文，不展示标题，也没有“阅读全文”
-- 无标题 Telegram 随想的单篇详情页不会渲染空 H1
-- 当前还支持随想编辑、删除和移动；更完整的命令见 `docs/telegram-usage.md`
+常用环境变量：
 
-更完整的维护说明见 `docs/thoughts-module.md`。
-用户使用说明见 `docs/telegram-usage.md`。
+| 变量 | 作用 |
+| --- | --- |
+| `TRAINING_SNAPSHOT_SOURCE` | 页面和分析数据源，`markdown` 或 `database`，默认 `markdown` |
+| `TRAINING_DB_ENABLED` | 是否启用 PostgreSQL |
+| `TRAINING_DB_URL` | PostgreSQL 连接串 |
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot token |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | 允许处理的 Telegram chat id，逗号分隔 |
+| `AI_API_KEY` | AI 服务鉴权 |
+| `AI_BASE_URL` | Chat Completions base URL |
+| `AI_MODEL` | AI 模型名 |
+| `AI_CONCURRENCY` | 图片识别并发数，默认 3 |
+| `TRAINING_ANALYSIS_GOAL` | `/分析` 长期训练目标覆盖值 |
+| `TELEGRAM_WEBHOOK_URL` | Telegram webhook 目标地址 |
+| `TELEGRAM_SECRET_TOKEN` | Telegram webhook secret header 校验值 |
 
-### 7.2.2 `/analysis` 训练分析的当前规则
+完整配置见 [GitHub与Cloudflare配置](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/部署维护/GitHub与Cloudflare配置.md) 和 [日常维护手册](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/部署维护/日常维护手册.md)。
 
-- 入口命令是 Telegram 文本消息 `/analysis 问题` 或 `/分析 问题`
-- 问题为空时使用默认问题：`请根据最近训练、体脂、饮食数据给出今天/明天的训练建议`
-- 默认长期目标是“增肌减腹”：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪
-- 可以通过 `TRAINING_ANALYSIS_GOAL` 覆盖默认长期目标
-- 只处理 `TELEGRAM_ALLOWED_CHAT_IDS` 白名单内的 chat
-- 不走图片识别，不写 `训练记录.md`，不写 `source/_posts`，不写 PostgreSQL
-- 基于现有 `TrainingSnapshot` 汇总最近 7/30 天数据，并通过 Telegram `sendMessage` 回发短建议
-- 用户明确问最近一周时，分析主结论只使用最近 7 天数据；用户明确问最近 30 天时才使用 30 天趋势
-- 会根据问题类型自适应组织回复：训练安排、饮食、体脂/体重趋势、恢复疲劳、疼痛/不适和综合复盘分别聚焦不同证据
-- 疼痛/不适类问题按教练 + 分诊建议回答，结合近期训练负荷和最近动作细节，但不做医学诊断
-- 输出约束由 `prompts/_source/analysis-rules.json` 和 `prompts/_source/shared-rules.json` 维护，再编译到 `prompts/training-analysis.md`
+## 训练记录流程
 
-更完整的维护说明见 `docs/telegram-analysis.md`。
+手工维护流程：
 
-### 7.2.3 `/ai` MCP Agent 助手的当前规则
+1. 编辑 `训练记录.md`。
+2. 执行 `npm run build:data` 生成快照和解析排查文件。
+3. 执行 `npm run build` 生成静态站点。
+4. 如需同步 PostgreSQL，执行 `npm run import:markdown` 或让 GitHub Actions 执行对账流程。
 
-- 入口命令是 Telegram 文本消息 `/ai 问题` 或 `/智能助手 问题`
-- 会按问题选择 MCP 工具，例如搜索历史记录、查看同步状态、读取配置、查询身体反馈或生成训练分析
-- 只处理 `TELEGRAM_ALLOWED_CHAT_IDS` 白名单内的 chat
-- 不走图片识别，不写 `训练记录.md`，不写 `source/_posts`，不写 PostgreSQL
-- 适合问“搜一下右肩疼痛相关记录”“同步状态正常吗”“有哪些命令可以用”等跨功能问题
+Telegram 自动流程：
 
-### 7.2.4 Telegram 帮助消息
+1. Telegram 消息进入 Cloudflare Worker。
+2. Worker 校验 secret；帮助消息直接回复，其它消息触发 GitHub `repository_dispatch`。
+3. `telegram-sync.yml` 执行 `npm run sync:telegram`。
+4. 图片批次调用 AI 识别；随想、分析、AI Agent 按命令分支处理。
+5. 图片和随想优先写 PostgreSQL。
+6. PostgreSQL 失败时写 Markdown 或 pending 队列。
+7. 内容变化后 workflow 提交文件并部署 GitHub Pages。
 
-- 给 Bot 发送 `/help`、`/帮助`、`help`、`帮助`、`命令`、`指令` 或 `使用说明`，Cloudflare Worker 会直接回发可用命令清单
-- 帮助消息优先不触发 GitHub `repository_dispatch`；如果已经进入 `Telegram Sync`，同步脚本也会直接回发帮助，不写数据库或文件
-- 该能力需要 Cloudflare Worker Secret 配置 `TELEGRAM_BOT_TOKEN`
+详细规则见 [训练记录生成与解析](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/训练系统/训练记录生成与解析.md)。
 
-### 7.3 页面构建
+## GitHub Pages 部署
 
-`TRAINING_SNAPSHOT_SOURCE` 决定页面构建数据来源：
+`.github/workflows/deploy-pages.yml` 在 `main` 分支站点相关文件变更或手动触发时运行。它调用 `.github/actions/site-build/action.yml`，完成依赖安装、可选回填/对账、构建和 Pages 部署。
 
-- `markdown`
-  站点从 `训练记录.md` 构建
-- `database`
-  站点从 PostgreSQL `core.*` 构建
+站点配置在 `_config.yml`，当前 URL 为 `https://soulgo.chat`，`source/CNAME` 也指向 `soulgo.chat`。GitHub Pages 自定义域名、DNS 和 Cloudflare 控制台状态需要在对应平台人工确认。
 
-## 8. 关键命令
+## GitHub Actions
 
-- `npm test`
-  运行全部测试
+| Workflow | 作用 |
+| --- | --- |
+| `ci-tests.yml` | 运行 `npm test` |
+| `deploy-pages.yml` | 构建并部署 GitHub Pages |
+| `telegram-sync.yml` | 处理 Telegram 同步、提交内容变化并部署站点 |
+| `deploy-cloudflare-worker.yml` | 部署 Cloudflare Worker，并刷新 Telegram webhook |
+| `refresh-telegram-webhook.yml` | 手动或每 6 小时刷新 Telegram webhook |
 
-- `npm run build:data`
-  生成 `training.json` 和 `dashboardView.json`
+共享构建 action：`.github/actions/site-build/action.yml`。
 
-- `npm run build:site`
-  调用 Hexo 生成静态站点
+## 数据来源说明
 
-- `npm run build`
-  先构建数据，再构建站点
+系统当前有两层事实源：
 
-- `npm run server`
-  本地启动预览
+- `训练记录.md`：人工可读、人工修订、页面默认数据源和数据库故障回退层。
+- PostgreSQL `core.*`：Telegram 自动同步后的主结构化数据层。
 
-- `npm run import:markdown`
-  把当前 Markdown 回填到 PostgreSQL
+`TRAINING_SNAPSHOT_SOURCE=markdown` 时，页面从 Markdown 构建；`TRAINING_SNAPSHOT_SOURCE=database` 时，页面从 PostgreSQL 构建。数据库源不可用时，部分构建路径会按现有 fallback 规则回退到 Markdown。
 
-- `npm run export:markdown`
-  从 PostgreSQL 导出 Markdown
+## 常见维护操作
 
-- `npm run sync:telegram`
-  处理 Telegram update、识别截图、写入 `/thought` 随想、回复 `/analysis` 分析或 `/ai` Agent 问答，同步到 PostgreSQL，必要时回退写 Markdown / 待补偿队列
+| 操作 | 命令 |
+| --- | --- |
+| 运行全部测试 | `npm test` |
+| 快速测试 | `npm run test:fast` |
+| 生成训练数据 | `npm run build:data` |
+| 构建站点 | `npm run build` |
+| 本地预览 | `npm run server` |
+| Markdown 导入数据库 | `npm run import:markdown` |
+| 数据库导出 Markdown | `npm run export:markdown` |
+| Markdown 与数据库对账 | `npm run reconcile:markdown` |
+| 重放/补齐 archive 到 core | `npm run backfill:core` |
+| 随想 Markdown 回填 core | `npm run backfill:thoughts` |
+| 处理 Telegram 同步 | `npm run sync:telegram` |
+| 刷新 Telegram webhook | `npm run telegram:webhook` |
+| 启动 MCP Server | `npm run mcp:server` |
 
-## 9. GitHub Actions
+## 文档导航
 
-当前工作流：
+- [文档总览](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/README.md)
+- [系统总览](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/系统架构/系统总览.md)
+- [内部接口手册](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/系统架构/内部接口手册.md)
+- [数据流转说明](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/数据流转/数据流转说明.md)
+- [训练记录生成与解析](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/训练系统/训练记录生成与解析.md)
+- [Telegram 使用说明](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/训练系统/Telegram使用说明.md)
+- [GitHub 与 Cloudflare 配置](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/部署维护/GitHub与Cloudflare配置.md)
+- [日常维护手册](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/部署维护/日常维护手册.md)
+- [常见问题排查](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/问题排查/常见问题排查.md)
 
-- `.github/workflows/deploy-pages.yml`
-  在 `main` 的站点相关变更 push 后自动测试、构建并发布 Pages，也支持手动触发
+## FAQ
 
-- `.github/workflows/telegram-sync.yml`
-  在 `repository_dispatch`、手动触发或 `训练记录.md` 的人工 push 时运行 Telegram 同步，并提交派生 Markdown；会跳过自身 bot push 造成的二次空跑
+**页面数据来自哪里？**
+由 `TRAINING_SNAPSHOT_SOURCE` 决定。默认从 `训练记录.md` 构建，也可以切到 PostgreSQL `core.*`。
 
-相关文档：
+**`训练数据解析.md` 可以手工改吗？**
+不建议。它由 `npm run build:data` 生成，用于排查解析结果，下一次构建会覆盖。
 
-- `docs/telegram-date-resolution.md`
-  Telegram 单张/多张图片的日期归档与跳过规则说明，包含 `photo` 与 `document` 的差异
+**Telegram 图片为什么没有入库？**
+常见原因是未授权 chat、AI 识别失败、置信度低、同一批次日期冲突，或图片和文件名都没有可靠日期。先看 GitHub Actions 的 `Telegram Sync` 日志和 pending 队列。
 
-- `docs/telegram-recognition-prompt.md`
-  Telegram 图片识别 prompt 的结构化源、生成流程与维护规则
+**`/分析` 会改训练记录吗？**
+不会。它只读取 `TrainingSnapshot`，调用 AI 后回发 Telegram。
 
-- `docs/github-cloudflare-settings.md`
-  GitHub Settings + Cloudflare Worker 的统一配置说明
+**`/ai` 会改数据吗？**
+不会。当前 Agent 入口只调用 MCP 查询和分析类工具，不写 Markdown、数据库或 Telegram 以外的状态。
 
-- `docs/thoughts-module.md`
-  锻炼随想模块与 Telegram `/thought` 的维护说明
+**数据库挂了会丢数据吗？**
+图片批次会回退写 `训练记录.md` 并进入 `runtime/telegram-sync-pending.ndjson`；随想批次会保留已经生成的 Markdown，并进入待补偿队列。数据库恢复后，下次同步会先重放队列。
 
-- `docs/telegram-usage.md`
-  Telegram 日常使用说明，包含图片发送、发送随想、编辑随想、删除随想、移动随想
+## 注意事项
 
-- `docs/telegram-analysis.md`
-  Telegram `/analysis` / `/分析` 训练分析指令维护说明
-
-- `docs/telegram-command-registry.md`
-  Telegram command registry 的优先级、alias、兼容策略、rollback 和验证说明
-
-- `src/telegram/command-registry.mjs`
-  Telegram 命令声明式注册表，保持现有 alias、优先级和 batch 形状不变，只作为同步路由的内部扩展点
-
-页面展示数据来源取决于 `TRAINING_SNAPSHOT_SOURCE`：
-
-- `markdown`
-  `训练记录.md -> TrainingSnapshot -> training.json -> Hexo -> public/`
-- `database`
-  `core.* -> TrainingSnapshot -> training.json -> Hexo -> public/`
-
-## 10. GitHub Settings 是否需要配置
-
-需要。
-
-至少 Telegram 自动同步和数据库链路都依赖 GitHub Settings 配置：
-
-### Secrets
-
-- `TELEGRAM_BOT_TOKEN`
-- `AI_API_KEY`
-- `TRAINING_DB_URL`
-
-### Variables
-
-- `AI_BASE_URL`
-- `AI_MODEL`
-- `AI_PROVIDER`（可选，默认 `openai-compatible`）
-- `AI_TIMEOUT_MS`（可选，默认沿用现有请求语义）
-- `AI_CONCURRENCY`
-- `TRAINING_ANALYSIS_GOAL`
-- `TELEGRAM_ALLOWED_CHAT_IDS`
-- `TELEGRAM_POLL_LIMIT`
-- `TRAINING_SNAPSHOT_SOURCE`
-- `TRAINING_DB_ENABLED`
-- `TRAINING_DB_TIMEOUT_MS`
-- `TRAINING_DB_APP_NAME`
-
-详细说明见 [docs/github-cloudflare-settings.md](docs/github-cloudflare-settings.md)。
-
-## 11. PostgreSQL 初始化
-
-- 新库初始化：执行 [sql/pgsql17.sql](/C:/Users/ljq90/Desktop/project_test/健身锻炼/sql/pgsql17.sql)
-- 已有库升级：请保留你已经执行过的数据库升级结果；仓库内不再维护单独的 `update.sql`
-
-当前数据库分为三层：
-
-- `archive.*`
-  构建快照与运行留痕
-- `ingest.*`
-  Telegram 原始批次、消息元数据、识别结果
-- `core.*`
-  主结构化数据层
-
-## 12. 维护注意事项
-
-- 不要随意更改 `训练记录.md` 中解析器依赖的标题层级和字段命名
-- 如果页面继续走 `markdown` source，PG 故障不会影响页面构建
-- 如果页面切到 `database` source，PG 就会变成页面构建依赖
-- PostgreSQL 失败时，Telegram 批次会先写 Markdown，再进入待补偿队列，不会直接丢
-- `/thought` 随想当前写入 `source/_posts` 时不生成 `title`；如果后续要恢复标题或调整 permalink，请同步修改模板、同步逻辑和测试
-- `/analysis` 训练分析只回发 Telegram，不写 docs、Markdown 或数据库；如果后续改成持久化报告，请同步修改文档、workflow 和测试
-- `/analysis` 默认按“增肌减腹”给建议；如果阶段目标改变，请优先改 `TRAINING_ANALYSIS_GOAL`，并同步 `docs/telegram-analysis.md`
-- AI 调用现在通过统一 provider adapter 进入；如果需要回滚到旧实现，删除 `AI_PROVIDER` 覆盖配置即可，默认仍走兼容的 Chat Completions 请求
-- 如果你在 PG 故障期间又手工改了同一天的 Markdown，后续补偿入库时要注意冲突口径
-- 继续 v2 H1-H6 前，先运行 H7 targeted tests：`node --test test/telegram-sync.test.mjs test/training-analysis.test.mjs test/training-db-core.test.mjs test/dashboard-view.test.mjs`
-
-## 13. 一句话总结
-
-这个仓库现在的本质是：
-
-一个以 `TrainingSnapshot` 为统一中间层、支持 Markdown 与 PostgreSQL 双来源、并自动发布到 GitHub Pages 的训练记录系统。
+- 不要随意改变 `训练记录.md` 的日期标题、四级标题和字段名，解析器依赖这些结构。
+- 修改 prompt 规则时，改 `prompts/_source/*.json`，再运行 `node tools/prompt-generator.mjs`，不要直接手写运行时 prompt。
+- 更新 Telegram 命令、数据库结构、环境变量或 workflow 时，必须同步更新 `docs/`。
+- 生产环境 Secrets、Variables、Cloudflare Worker 变量和数据库状态无法从仓库文件完全确认，需要在对应平台检查。
+- 纯文档整理不应修改代码、配置逻辑、接口行为或系统功能。

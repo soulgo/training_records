@@ -17,7 +17,7 @@
 - 发送 `/ai 问题` 让 AI 助手调用 MCP 工具查询历史、同步状态或综合分析
 - 发送 `/help`、`/帮助`、`help` 或 `帮助` 查看当前命令清单
 
-这两类入口不要混淆：
+这些入口不要混淆：
 
 - 普通图片消息会走截图识别
 - 但如果图片 caption 以 `/随想` 或 `/thought` 开头，这批图片会被当作“随想”，不会再走训练截图识别
@@ -265,6 +265,6 @@ Bot 会直接回发当前可用命令清单，包括截图、随想、编辑、�
 
 如果你想看更偏维护视角的说明，可以继续看：
 
-- `docs/thoughts-module.md`：随想模块、Markdown、数据库镜像的维护说明
-- `docs/telegram-date-resolution.md`：截图日期归档规则，尤其是 `照片` 和 `文件` 的差异
-- `docs/telegram-analysis.md`：`/analysis` / `/分析` 指令说明
+- [随想模块维护](随想模块维护.md)：随想模块、Markdown、数据库镜像的维护说明
+- [Telegram 图片日期归档](Telegram图片日期归档.md)：截图日期归档规则，尤其是 `照片` 和 `文件` 的差异
+- [Telegram 训练分析](Telegram训练分析.md)：`/analysis` / `/分析` 指令说明

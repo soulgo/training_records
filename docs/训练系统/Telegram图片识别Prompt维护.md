@@ -19,7 +19,7 @@ node tools/prompt-generator.mjs
 
 如果你这次维护涉及”单张/多张图片怎么定归档日期、图片没日期时怎么回退、`photo` 和 `document` 有什么差别”，请先一起阅读：
 
-- [docs/telegram-date-resolution.md](/Users/soulgo/Desktop/training_records/docs/telegram-date-resolution.md)
+- [Telegram 图片日期归档](Telegram图片日期归档.md)
 
 ## 维护原则
 

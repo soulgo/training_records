@@ -249,7 +249,7 @@ TELEGRAM_WEBHOOK_URL=https://telegram-sync-dispatch.1406221797.workers.dev/
 
 ### Worker 代码
 
-- 仓库内示例文件：[cloudflare/telegram-sync-dispatch-worker.mjs](../cloudflare/telegram-sync-dispatch-worker.mjs)
+- 仓库内示例文件：[cloudflare/telegram-sync-dispatch-worker.mjs](../../cloudflare/telegram-sync-dispatch-worker.mjs)
 
 它会：
 
@@ -265,7 +265,7 @@ TELEGRAM_WEBHOOK_URL=https://telegram-sync-dispatch.1406221797.workers.dev/
 
 ### Wrangler 配置
 
-仓库根目录已经提供 [`wrangler.toml`](../wrangler.toml)，核心绑定长这样：
+仓库根目录已经提供 [`wrangler.toml`](../../wrangler.toml)，核心绑定长这样：
 
 ```toml
 [[durable_objects.bindings]]
@@ -285,7 +285,7 @@ new_sqlite_classes = ["TelegramAlbumBuffer"]
 
 把 `wrangler.toml` push 到 GitHub 只会更新仓库文件，不会自动修改 Cloudflare 控制台。Cloudflare 上的 Worker、变量和 Durable Object binding 只有在 Wrangler 部署成功后才会变化。
 
-当前仓库已经提供 [`deploy-cloudflare-worker.yml`](../.github/workflows/deploy-cloudflare-worker.yml)，它会在以下文件推到 `main` 后自动运行 `wrangler deploy`：
+当前仓库已经提供 [`deploy-cloudflare-worker.yml`](../../.github/workflows/deploy-cloudflare-worker.yml)，它会在以下文件推到 `main` 后自动运行 `wrangler deploy`：
 
 - `wrangler.toml`
 - `cloudflare/**`
@@ -304,7 +304,7 @@ npx wrangler deploy
 
 ## 3. GitHub Actions 行为
 
-[`telegram-sync.yml`](../.github/workflows/telegram-sync.yml) 现在支持：
+[`telegram-sync.yml`](../../.github/workflows/telegram-sync.yml) 现在支持：
 
 - `repository_dispatch`
 - `push` 到 `main` 且仅限 `训练记录.md`
@@ -320,7 +320,7 @@ npx wrangler deploy
 - 仍然会重放待补偿批次并在需要时刷新 Markdown
 - 当同步提交了新的 `训练记录.md` 后，会在同一个 workflow 里直接构建并部署 GitHub Pages；不能依赖 bot push 再触发独立的 Pages workflow
 
-[`deploy-pages.yml`](../.github/workflows/deploy-pages.yml) 用于普通人工 push / 手动触发：
+[`deploy-pages.yml`](../../.github/workflows/deploy-pages.yml) 用于普通人工 push / 手动触发：
 
 - 在 `main` 的站点相关文件真正发生 push 后再部署
 - 不再因为一次 `Telegram Sync` 完成就无条件额外跑一次 Pages workflow
@@ -417,7 +417,7 @@ Invoke-RestMethod `
 
 ## 8. SQL 文件约定
 
-- 仓库当前只保留新库初始化脚本：[sql/pgsql17.sql](../sql/pgsql17.sql)
+- 仓库当前只保留新库初始化脚本：[sql/pgsql17.sql](../../sql/pgsql17.sql)
 
 如果你已经在现有库里手工执行过升级 SQL，那么接下来只需要保证数据库结构已经包含：
 

@@ -25,7 +25,7 @@
 2. Telegram 原始文件名日期
 3. 都没有则跳过
 
-对应实现见 [tools/telegram-sync-lib.mjs](/Users/soulgo/Desktop/training_records/tools/telegram-sync-lib.mjs:52)。
+对应实现见 `tools/telegram-sync-lib.mjs`。
 
 ## 2. 图片内日期的来源边界
 
@@ -42,7 +42,7 @@
 - 活动总览这类页面顶部的大号日期，如果可靠，属于截图画面内可见日期。
 - 如果截图画面里只出现 `5月22日` 这类月日，可以用 Telegram 消息年份补全；Telegram 消息时间只用于补全年份，不能单独当作图片日期。
 
-这些规则写在 [prompts/telegram-training-image-recognition.md](/Users/soulgo/Desktop/training_records/prompts/telegram-training-image-recognition.md:12)，事实源是 [prompts/_source/recognition-rules.json](/Users/soulgo/Desktop/training_records/prompts/_source/recognition-rules.json:17)。
+这些规则写在 `prompts/telegram-training-image-recognition.md`，事实源是 `prompts/_source/recognition-rules.json`。
 
 ## 3. Telegram `photo` 和 `document` 的差异
 
@@ -59,7 +59,7 @@
 - 如果图片本身没有日期，又想依赖文件名日期回退，优先用 `document/文件` 发送。
 - 如果只能用 `photo/照片` 发送，就要尽量保证图片画面里自己能看到日期，或者能看到相册详情页里的文件名日期。
 
-当前程序在“看起来是 `photo` 发送且没有拿到文件名”时，会额外给出 warning，见 [tools/telegram-sync-lib.mjs](/Users/soulgo/Desktop/training_records/tools/telegram-sync-lib.mjs:151)。
+当前程序在“看起来是 `photo` 发送且没有拿到文件名”时，会额外给出 warning，见 `tools/telegram-sync-lib.mjs`。
 
 ## 4. 单张图片的处理流程
 
@@ -229,11 +229,11 @@
 
 如果将来调整日期归档规则，至少要一起检查：
 
-- [prompts/telegram-training-image-recognition.md](/Users/soulgo/Desktop/training_records/prompts/telegram-training-image-recognition.md)
-- [tools/telegram-sync-lib.mjs](/Users/soulgo/Desktop/training_records/tools/telegram-sync-lib.mjs)
-- [tools/telegram-sync.mjs](/Users/soulgo/Desktop/training_records/tools/telegram-sync.mjs)
-- [test/telegram-sync.test.mjs](/Users/soulgo/Desktop/training_records/test/telegram-sync.test.mjs)
-- [test/telegram-sync-runner.test.mjs](/Users/soulgo/Desktop/training_records/test/telegram-sync-runner.test.mjs)
+- `prompts/telegram-training-image-recognition.md`
+- `tools/telegram-sync-lib.mjs`
+- `tools/telegram-sync.mjs`
+- `test/telegram-sync.test.mjs`
+- `test/telegram-sync-runner.test.mjs`
 
 最低验证命令：
 

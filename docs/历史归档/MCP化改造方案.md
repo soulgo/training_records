@@ -1,5 +1,7 @@
 # 系统 MCP 化改造方案设计
 
+> 归档说明：本文是 MCP 化阶段方案和设计记录，不是日常操作手册。当前 MCP 使用方式以 [MCP 使用说明](../部署维护/MCP使用说明.md) 为准。
+
 ## 1. 当前系统架构分析
 
 当前项目是一个以 `TrainingSnapshot` 为统一中间层的训练记录系统。核心输入来自 `训练记录.md`、Telegram 消息/图片和 PostgreSQL `core.*`，核心输出是 `source/_data/training.json`、`source/_data/dashboardView.json` 和 Hexo 生成的 `public/` 静态站点。
@@ -218,7 +220,7 @@ MCP 配置：
 - `source/_posts/*-telegram-thought-*.md` 随想正文，尤其 `thought_module=body_feedback`。
 - `训练记录.md` 中按日期切分的 Markdown 区块。
 - `/analysis` 历史问答，如果未来持久化。
-- `docs/telegram-usage.md`、`docs/telegram-analysis.md`、`docs/internal_interface.md` 作为 Agent 使用手册。
+- `docs/训练系统/Telegram使用说明.md`、`docs/训练系统/Telegram训练分析.md`、`docs/系统架构/内部接口手册.md` 可作为 Agent 使用手册。
 
 不优先向量化：
 
