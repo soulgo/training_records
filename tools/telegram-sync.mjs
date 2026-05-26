@@ -43,6 +43,7 @@ import {
 } from './lib/thought-modules.mjs';
 import { getRecognitionPromptMetadata, stripPromptMetadataHeader } from './prompt-generator.mjs';
 import { recognizeTelegramImageMessage } from '../src/ai/recognition-service.mjs';
+import { TELEGRAM_HELP_TEXT } from '../src/telegram/help.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -245,6 +246,19 @@ export async function runTelegramSync(options = {}) {
       continue;
     }
 
+    if (persistedBatch.kind === 'help') {
+      const helpResult = await handleHelpBatch({
+        batch: persistedBatch,
+        sendMessage,
+      });
+      batchResults.push({
+        ...persistedBatch,
+        helpReplyStatus: helpResult.status,
+        helpReplyError: helpResult.error ?? null,
+      });
+      continue;
+    }
+
     if (persistedBatch.kind === 'analysis') {
       const analysisResult = await handleAnalysisBatch({
         batch: persistedBatch,
@@ -436,6 +450,10 @@ export function buildTelegramSyncReport(result) {
       normalized.batches[index].aiAgentReplyStatus = batch.aiAgentReplyStatus ?? null;
       normalized.batches[index].aiAgentReplyError = batch.aiAgentReplyError ?? null;
       normalized.batches[index].aiAgentReplyParts = batch.aiAgentReplyParts ?? null;
+    }
+    if ((batch.kind ?? 'image') === 'help') {
+      normalized.batches[index].helpReplyStatus = batch.helpReplyStatus ?? null;
+      normalized.batches[index].helpReplyError = batch.helpReplyError ?? null;
     }
   }
 
@@ -941,6 +959,25 @@ async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }
       status: 'failed',
       error: errorMessage,
       parts: 1,
+    };
+  }
+}
+
+async function handleHelpBatch({ batch, sendMessage }) {
+  const message = batch.messages?.[0] ?? {};
+  try {
+    await sendMessage({
+      chatId: message.chatId,
+      text: TELEGRAM_HELP_TEXT,
+      replyToMessageId: message.messageId,
+    });
+    return {
+      status: 'sent',
+    };
+  } catch (error) {
+    return {
+      status: 'failed',
+      error: error instanceof Error ? error.message : String(error),
     };
   }
 }

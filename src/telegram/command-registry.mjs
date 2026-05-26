@@ -1,5 +1,10 @@
 const TELEGRAM_COMMAND_REGISTRY = Object.freeze([
   Object.freeze({
+    name: 'help',
+    priority: 0,
+    aliases: ['/help', '/帮助', 'help', '帮助', '命令', '指令', '使用说明'],
+  }),
+  Object.freeze({
     name: 'move',
     priority: 1,
     aliases: ['/move', '/移动', '/thought', '/随想'],

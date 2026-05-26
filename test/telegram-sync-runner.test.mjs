@@ -2856,6 +2856,82 @@ test('runTelegramSync ignores unauthorized /ai commands without invoking the age
   assert.equal(sent, false);
 });
 
+test('runTelegramSync replies to help commands without image recognition or persistence', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-help-'));
+  const sentMessages = [];
+  let recognized = false;
+  let persisted = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 9016,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/帮助',
+        },
+      },
+      {
+        update_id: 902,
+        message: {
+          message_id: 9017,
+          date: Math.floor(new Date('2026-05-14T02:31:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: 'help',
+        },
+      },
+    ],
+    recognizeBatch: async () => {
+      recognized = true;
+      return [];
+    },
+    persistNormalizedBatch: async () => {
+      persisted = true;
+      return { status: 'stored' };
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 10006 };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for help command');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for help command');
+    },
+  });
+
+  assert.equal(result.changed, false);
+  assert.equal(result.fallbackUsed, false);
+  assert.equal(result.batchResults.length, 2);
+  assert.deepEqual(result.batchResults.map((batch) => batch.kind), ['help', 'help']);
+  assert.deepEqual(result.batchResults.map((batch) => batch.helpReplyStatus), ['sent', 'sent']);
+  assert.equal(recognized, false);
+  assert.equal(persisted, false);
+  assert.equal(sentMessages.length, 2);
+  assert.equal(sentMessages[0].chatId, 42);
+  assert.equal(sentMessages[0].replyToMessageId, 9016);
+  assert.match(sentMessages[0].text, /\/随想 内容：记录锻炼随想/);
+  assert.match(sentMessages[0].text, /\/移动 id 模块/);
+  assert.equal(sentMessages[1].replyToMessageId, 9017);
+
+  await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
+  await assert.rejects(readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-9016.md'), 'utf8'), /ENOENT/);
+});
+
 test('runTelegramSync retries transient AI recognition failures and continues syncing', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-recognition-retry-'));
   const persistedBatches = [];

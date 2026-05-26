@@ -15,13 +15,13 @@
 - 发“随想”，把文字或带图内容写进站点随想页
 - 发送 `/分析 问题` 获取训练建议
 - 发送 `/ai 问题` 让 AI 助手调用 MCP 工具查询历史、同步状态或综合分析
-- 发送 `/help` 或 `帮助` 查看当前命令清单
+- 发送 `/help`、`/帮助`、`help` 或 `帮助` 查看当前命令清单
 
 这两类入口不要混淆：
 
 - 普通图片消息会走截图识别
 - 但如果图片 caption 以 `/随想` 或 `/thought` 开头，这批图片会被当作“随想”，不会再走训练截图识别
-- `/help`、`帮助`、`命令`、`指令`、`使用说明` 会由 Cloudflare Worker 直接回复，不会触发 GitHub Actions
+- `/help`、`/帮助`、`help`、`帮助`、`命令`、`指令`、`使用说明` 会优先由 Cloudflare Worker 直接回复，不会触发 GitHub Actions；如果消息已经进入 Telegram Sync，也会直接回发帮助，不写数据库或文件
 
 ## 2. 帮助命令
 
@@ -29,6 +29,8 @@
 
 ```text
 /help
+/帮助
+help
 帮助
 命令
 指令
@@ -37,7 +39,7 @@
 
 Bot 会直接回发当前可用命令清单，包括截图、随想、编辑、删除、移动、`/分析` 和 `/ai`。
 
-这类帮助消息在 Cloudflare Worker 层处理，不会触发 GitHub `repository_dispatch`，也不会启动 `Telegram Sync` GitHub Actions。
+这类帮助消息优先在 Cloudflare Worker 层处理，不会触发 GitHub `repository_dispatch`，也不会启动 `Telegram Sync` GitHub Actions。如果 webhook 配置或部署版本导致消息已经进入 `Telegram Sync`，同步脚本也会直接回发帮助，不会写数据库、Markdown 或图片识别结果。
 
 ## 3. 图片怎么发
 

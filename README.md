@@ -288,8 +288,8 @@ npm run build
 
 ### 7.2.4 Telegram 帮助消息
 
-- 给 Bot 发送 `/help`、`帮助`、`命令`、`指令` 或 `使用说明`，Cloudflare Worker 会直接回发可用命令清单
-- 帮助消息不会触发 GitHub `repository_dispatch`，也不会启动 `Telegram Sync` GitHub Actions
+- 给 Bot 发送 `/help`、`/帮助`、`help`、`帮助`、`命令`、`指令` 或 `使用说明`，Cloudflare Worker 会直接回发可用命令清单
+- 帮助消息优先不触发 GitHub `repository_dispatch`；如果已经进入 `Telegram Sync`，同步脚本也会直接回发帮助，不写数据库或文件
 - 该能力需要 Cloudflare Worker Secret 配置 `TELEGRAM_BOT_TOKEN`
 
 ### 7.3 页面构建

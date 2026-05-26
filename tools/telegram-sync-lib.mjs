@@ -16,6 +16,7 @@ import {
 } from './lib/thought-modules.mjs';
 import { appendMetric } from './lib/markdown-render.mjs';
 import { createTelegramCommandResolver } from '../src/telegram/command-registry.mjs';
+import { isTelegramHelpText } from '../src/telegram/help.mjs';
 
 const FINGERPRINT_RE = /^<!-- telegram-fingerprint: ([^ ]+) -->$/m;
 const TELEGRAM_SECTION_TAG = '<!-- telegram-sync-section -->';
@@ -51,6 +52,14 @@ const telegramCommandResolver = createTelegramCommandResolver({
     },
     build(normalized) {
       return buildAiAgentBatch(normalized);
+    },
+  },
+  help: {
+    match(normalized) {
+      return parseHelpCommand(normalized.text);
+    },
+    build(normalized) {
+      return buildHelpBatch(normalized);
     },
   },
   explicit_edit: {
@@ -204,6 +213,10 @@ export function groupTelegramUpdates(updates, options = {}) {
 }
 
 export function analyzeTelegramBatch(batch, recognitions, options = {}) {
+  if (batch.kind === 'help') {
+    return analyzeHelpBatch(batch);
+  }
+
   if (batch.kind === 'analysis') {
     return analyzeAnalysisBatch(batch);
   }
@@ -672,6 +685,22 @@ function buildAiAgentBatch(message) {
   };
 }
 
+function buildHelpBatch(message) {
+  const parsedHelp = parseHelpCommand(message.text);
+  if (!parsedHelp) {
+    return null;
+  }
+
+  return {
+    kind: 'help',
+    batchId: `help-${message.messageId}`,
+    messages: [message],
+    help: {
+      command: parsedHelp.command,
+    },
+  };
+}
+
 function normalizeTelegramImageDocument(document) {
   if (!document?.file_id) {
     return null;
@@ -958,6 +987,26 @@ function analyzeAiAgentBatch(batch) {
     aiAgent: {
       command: batch.aiAgent?.command ?? '/ai',
       question,
+      telegramMessageId: message?.messageId ?? null,
+      telegramChatId: message?.chatId ?? null,
+      messageDateUnix: message?.dateUnix ?? null,
+    },
+  };
+}
+
+function analyzeHelpBatch(batch) {
+  const message = batch.messages?.[0] ?? null;
+
+  return {
+    status: 'ready',
+    kind: 'help',
+    batchId: batch.batchId,
+    archivedDate: null,
+    warnings: [],
+    issues: [],
+    confidence: 1,
+    help: {
+      command: batch.help?.command ?? '/help',
       telegramMessageId: message?.messageId ?? null,
       telegramChatId: message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,
@@ -1720,6 +1769,16 @@ function parseAiAgentCommand(text) {
   return {
     command: match[1],
     question: match[2].trim(),
+  };
+}
+
+function parseHelpCommand(text) {
+  if (!isTelegramHelpText(text)) {
+    return null;
+  }
+
+  return {
+    command: String(text).trim(),
   };
 }
 

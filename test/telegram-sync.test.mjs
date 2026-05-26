@@ -427,18 +427,19 @@ test('groups supported Telegram command aliases without changing routed batch sh
   const commandRegistry = registry.getTelegramCommandRegistry();
   assert.deepEqual(
     commandRegistry.map((entry) => entry.name),
-    ['move', 'delete', 'analysis', 'ai_agent', 'explicit_edit', 'edited_message', 'reply_edit', 'thought', 'image'],
+    ['help', 'move', 'delete', 'analysis', 'ai_agent', 'explicit_edit', 'edited_message', 'reply_edit', 'thought', 'image'],
   );
   assert.deepEqual(
     commandRegistry.map((entry) => entry.priority),
-    [1, 2, 3, 4, 5, 6, 7, 8, 9],
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
   );
-  assert.deepEqual(commandRegistry[0].aliases, ['/move', '/移动', '/thought', '/随想']);
-  assert.deepEqual(commandRegistry[1].aliases, ['/thought-delete', '/thoughtdel', '/delete-thought', '/删随想', '/随想删']);
-  assert.deepEqual(commandRegistry[2].aliases, ['/analysis', '/分析']);
-  assert.deepEqual(commandRegistry[3].aliases, ['/ai', '/智能助手']);
-  assert.deepEqual(commandRegistry[4].aliases, ['/thought-edit', '/thoughtedit', '/edit-thought', '/编随想', '/随想编']);
-  assert.deepEqual(commandRegistry[7].aliases, ['/thought', '/随想']);
+  assert.deepEqual(commandRegistry[0].aliases, ['/help', '/帮助', 'help', '帮助', '命令', '指令', '使用说明']);
+  assert.deepEqual(commandRegistry[1].aliases, ['/move', '/移动', '/thought', '/随想']);
+  assert.deepEqual(commandRegistry[2].aliases, ['/thought-delete', '/thoughtdel', '/delete-thought', '/删随想', '/随想删']);
+  assert.deepEqual(commandRegistry[3].aliases, ['/analysis', '/分析']);
+  assert.deepEqual(commandRegistry[4].aliases, ['/ai', '/智能助手']);
+  assert.deepEqual(commandRegistry[5].aliases, ['/thought-edit', '/thoughtedit', '/edit-thought', '/编随想', '/随想编']);
+  assert.deepEqual(commandRegistry[8].aliases, ['/thought', '/随想']);
 
   const fixtures = [
     {
@@ -569,6 +570,18 @@ test('groups supported Telegram command aliases without changing routed batch sh
       payloadKey: 'aiAgent',
       command: '/智能助手',
       question: '同步状态正常吗',
+    },
+    {
+      text: '/帮助',
+      kind: 'help',
+      payloadKey: 'help',
+      command: '/帮助',
+    },
+    {
+      text: 'help',
+      kind: 'help',
+      payloadKey: 'help',
+      command: 'help',
     },
   ];
 

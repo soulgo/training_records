@@ -5,6 +5,7 @@ import {
   TelegramAlbumBuffer,
   handleTelegramWebhook,
 } from '../cloudflare/telegram-sync-dispatch-worker.mjs';
+import { TELEGRAM_HELP_TEXT } from '../src/telegram/help.mjs';
 
 function createEnv() {
   return {
@@ -123,22 +124,7 @@ test('handleTelegramWebhook replies to help messages without dispatching GitHub 
   assert.equal(calls[0].url, 'https://api.telegram.org/bottelegram-token/sendMessage');
   assert.deepEqual(JSON.parse(calls[0].init.body), {
     chat_id: 42,
-    text: [
-      '当前可用命令：',
-      '',
-      '/help 或 帮助：查看这份命令说明',
-      '/随想 内容：记录锻炼随想',
-      '/随想 杂七杂八 内容：记录杂项随想',
-      '/随想 身体反馈 内容：记录疼痛、疲劳或恢复异常',
-      '/随想编 id 内容：按 id 编辑随想',
-      '/随想编 id 模块 内容：编辑并移动到指定模块',
-      '/随想删 id：按 id 删除随想；回复原消息时可只发 /随想删',
-      '/移动 id 模块：把随想移动到 锻炼 / 杂七杂八 / 身体反馈',
-      '/分析 问题：基于训练、体脂、饮食和身体反馈生成训练建议',
-      '/ai 问题：调用 MCP 工具查询历史、同步状态或综合分析',
-      '',
-      '图片：直接发送训练/饮食/体脂截图会自动识别；图片 caption 以 /随想 开头时会归档为带图随想。',
-    ].join('\n'),
+    text: TELEGRAM_HELP_TEXT,
     reply_to_message_id: 3,
     disable_web_page_preview: true,
   });
@@ -180,6 +166,38 @@ test('handleTelegramWebhook can reply to help messages without a GitHub token', 
   });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, 'https://api.telegram.org/bottelegram-token/sendMessage');
+});
+
+test('handleTelegramWebhook treats /帮助 and bare help as local help commands', async () => {
+  for (const [text, updateId] of [
+    ['/帮助', 132],
+    ['help', 133],
+  ]) {
+    const calls = [];
+    const request = createTelegramRequest({
+      update_id: updateId,
+      message: {
+        message_id: updateId - 120,
+        chat: { id: 42 },
+        text,
+      },
+    });
+
+    const response = await handleTelegramWebhook(request, createEnv(), {
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return new Response(JSON.stringify({ ok: true, result: { message_id: updateId } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).handled, 'help');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://api.telegram.org/bottelegram-token/sendMessage');
+  }
 });
 
 test('handleTelegramWebhook buffers album updates and dispatches them together after the alarm fires', async () => {

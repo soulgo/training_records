@@ -13,6 +13,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Telegram 帮助命令现在同时支持 `/帮助` 和裸 `help`；即使帮助消息已经进入 `Telegram Sync`，也会直接回发命令清单，不写数据库、Markdown 或图片识别结果。
+
 ## [1.1.7] - 2026-05-26
 
 ### Added
