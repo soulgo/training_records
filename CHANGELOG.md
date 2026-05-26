@@ -13,14 +13,23 @@
 
 ## [Unreleased]
 
+## [1.1.6] - 2026-05-26
+
 ### Added
 
 - 新增 Telegram webhook 自动刷新脚本与 GitHub Actions 工作流：Worker 部署后会自动调用 `setWebhook`，并支持手动或每 6 小时定时刷新，减少更换 Bot Token 后漏设 webhook 的风险。
 - `/分析` 现在会读取身体反馈记录，并在训练、饮食、恢复和疼痛/不适建议中结合反馈发生日期、时间点与近期训练负荷。
+- 新增 MCP v1 stdio Server：通过 `npm run mcp:server` 暴露训练快照、每日记录、体脂、活动、饮食、身体反馈、图表、分析摘要、配置和运行状态等只读 Tool。
+- 新增 `training.generate_analysis` MCP Tool，复用现有训练分析链路并返回结构化 `reply`、`summary` 和 `focus`，不会写 Telegram、Markdown 或数据库。
+- 新增 MCP 架构方案与使用文档，说明 Tool 边界、配置方式、返回结构和当前不开放的高副作用能力。
 
 ### Fixed
 
 - 修复身体反馈 Markdown 日期在 UTC CI 环境中被二次时区转换，导致 `/分析` 快照日期偏移一天的问题。
+
+### Changed
+
+- 同步项目包版本号到 `1.1.6`。
 
 ## [1.1.5] - 2026-05-25
 
@@ -91,7 +100,8 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.5...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.6...HEAD
+[1.1.6]: https://github.com/soulgo/training_records/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/soulgo/training_records/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/soulgo/training_records/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/soulgo/training_records/compare/v1.1.2...v1.1.3
