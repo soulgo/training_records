@@ -1,8 +1,25 @@
 const GITHUB_API_BASE_URL = 'https://api.github.com';
 const DEFAULT_GITHUB_OWNER = 'soulgo';
 const DEFAULT_GITHUB_REPO = 'training_records';
+const TELEGRAM_API_BASE_URL = 'https://api.telegram.org';
 const TELEGRAM_SECRET_HEADER = 'X-Telegram-Bot-Api-Secret-Token';
 const ALBUM_BUFFER_DELAY_MS = 3_000;
+const TELEGRAM_HELP_TEXT = [
+  '当前可用命令：',
+  '',
+  '/help 或 帮助：查看这份命令说明',
+  '/随想 内容：记录锻炼随想',
+  '/随想 杂七杂八 内容：记录杂项随想',
+  '/随想 身体反馈 内容：记录疼痛、疲劳或恢复异常',
+  '/随想编 id 内容：按 id 编辑随想',
+  '/随想编 id 模块 内容：编辑并移动到指定模块',
+  '/随想删 id：按 id 删除随想；回复原消息时可只发 /随想删',
+  '/移动 id 模块：把随想移动到 锻炼 / 杂七杂八 / 身体反馈',
+  '/分析 问题：基于训练、体脂、饮食和身体反馈生成训练建议',
+  '/ai 问题：调用 MCP 工具查询历史、同步状态或综合分析',
+  '',
+  '图片：直接发送训练/饮食/体脂截图会自动识别；图片 caption 以 /随想 开头时会归档为带图随想。',
+].join('\n');
 
 export default {
   async fetch(request, env) {
@@ -75,7 +92,7 @@ export async function handleTelegramWebhook(request, env, options = {}) {
     return jsonResponse(405, { ok: false, error: 'method_not_allowed' });
   }
 
-  const configError = validateRequiredConfig(env);
+  const configError = validateBaseConfig(env);
   if (configError) {
     return jsonResponse(500, { ok: false, error: configError });
   }
@@ -91,6 +108,33 @@ export async function handleTelegramWebhook(request, env, options = {}) {
     update = await request.json();
   } catch {
     return jsonResponse(400, { ok: false, error: 'invalid_json' });
+  }
+
+  if (isTelegramHelpUpdate(update)) {
+    const helpResponse = await sendTelegramHelpMessage({
+      fetchImpl,
+      env,
+      update,
+    });
+    if (!helpResponse.ok) {
+      return jsonResponse(502, {
+        ok: false,
+        error: 'telegram_help_failed',
+        status: helpResponse.status,
+        body: await safeReadText(helpResponse),
+      });
+    }
+
+    return jsonResponse(200, {
+      ok: true,
+      handled: 'help',
+      updateId: update?.update_id ?? null,
+    });
+  }
+
+  const dispatchConfigError = validateDispatchConfig(env);
+  if (dispatchConfigError) {
+    return jsonResponse(500, { ok: false, error: dispatchConfigError });
   }
 
   const albumKey = getAlbumBufferKey(update);
@@ -146,13 +190,50 @@ export async function handleTelegramWebhook(request, env, options = {}) {
   });
 }
 
-function validateRequiredConfig(env) {
-  for (const name of ['GITHUB_TOKEN', 'TELEGRAM_SECRET_TOKEN']) {
+function validateBaseConfig(env) {
+  for (const name of ['TELEGRAM_SECRET_TOKEN']) {
     if (!env?.[name]?.trim()) {
       return `missing_${name.toLowerCase()}`;
     }
   }
   return null;
+}
+
+function validateDispatchConfig(env) {
+  if (!env?.GITHUB_TOKEN?.trim()) {
+    return 'missing_github_token';
+  }
+  return null;
+}
+
+function isTelegramHelpUpdate(update) {
+  const message = update?.message ?? null;
+  if (!message || message.chat?.id == null) {
+    return false;
+  }
+  const text = String(message.text ?? '').trim();
+  return /^(?:\/(?:help|start)(?:@[A-Za-z0-9_]+)?|帮助|命令|指令|使用说明)$/u.test(text);
+}
+
+async function sendTelegramHelpMessage({ fetchImpl, env, update }) {
+  const message = update?.message ?? {};
+  const botToken = env?.TELEGRAM_BOT_TOKEN?.trim();
+  if (!botToken) {
+    return new Response('missing_telegram_bot_token', { status: 500 });
+  }
+  const apiBaseUrl = env?.TELEGRAM_API_BASE_URL?.trim() || TELEGRAM_API_BASE_URL;
+  return fetchImpl(`${apiBaseUrl}/bot${botToken}/sendMessage`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      chat_id: message.chat.id,
+      text: TELEGRAM_HELP_TEXT,
+      reply_to_message_id: message.message_id,
+      disable_web_page_preview: true,
+    }),
+  });
 }
 
 async function safeReadText(response) {

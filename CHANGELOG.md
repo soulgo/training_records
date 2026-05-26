@@ -13,6 +13,18 @@
 
 ## [Unreleased]
 
+## [1.1.7] - 2026-05-26
+
+### Added
+
+- 新增 Telegram `/ai` / `/智能助手` Agent 入口：会按问题调用 MCP 工具查询历史记录、同步状态、配置、身体反馈或训练分析，并直接回发 Telegram。
+- Cloudflare webhook 现在会直接响应 `/help`、`帮助`、`命令` 等帮助消息，返回当前可用命令清单，不再为帮助请求触发 GitHub Actions。
+- Telegram 帮助清单覆盖截图识别、随想创建、编辑、删除、移动、`/分析` 和 `/ai` 等日常入口。
+
+### Changed
+
+- 同步项目包版本号到 `1.1.7`。
+
 ## [1.1.6] - 2026-05-26
 
 ### Added
@@ -100,7 +112,8 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.6...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.7...HEAD
+[1.1.7]: https://github.com/soulgo/training_records/compare/v1.1.6...v1.1.7
 [1.1.6]: https://github.com/soulgo/training_records/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/soulgo/training_records/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/soulgo/training_records/compare/v1.1.3...v1.1.4

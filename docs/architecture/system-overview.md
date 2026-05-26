@@ -85,9 +85,10 @@
 
 1. 校验 HTTP method 为 `POST`。
 2. 校验 `X-Telegram-Bot-Api-Secret-Token` 与 `TELEGRAM_SECRET_TOKEN`。
-3. 对带 `media_group_id` 的相册 update，使用 Durable Object binding `TELEGRAM_ALBUM_BUFFER` 聚合 3 秒。
-4. 调用 GitHub API `/repos/{owner}/{repo}/dispatches`，发送 `event_type: telegram_update`。
-5. `GITHUB_OWNER`、`GITHUB_REPO` 默认分别为 `soulgo`、`training_records`。
+3. 对 `/help`、`帮助`、`命令`、`指令`、`使用说明` 直接调用 Telegram `sendMessage` 回发命令清单，不触发 GitHub Actions。
+4. 对带 `media_group_id` 的相册 update，使用 Durable Object binding `TELEGRAM_ALBUM_BUFFER` 聚合 3 秒。
+5. 调用 GitHub API `/repos/{owner}/{repo}/dispatches`，发送 `event_type: telegram_update`。
+6. `GITHUB_OWNER`、`GITHUB_REPO` 默认分别为 `soulgo`、`training_records`。
 
 `wrangler.toml` 已确认配置 Worker 名称 `telegram-sync-dispatch`、入口 `cloudflare/telegram-sync-dispatch-worker.mjs`、Durable Object binding `TELEGRAM_ALBUM_BUFFER`。Cloudflare 控制台中的实际变量、Secret、路由和域名绑定状态：待人工确认。
 
@@ -111,7 +112,7 @@
 ### Telegram 自动同步数据流
 
 1. Telegram Bot update 进入 Cloudflare Worker 或由 `getUpdates` 轮询。
-2. Webhook 模式下 Worker dispatch 到 GitHub `repository_dispatch`，触发 `.github/workflows/telegram-sync.yml`。
+2. Webhook 模式下 Worker 会直接回复帮助消息；其它消息 dispatch 到 GitHub `repository_dispatch`，触发 `.github/workflows/telegram-sync.yml`。
 3. `telegram-sync.yml` 设置 `TELEGRAM_SYNC_TRANSPORT=webhook` 并运行 `npm run sync:telegram`。
 4. `tools/telegram-transport.mjs` 读取 dispatch payload 或调用 Telegram API。
 5. `tools/telegram-sync-lib.mjs` 分组 update，解析命令、图片、随想和分析请求。
@@ -147,9 +148,10 @@
 | 调用链 | 触发 | 说明 |
 | --- | --- | --- |
 | `tools/telegram-transport.mjs -> https://api.telegram.org/bot*/getUpdates` | poll 模式 | 拉取 Telegram update |
-| `tools/telegram-transport.mjs -> https://api.telegram.org/bot*/sendMessage` | 同步结果通知、`/analysis` 回复 | 回发 Telegram 消息 |
+| `tools/telegram-transport.mjs -> https://api.telegram.org/bot*/sendMessage` | 同步结果通知、`/analysis` 和 `/ai` 回复 | 回发 Telegram 消息 |
 | `tools/telegram-transport.mjs -> getFile/file download` | 图片识别、随想图片保存 | 获取 Telegram 图片 URL 或二进制 |
 | `src/ai/openai-compatible-provider.mjs -> ${AI_BASE_URL}/chat/completions` | 图片识别、训练分析 | 默认 provider 为 `openai-compatible` |
+| `cloudflare/telegram-sync-dispatch-worker.mjs -> https://api.telegram.org/bot*/sendMessage` | Telegram 帮助消息 | Worker 直接回发命令清单，不触发 Actions |
 | `cloudflare/telegram-sync-dispatch-worker.mjs -> https://api.github.com/repos/{owner}/{repo}/dispatches` | Telegram webhook | 触发 GitHub `repository_dispatch` |
 | `pg.Client` | DB 读写 | 连接 `TRAINING_DB_URL` 指向的 PostgreSQL |
 
@@ -214,6 +216,7 @@ Hexo 站点配置 `_config.yml` 指定：
 | `TRAINING_DB_LOG_PATH` | archive failure log | 默认 `runtime/training-db-sync.ndjson` |
 | `TRAINING_SNAPSHOT_SOURCE` | build:data、snapshot、analysis | `markdown` 或 `database`，默认 `markdown` |
 | `GITHUB_TOKEN` | Cloudflare Worker | 调用 GitHub repository_dispatch |
+| `TELEGRAM_BOT_TOKEN` | Cloudflare Worker | 帮助消息直接回发 Telegram |
 | `GITHUB_OWNER`、`GITHUB_REPO` | Cloudflare Worker | dispatch 目标仓库，默认 `soulgo/training_records` |
 | `GITHUB_API_BASE_URL` | Cloudflare Worker | 默认 `https://api.github.com` |
 | `TELEGRAM_SECRET_TOKEN` | Cloudflare Worker | Telegram webhook secret header 校验 |
@@ -258,7 +261,7 @@ Cloudflare Worker 已在仓库中存在并可由 `deploy-cloudflare-worker.yml` 
 - GitHub Pages 是否实际启用，并绑定 `soulgo.chat`。
 - `soulgo.chat` 的 DNS 是否由 Cloudflare 托管，是否启用 CDN/proxy。
 - Cloudflare Worker 是否已部署到生产环境，以及 route/webhook URL。
-- Cloudflare Worker runtime Secrets/Variables：`GITHUB_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`GITHUB_OWNER`、`GITHUB_REPO`、`GITHUB_API_BASE_URL`。
+- Cloudflare Worker runtime Secrets/Variables：`GITHUB_TOKEN`、`TELEGRAM_BOT_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`GITHUB_OWNER`、`GITHUB_REPO`、`GITHUB_API_BASE_URL`。
 - Durable Object binding `TELEGRAM_ALBUM_BUFFER` 是否在已部署 Worker 上生效。
 - GitHub Actions Secrets/Variables：`TELEGRAM_BOT_TOKEN`、`AI_API_KEY`、`TRAINING_DB_URL`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`AI_BASE_URL`、`AI_MODEL`、`TRAINING_DB_ENABLED` 等。
 - PostgreSQL 实例是否在线、schema 是否已按 `sql/pgsql17.sql` 或拆分 SQL 初始化、当前账号权限是否满足读写。

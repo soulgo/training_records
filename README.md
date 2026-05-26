@@ -241,11 +241,12 @@ npm run build
 2. 如果是截图消息，则调用 AI 识别图片并归档训练/饮食/体脂数据
 3. 如果是 `/thought 正文` 文字消息，则直接生成 `source/_posts/YYYY-MM-DD-telegram-thought-<messageId>.md`
 4. 如果是 `/analysis 问题` 或 `/分析 问题`，则读取现有 `TrainingSnapshot`，调用 AI 生成短建议并回发 Telegram
-5. 图片和 `/thought` ready 批次优先写 PostgreSQL
-6. 图片批次在 PostgreSQL 失败时会回退写 `训练记录.md`
-7. `/thought` 批次在 PostgreSQL 失败时会保留已写出的随想 Markdown，并把待补偿记录写入队列
-8. 失败批次写入 `runtime/telegram-sync-pending.ndjson`
-9. PostgreSQL 恢复后，下次同步会先重放待补偿批次
+5. 如果是 `/ai 问题` 或 `/智能助手 问题`，则按问题调用 MCP 工具并回发 Telegram，不写数据库或 Markdown
+6. 图片和 `/thought` ready 批次优先写 PostgreSQL
+7. 图片批次在 PostgreSQL 失败时会回退写 `训练记录.md`
+8. `/thought` 批次在 PostgreSQL 失败时会保留已写出的随想 Markdown，并把待补偿记录写入队列
+9. 失败批次写入 `runtime/telegram-sync-pending.ndjson`
+10. PostgreSQL 恢复后，下次同步会先重放待补偿批次
 
 ### 7.2.1 `/thought` 随想的当前规则
 
@@ -276,6 +277,20 @@ npm run build
 - 输出约束由 `prompts/_source/analysis-rules.json` 和 `prompts/_source/shared-rules.json` 维护，再编译到 `prompts/training-analysis.md`
 
 更完整的维护说明见 `docs/telegram-analysis.md`。
+
+### 7.2.3 `/ai` MCP Agent 助手的当前规则
+
+- 入口命令是 Telegram 文本消息 `/ai 问题` 或 `/智能助手 问题`
+- 会按问题选择 MCP 工具，例如搜索历史记录、查看同步状态、读取配置、查询身体反馈或生成训练分析
+- 只处理 `TELEGRAM_ALLOWED_CHAT_IDS` 白名单内的 chat
+- 不走图片识别，不写 `训练记录.md`，不写 `source/_posts`，不写 PostgreSQL
+- 适合问“搜一下右肩疼痛相关记录”“同步状态正常吗”“有哪些命令可以用”等跨功能问题
+
+### 7.2.4 Telegram 帮助消息
+
+- 给 Bot 发送 `/help`、`帮助`、`命令`、`指令` 或 `使用说明`，Cloudflare Worker 会直接回发可用命令清单
+- 帮助消息不会触发 GitHub `repository_dispatch`，也不会启动 `Telegram Sync` GitHub Actions
+- 该能力需要 Cloudflare Worker Secret 配置 `TELEGRAM_BOT_TOKEN`
 
 ### 7.3 页面构建
 
@@ -310,7 +325,7 @@ npm run build
   从 PostgreSQL 导出 Markdown
 
 - `npm run sync:telegram`
-  处理 Telegram update、识别截图、写入 `/thought` 随想或回复 `/analysis` 分析，同步到 PostgreSQL，必要时回退写 Markdown / 待补偿队列
+  处理 Telegram update、识别截图、写入 `/thought` 随想、回复 `/analysis` 分析或 `/ai` Agent 问答，同步到 PostgreSQL，必要时回退写 Markdown / 待补偿队列
 
 ## 9. GitHub Actions
 

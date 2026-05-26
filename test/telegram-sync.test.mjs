@@ -371,6 +371,52 @@ test('groups /analysis text messages into analysis batches', async () => {
   assert.equal(batches[1].analysis.question, '最近饮食怎么样');
 });
 
+test('groups /ai text messages into ai agent batches', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 321,
+      message: {
+        message_id: 31,
+        date: 1_746_748_800,
+        chat: { id: 42 },
+        text: '/ai 搜一下右肩疼痛相关记录',
+      },
+    },
+    {
+      update_id: 322,
+      message: {
+        message_id: 32,
+        date: 1_746_748_900,
+        chat: { id: 42 },
+        text: '/智能助手 同步状态正常吗',
+      },
+    },
+    {
+      update_id: 323,
+      message: {
+        message_id: 33,
+        date: 1_746_749_000,
+        chat: { id: 42 },
+        text: '/ais 这个不应该被识别',
+      },
+    },
+  ]);
+
+  assert.equal(batches.length, 2);
+  assert.equal(batches[0].kind, 'ai_agent');
+  assert.equal(batches[0].batchId, 'ai-31');
+  assert.equal(batches[0].aiAgent.command, '/ai');
+  assert.equal(batches[0].aiAgent.question, '搜一下右肩疼痛相关记录');
+  assert.equal(batches[1].kind, 'ai_agent');
+  assert.equal(batches[1].batchId, 'ai-32');
+  assert.equal(batches[1].aiAgent.command, '/智能助手');
+  assert.equal(batches[1].aiAgent.question, '同步状态正常吗');
+});
+
 test('groups supported Telegram command aliases without changing routed batch shape', async () => {
   const lib = await importTelegramSyncLib();
   const registry = await importTelegramCommandRegistry();
@@ -381,17 +427,18 @@ test('groups supported Telegram command aliases without changing routed batch sh
   const commandRegistry = registry.getTelegramCommandRegistry();
   assert.deepEqual(
     commandRegistry.map((entry) => entry.name),
-    ['move', 'delete', 'analysis', 'explicit_edit', 'edited_message', 'reply_edit', 'thought', 'image'],
+    ['move', 'delete', 'analysis', 'ai_agent', 'explicit_edit', 'edited_message', 'reply_edit', 'thought', 'image'],
   );
   assert.deepEqual(
     commandRegistry.map((entry) => entry.priority),
-    [1, 2, 3, 4, 5, 6, 7, 8],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9],
   );
   assert.deepEqual(commandRegistry[0].aliases, ['/move', '/移动', '/thought', '/随想']);
   assert.deepEqual(commandRegistry[1].aliases, ['/thought-delete', '/thoughtdel', '/delete-thought', '/删随想', '/随想删']);
   assert.deepEqual(commandRegistry[2].aliases, ['/analysis', '/分析']);
-  assert.deepEqual(commandRegistry[3].aliases, ['/thought-edit', '/thoughtedit', '/edit-thought', '/编随想', '/随想编']);
-  assert.deepEqual(commandRegistry[6].aliases, ['/thought', '/随想']);
+  assert.deepEqual(commandRegistry[3].aliases, ['/ai', '/智能助手']);
+  assert.deepEqual(commandRegistry[4].aliases, ['/thought-edit', '/thoughtedit', '/edit-thought', '/编随想', '/随想编']);
+  assert.deepEqual(commandRegistry[7].aliases, ['/thought', '/随想']);
 
   const fixtures = [
     {
@@ -508,6 +555,20 @@ test('groups supported Telegram command aliases without changing routed batch sh
       payloadKey: 'analysis',
       command: '/分析',
       question: '最近饮食怎么样',
+    },
+    {
+      text: '/ai 搜一下右肩疼痛相关记录',
+      kind: 'ai_agent',
+      payloadKey: 'aiAgent',
+      command: '/ai',
+      question: '搜一下右肩疼痛相关记录',
+    },
+    {
+      text: '/智能助手 同步状态正常吗',
+      kind: 'ai_agent',
+      payloadKey: 'aiAgent',
+      command: '/智能助手',
+      question: '同步状态正常吗',
     },
   ];
 

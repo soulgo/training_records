@@ -100,9 +100,9 @@ node --test test/telegram-sync.test.mjs test/training-analysis.test.mjs test/tra
 | 方法 | `POST` |
 | 请求体 | Telegram Bot API Update JSON |
 | 必填 Header | `X-Telegram-Bot-Api-Secret-Token: <TELEGRAM_SECRET_TOKEN>` |
-| 成功响应 | `202` JSON |
+| 成功响应 | `202` JSON；帮助消息为 `200` JSON |
 
-Worker 不直接识别图片或写训练数据。它只校验 Telegram secret，然后把 update 转发为 GitHub `repository_dispatch`，由 GitHub Actions 执行 `npm run sync:telegram`。
+Worker 不直接识别图片或写训练数据。它会先校验 Telegram secret；帮助消息会直接调用 Telegram `sendMessage` 回发命令清单，其它 update 会转发为 GitHub `repository_dispatch`，由 GitHub Actions 执行 `npm run sync:telegram`。
 
 GitHub dispatch 请求：
 
@@ -121,7 +121,8 @@ Worker 环境变量：
 
 | 变量 | 必填 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| `GITHUB_TOKEN` | 是 | 无 | 调用 GitHub repository dispatch 的 token |
+| `GITHUB_TOKEN` | 普通 dispatch 必填 | 无 | 调用 GitHub repository dispatch 的 token；帮助消息不依赖它 |
+| `TELEGRAM_BOT_TOKEN` | 帮助消息必填 | 无 | Worker 直接回复 `/help`、`帮助`、`命令` 等消息 |
 | `TELEGRAM_SECRET_TOKEN` | 是 | 无 | 与 Telegram webhook secret header 对比 |
 | `GITHUB_OWNER` | 否 | `soulgo` | GitHub 仓库 owner |
 | `GITHUB_REPO` | 否 | `training_records` | GitHub 仓库名 |
@@ -134,10 +135,11 @@ Worker 环境变量：
 | --- | --- | --- |
 | `202` | `{ "ok": true, "dispatched": true, "updateId": 123 }` | 单条 update 已 dispatch |
 | `202` | `{ "ok": true, "buffered": true, "updateId": 123, "albumKey": "42:album" }` | 相册 update 已进入 Durable Object 缓冲 |
+| `200` | `{ "ok": true, "handled": "help", "updateId": 123 }` | 帮助消息已直接回发 Telegram |
 | `400` | `{ "ok": false, "error": "invalid_json" }` | 请求体不是合法 JSON |
 | `401` | `{ "ok": false, "error": "unauthorized" }` | secret header 不匹配 |
 | `405` | `{ "ok": false, "error": "method_not_allowed" }` | 非 `POST` 请求 |
-| `500` | `{ "ok": false, "error": "missing_github_token" }` | Worker 缺少必填配置 |
+| `500` | `{ "ok": false, "error": "missing_github_token" }` | 非帮助消息需要 dispatch，但 Worker 缺少 GitHub token |
 | `502` | `{ "ok": false, "error": "github_dispatch_failed", "status": 500, "body": "..." }` | GitHub dispatch 失败 |
 
 ### 3.2 Telegram 相册聚合 Durable Object
@@ -789,6 +791,7 @@ AI 返回内容必须是符合 schema 的 JSON 字符串。顶层字段：
 | 变量 | 稳定性 | 默认 | 使用位置 | 说明 |
 | --- | --- | --- | --- | --- |
 | `GITHUB_TOKEN` | `可对外` | 无 | Cloudflare Worker | GitHub dispatch token |
+| `TELEGRAM_BOT_TOKEN` | `可对外` | 无 | Cloudflare Worker | 帮助消息直接回复 Telegram |
 | `TELEGRAM_SECRET_TOKEN` | `可对外` | 无 | Cloudflare Worker | Telegram webhook secret |
 | `GITHUB_OWNER` | `可对外` | `soulgo` | Cloudflare Worker | 目标仓库 owner |
 | `GITHUB_REPO` | `可对外` | `training_records` | Cloudflare Worker | 目标仓库名 |
@@ -807,6 +810,7 @@ AI 返回内容必须是符合 schema 的 JSON 字符串。顶层字段：
 | --- | --- | --- |
 | Telegram secret 不匹配 | Worker 返回 `401 unauthorized` | 检查 Telegram webhook secret 与 Cloudflare `TELEGRAM_SECRET_TOKEN` |
 | Worker 缺少 GitHub token | Worker 返回 `500 missing_github_token` | 配置 Cloudflare secret `GITHUB_TOKEN` |
+| 帮助消息回复失败 | Worker 返回 `502 telegram_help_failed` | 检查 Cloudflare secret `TELEGRAM_BOT_TOKEN` 和 Telegram API 状态 |
 | GitHub dispatch 失败 | Worker 返回 `502 github_dispatch_failed` | 检查 token 权限、仓库 owner/repo、GitHub API 状态 |
 | AI 识别失败 | `sync:telegram` stderr 出现 image recognition failed | 检查 `AI_*`、图片 URL、模型 schema 支持 |
 | 图片无可靠日期 | batch `status: "skipped"` | 以 document 方式发送带日期文件名的图片，或保证截图画面有日期 |

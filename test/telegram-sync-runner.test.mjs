@@ -2734,6 +2734,128 @@ test('runTelegramSync ignores unauthorized /analysis commands without generating
   assert.equal(sent, false);
 });
 
+test('runTelegramSync replies to /ai through the telegram ai agent without file writes', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-ai-agent-'));
+  const sentMessages = [];
+  let recognized = false;
+  let persisted = false;
+  const agentCalls = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 9014,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/ai 搜一下右肩疼痛相关记录',
+        },
+      },
+    ],
+    recognizeBatch: async () => {
+      recognized = true;
+      return [];
+    },
+    persistNormalizedBatch: async () => {
+      persisted = true;
+      return { status: 'stored' };
+    },
+    runTelegramAiAgent: async (input) => {
+      agentCalls.push(input);
+      return '找到 1 条相关身体反馈：右肩训练后有刺痛。';
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 10004 };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run through sync override');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for ai agent command');
+    },
+  });
+
+  assert.equal(result.changed, false);
+  assert.equal(result.fallbackUsed, false);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'ai_agent');
+  assert.equal(result.batchResults[0].aiAgentReplyStatus, 'sent');
+  assert.equal(result.batchResults[0].aiAgentReplyParts, 1);
+  assert.equal(recognized, false);
+  assert.equal(persisted, false);
+  assert.equal(agentCalls.length, 1);
+  assert.equal(agentCalls[0].question, '搜一下右肩疼痛相关记录');
+  assert.equal(agentCalls[0].chatId, 42);
+  assert.equal(sentMessages.length, 1);
+  assert.deepEqual(sentMessages[0], {
+    chatId: 42,
+    text: '找到 1 条相关身体反馈：右肩训练后有刺痛。',
+    replyToMessageId: 9014,
+  });
+
+  await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
+  await assert.rejects(readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-9014.md'), 'utf8'), /ENOENT/);
+});
+
+test('runTelegramSync ignores unauthorized /ai commands without invoking the agent', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-ai-agent-unauthorized-'));
+  let agentCalled = false;
+  let sent = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 9015,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 99 },
+          text: '/ai 同步状态正常吗',
+        },
+      },
+    ],
+    runTelegramAiAgent: async () => {
+      agentCalled = true;
+      return 'should not run';
+    },
+    sendTelegramMessage: async () => {
+      sent = true;
+    },
+  });
+
+  assert.equal(result.changed, false);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'ai_agent');
+  assert.equal(result.batchResults[0].status, 'ignored');
+  assert.equal(result.batchResults[0].reason, 'unauthorized chat');
+  assert.equal(agentCalled, false);
+  assert.equal(sent, false);
+});
+
 test('runTelegramSync retries transient AI recognition failures and continues syncing', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-recognition-retry-'));
   const persistedBatches = [];

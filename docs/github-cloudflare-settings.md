@@ -226,6 +226,7 @@ TELEGRAM_WEBHOOK_URL=https://telegram-sync-dispatch.1406221797.workers.dev/
 在 Cloudflare Worker 的 `Settings -> Variables and Secrets` 中配置：
 
 - Secret: `GITHUB_TOKEN`
+- Secret: `TELEGRAM_BOT_TOKEN`
 - Secret: `TELEGRAM_SECRET_TOKEN`
 - Variable: `GITHUB_OWNER`（可选；默认 `soulgo`）
 - Variable: `GITHUB_REPO`（可选；默认 `training_records`）
@@ -244,6 +245,8 @@ TELEGRAM_WEBHOOK_URL=https://telegram-sync-dispatch.1406221797.workers.dev/
 [guid]::NewGuid().ToString('N')
 ```
 
+说明：`/help`、`帮助` 等帮助消息只依赖 `TELEGRAM_SECRET_TOKEN` 和 `TELEGRAM_BOT_TOKEN`；普通同步消息仍依赖 `GITHUB_TOKEN` 才能 dispatch 到 GitHub Actions。
+
 ### Worker 代码
 
 - 仓库内示例文件：[cloudflare/telegram-sync-dispatch-worker.mjs](../cloudflare/telegram-sync-dispatch-worker.mjs)
@@ -251,9 +254,10 @@ TELEGRAM_WEBHOOK_URL=https://telegram-sync-dispatch.1406221797.workers.dev/
 它会：
 
 1. 校验 Telegram webhook 请求头 `X-Telegram-Bot-Api-Secret-Token`
-2. 普通单条消息立即转发为 GitHub `repository_dispatch`
-3. 相册消息按 `chat_id + media_group_id` 进入 `TelegramAlbumBuffer`，缓冲 3 秒后再合并派发
-4. 触发类型固定为 `telegram_update`，payload 使用 `client_payload.telegram_updates`
+2. 对 `/help`、`帮助`、`命令`、`指令`、`使用说明` 直接调用 Telegram `sendMessage` 回发命令清单，不触发 GitHub Actions
+3. 普通单条消息立即转发为 GitHub `repository_dispatch`
+4. 相册消息按 `chat_id + media_group_id` 进入 `TelegramAlbumBuffer`，缓冲 3 秒后再合并派发
+5. 触发类型固定为 `telegram_update`，payload 使用 `client_payload.telegram_updates`
 
 如果没有配置 `TELEGRAM_ALBUM_BUFFER` 绑定，Worker 仍然会继续工作，但相册不会聚合，行为会退回为逐条 dispatch。
 
@@ -378,7 +382,7 @@ Invoke-RestMethod `
 4. 先把 `TRAINING_DB_ENABLED` 设成 `false`
 5. 本地确认 PostgreSQL 链路和回退链路都正常后，再改成 `true`
 6. 如果启用 Telegram webhook，再配置 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
-7. 再去 Cloudflare 配 `GITHUB_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`GITHUB_OWNER`、`GITHUB_REPO` 和 `TELEGRAM_ALBUM_BUFFER`
+7. 再去 Cloudflare 配 `GITHUB_TOKEN`、`TELEGRAM_BOT_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`GITHUB_OWNER`、`GITHUB_REPO` 和 `TELEGRAM_ALBUM_BUFFER`
 8. 再在 GitHub Actions 配 `TELEGRAM_SECRET_TOKEN` Secret 和 `TELEGRAM_WEBHOOK_URL` Variable
 9. 手动运行一次 `Deploy Cloudflare Worker` 或 `Refresh Telegram Webhook`
 
@@ -388,10 +392,12 @@ Invoke-RestMethod `
 2. 给 Bot 发 2 张相册截图，应只触发 1 次 `Telegram Sync`
 3. 给 Bot 发一条 `/thought 今天训练后背阔发力更明显` 或 `/随想 今天训练后背阔发力更明显`，应触发 1 次 `Telegram Sync`
 4. 给 Bot 发一条 `/analysis 今天怎么练` 或 `/分析 最近饮食怎么样`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的分析建议
-5. 直接编辑一条已经归档的 `/thought` / `/随想` 消息，应触发 1 次 `Telegram Sync`，并更新对应 `source/_posts` 里的正文
-6. 回复原随想消息发送 `/随想删`，或单独发送 `/随想删 126`，应触发 1 次 `Telegram Sync`，并删除对应随想文件；带图时还应删除 `source/images/thoughts/` 里的图片
-7. 在 Cloudflare Worker 请求日志确认收到了 `POST`
-8. 在 GitHub Actions 确认 `Telegram Sync` 被 `repository_dispatch` 触发
+5. 给 Bot 发一条 `/ai 搜一下右肩疼痛相关记录`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的 Agent 回复
+6. 给 Bot 发一条 `/help` 或 `帮助`，应直接收到命令清单，且不触发 `Telegram Sync`
+7. 直接编辑一条已经归档的 `/thought` / `/随想` 消息，应触发 1 次 `Telegram Sync`，并更新对应 `source/_posts` 里的正文
+8. 回复原随想消息发送 `/随想删`，或单独发送 `/随想删 126`，应触发 1 次 `Telegram Sync`，并删除对应随想文件；带图时还应删除 `source/images/thoughts/` 里的图片
+9. 在 Cloudflare Worker 请求日志确认收到了 `POST`
+10. 在 GitHub Actions 确认普通同步请求被 `repository_dispatch` 触发
 
 ## 7. 当前实现下的重要说明
 

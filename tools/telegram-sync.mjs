@@ -20,6 +20,7 @@ import {
   generateTrainingAnalysisReply,
   splitTelegramMessage,
 } from './training-analysis.mjs';
+import { runTelegramAiAgent } from './telegram-ai-agent.mjs';
 import { canFallbackToMarkdownSnapshot, canUseDatabaseFallback } from './lib/snapshot-fallback.mjs';
 import {
   fetchTelegramUpdates,
@@ -111,6 +112,16 @@ export async function runTelegramSync(options = {}) {
     options.generateTrainingAnalysisReply ??
     ((input) =>
       generateTrainingAnalysisReply({
+        ...input,
+        rootDir: activeRootDir,
+        env: rawEnv,
+        now,
+        aiProvider,
+      }));
+  const runAiAgent =
+    options.runTelegramAiAgent ??
+    ((input) =>
+      runTelegramAiAgent({
         ...input,
         rootDir: activeRootDir,
         env: rawEnv,
@@ -245,6 +256,21 @@ export async function runTelegramSync(options = {}) {
         analysisReplyStatus: analysisResult.status,
         analysisReplyError: analysisResult.error ?? null,
         analysisReplyParts: analysisResult.parts ?? 0,
+      });
+      continue;
+    }
+
+    if (persistedBatch.kind === 'ai_agent') {
+      const aiAgentResult = await handleAiAgentBatch({
+        batch: persistedBatch,
+        runAiAgent,
+        sendMessage,
+      });
+      batchResults.push({
+        ...persistedBatch,
+        aiAgentReplyStatus: aiAgentResult.status,
+        aiAgentReplyError: aiAgentResult.error ?? null,
+        aiAgentReplyParts: aiAgentResult.parts ?? 0,
       });
       continue;
     }
@@ -405,6 +431,11 @@ export function buildTelegramSyncReport(result) {
       normalized.batches[index].analysisReplyStatus = batch.analysisReplyStatus ?? null;
       normalized.batches[index].analysisReplyError = batch.analysisReplyError ?? null;
       normalized.batches[index].analysisReplyParts = batch.analysisReplyParts ?? null;
+    }
+    if ((batch.kind ?? 'image') === 'ai_agent') {
+      normalized.batches[index].aiAgentReplyStatus = batch.aiAgentReplyStatus ?? null;
+      normalized.batches[index].aiAgentReplyError = batch.aiAgentReplyError ?? null;
+      normalized.batches[index].aiAgentReplyParts = batch.aiAgentReplyParts ?? null;
     }
   }
 
@@ -904,6 +935,41 @@ async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }
     await sendMessage({
       chatId: message.chatId,
       text: `训练分析暂时生成失败：${errorMessage}`,
+      replyToMessageId: message.messageId,
+    });
+    return {
+      status: 'failed',
+      error: errorMessage,
+      parts: 1,
+    };
+  }
+}
+
+async function handleAiAgentBatch({ batch, runAiAgent, sendMessage }) {
+  const message = batch.messages?.[0] ?? {};
+  try {
+    const reply = await runAiAgent({
+      question: batch.aiAgent?.question ?? '',
+      chatId: message.chatId,
+      messageId: message.messageId,
+    });
+    const parts = splitTelegramMessage(reply);
+    for (const [index, part] of parts.entries()) {
+      await sendMessage({
+        chatId: message.chatId,
+        text: part,
+        replyToMessageId: index === 0 ? message.messageId : null,
+      });
+    }
+    return {
+      status: 'sent',
+      parts: parts.length,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    await sendMessage({
+      chatId: message.chatId,
+      text: `AI 助手暂时生成失败：${errorMessage}`,
       replyToMessageId: message.messageId,
     });
     return {

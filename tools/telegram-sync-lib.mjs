@@ -45,6 +45,14 @@ const telegramCommandResolver = createTelegramCommandResolver({
       return buildAnalysisBatch(normalized);
     },
   },
+  ai_agent: {
+    match(normalized) {
+      return parseAiAgentCommand(normalized.text);
+    },
+    build(normalized) {
+      return buildAiAgentBatch(normalized);
+    },
+  },
   explicit_edit: {
     match(normalized, context) {
       if (normalized.updateType !== 'message' || normalized.mediaGroupId) {
@@ -198,6 +206,10 @@ export function groupTelegramUpdates(updates, options = {}) {
 export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   if (batch.kind === 'analysis') {
     return analyzeAnalysisBatch(batch);
+  }
+
+  if (batch.kind === 'ai_agent') {
+    return analyzeAiAgentBatch(batch);
   }
 
   if (batch.kind === 'thought_edit') {
@@ -643,6 +655,23 @@ function buildAnalysisBatch(message) {
   };
 }
 
+function buildAiAgentBatch(message) {
+  const parsedAiAgent = parseAiAgentCommand(message.text);
+  if (!parsedAiAgent) {
+    return null;
+  }
+
+  return {
+    kind: 'ai_agent',
+    batchId: `ai-${message.messageId}`,
+    messages: [message],
+    aiAgent: {
+      command: parsedAiAgent.command,
+      question: parsedAiAgent.question,
+    },
+  };
+}
+
 function normalizeTelegramImageDocument(document) {
   if (!document?.file_id) {
     return null;
@@ -906,6 +935,28 @@ function analyzeAnalysisBatch(batch) {
     confidence: 1,
     analysis: {
       command: batch.analysis?.command ?? '/analysis',
+      question,
+      telegramMessageId: message?.messageId ?? null,
+      telegramChatId: message?.chatId ?? null,
+      messageDateUnix: message?.dateUnix ?? null,
+    },
+  };
+}
+
+function analyzeAiAgentBatch(batch) {
+  const message = batch.messages?.[0] ?? null;
+  const question = batch.aiAgent?.question?.trim() ?? '';
+
+  return {
+    status: 'ready',
+    kind: 'ai_agent',
+    batchId: batch.batchId,
+    archivedDate: null,
+    warnings: [],
+    issues: [],
+    confidence: 1,
+    aiAgent: {
+      command: batch.aiAgent?.command ?? '/ai',
       question,
       telegramMessageId: message?.messageId ?? null,
       telegramChatId: message?.chatId ?? null,
@@ -1645,6 +1696,23 @@ function parseAnalysisCommand(text) {
 
   const trimmedStart = text.trimStart();
   const match = trimmedStart.match(/^(\/(?:analysis|分析)(?:@[A-Za-z0-9_]+)?)(?=$|\s)([\s\S]*)$/u);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    command: match[1],
+    question: match[2].trim(),
+  };
+}
+
+function parseAiAgentCommand(text) {
+  if (typeof text !== 'string') {
+    return null;
+  }
+
+  const trimmedStart = text.trimStart();
+  const match = trimmedStart.match(/^(\/(?:ai|智能助手)(?:@[A-Za-z0-9_]+)?)(?=$|\s)([\s\S]*)$/u);
   if (!match) {
     return null;
   }
