@@ -7,6 +7,7 @@
 - `.github/workflows/deploy-pages.yml`
 - `.github/workflows/telegram-sync.yml`
 - `.github/workflows/deploy-cloudflare-worker.yml`
+- `.github/workflows/refresh-telegram-webhook.yml`
 
 ## 1. GitHub Settings
 
@@ -50,6 +51,13 @@ postgresql://training_writer:你的数据库密码@你的数据库公网IP或域
 - 使用工作流：`deploy-cloudflare-worker.yml`
 - 是否必填：使用 Telegram webhook + Cloudflare Worker 时必填
 - 获取位置：Cloudflare Dashboard 右侧账号信息里的 Account ID
+
+#### `TELEGRAM_SECRET_TOKEN`
+
+- 用途：设置 Telegram webhook 时写入 `secret_token`，必须与 Cloudflare Worker 的 `TELEGRAM_SECRET_TOKEN` 一致
+- 使用工作流：`deploy-cloudflare-worker.yml`、`refresh-telegram-webhook.yml`
+- 是否必填：使用 Telegram webhook + Cloudflare Worker 时必填
+- 注意：这个值需要同时配置到 GitHub Actions Secret 和 Cloudflare Worker Secret；GitHub Actions 无法从 Cloudflare 反向读取 Secret 明文
 
 ### Variables
 
@@ -171,6 +179,17 @@ true
 training-records-dashboard
 ```
 
+#### `TELEGRAM_WEBHOOK_URL`
+
+- 用途：Telegram webhook 目标地址
+- 使用工作流：`deploy-cloudflare-worker.yml`、`refresh-telegram-webhook.yml`
+- 是否必填：使用 Telegram webhook + Cloudflare Worker 时必填
+- 当前默认 Worker URL：
+
+```text
+https://telegram-sync-dispatch.1406221797.workers.dev/
+```
+
 ### 建议的初始值
 
 #### Secrets 模板
@@ -181,6 +200,7 @@ AI_API_KEY=你的 AI 平台 API Key
 TRAINING_DB_URL=postgresql://training_writer:你的数据库密码@你的数据库公网IP或域名:5432/training_records
 CLOUDFLARE_API_TOKEN=你的 Cloudflare API Token
 CLOUDFLARE_ACCOUNT_ID=你的 Cloudflare Account ID
+TELEGRAM_SECRET_TOKEN=你配置到 Cloudflare 的 TELEGRAM_SECRET_TOKEN
 ```
 
 #### Variables 模板
@@ -196,6 +216,7 @@ TRAINING_SNAPSHOT_SOURCE=markdown
 TRAINING_DB_ENABLED=false
 TRAINING_DB_TIMEOUT_MS=3000
 TRAINING_DB_APP_NAME=training-records-dashboard
+TELEGRAM_WEBHOOK_URL=https://telegram-sync-dispatch.1406221797.workers.dev/
 ```
 
 ## 2. Cloudflare Worker
@@ -300,9 +321,37 @@ npx wrangler deploy
 - 在 `main` 的站点相关文件真正发生 push 后再部署
 - 不再因为一次 `Telegram Sync` 完成就无条件额外跑一次 Pages workflow
 
-## 4. 设置 Telegram webhook
+## 4. 自动刷新 Telegram webhook
 
-在仓库代码和 Worker 都部署完成后，再执行：
+当前仓库已经提供自动刷新 webhook 的脚本和工作流：
+
+- `npm run telegram:webhook`：调用 Telegram `setWebhook`
+- `deploy-cloudflare-worker.yml`：Worker 部署成功后自动刷新 webhook
+- `refresh-telegram-webhook.yml`：支持手动触发，并且每 6 小时自动刷新一次 webhook
+
+这能覆盖更换 `TELEGRAM_BOT_TOKEN` 后忘记重新调用 `setWebhook` 的问题。GitHub Secrets 被修改时不会触发 workflow，所以更新 token 后有两种方式：
+
+1. 到 GitHub Actions 手动运行 `Refresh Telegram Webhook`
+2. 等待 `Refresh Telegram Webhook` 的 6 小时定时任务自动运行
+
+自动刷新依赖以下配置：
+
+- GitHub Actions Secret: `TELEGRAM_BOT_TOKEN`
+- GitHub Actions Secret: `TELEGRAM_SECRET_TOKEN`
+- GitHub Actions Variable: `TELEGRAM_WEBHOOK_URL`
+
+其中 `TELEGRAM_SECRET_TOKEN` 必须和 Cloudflare Worker Secret 里的同名值一致，否则 Telegram 会正常把请求发到 Worker，但 Worker 会因为 secret header 不匹配返回 `401 unauthorized`。
+
+如果需要本地手动兜底，也可以运行：
+
+```powershell
+$env:TELEGRAM_BOT_TOKEN = "你的 Telegram Bot Token"
+$env:TELEGRAM_WEBHOOK_URL = "https://telegram-sync-dispatch.1406221797.workers.dev/"
+$env:TELEGRAM_SECRET_TOKEN = "你配置到 Cloudflare 的 TELEGRAM_SECRET_TOKEN"
+npm run telegram:webhook
+```
+
+等价的原始 Telegram API 请求是：
 
 ```powershell
 $botToken = "你的 Telegram Bot Token"
@@ -330,6 +379,8 @@ Invoke-RestMethod `
 5. 本地确认 PostgreSQL 链路和回退链路都正常后，再改成 `true`
 6. 如果启用 Telegram webhook，再配置 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
 7. 再去 Cloudflare 配 `GITHUB_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`GITHUB_OWNER`、`GITHUB_REPO` 和 `TELEGRAM_ALBUM_BUFFER`
+8. 再在 GitHub Actions 配 `TELEGRAM_SECRET_TOKEN` Secret 和 `TELEGRAM_WEBHOOK_URL` Variable
+9. 手动运行一次 `Deploy Cloudflare Worker` 或 `Refresh Telegram Webhook`
 
 ## 6. 验证方法
 
@@ -356,6 +407,7 @@ Invoke-RestMethod `
   - `markdown`：页面构建不依赖 PostgreSQL
   - `database`：页面构建直接依赖 PostgreSQL
 - `wrangler.toml` 推送到 GitHub 后，只有 `deploy-cloudflare-worker.yml` 成功运行，Cloudflare Worker 里的 Durable Object binding 才会真正更新
+- GitHub Secrets 修改不会触发 workflow；更新 `TELEGRAM_BOT_TOKEN` 后，`refresh-telegram-webhook.yml` 会在 6 小时内自动刷新，也可以手动运行立即生效
 
 ## 8. SQL 文件约定
 

@@ -1,35 +1,23 @@
-name: Deploy Cloudflare Worker
+name: Refresh Telegram Webhook
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - wrangler.toml
-      - cloudflare/**
-      - .github/workflows/deploy-cloudflare-worker.yml
+  schedule:
+    - cron: '17 */6 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: cloudflare-worker
+  group: telegram-webhook
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  refresh:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -40,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Refresh Telegram webhook
+      - name: Set Telegram webhook
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_WEBHOOK_URL: ${{ vars.TELEGRAM_WEBHOOK_URL }}

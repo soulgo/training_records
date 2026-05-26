@@ -61,6 +61,8 @@ test('ci-tests workflow runs npm test without deploying Pages', async () => {
     '.github/actions/site-build/action.yml',
     '.github/workflows/deploy-pages.yml',
     '.github/workflows/telegram-sync.yml',
+    '.github/workflows/deploy-cloudflare-worker.yml',
+    '.github/workflows/refresh-telegram-webhook.yml',
     '.github/workflows/ci-tests.yml',
     'package.json',
     'package-lock.json',
@@ -75,6 +77,41 @@ test('ci-tests workflow runs npm test without deploying Pages', async () => {
   assert.match(workflow, /run:\s*npm ci/);
   assert.match(workflow, /run:\s*npm test/);
   assert.doesNotMatch(workflow, /actions\/deploy-pages@v4/);
+});
+
+test('deploy-cloudflare-worker workflow refreshes Telegram webhook after deployment', async () => {
+  const workflow = await readWorkflow('.github/workflows/deploy-cloudflare-worker.yml');
+
+  assert.match(workflow, /name:\s*Deploy Cloudflare Worker/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
+  assert.match(workflow, /command:\s*deploy/);
+  assert.match(workflow, /actions\/setup-node@v4/);
+  assert.match(workflow, /node-version:\s*22/);
+  assert.match(workflow, /run:\s*npm ci/);
+  assert.match(workflow, /- name: Refresh Telegram webhook/);
+  assert.match(workflow, /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.TELEGRAM_BOT_TOKEN\s*\}\}/);
+  assert.match(workflow, /TELEGRAM_WEBHOOK_URL:\s*\$\{\{\s*vars\.TELEGRAM_WEBHOOK_URL\s*\}\}/);
+  assert.match(workflow, /TELEGRAM_SECRET_TOKEN:\s*\$\{\{\s*secrets\.TELEGRAM_SECRET_TOKEN\s*\}\}/);
+  assert.match(workflow, /run:\s*npm run telegram:webhook/);
+});
+
+test('refresh-telegram-webhook workflow supports manual and scheduled webhook refresh', async () => {
+  const workflow = await readWorkflow('.github/workflows/refresh-telegram-webhook.yml');
+
+  assert.match(workflow, /name:\s*Refresh Telegram Webhook/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /schedule:\s*\n\s*-\s*cron:\s*'17 \*\/6 \* \* \*'/);
+  assert.match(workflow, /group:\s*telegram-webhook/);
+  assert.match(workflow, /actions\/checkout@v4/);
+  assert.match(workflow, /actions\/setup-node@v4/);
+  assert.match(workflow, /node-version:\s*22/);
+  assert.match(workflow, /run:\s*npm ci/);
+  assert.match(workflow, /- name: Set Telegram webhook/);
+  assert.match(workflow, /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.TELEGRAM_BOT_TOKEN\s*\}\}/);
+  assert.match(workflow, /TELEGRAM_WEBHOOK_URL:\s*\$\{\{\s*vars\.TELEGRAM_WEBHOOK_URL\s*\}\}/);
+  assert.match(workflow, /TELEGRAM_SECRET_TOKEN:\s*\$\{\{\s*secrets\.TELEGRAM_SECRET_TOKEN\s*\}\}/);
+  assert.match(workflow, /run:\s*npm run telegram:webhook/);
 });
 
 test('deploy-pages workflow still triggers for site-relevant changes', async () => {

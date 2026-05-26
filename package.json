@@ -17,7 +17,8 @@
     "clean": "node tools/run-hexo-command.mjs clean",
     "server": "npm run build:data && node tools/run-hexo-command.mjs server",
     "sync:telegram": "node tools/telegram-sync.mjs",
-    "telegram:sync": "npm run sync:telegram"
+    "telegram:sync": "npm run sync:telegram",
+    "telegram:webhook": "node tools/telegram-webhook.mjs"
   },
   "dependencies": {
     "hexo": "^7.3.0",
