@@ -330,6 +330,67 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls.at(-1)[0], 'end');
 });
 
+test('persistNormalizedBatch can merge an existing core day without failing on body feedback reads', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash\s+from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.training_day\s+where archived_date = \$1/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-05-09',
+              total_activities: 1,
+              total_duration_seconds: 600,
+              training_calories: 120,
+              workout_duration_minutes: 10,
+              active_hours: 1,
+              cycling_distance_km: 0,
+              intake_calories: 800,
+              nutrition_details_json: [],
+            },
+          ],
+        };
+      }
+      if (/from core\.measurement\s+where archived_date = \$1/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.activity\s+where archived_date = \$1/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.meal\s+where archived_date = \$1/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: normalizedBatch,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.equal(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)), true);
+  assert.equal(calls.at(-1)[0], 'end');
+});
+
 test('persistNormalizedBatch rolls back the transaction when a core write fails', async () => {
   const calls = [];
   const fakeClient = {

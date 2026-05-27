@@ -650,6 +650,22 @@ async function readCoreDay(client, archivedDate) {
     `,
     [archivedDate],
   );
+  const bodyFeedbackResult = await client.query(
+    `
+      select
+        telegram_message_id,
+        telegram_chat_id,
+        body,
+        message_date_unix,
+        markdown_path,
+        updated_at
+      from core.thought
+      where thought_module = 'body_feedback'
+        and status = 'active'
+      order by coalesce(message_date_unix, extract(epoch from updated_at)) asc,
+        telegram_message_id asc
+    `,
+  );
 
   if (!dayResult.rows.length) {
     return null;
@@ -669,6 +685,9 @@ async function readCoreDay(client, archivedDate) {
         }
         if (/from core\.meal/i.test(sql)) {
           return mealResult;
+        }
+        if (/from core\.thought/i.test(sql)) {
+          return bodyFeedbackResult;
         }
         throw new Error(`Unexpected SQL: ${sql}`);
       },
