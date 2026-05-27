@@ -220,11 +220,19 @@ export async function runTelegramSync(options = {}) {
     }
 
     let recognitions = [];
+    let recognitionErrors = [];
     if (batch.kind === 'image') {
       try {
-        recognitions = (await recognizeBatchRunner(batch, env)).filter(Boolean);
+        const recognitionOutput = normalizeRecognitionOutput(await recognizeBatchRunner(batch, env));
+        recognitions = recognitionOutput.recognitions;
+        recognitionErrors = recognitionOutput.recognitionErrors;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
+        recognitionErrors = batch.messages.map((message) => ({
+          messageId: message.messageId,
+          error: errorMessage,
+          failureCategory: classifyFailureCategory(errorMessage, { phase: 'ai_recognition' }),
+        }));
         process.stderr.write(
           `[telegram-sync] image recognition failed for ${batch.batchId}: ${errorMessage}\n`,
         );
@@ -239,7 +247,9 @@ export async function runTelegramSync(options = {}) {
       updateIds: batch.messages.map((message) => message.updateId),
       messages: batch.messages,
       recognitions,
+      recognitionErrors,
     };
+    attachFailureMetadata(persistedBatch);
 
     if (analyzed.status !== 'ready') {
       batchResults.push(persistedBatch);
@@ -270,6 +280,14 @@ export async function runTelegramSync(options = {}) {
         analysisReplyStatus: analysisResult.status,
         analysisReplyError: analysisResult.error ?? null,
         analysisReplyParts: analysisResult.parts ?? 0,
+        failureCategory:
+          analysisResult.status === 'failed'
+            ? classifyFailureCategory(analysisResult.error, { phase: 'ai_analysis' })
+            : persistedBatch.failureCategory,
+        failureReason:
+          analysisResult.status === 'failed'
+            ? analysisResult.error
+            : persistedBatch.failureReason,
       });
       continue;
     }
@@ -285,6 +303,14 @@ export async function runTelegramSync(options = {}) {
         aiAgentReplyStatus: aiAgentResult.status,
         aiAgentReplyError: aiAgentResult.error ?? null,
         aiAgentReplyParts: aiAgentResult.parts ?? 0,
+        failureCategory:
+          aiAgentResult.status === 'failed'
+            ? classifyFailureCategory(aiAgentResult.error, { phase: 'ai_agent' })
+            : persistedBatch.failureCategory,
+        failureReason:
+          aiAgentResult.status === 'failed'
+            ? aiAgentResult.error
+            : persistedBatch.failureReason,
       });
       continue;
     }
@@ -338,6 +364,8 @@ export async function runTelegramSync(options = {}) {
           ...persistedBatch,
           persistenceStatus: 'fallback_markdown',
           persistenceError: errorMessage,
+          failureCategory: classifyFailureCategory(errorMessage, { phase: 'database' }),
+          failureReason: errorMessage,
         });
         continue;
       }
@@ -434,6 +462,9 @@ export function buildTelegramSyncReport(result) {
       thoughtWriteStatus: batch.thoughtWriteStatus ?? null,
       persistenceStatus: batch.persistenceStatus ?? null,
       persistenceError: batch.persistenceError ?? null,
+      failureCategory: batch.failureCategory ?? null,
+      failureReason: batch.failureReason ?? null,
+      recognitionErrors: batch.recognitionErrors ?? [],
       warnings: batch.warnings ?? [],
       issues: batch.issues ?? [],
       reason: batch.reason ?? null,
@@ -560,7 +591,7 @@ function shouldNotifyBatch(batch) {
     return false;
   }
 
-  if (!isTrainingDataBatchKind(batch.kind)) {
+  if (!isTrainingDataBatchKind(batch.kind) && !isThoughtBatchKind(batch.kind)) {
     return false;
   }
 
@@ -580,6 +611,10 @@ function getBatchReplyMessageId(batch) {
 }
 
 function formatTelegramSyncNotification(batch) {
+  if (isThoughtBatchKind(batch.kind)) {
+    return formatThoughtSyncNotification(batch);
+  }
+
   if (batch.status === 'ready') {
     const dateText = formatChineseDate(batch.archivedDate);
     const storageText = formatPersistenceStatus(batch.persistenceStatus);
@@ -587,6 +622,10 @@ function formatTelegramSyncNotification(batch) {
   }
 
   if (batch.status === 'skipped') {
+    if (batch.failureCategory === 'ai_service') {
+      const reason = batch.failureReason ? `：${batch.failureReason}` : '';
+      return `解析失败：AI 服务失败${reason}`;
+    }
     const reason = batch.reason ? `：${batch.reason}` : '';
     return `解析未入库${reason}`;
   }
@@ -783,6 +822,7 @@ async function recognizeBatch(batch, env, options = {}) {
   const promptMetadata = await getRecognitionPromptMetadata();
   const systemPrompt = await loadRecognitionSystemPrompt(options.rawEnv ?? process.env);
   const fetchTelegramFileById = options.fetchTelegramFileById ?? null;
+  const recognitionErrors = [];
   const recognitions = await mapWithConcurrency(batch.messages, env.aiConcurrency, async (message) => {
     const fileId = message.photos.at(-1)?.fileId;
     if (!fileId) {
@@ -814,6 +854,12 @@ async function recognizeBatch(batch, env, options = {}) {
           } catch (inlineError) {
             const originalMessage = error instanceof Error ? error.message : String(error);
             const inlineMessage = inlineError instanceof Error ? inlineError.message : String(inlineError);
+            recognitionErrors.push({
+              messageId: message.messageId,
+              error: inlineMessage,
+              originalError: originalMessage,
+              failureCategory: classifyFailureCategory(inlineMessage, { phase: 'ai_recognition' }),
+            });
             process.stderr.write(
               `[telegram-sync] inline image retry failed for ${message.messageId}: ${inlineMessage} (original: ${originalMessage})\n`,
             );
@@ -822,6 +868,11 @@ async function recognizeBatch(batch, env, options = {}) {
         }
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
+      recognitionErrors.push({
+        messageId: message.messageId,
+        error: errorMessage,
+        failureCategory: classifyFailureCategory(errorMessage, { phase: 'ai_recognition' }),
+      });
       process.stderr.write(
         `[telegram-sync] image recognition failed for ${message.messageId}: ${errorMessage}\n`,
       );
@@ -829,7 +880,125 @@ async function recognizeBatch(batch, env, options = {}) {
     }
   });
 
-  return recognitions.filter(Boolean);
+  return {
+    recognitions: recognitions.filter(Boolean),
+    recognitionErrors,
+  };
+}
+
+function normalizeRecognitionOutput(output) {
+  if (Array.isArray(output)) {
+    return {
+      recognitions: output.filter(Boolean),
+      recognitionErrors: [],
+    };
+  }
+  return {
+    recognitions: Array.isArray(output?.recognitions) ? output.recognitions.filter(Boolean) : [],
+    recognitionErrors: Array.isArray(output?.recognitionErrors) ? output.recognitionErrors : [],
+  };
+}
+
+function attachFailureMetadata(batch) {
+  if (!batch || batch.failureCategory) {
+    return batch;
+  }
+
+  if (Array.isArray(batch.recognitionErrors) && batch.recognitionErrors.length > 0) {
+    batch.failureCategory =
+      batch.recognitionErrors.find((error) => error.failureCategory)?.failureCategory ?? 'ai_service';
+    batch.failureReason = batch.recognitionErrors.map((error) => error.error).filter(Boolean).join('; ');
+    return batch;
+  }
+
+  if (batch.status === 'ignored') {
+    batch.failureCategory = 'user_input';
+    batch.failureReason = batch.reason ?? 'ignored';
+    return batch;
+  }
+
+  if (batch.status === 'skipped') {
+    const reason = [batch.reason, ...(batch.issues ?? [])].filter(Boolean).join('; ');
+    batch.failureCategory = classifyFailureCategory(reason, { phase: batch.kind ?? 'sync' });
+    batch.failureReason = reason || batch.reason || 'skipped';
+    return batch;
+  }
+
+  if (batch.persistenceError) {
+    batch.failureCategory = classifyFailureCategory(batch.persistenceError, { phase: 'database' });
+    batch.failureReason = batch.persistenceError;
+  }
+
+  return batch;
+}
+
+function classifyFailureCategory(message, options = {}) {
+  const text = String(message ?? '');
+  const phase = String(options.phase ?? '');
+
+  if (/github|action|dispatch|rebase|push|checkout|npm ci|site_build|workflow/i.test(`${phase} ${text}`)) {
+    return 'github_action';
+  }
+  if (/getFile|sendMessage|file download|download failed/i.test(text)) {
+    return 'telegram_api';
+  }
+  if (/database|postgres|TRAINING_DB|ECONN|connection|pending_replay|fallback_markdown/i.test(`${phase} ${text}`)) {
+    return 'database';
+  }
+  if (/missing recognition/i.test(text)) {
+    return 'user_input';
+  }
+  if (/\bAI\b|recognition|analysis|agent|schema|JSON|HTTP\s*(?:4\d\d|5\d\d)|rate|timeout|timed out|empty content|provider/i.test(`${phase} ${text}`)) {
+    return 'ai_service';
+  }
+  if (/unauthorized|no reliable|low confidence|conflicting|missing target|not_found|ignored|skipped|filename date/i.test(text)) {
+    return 'user_input';
+  }
+  return 'system_bug';
+}
+
+function formatThoughtSyncNotification(batch) {
+  const actionText = formatThoughtActionText(batch.kind, batch.thoughtWriteStatus);
+  const storageText = formatThoughtPersistenceText(batch.persistenceStatus);
+  const errorText = batch.persistenceError || batch.failureReason
+    ? `：${batch.persistenceError ?? batch.failureReason}`
+    : '';
+
+  if (batch.thoughtWriteStatus === 'not_found') {
+    return `${actionText}：目标随想不存在`;
+  }
+
+  return `${actionText}，${storageText}${errorText}`;
+}
+
+function formatThoughtActionText(kind, status) {
+  const action = {
+    thought: '随想写入',
+    thought_edit: '随想更新',
+    thought_delete: '随想删除',
+    thought_move: '随想移动',
+  }[kind] ?? '随想处理';
+
+  if (status === 'duplicate') {
+    return `${action}成功（重复消息已跳过）`;
+  }
+  if (status === 'unchanged') {
+    return `${action}成功（内容无变化）`;
+  }
+  if (status === 'not_found') {
+    return `${action}失败`;
+  }
+  return `${action}成功`;
+}
+
+function formatThoughtPersistenceText(status) {
+  if (status === 'stored' || status === 'unchanged') {
+    return '已入库';
+  }
+  if (status === 'pending_replay') {
+    return 'Markdown 已写入，数据库待补偿';
+  }
+  return formatPersistenceStatus(status);
 }
 
 async function buildInlineTelegramImageUrl(fetchTelegramFileById, fileId) {
@@ -1077,6 +1246,8 @@ async function handleThoughtSyncBatch({
         ...baseBatchResult,
         persistenceStatus: 'pending_replay',
         persistenceError: errorMessage,
+        failureCategory: classifyFailureCategory(errorMessage, { phase: 'database' }),
+        failureReason: errorMessage,
       },
     };
   }

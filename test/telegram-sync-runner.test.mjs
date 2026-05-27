@@ -11,6 +11,7 @@ import {
   runTelegramSync,
   shouldPersistTelegramArtifacts,
 } from '../tools/telegram-sync.mjs';
+import { notifyTelegramActionFailure } from '../tools/telegram-action-monitor.mjs';
 import { buildRecognitionCacheKey, isRecognitionCacheEnabled } from '../src/ai/recognition-service.mjs';
 
 test('telegram sync entrypoint exits cleanly in webhook mode without queued work', () => {
@@ -806,6 +807,9 @@ test('buildTelegramSyncReport exposes fallback and archived date details for log
         thoughtWriteStatus: null,
         persistenceStatus: 'fallback_markdown',
         persistenceError: 'database unavailable',
+        failureCategory: null,
+        failureReason: null,
+        recognitionErrors: [],
         warnings: [],
         issues: [],
         reason: null,
@@ -2734,6 +2738,54 @@ test('runTelegramSync ignores unauthorized /analysis commands without generating
   assert.equal(sent, false);
 });
 
+test('telegram action monitor reports the failed workflow stage to the original telegram message', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-action-monitor-'));
+  const eventPath = path.join(tempRoot, 'event.json');
+  const sentMessages = [];
+  await writeFile(
+    eventPath,
+    JSON.stringify({
+      client_payload: {
+        telegram_updates: [
+          {
+            update_id: 901,
+            message: {
+              message_id: 77,
+              chat: { id: 42 },
+            },
+          },
+        ],
+      },
+    }),
+    'utf8',
+  );
+
+  const result = await notifyTelegramActionFailure({
+    env: {
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+      GITHUB_EVENT_PATH: eventPath,
+      GITHUB_SERVER_URL: 'https://github.com',
+      GITHUB_REPOSITORY: 'soulgo/training_records',
+      GITHUB_RUN_ID: '123456',
+      TELEGRAM_BOT_TOKEN: 'token',
+      STEP_SYNC_OUTCOME: 'failure',
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(result.failureCategory, 'github_action');
+  assert.equal(result.failureStage, 'Sync Telegram updates');
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].chatId, 42);
+  assert.equal(sentMessages[0].replyToMessageId, 77);
+  assert.match(sentMessages[0].text, /GitHub Action 执行失败：Sync Telegram updates/);
+  assert.match(sentMessages[0].text, /https:\/\/github\.com\/soulgo\/training_records\/actions\/runs\/123456/);
+});
+
 test('runTelegramSync replies to /ai through the telegram ai agent without file writes', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-ai-agent-'));
   const sentMessages = [];
@@ -3845,6 +3897,145 @@ test('runTelegramSync sends Telegram result notification after storing an image 
     text: '解析成功，已入库 2026 年 5 月 22 日数据',
     replyToMessageId: 901,
   });
+});
+
+test('runTelegramSync sends Telegram result notification after writing a thought', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notification-thought-'));
+  const sentMessages = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 903,
+          date: Math.floor(new Date('2026-05-22T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/随想 今天深蹲动作轨迹更稳了',
+        },
+      },
+    ],
+    persistNormalizedBatch: async () => ({ status: 'stored' }),
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9903 };
+    },
+  });
+
+  assert.equal(result.batchResults[0].kind, 'thought');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'written');
+  assert.equal(sentMessages.length, 1);
+  assert.deepEqual(sentMessages[0], {
+    chatId: 42,
+    text: '随想写入成功，已入库',
+    replyToMessageId: 903,
+  });
+});
+
+test('runTelegramSync explains thought database fallback in Telegram notification', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notification-thought-db-'));
+  const sentMessages = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 904,
+          date: Math.floor(new Date('2026-05-22T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/随想 今天训练后背阔发力更明显',
+        },
+      },
+    ],
+    persistNormalizedBatch: async () => {
+      throw new Error('database unavailable');
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9904 };
+    },
+  });
+
+  assert.equal(result.batchResults[0].persistenceStatus, 'pending_replay');
+  assert.equal(result.batchResults[0].failureCategory, 'database');
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].chatId, 42);
+  assert.equal(sentMessages[0].replyToMessageId, 904);
+  assert.match(sentMessages[0].text, /随想写入成功，Markdown 已写入，数据库待补偿/);
+  assert.match(sentMessages[0].text, /database unavailable/);
+});
+
+test('runTelegramSync preserves image recognition failure reason in report and notification', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notification-ai-failure-'));
+  const sentMessages = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 905,
+          date: Math.floor(new Date('2026-05-22T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          photo: [{ file_id: 'file-a', file_unique_id: 'uniq-a' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => {
+      throw new Error('AI recognition failed with HTTP 429: rate limit');
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9905 };
+    },
+  });
+
+  const report = buildTelegramSyncReport(result);
+  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batchResults[0].failureCategory, 'ai_service');
+  assert.match(result.batchResults[0].failureReason, /HTTP 429/);
+  assert.equal(report.batches[0].failureCategory, 'ai_service');
+  assert.match(report.batches[0].recognitionErrors[0].error, /rate limit/);
+  assert.equal(sentMessages.length, 1);
+  assert.match(sentMessages[0].text, /AI 服务失败/);
+  assert.match(sentMessages[0].text, /HTTP 429/);
 });
 
 test('runTelegramSync sends Telegram result notification when an image batch is skipped', async () => {

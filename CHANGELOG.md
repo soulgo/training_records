@@ -13,8 +13,23 @@
 
 ## [Unreleased]
 
+## [1.1.8] - 2026-05-27
+
+### Added
+
+- Telegram 随想新增、编辑、删除和移动成功后会回发同步反馈，让随想写入和训练图片解析入库保持一致的成功确认体验。
+- 新增 GitHub Action 失败监控脚本：`repository_dispatch` 触发的 Telegram 同步失败时，会回 Telegram 显示失败阶段、失败分类和 GitHub run 排查入口。
+
+### Changed
+
+- `buildTelegramSyncReport()` 增加 `failureCategory`、`failureReason`、`recognitionErrors` 可观测字段，便于区分用户输入、AI 服务、Telegram API、数据库、GitHub Action 和系统代码异常。
+- `pending_replay` 通知明确说明“Markdown 已写入，数据库待补偿”，不再伪装成数据库写入成功。
+- 同步项目包版本号到 `1.1.8`。
+
 ### Fixed
 
+- Worker 在缺少 GitHub Token、GitHub dispatch 失败或相册缓冲 dispatch 失败时，会尽量直接回 Telegram 说明“GitHub Action 未能启动”，避免误判为业务代码写入失败。
+- 图片识别、`/分析` 和 `/ai` 失败通知保留 AI、网络、schema/JSON 等具体失败原因，不再只返回笼统的 `missing recognition`。
 - Telegram 帮助命令现在同时支持 `/帮助` 和裸 `help`；即使帮助消息已经进入 `Telegram Sync`，也会直接回发命令清单，不写数据库、Markdown 或图片识别结果。
 
 ## [1.1.7] - 2026-05-26
@@ -116,7 +131,8 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.7...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.8...HEAD
+[1.1.8]: https://github.com/soulgo/training_records/compare/v1.1.7...v1.1.8
 [1.1.7]: https://github.com/soulgo/training_records/compare/v1.1.6...v1.1.7
 [1.1.6]: https://github.com/soulgo/training_records/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/soulgo/training_records/compare/v1.1.4...v1.1.5

@@ -245,7 +245,7 @@ TELEGRAM_WEBHOOK_URL=https://telegram-sync-dispatch.1406221797.workers.dev/
 [guid]::NewGuid().ToString('N')
 ```
 
-说明：`/help`、`帮助` 等帮助消息只依赖 `TELEGRAM_SECRET_TOKEN` 和 `TELEGRAM_BOT_TOKEN`；普通同步消息仍依赖 `GITHUB_TOKEN` 才能 dispatch 到 GitHub Actions。
+说明：`/help`、`帮助` 等帮助消息只依赖 `TELEGRAM_SECRET_TOKEN` 和 `TELEGRAM_BOT_TOKEN`；普通同步消息仍依赖 `GITHUB_TOKEN` 才能 dispatch 到 GitHub Actions。如果缺少 `GITHUB_TOKEN` 或 GitHub dispatch 失败，Worker 会尽量用 `TELEGRAM_BOT_TOKEN` 回复原消息，说明“GitHub Action 未能启动”。
 
 ### Worker 代码
 
@@ -258,6 +258,7 @@ TELEGRAM_WEBHOOK_URL=https://telegram-sync-dispatch.1406221797.workers.dev/
 3. 普通单条消息立即转发为 GitHub `repository_dispatch`
 4. 相册消息按 `chat_id + media_group_id` 进入 `TelegramAlbumBuffer`，缓冲 3 秒后再合并派发
 5. 触发类型固定为 `telegram_update`，payload 使用 `client_payload.telegram_updates`
+6. GitHub dispatch 失败时直接回发 Telegram，不会误报为系统写入成功
 
 如果没有配置 `TELEGRAM_ALBUM_BUFFER` 绑定，Worker 仍然会继续工作，但相册不会聚合，行为会退回为逐条 dispatch。
 
@@ -319,6 +320,7 @@ npx wrangler deploy
 - 由 `github-actions[bot]` 推送出来的同步提交会跳过二次 `Telegram Sync`
 - 仍然会重放待补偿批次并在需要时刷新 Markdown
 - 当同步提交了新的 `训练记录.md` 后，会在同一个 workflow 里直接构建并部署 GitHub Pages；不能依赖 bot push 再触发独立的 Pages workflow
+- `repository_dispatch` 触发的同步如果在依赖安装、同步、测试、提交、rebase、push 或站点构建阶段失败，会运行 `tools/telegram-action-monitor.mjs` 回发 Telegram。回复会包含失败阶段、`github_action` 分类和 GitHub Actions run URL。
 
 [`deploy-pages.yml`](../../.github/workflows/deploy-pages.yml) 用于普通人工 push / 手动触发：
 
@@ -390,7 +392,7 @@ Invoke-RestMethod `
 
 1. 给 Bot 发一张新的训练/饮食/体脂截图，应触发 1 次 `Telegram Sync`
 2. 给 Bot 发 2 张相册截图，应只触发 1 次 `Telegram Sync`
-3. 给 Bot 发一条 `/thought 今天训练后背阔发力更明显` 或 `/随想 今天训练后背阔发力更明显`，应触发 1 次 `Telegram Sync`
+3. 给 Bot 发一条 `/thought 今天训练后背阔发力更明显` 或 `/随想 今天训练后背阔发力更明显`，应触发 1 次 `Telegram Sync`，并收到“随想写入成功”反馈
 4. 给 Bot 发一条 `/analysis 今天怎么练` 或 `/分析 最近饮食怎么样`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的分析建议
 5. 给 Bot 发一条 `/ai 搜一下右肩疼痛相关记录`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的 Agent 回复
 6. 给 Bot 发一条 `/help` 或 `帮助`，应直接收到命令清单，且不触发 `Telegram Sync`
@@ -398,6 +400,7 @@ Invoke-RestMethod `
 8. 回复原随想消息发送 `/随想删`，或单独发送 `/随想删 126`，应触发 1 次 `Telegram Sync`，并删除对应随想文件；带图时还应删除 `source/images/thoughts/` 里的图片
 9. 在 Cloudflare Worker 请求日志确认收到了 `POST`
 10. 在 GitHub Actions 确认普通同步请求被 `repository_dispatch` 触发
+11. 临时使用无效的 Cloudflare `GITHUB_TOKEN` 验证时，应收到“GitHub Action 未能启动”反馈；恢复 token 后再继续测试
 
 ## 7. 当前实现下的重要说明
 
@@ -408,6 +411,8 @@ Invoke-RestMethod `
 - `/analysis` 的数据来源跟随 `TRAINING_SNAPSHOT_SOURCE`；如果配置为 `database`，还需要保证 `TRAINING_DB_ENABLED`、`TRAINING_DB_URL` 和 PostgreSQL `core.*` 数据可用
 - PostgreSQL 失败时，Telegram 同步会回退写 Markdown，并把待补偿批次写到 `runtime/telegram-sync-pending.ndjson`
 - 对 `/thought` 来说，“回退写 Markdown”指的是保留已经生成在 `source/_posts/` 下的随想文件，并把待补偿入库信息写到 `runtime/telegram-sync-pending.ndjson`
+- 随想新增、编辑、删除、移动现在会回发成功反馈；如果数据库失败但 Markdown 已写入，反馈会明确说明“数据库待补偿”
+- 图片识别、随想、`/analysis` 和 `/ai` 的失败反馈会尽量标注 `user_input`、`ai_service`、`telegram_api`、`database`、`github_action` 或 `system_bug`
 - PostgreSQL 恢复后，后续同步会先重放待补偿批次
 - `deploy-pages.yml` 是否依赖 PostgreSQL，取决于 `TRAINING_SNAPSHOT_SOURCE`
   - `markdown`：页面构建不依赖 PostgreSQL

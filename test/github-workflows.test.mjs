@@ -139,9 +139,9 @@ test('telegram-sync workflow uses the shared site build action after pushing rep
   assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
   assert.match(workflow, /git add 训练记录\.md source\/_posts source\/images/);
   assert.match(workflow, /git commit -m "chore: sync Telegram updates"/);
-  assert.match(workflow, /- name: Run tests\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.changes\.outputs\.content_changed == 'true'/);
+  assert.match(workflow, /- name: Run tests\s*\n\s*id: test\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.detect\.outputs\.content_changed == 'true'/);
   assert.match(workflow, /run:\s*npm run test:fast/);
-  assert.match(workflow, /- name: Build and deploy site snapshot\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /- name: Build and deploy site snapshot\s*\n\s*id: site_build\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true'/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'false'/);
   assert.match(workflow, /run_tests:\s*'false'/);
@@ -165,10 +165,39 @@ test('telegram-sync workflow keeps change detection and maintenance gating intac
       new RegExp(`- name: ${escapeRegExp(stepName)}\\n\\s+if: github\\.event_name != 'repository_dispatch'`),
     );
   }
-  assert.match(workflow, /- name: Commit sync results\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
-  assert.match(workflow, /- name: Rebase on latest main\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
-  assert.match(workflow, /- name: Push changes\s*\n\s*if: steps\.changes\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /- name: Commit sync results\s*\n\s*id: commit\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /- name: Rebase on latest main\s*\n\s*id: rebase\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /- name: Push changes\s*\n\s*id: push\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true'/);
 });
+
+test('telegram-sync workflow reports repository dispatch failures back to Telegram', async () => {
+  const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
+
+  for (const [stepName, stepId] of [
+    ['Install dependencies', 'install'],
+    ['Sync Telegram updates', 'sync'],
+    ['Detect changes', 'detect'],
+    ['Run tests', 'test'],
+    ['Commit sync results', 'commit'],
+    ['Rebase on latest main', 'rebase'],
+    ['Push changes', 'push'],
+    ['Build and deploy site snapshot', 'site_build'],
+  ]) {
+    assert.match(
+      workflow,
+      new RegExp(`- name: ${escapeRegExp(stepName)}\\n\\s+id: ${stepId}`),
+      `${stepName} should have stable id ${stepId}`,
+    );
+  }
+
+  assert.match(workflow, /- name: Notify Telegram sync failure/);
+  assert.match(workflow, /if: failure\(\) && github\.event_name == 'repository_dispatch'/);
+  assert.match(workflow, /continue-on-error: true/);
+  assert.match(workflow, /node tools\/telegram-action-monitor\.mjs/);
+  assert.match(workflow, /STEP_INSTALL_OUTCOME: \$\{\{ steps\.install\.outcome \}\}/);
+  assert.match(workflow, /STEP_SITE_BUILD_OUTCOME: \$\{\{ steps\.site_build\.outcome \}\}/);
+}
+);
 
 test('reusable workflow file has been removed so only real workflows appear in Actions', async () => {
   const reusableWorkflowPath = new URL('.github/workflows/_reusable-build.yml', rootDir);

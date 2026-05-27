@@ -61,11 +61,24 @@ export class TelegramAlbumBuffer {
       return;
     }
 
-    await dispatchTelegramUpdates({
+    const response = await dispatchTelegramUpdates({
       fetchImpl: this.env.__dispatchFetchImpl ?? fetch,
       env: this.env,
       updates,
     });
+    if (!response.ok) {
+      const body = await safeReadText(response);
+      for (const update of updates) {
+        await notifyTelegramActionNotStarted({
+          fetchImpl: this.env.__dispatchFetchImpl ?? fetch,
+          env: this.env,
+          update,
+          reason: 'github_dispatch_failed',
+          status: response.status,
+          body,
+        });
+      }
+    }
 
     await this.state.storage.delete('updates');
   }
@@ -120,6 +133,12 @@ export async function handleTelegramWebhook(request, env, options = {}) {
 
   const dispatchConfigError = validateDispatchConfig(env);
   if (dispatchConfigError) {
+    await notifyTelegramActionNotStarted({
+      fetchImpl,
+      env,
+      update,
+      reason: dispatchConfigError,
+    });
     return jsonResponse(500, { ok: false, error: dispatchConfigError });
   }
 
@@ -161,11 +180,20 @@ export async function handleTelegramWebhook(request, env, options = {}) {
   });
 
   if (!response.ok) {
+    const body = await safeReadText(response);
+    await notifyTelegramActionNotStarted({
+      fetchImpl,
+      env,
+      update,
+      reason: 'github_dispatch_failed',
+      status: response.status,
+      body,
+    });
     return jsonResponse(502, {
       ok: false,
       error: 'github_dispatch_failed',
       status: response.status,
-      body: await safeReadText(response),
+      body,
     });
   }
 
@@ -219,6 +247,69 @@ async function sendTelegramHelpMessage({ fetchImpl, env, update }) {
       disable_web_page_preview: true,
     }),
   });
+}
+
+async function notifyTelegramActionNotStarted({ fetchImpl, env, update, reason, status, body }) {
+  const message = update?.message ?? update?.edited_message ?? null;
+  if (!message?.chat?.id) {
+    return null;
+  }
+
+  return sendTelegramFailureMessage({
+    fetchImpl,
+    env,
+    chatId: message.chat.id,
+    replyToMessageId: message.message_id,
+    text: formatActionNotStartedMessage({ reason, status, body }),
+  });
+}
+
+async function sendTelegramFailureMessage({
+  fetchImpl,
+  env,
+  chatId,
+  replyToMessageId,
+  text,
+}) {
+  const botToken = env?.TELEGRAM_BOT_TOKEN?.trim();
+  if (!botToken) {
+    return null;
+  }
+  const apiBaseUrl = env?.TELEGRAM_API_BASE_URL?.trim() || TELEGRAM_API_BASE_URL;
+  try {
+    return await fetchImpl(`${apiBaseUrl}/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        reply_to_message_id: replyToMessageId,
+        allow_sending_without_reply: true,
+        disable_web_page_preview: true,
+      }),
+    });
+  } catch {
+    return null;
+  }
+}
+
+function formatActionNotStartedMessage({ reason, status, body }) {
+  const details = [
+    reason,
+    status ? `HTTP ${status}` : '',
+    summarizeText(body),
+  ].filter(Boolean).join('；');
+  return `GitHub Action 未能启动：${details || '未知原因'}`;
+}
+
+function summarizeText(value) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!text) {
+    return '';
+  }
+  return text.length > 180 ? `${text.slice(0, 177)}...` : text;
 }
 
 async function safeReadText(response) {

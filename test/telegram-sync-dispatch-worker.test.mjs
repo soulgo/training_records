@@ -93,6 +93,80 @@ test('handleTelegramWebhook falls back to the documented repository when owner a
   assert.equal(calls[0].url, 'https://api.github.com/repos/soulgo/training_records/dispatches');
 });
 
+test('handleTelegramWebhook notifies Telegram when the GitHub token is missing', async () => {
+  const calls = [];
+  const request = createTelegramRequest({
+    update_id: 125,
+    message: {
+      message_id: 5,
+      chat: { id: 42 },
+      text: '/随想 今天训练后背阔发力更明显',
+    },
+  });
+
+  const response = await handleTelegramWebhook(
+    request,
+    {
+      TELEGRAM_BOT_TOKEN: 'telegram-token',
+      TELEGRAM_SECRET_TOKEN: 'secret-token',
+    },
+    {
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return new Response(JSON.stringify({ ok: true, result: { message_id: 101 } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    },
+  );
+
+  assert.equal(response.status, 500);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://api.telegram.org/bottelegram-token/sendMessage');
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.chat_id, 42);
+  assert.equal(body.reply_to_message_id, 5);
+  assert.match(body.text, /GitHub Action 未能启动/);
+  assert.match(body.text, /missing_github_token/);
+});
+
+test('handleTelegramWebhook notifies Telegram when GitHub dispatch fails', async () => {
+  const calls = [];
+  const request = createTelegramRequest({
+    update_id: 126,
+    message: {
+      message_id: 6,
+      chat: { id: 42 },
+      photo: [{ file_id: 'file-a' }],
+    },
+  });
+
+  const response = await handleTelegramWebhook(request, createEnv(), {
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      if (String(url).includes('/dispatches')) {
+        return new Response('bad credentials', { status: 401 });
+      }
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 102 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  assert.equal(response.status, 502);
+  assert.equal(calls.length, 2);
+  const telegramCall = calls.find((call) => String(call.url).includes('/sendMessage'));
+  assert.ok(telegramCall);
+  const body = JSON.parse(telegramCall.init.body);
+  assert.equal(body.chat_id, 42);
+  assert.equal(body.reply_to_message_id, 6);
+  assert.match(body.text, /GitHub Action 未能启动/);
+  assert.match(body.text, /github_dispatch_failed/);
+  assert.match(body.text, /401/);
+});
+
 test('handleTelegramWebhook replies to help messages without dispatching GitHub Actions', async () => {
   const calls = [];
   const request = createTelegramRequest({
