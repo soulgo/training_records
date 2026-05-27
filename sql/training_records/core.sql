@@ -12,7 +12,7 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 19/05/2026 14:41:22
+ Date: 27/05/2026 10:08:20
 */
 
 
@@ -57,26 +57,6 @@ CREATE TABLE "core"."meal" (
 ;
 
 -- ----------------------------
--- Table structure for thought
--- ----------------------------
-DROP TABLE IF EXISTS "core"."thought";
-CREATE TABLE "core"."thought" (
-  "telegram_message_id" int8 NOT NULL,
-  "telegram_chat_id" int8,
-  "source_batch_id" text COLLATE "pg_catalog"."default",
-  "command" text COLLATE "pg_catalog"."default" NOT NULL,
-  "body" text COLLATE "pg_catalog"."default" NOT NULL,
-  "tags_json" jsonb NOT NULL DEFAULT '["训练","随想","Telegram"]'::jsonb,
-  "message_date_unix" int8,
-  "markdown_path" text COLLATE "pg_catalog"."default",
-  "image_refs_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
-  "status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'active'::text,
-  "deleted_at" timestamptz(6),
-  "updated_at" timestamptz(6) NOT NULL
-)
-;
-
--- ----------------------------
 -- Table structure for measurement
 -- ----------------------------
 DROP TABLE IF EXISTS "core"."measurement";
@@ -102,6 +82,34 @@ CREATE TABLE "core"."measurement" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
+
+-- ----------------------------
+-- Table structure for thought
+-- ----------------------------
+DROP TABLE IF EXISTS "core"."thought";
+CREATE TABLE "core"."thought" (
+  "telegram_message_id" int8 NOT NULL,
+  "telegram_chat_id" int8,
+  "source_batch_id" text COLLATE "pg_catalog"."default",
+  "command" text COLLATE "pg_catalog"."default" NOT NULL,
+  "body" text COLLATE "pg_catalog"."default" NOT NULL,
+  "tags_json" jsonb NOT NULL DEFAULT '["训练", "随想", "Telegram"]'::jsonb,
+  "message_date_unix" int8,
+  "markdown_path" text COLLATE "pg_catalog"."default",
+  "image_refs_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'active'::text,
+  "deleted_at" timestamptz(6),
+  "updated_at" timestamptz(6) NOT NULL,
+  "thought_module" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'workout'::text
+)
+;
+COMMENT ON COLUMN "core"."thought"."telegram_message_id" IS '原 Telegram message_id，也是随想的稳定定位 ID';
+COMMENT ON COLUMN "core"."thought"."body" IS '随想正文文本，不包含图片二进制';
+COMMENT ON COLUMN "core"."thought"."markdown_path" IS '当前 Markdown 兼容层路径，例如 source/_posts/YYYY-MM-DD-telegram-thought-501.md';
+COMMENT ON COLUMN "core"."thought"."image_refs_json" IS '有序图片引用清单，当前为 /images/thoughts/...，后续可切换为 OSS object key 或 URL';
+COMMENT ON COLUMN "core"."thought"."status" IS 'active 或 deleted；删除命令使用软删除保留迁移线索';
+COMMENT ON COLUMN "core"."thought"."thought_module" IS '随想模块：workout 为锻炼随想，misc 为杂七杂八，body_feedback 为身体反馈；历史缺省按 workout 兼容';
+COMMENT ON TABLE "core"."thought" IS '锻炼随想正文镜像表；图片仍保存在本地目录或后续对象存储，表内只保存引用';
 
 -- ----------------------------
 -- Table structure for training_day
@@ -143,21 +151,9 @@ CREATE INDEX "idx_core_meal_archived_date" ON "core"."meal" USING btree (
 );
 
 -- ----------------------------
--- Indexes structure for table thought
--- ----------------------------
-CREATE INDEX "idx_core_thought_updated_at" ON "core"."thought" USING btree (
-  "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
-);
-
--- ----------------------------
 -- Primary Key structure for table meal
 -- ----------------------------
 ALTER TABLE "core"."meal" ADD CONSTRAINT "meal_pkey" PRIMARY KEY ("meal_key");
-
--- ----------------------------
--- Primary Key structure for table thought
--- ----------------------------
-ALTER TABLE "core"."thought" ADD CONSTRAINT "thought_pkey" PRIMARY KEY ("telegram_message_id");
 
 -- ----------------------------
 -- Indexes structure for table measurement
@@ -170,6 +166,22 @@ CREATE INDEX "idx_core_measurement_archived_date" ON "core"."measurement" USING 
 -- Primary Key structure for table measurement
 -- ----------------------------
 ALTER TABLE "core"."measurement" ADD CONSTRAINT "measurement_pkey" PRIMARY KEY ("measurement_key");
+
+-- ----------------------------
+-- Indexes structure for table thought
+-- ----------------------------
+CREATE INDEX "idx_core_thought_module_updated_at" ON "core"."thought" USING btree (
+  "thought_module" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
+);
+CREATE INDEX "idx_core_thought_updated_at" ON "core"."thought" USING btree (
+  "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
+);
+
+-- ----------------------------
+-- Primary Key structure for table thought
+-- ----------------------------
+ALTER TABLE "core"."thought" ADD CONSTRAINT "thought_pkey" PRIMARY KEY ("telegram_message_id");
 
 -- ----------------------------
 -- Primary Key structure for table training_day
