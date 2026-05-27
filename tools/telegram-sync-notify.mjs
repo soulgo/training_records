@@ -5,13 +5,24 @@ import { notifyTelegramSyncResultFromFile } from './telegram-sync.mjs';
 import { sendTelegramMessage } from './telegram-transport.mjs';
 
 export async function main() {
-  const resultPath = process.env.TELEGRAM_SYNC_RESULT_PATH?.trim();
-  const result = await notifyTelegramSyncResultFromFile({
-    resultPath,
-    env: process.env,
-    sendMessage: sendTelegramMessage,
-  });
+  const result = await notifyTelegramSyncFromEnv({ env: process.env });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
+export async function notifyTelegramSyncFromEnv({
+  env = process.env,
+  sendMessage = sendTelegramMessage,
+} = {}) {
+  const resultPath = env.TELEGRAM_SYNC_RESULT_PATH?.trim();
+  return notifyTelegramSyncResultFromFile({
+    resultPath,
+    env,
+    sendMessage: (message) =>
+      sendMessage({
+        ...message,
+        botToken: env.TELEGRAM_BOT_TOKEN,
+      }),
+  });
 }
 
 if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {

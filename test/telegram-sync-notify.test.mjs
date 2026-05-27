@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { notifyTelegramSyncResultFromFile } from '../tools/telegram-sync.mjs';
+import { notifyTelegramSyncFromEnv } from '../tools/telegram-sync-notify.mjs';
 
 test('telegram sync notifier reads the result file and sends the deferred success message', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notifier-'));
@@ -53,4 +54,44 @@ test('telegram sync notifier reads the result file and sends the deferred succes
     text: '随想写入成功，已入库',
     replyToMessageId: 906,
   });
+});
+
+test('telegram sync notifier passes the bot token to the transport sender', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notifier-token-'));
+  const resultPath = path.join(tempRoot, 'result.json');
+  const sentMessages = [];
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'thought',
+          status: 'ready',
+          batchId: 'thought-2',
+          messages: [{ chatId: 42, messageId: 907 }],
+          thoughtWriteStatus: 'written',
+          persistenceStatus: 'stored',
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  const result = await notifyTelegramSyncFromEnv({
+    env: {
+      TELEGRAM_BOT_TOKEN: 'bot-token',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+      TELEGRAM_SYNC_TRANSPORT: 'webhook',
+      TELEGRAM_SYNC_RESULT_PATH: resultPath,
+    },
+    sendMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9902 };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(sentMessages[0].botToken, 'bot-token');
+  assert.equal(sentMessages[0].chatId, 42);
 });
