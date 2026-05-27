@@ -136,14 +136,15 @@ export async function runTelegramSync(options = {}) {
         ...input,
         botToken: env.botToken,
       }));
-  const shouldNotify =
-    options.notifyTelegramSyncResult ??
-    shouldNotifyTelegramSyncResult(env, options.env ?? process.env);
   const trainingDbConfig = resolveTrainingCoreConfig(options.env ?? process.env);
   const canFallbackFromDatabase = canUseDatabaseFallback({
     source: 'database',
     config: trainingDbConfig,
   });
+  const notificationStage = resolveTelegramSyncNotificationStage(rawEnv);
+  const shouldNotifyImmediately =
+    shouldNotifyTelegramSyncResult(rawEnv) && notificationStage !== 'after_action';
+  const resultPath = resolveTelegramSyncResultPath(rawEnv, activeRootDir, options.resultPath);
 
   const dispatchUpdates = await resolveDispatchTelegramUpdates({
     repositoryDispatchEvent: options.repositoryDispatchEvent,
@@ -416,14 +417,7 @@ export async function runTelegramSync(options = {}) {
     await writeFile(recordPath, markdown, 'utf8');
   }
 
-  if (shouldNotify) {
-    await notifyTelegramSyncResult({
-      batchResults,
-      sendMessage,
-    });
-  }
-
-  return {
+  const result = {
     changed,
     fallbackUsed,
     updatesFetched: updates.length,
@@ -431,6 +425,17 @@ export async function runTelegramSync(options = {}) {
     readyBatches: batchResults.filter((batch) => batch.status === 'ready').length,
     batchResults,
   };
+  await maybePersistTelegramSyncResult(resultPath, result);
+
+  if (shouldNotifyImmediately) {
+    await notifyTelegramSyncResult({
+      batchResults,
+      sendMessage,
+      env: rawEnv,
+    });
+  }
+
+  return result;
 }
 
 export function shouldPersistTelegramArtifacts({
@@ -528,7 +533,7 @@ function shouldRewriteTrainingMarkdown({ replayStoredImageAny, batchResults }) {
   );
 }
 
-function shouldNotifyTelegramSyncResult(env, rawEnv) {
+function shouldNotifyTelegramSyncResult(rawEnv) {
   const flag = String(rawEnv.TELEGRAM_SYNC_NOTIFY ?? '').trim().toLowerCase();
   if (['1', 'true', 'yes', 'on'].includes(flag)) {
     return true;
@@ -537,13 +542,76 @@ function shouldNotifyTelegramSyncResult(env, rawEnv) {
     return false;
   }
 
-  return rawEnv.GITHUB_ACTIONS === 'true' && env.syncTransport === 'webhook';
+  return (
+    rawEnv.GITHUB_ACTIONS === 'true' &&
+    String(rawEnv.TELEGRAM_SYNC_TRANSPORT ?? '').trim().toLowerCase() === 'webhook'
+  );
 }
 
-async function notifyTelegramSyncResult({ batchResults, sendMessage }) {
-  const messagesByChat = new Map();
+function resolveTelegramSyncNotificationStage(rawEnv) {
+  const stage = String(rawEnv.TELEGRAM_SYNC_NOTIFY_STAGE ?? '').trim().toLowerCase();
+  if (
+    stage === 'after_action' ||
+    stage === 'after-action' ||
+    stage === 'post_action' ||
+    stage === 'post-action'
+  ) {
+    return 'after_action';
+  }
+  return 'inline';
+}
 
-  for (const batch of batchResults ?? []) {
+function resolveTelegramSyncResultPath(rawEnv, activeRootDir, explicitPath) {
+  const candidate = String(explicitPath ?? rawEnv.TELEGRAM_SYNC_RESULT_PATH ?? '').trim();
+  if (candidate) {
+    return path.isAbsolute(candidate) ? candidate : path.resolve(activeRootDir, candidate);
+  }
+  return '';
+}
+
+async function maybePersistTelegramSyncResult(resultPath, result) {
+  if (!resultPath) {
+    return;
+  }
+
+  await mkdir(path.dirname(resultPath), { recursive: true });
+  await writeFile(resultPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+}
+
+export async function notifyTelegramSyncResultFromFile({
+  resultPath,
+  env = process.env,
+  sendMessage = sendTelegramMessage,
+}) {
+  if (!resultPath) {
+    return { notified: false, reason: 'missing_result_path' };
+  }
+
+  const raw = await readFile(resultPath, 'utf8');
+  const report = JSON.parse(raw);
+  return notifyTelegramSyncResultFromReport({ report, env, sendMessage });
+}
+
+export async function notifyTelegramSyncResultFromReport({
+  report,
+  env = process.env,
+  sendMessage = sendTelegramMessage,
+}) {
+  return notifyTelegramSyncResult({
+    batchResults: report?.batchResults ?? report?.batches ?? [],
+    env,
+    sendMessage,
+  });
+}
+
+async function notifyTelegramSyncResult({ batchResults, env = process.env, sendMessage }) {
+  const messagesByChat = new Map();
+  const shouldNotify = shouldNotifyTelegramSyncResult(env);
+  if (!shouldNotify) {
+    return { notified: false, reason: 'notification_disabled' };
+  }
+
+  for (const batch of batchResults) {
     if (!shouldNotifyBatch(batch)) {
       continue;
     }
@@ -568,6 +636,7 @@ async function notifyTelegramSyncResult({ batchResults, sendMessage }) {
     });
   }
 
+  let sent = 0;
   for (const [chatId, messages] of messagesByChat.entries()) {
     for (const message of messages) {
       try {
@@ -576,6 +645,7 @@ async function notifyTelegramSyncResult({ batchResults, sendMessage }) {
           text: message.text,
           replyToMessageId: message.replyToMessageId,
         });
+        sent += 1;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         process.stderr.write(
@@ -584,6 +654,8 @@ async function notifyTelegramSyncResult({ batchResults, sendMessage }) {
       }
     }
   }
+
+  return { notified: sent > 0, sent };
 }
 
 function shouldNotifyBatch(batch) {

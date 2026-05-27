@@ -146,6 +146,8 @@ test('telegram-sync workflow uses the shared site build action after pushing rep
   assert.match(workflow, /run_backfill:\s*'false'/);
   assert.match(workflow, /run_tests:\s*'false'/);
   assert.match(workflow, /deploy:\s*'true'/);
+  assert.match(workflow, /TELEGRAM_SYNC_NOTIFY_STAGE: after_action/);
+  assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH: \$\{\{ runner\.temp \}\}\/telegram-sync-result\.json/);
 });
 
 test('telegram-sync workflow keeps change detection and maintenance gating intact', async () => {
@@ -193,6 +195,9 @@ test('telegram-sync workflow reports repository dispatch failures back to Telegr
   assert.match(workflow, /- name: Notify Telegram sync failure/);
   assert.match(workflow, /if: failure\(\) && github\.event_name == 'repository_dispatch'/);
   assert.match(workflow, /continue-on-error: true/);
+  assert.match(workflow, /- name: Notify Telegram sync success/);
+  assert.match(workflow, /if: success\(\) && github\.event_name == 'repository_dispatch'/);
+  assert.match(workflow, /node tools\/telegram-sync-notify\.mjs/);
   assert.match(workflow, /node tools\/telegram-action-monitor\.mjs/);
   assert.match(workflow, /STEP_INSTALL_OUTCOME: \$\{\{ steps\.install\.outcome \}\}/);
   assert.match(workflow, /STEP_SITE_BUILD_OUTCOME: \$\{\{ steps\.site_build\.outcome \}\}/);

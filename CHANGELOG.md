@@ -13,6 +13,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Telegram 同步的成功回执现在改为在 GitHub Action 最后阶段统一发送，不再在 `sync:telegram` 步骤完成时提前回发。
+
 ## [1.1.8] - 2026-05-27
 
 ### Added

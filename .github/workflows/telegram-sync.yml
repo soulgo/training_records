@@ -71,6 +71,8 @@ jobs:
           TELEGRAM_ALLOWED_CHAT_IDS: ${{ vars.TELEGRAM_ALLOWED_CHAT_IDS }}
           TELEGRAM_POLL_LIMIT: ${{ vars.TELEGRAM_POLL_LIMIT }}
           TELEGRAM_SYNC_TRANSPORT: webhook
+          TELEGRAM_SYNC_NOTIFY_STAGE: after_action
+          TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
         run: npm run sync:telegram
 
       - name: Export markdown from database snapshot
@@ -122,6 +124,16 @@ jobs:
           run_backfill: 'false'
           run_tests: 'false'
           deploy: 'true'
+
+      - name: Notify Telegram sync success
+        if: success() && github.event_name == 'repository_dispatch'
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_SYNC_NOTIFY: true
+          TELEGRAM_SYNC_NOTIFY_STAGE: after_action
+          TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
+        run: node tools/telegram-sync-notify.mjs
 
       - name: Notify Telegram sync failure
         if: failure() && github.event_name == 'repository_dispatch'

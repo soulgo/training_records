@@ -3944,6 +3944,68 @@ test('runTelegramSync sends Telegram result notification after writing a thought
   });
 });
 
+test('runTelegramSync defers Telegram success notification until the action finishes', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notification-deferred-'));
+  const resultPath = path.join(tempRoot, 'runtime', 'telegram-sync-result.json');
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+      TELEGRAM_SYNC_NOTIFY_STAGE: 'after_action',
+      TELEGRAM_SYNC_RESULT_PATH: resultPath,
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 906,
+          date: Math.floor(new Date('2026-05-22T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/随想 动作轨迹更稳了',
+        },
+      },
+    ],
+    persistNormalizedBatch: async () => ({ status: 'stored' }),
+  });
+
+  assert.equal(result.batchResults[0].kind, 'thought');
+  const savedResult = JSON.parse(await readFile(resultPath, 'utf8'));
+  assert.equal(savedResult.batchResults[0].thoughtWriteStatus, 'written');
+  assert.equal(savedResult.batchResults[0].persistenceStatus, 'stored');
+
+  const notifierMessages = [];
+  const { notifyTelegramSyncResultFromFile } = await import('../tools/telegram-sync.mjs');
+  const notifyResult = await notifyTelegramSyncResultFromFile({
+    resultPath,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+      TELEGRAM_SYNC_TRANSPORT: 'webhook',
+    },
+    sendMessage: async (message) => {
+      notifierMessages.push(message);
+      return { message_id: 9906 };
+    },
+  });
+
+  assert.equal(notifyResult.notified, true);
+  assert.equal(notifierMessages.length, 1);
+  assert.deepEqual(notifierMessages[0], {
+    chatId: 42,
+    text: '随想写入成功，已入库',
+    replyToMessageId: 906,
+  });
+});
+
 test('runTelegramSync explains thought database fallback in Telegram notification', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notification-thought-db-'));
   const sentMessages = [];
