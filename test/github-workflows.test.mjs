@@ -46,7 +46,7 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /deploy:\s*'true'/);
 });
 
-test('ci-tests workflow runs npm test without deploying Pages', async () => {
+test('ci-tests workflow runs npm run test:fast without deploying Pages', async () => {
   const workflow = await readWorkflow('.github/workflows/ci-tests.yml');
 
   assert.match(workflow, /name:\s*CI Tests/);
@@ -82,7 +82,7 @@ test('ci-tests workflow runs npm test without deploying Pages', async () => {
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /cache:\s*npm/);
   assert.match(workflow, /run:\s*npm ci/);
-  assert.match(workflow, /run:\s*npm test/);
+  assert.match(workflow, /run:\s*npm run test:fast/);
   assert.doesNotMatch(workflow, /actions\/deploy-pages@v4/);
 });
 

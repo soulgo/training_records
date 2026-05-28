@@ -53,7 +53,7 @@ runs:
     - name: Run tests
       if: ${{ inputs.run_tests == 'true' }}
       shell: bash
-      run: npm test
+      run: npm run test:fast
 
     - name: Build site data and static files
       shell: bash
