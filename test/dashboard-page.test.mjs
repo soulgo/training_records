@@ -35,7 +35,7 @@ test('dashboard renders comparison pills for the latest metrics without relying 
   );
 });
 
-test('dashboard defaults charts to the latest 30 days and daily cards to the latest 4 days', () => {
+test('dashboard defaults charts to the latest 30 days and daily cards to the latest 4 days', { concurrency: false }, () => {
   withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
     const originalDashboardView = readOptionalFile(dashboardViewPath);
@@ -100,7 +100,7 @@ test('dashboard chart script keeps full data while sparsifying x-axis labels and
   assert.doesNotMatch(script, /labels: \(charts\.intakeCalories \|\| \[\]\)\.map\(\(point\) => point\.date\.slice\(5\)\)/);
 });
 
-test('dashboard embeds daily overview pagination controls without changing the default latest 4-day view', () => {
+test('dashboard embeds daily overview pagination controls without changing the default latest 4-day view', { concurrency: false }, () => {
   withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
     const originalDashboardView = readOptionalFile(dashboardViewPath);
@@ -138,7 +138,7 @@ test('dashboard explains that the top card follows the latest measurement day wh
   assert.match(homepage, /最近活动以下方日期卡片为准/);
 });
 
-test('dashboard fallback view handles ISO datetime dates from generated data', () => {
+test('dashboard fallback view handles ISO datetime dates from generated data', { concurrency: false }, () => {
   withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
     const originalDashboardView = readOptionalFile(dashboardViewPath);
@@ -172,7 +172,7 @@ test('dashboard fallback view handles ISO datetime dates from generated data', (
   });
 });
 
-test('homepage keeps the introduction at the bottom and uses a smaller header nav', () => {
+test('homepage keeps the introduction at the bottom and uses a smaller header nav', { concurrency: false }, () => {
   const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
   const noteIndex = homepage.indexOf('<div class="dashboard-note">');
   const dailyIndex = homepage.indexOf('<section class="daily-section">');
@@ -186,7 +186,7 @@ test('homepage keeps the introduction at the bottom and uses a smaller header na
   assert.match(homepage, /<div id="nav">[\s\S]*<a href="\/">训练记录<\/a>/);
 });
 
-test('homepage uses root-relative asset and navigation paths for custom domain deployment', () => {
+test('homepage uses root-relative asset and navigation paths for custom domain deployment', { concurrency: false }, () => {
   const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
 
   assert.match(homepage, /<link rel="stylesheet" href="\/css\/style\.css">/);
@@ -196,7 +196,7 @@ test('homepage uses root-relative asset and navigation paths for custom domain d
   assert.doesNotMatch(homepage, /(?:href|src)="\/training_records\//);
 });
 
-test('homepage footer renders the version from the changelog', () => {
+test('homepage footer renders the version from the changelog', { concurrency: false }, () => {
   const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
   const latestRelease = readLatestChangelogVersion(rootDir);
 
@@ -207,7 +207,7 @@ test('homepage footer renders the version from the changelog', () => {
   );
 });
 
-test('homepage removes the dashboard hero intro and shows trained day count card', () => {
+test('homepage removes the dashboard hero intro and shows trained day count card', { concurrency: false }, () => {
   const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
 
   assert.doesNotMatch(homepage, /Markdown · Hexo · GitHub Pages/);
@@ -216,7 +216,7 @@ test('homepage removes the dashboard hero intro and shows trained day count card
   assert.match(homepage, /<strong>\d+ 天<\/strong>/);
 });
 
-test('homepage places workout duration and trained days directly after training calories in the top metrics area', () => {
+test('homepage places workout duration and trained days directly after training calories in the top metrics area', { concurrency: false }, () => {
   const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
   const heroSectionMatch = homepage.match(/<section class="hero-metrics">([\s\S]*?)<\/section>/);
   const metricGridMatch = homepage.match(/<section class="metric-grid">([\s\S]*?)<\/section>/);
