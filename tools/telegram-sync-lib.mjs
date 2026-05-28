@@ -1254,24 +1254,40 @@ function normalizeMeasurementForArchive(measurement, archivedDate) {
     return null;
   }
 
-  const measuredAt = measurement.measuredAt?.trim();
+  const normalized = {
+    ...measurement,
+    weightKg: normalizeWeightValue(measurement.weightKg),
+    skeletalMuscleKg: normalizeWeightValue(measurement.skeletalMuscleKg),
+    boneMassKg: normalizeWeightValue(measurement.boneMassKg),
+    fatFreeMassKg: normalizeWeightValue(measurement.fatFreeMassKg),
+  };
+
+  const measuredAt = normalized.measuredAt?.trim();
   if (!measuredAt) {
     return {
-      ...measurement,
+      ...normalized,
       measuredAt: archivedDate,
     };
   }
 
   if (/^\d{2}:\d{2}$/.test(measuredAt)) {
-    const { detectedDate, ...rest } = measurement;
+    const { detectedDate, ...rest } = normalized;
     return {
       ...rest,
-      measuredAt: `${measurement.detectedDate ?? archivedDate} ${measuredAt}`,
+      measuredAt: `${normalized.detectedDate ?? archivedDate} ${measuredAt}`,
     };
   }
 
-  const { detectedDate, ...normalized } = measurement;
-  return normalized;
+  const { detectedDate, ...finalNormalized } = normalized;
+  return finalNormalized;
+}
+
+function normalizeWeightValue(value) {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  return Number.isFinite(value) ? roundTo(value, 3) : value;
 }
 
 function renderNutritionBlock(batchResult) {

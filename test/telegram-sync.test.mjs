@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { parseTrainingRecord } from '../tools/training-parser.mjs';
+import { parseWeightKg } from '../src/domain/training/training-domain.mjs';
 
 async function importTelegramSyncLib() {
   try {
@@ -112,6 +113,13 @@ test('groups album document images and applies filename date when screenshots ar
   assert.equal(analyzed.archivedDate, '2026-05-09');
   assert.equal(analyzed.nutrition.totalCalories, 308);
   assert.equal(analyzed.activities.length, 1);
+});
+
+test('parseWeightKg converts jin values to kilograms with precision', () => {
+  assert.equal(parseWeightKg('143.8 斤'), 71.9);
+  assert.equal(parseWeightKg('60.7 斤'), 30.35);
+  assert.equal(parseWeightKg('5.87斤'), 2.935);
+  assert.equal(parseWeightKg('60.70 kg'), 60.7);
 });
 
 test('uses meal calories as nutrition total when recognition omits totalCalories', async () => {

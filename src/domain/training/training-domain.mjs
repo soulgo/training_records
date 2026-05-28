@@ -104,9 +104,9 @@ export function parseWeightKg(value) {
   if (kg) {
     return Number(kg[1]);
   }
-  const jin = value.match(/(\d+(?:\.\d+)?)斤/);
+  const jin = value.match(/(\d+(?:\.\d+)?)\s*斤/);
   if (jin) {
-    return roundTo(Number(jin[1]) * 0.5, 2);
+    return roundTo(Number(jin[1]) * 0.5, 3);
   }
   return null;
 }

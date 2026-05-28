@@ -13,6 +13,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复 Telegram 训练图片识别对体脂秤截图中“斤”单位的换算与归一逻辑，避免 `weightKg`、`skeletalMuscleKg`、`boneMassKg`、`fatFreeMassKg` 被误写为原始斤数。
+- 补充相关识别提示词与回归测试，确保体重类字段统一按 kg 口径入库，并保留必要的小数精度。
+
 ## [1.1.9] - 2026-05-28
 
 ### Changed
