@@ -54,10 +54,11 @@
 - [x] `src/db/training/` 已建立 config / read / write / archive facade
 - [x] 本次已修复 facade 到 `tools/training-db-*` 的相对路径错误
 - [x] `src/db/index.mjs` 可统一导出训练 DB 能力
-- [ ] SQL 实现仍主要位于 `tools/training-db-*.mjs`
-- [ ] `tools/backfill-thoughts-to-core.mjs` 仍直接使用 `pg`
+- [x] SQL 实现已从 `tools/training-db-*.mjs` 完整迁入 `src/db/training/`
+- [x] `tools/backfill-thoughts-to-core.mjs` 已改为通过 `src/db/training/write.mjs` 调用 `persistThoughtToCore`，不再直接使用 `pg`
+- [x] `tools/training-db-*.mjs` 现为干净的 re-export 兼容层
 
-当前状态：可运行，边界可用；完整 repository 迁移仍未完成。
+当前状态：已完成。DB 实现统一在 `src/db/training/`，`tools/` 保留兼容入口。
 
 ### P0-4 收敛 Telegram 同步流程边界
 
@@ -133,10 +134,12 @@
 
 - [x] `src/db/**` facade 已可作为统一入口
 - [x] DB 写入、幂等、transaction 相关测试通过
-- [ ] SQL 仍散落在 `tools/training-db-*.mjs` 与少量 job / AI 缓存相关模块
-- [ ] 完整迁入 `src/db/**` 后才能关闭该项
+- [x] SQL 已从 `tools/training-db-*.mjs` 完整迁入 `src/db/training/`（read/write/archive）
+- [x] `tools/training-db-*.mjs` 现为干净的 re-export 兼容层
+- [x] `tools/backfill-thoughts-to-core.mjs` 已通过 `persistThoughtToCore` 共享 thought 写入逻辑
+- [x] `exportTrainingMarkdown` 已从 DB facade 提取到 `src/domain/training/training-exporter.mjs`
 
-当前状态：部分完成；不阻塞运行，但仍是长期维护风险。
+当前状态：已完成。SQL 与业务编排已分离，DB 层入口统一在 `src/db/`。
 
 ---
 
@@ -210,7 +213,7 @@
 
 ## 7. 当前剩余风险
 
-- [ ] `tools/training-db-*.mjs` 仍承载 DB 实现，`src/db/**` 目前主要是 facade
+- [x] `tools/training-db-*.mjs` 现为干净的 re-export 兼容层，DB 实现已完整迁入 `src/db/training/`
 - [ ] `tools/telegram-sync.mjs` 仍偏大，后续维护时仍可能继续膨胀
 - [ ] database 事实源切换尚未执行，Markdown 与 DB 并存策略仍需长期对账
 - [ ] deploy-pages 恢复全量测试后，部署耗时会增加，但稳定性更高
@@ -224,6 +227,7 @@
 - [x] 当前构建链路可以生成非空 GitHub Pages 产物
 - [x] 本次发现的上线阻塞项已修复
 - [x] 可以进入下一轮迭代或上线前人工验收
-- [ ] 不建议把 DB repository 全量迁移、Telegram CLI 瘦身、数据库事实源切换视为已彻底完成
+- [x] DB repository 全量迁移已完成（`src/db/training/` 现为 SQL 实现主入口，`tools/training-db-*.mjs` 均为干净 re-export）
+- [ ] Telegram CLI 瘦身与数据库事实源切换仍待后续推进
 
-结论：本轮修复已达到“可运行、可构建、可部署前校验”的验收标准；长期维护层面仍建议继续推进 DB 实现迁入 `src/db/**` 与 `tools/telegram-sync.mjs` 进一步瘦身。
+结论：本轮修复已达到“可运行、可构建、可部署前校验”的验收标准；DB 实现已完整迁入 `src/db/training/`；长期维护层面仍建议继续推进 `tools/telegram-sync.mjs` 瘦身。

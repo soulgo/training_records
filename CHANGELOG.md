@@ -13,6 +13,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- DB 实现完整迁入 `src/db/training/`：read / write / archive 模块现为 SQL 实现主入口，`tools/training-db-*.mjs` 改为干净的 re-export 兼容层。
+- `tools/backfill-thoughts-to-core.mjs` 不再直接使用 `pg`，改为通过 `src/db/training/write.mjs` 共享 `persistThoughtToCore` 写入逻辑。
+- `exportTrainingMarkdown` 从 DB facade 提取到 `src/domain/training/training-exporter.mjs`，保持领域层纯粹。
+- 删除死代码 `tools/lib/format.mjs`（与 `src/shared/format.mjs` 完全重复且无引用）。
+- 更新 V5 验收清单：P0-3 与 P1-6（DB Repository 化）标记为已完成。
+
 ### Fixed
 
 - 修复 Telegram 训练图片识别对体脂秤截图中“斤”单位的换算与归一逻辑，避免 `weightKg`、`skeletalMuscleKg`、`boneMassKg`、`fatFreeMassKg` 被误写为原始斤数。

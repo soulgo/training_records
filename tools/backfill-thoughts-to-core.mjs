@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import frontMatter from 'hexo-front-matter';
 import pg from 'pg';
 
-import { resolveTrainingCoreConfig } from './training-db-core.mjs';
+import { resolveTrainingCoreConfig } from '../src/db/training/config.mjs';
+import { persistThoughtToCore } from '../src/db/training/write.mjs';
 import {
   getThoughtModuleTags,
   normalizeThoughtModule,
@@ -63,7 +64,7 @@ export async function backfillThoughtsToCore(options = {}) {
         continue;
       }
 
-      await upsertThoughtFromMarkdown(client, thought, processedAt);
+      await persistThoughtToCore(client, { ...thought, processedAt });
       importedCount++;
     }
 
@@ -93,55 +94,6 @@ export async function backfillThoughtsToCore(options = {}) {
   }
 }
 
-async function upsertThoughtFromMarkdown(client, thought, processedAt) {
-  await client.query(
-    `
-      insert into core.thought (
-        telegram_message_id,
-        telegram_chat_id,
-        source_batch_id,
-        command,
-        body,
-        thought_module,
-        tags_json,
-        message_date_unix,
-        markdown_path,
-        image_refs_json,
-        status,
-        deleted_at,
-        updated_at
-      )
-      values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10::jsonb, 'active', null, $11)
-      on conflict (telegram_message_id) do update set
-        telegram_chat_id = coalesce(excluded.telegram_chat_id, core.thought.telegram_chat_id),
-        source_batch_id = coalesce(excluded.source_batch_id, core.thought.source_batch_id),
-        command = excluded.command,
-        body = excluded.body,
-        thought_module = excluded.thought_module,
-        tags_json = excluded.tags_json,
-        message_date_unix = coalesce(excluded.message_date_unix, core.thought.message_date_unix),
-        markdown_path = excluded.markdown_path,
-        image_refs_json = excluded.image_refs_json,
-        status = excluded.status,
-        deleted_at = null,
-        updated_at = excluded.updated_at
-    `,
-    [
-      thought.telegramMessageId,
-      thought.telegramChatId,
-      thought.sourceBatchId,
-      '/thought',
-      thought.body,
-      thought.thoughtModule,
-      JSON.stringify(thought.tags),
-      thought.messageDateUnix,
-      thought.markdownPath,
-      JSON.stringify(thought.imageRefs),
-      processedAt.toISOString(),
-    ],
-  );
-}
-
 function normalizeThoughtMarkdown(parsed, postPath, activeRootDir) {
   const { _content = '', ...frontMatterData } = parsed ?? {};
   const telegramMessageId = parsePositiveInteger(frontMatterData.telegram_message_id);
@@ -163,15 +115,18 @@ function normalizeThoughtMarkdown(parsed, postPath, activeRootDir) {
   const markdownPath = normalizePath(path.relative(activeRootDir, postPath));
 
   return {
-    telegramMessageId,
-    telegramChatId,
+    messageId: telegramMessageId,
+    chatId: telegramChatId,
     sourceBatchId: null,
     body,
+    command: '/thought',
     thoughtModule,
     tags,
     messageDateUnix: parseThoughtDateUnix(frontMatterData.date),
     markdownPath,
     imageRefs,
+    status: 'active',
+    processedAt: null,
   };
 }
 

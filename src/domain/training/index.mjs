@@ -4,3 +4,4 @@
 export * from './training-domain.mjs';
 export * from './training-parser.mjs';
 export * from './training-snapshot.mjs';
+export * from './training-exporter.mjs';
