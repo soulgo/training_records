@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { buildTrainingSnapshot } from '../tools/training-snapshot.mjs';
+import { buildTrainingSnapshot } from '../src/domain/training/training-snapshot.mjs';
 
 const sampleMarkdown = `
 ### 2026-05-09

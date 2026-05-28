@@ -62,6 +62,10 @@ runs:
         GITHUB_ACTIONS: 'true'
       run: npm run build
 
+    - name: Verify generated site artifact
+      shell: bash
+      run: test -s public/index.html
+
     - name: Setup Pages
       if: ${{ inputs.deploy == 'true' }}
       uses: actions/configure-pages@v5

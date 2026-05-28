@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseTrainingRecord } from '../tools/training-parser.mjs';
+import { parseTrainingRecord } from '../src/domain/training/training-parser.mjs';
 
 const sampleMarkdown = `
 ### 2026-05-07

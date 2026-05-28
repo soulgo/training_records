@@ -126,7 +126,7 @@ async function fetchWithRetry(url, init, options = {}) {
     } catch (error) {
       lastError = error;
       if (attempt === maxAttempts) {
-        throw error;
+        throw new Error(finalErrorMessage, { cause: error });
       }
       process.stderr.write(
         `${logPrefix} request failed: ${error instanceof Error ? error.message : String(error)}; retrying (${attempt}/${maxAttempts})\n`,

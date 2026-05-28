@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildDashboardViewModel } from '../tools/dashboard-view.mjs';
+import { buildDashboardViewModel } from '../src/site/dashboard-view.mjs';
 
 test('dashboard view normalizes database date objects before calculating chart windows', () => {
   const view = buildDashboardViewModel({
@@ -113,6 +113,7 @@ test('dashboard view model keeps the stable rendering contract for overview card
   assert.deepEqual(
     Object.keys(view).sort(),
     [
+      'chartCards',
       'chartPayload',
       'chartWindowDays',
       'dailyCardLimit',
@@ -123,8 +124,12 @@ test('dashboard view model keeps the stable rendering contract for overview card
       'latestDashboardDate',
       'latestDay',
       'latestMeasurement',
+      'overviewMeta',
+      'overviewStats',
       'previousDay',
+      'primaryMetrics',
       'recentDays',
+      'secondaryMetrics',
       'totalArchivedDays',
       'trainedDays',
     ].sort(),
@@ -195,6 +200,8 @@ test('dashboard view model keeps the stable rendering contract for overview card
   );
   assert.match(view.recentDays[0].cardHtml, /<article class="day-card">/);
   assert.match(view.recentDays[0].cardHtml, /力量训练 × 1/);
+  assert.match(view.primaryMetrics[0].comparisonHtml, /hero-card__comparison/);
+  assert.match(view.secondaryMetrics[0].comparisonHtml, /metric-card__comparison/);
   assert.deepEqual(
     view.chartPayload.charts.weightKg.map((point) => point.date),
     ['2026-04-13', '2026-05-12'],

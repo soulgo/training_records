@@ -9,9 +9,14 @@ on:
       - 训练记录.md
       - _config.yml
       - source/**
+      - src/**
       - test/**
       - themes/**
       - tools/**
+      - cloudflare/**
+      - docs/**
+      - prompts/**
+      - sql/**
       - .github/actions/site-build/action.yml
       - .github/workflows/deploy-pages.yml
       - .github/workflows/telegram-sync.yml
@@ -25,9 +30,14 @@ on:
       - 训练记录.md
       - _config.yml
       - source/**
+      - src/**
       - test/**
       - themes/**
       - tools/**
+      - cloudflare/**
+      - docs/**
+      - prompts/**
+      - sql/**
       - .github/actions/site-build/action.yml
       - .github/workflows/deploy-pages.yml
       - .github/workflows/telegram-sync.yml

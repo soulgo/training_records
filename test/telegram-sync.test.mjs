@@ -5,7 +5,7 @@ import { parseTrainingRecord } from '../tools/training-parser.mjs';
 
 async function importTelegramSyncLib() {
   try {
-    return await import('../tools/telegram-sync-lib.mjs');
+    return await import('../src/telegram/sync-batch.mjs');
   } catch {
     return null;
   }

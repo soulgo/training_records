@@ -9,8 +9,10 @@ on:
       - 训练记录.md
       - _config.yml
       - source/**
+      - src/**
       - themes/**
       - tools/**
+      - prompts/**
       - .github/actions/site-build/action.yml
       - .github/workflows/deploy-pages.yml
       - .github/workflows/telegram-sync.yml
@@ -46,5 +48,5 @@ jobs:
         uses: ./.github/actions/site-build
         with:
           run_backfill: 'true'
-          run_tests: 'false'
+          run_tests: 'true'
           deploy: 'true'

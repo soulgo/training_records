@@ -3,18 +3,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import frontMatter from 'hexo-front-matter';
 
-import { parseTrainingRecord } from '../src/domain/training/training-parser.mjs';
-import { readTrainingSnapshotFromDatabase } from './training-db-core.mjs';
-import { readDirRecursive } from './lib/fs-walk.mjs';
+import { parseTrainingRecord } from './training-parser.mjs';
+import { readTrainingSnapshotFromDatabase } from '../../../tools/training-db-core.mjs';
+import { readDirRecursive } from '../../../tools/lib/fs-walk.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const defaultRootDir = path.resolve(__dirname, '..');
+const defaultRootDir = path.resolve(__dirname, '..', '..', '..');
 const incompleteDatabaseSnapshotPattern = /database snapshot is empty or missing measurements/i;
 const unavailableDatabaseSnapshotPattern = /^database snapshot unavailable:/i;
 
 export async function buildTrainingSnapshot(options = {}) {
   const rootDir = options.rootDir ?? defaultRootDir;
-  const source = options.source ?? resolveSnapshotSource(options.env);
+  const source = options.source ?? resolveSnapshotSource(options.env ?? null);
 
   if (source === 'database') {
     try {
@@ -41,7 +41,7 @@ export async function buildTrainingSnapshot(options = {}) {
   return readTrainingSnapshotFromMarkdown(rootDir, options.now);
 }
 
-export function resolveSnapshotSource(env = process.env) {
+export function resolveSnapshotSource(env = {}) {
   const configured = String(env?.TRAINING_SNAPSHOT_SOURCE ?? 'markdown').trim().toLowerCase();
   return configured === 'database' ? 'database' : 'markdown';
 }

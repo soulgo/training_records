@@ -15,8 +15,8 @@ import {
   resolveThoughtModuleLabel,
 } from './lib/thought-modules.mjs';
 import { appendMetric } from './lib/markdown-render.mjs';
-import { createTelegramCommandResolver } from '../src/telegram/command-registry.mjs';
-import { isTelegramHelpText } from '../src/telegram/help.mjs';
+import { createTelegramCommandResolver } from '../src/telegram/commands.mjs';
+import { isTelegramHelpText } from '../src/telegram/commands.mjs';
 
 const FINGERPRINT_RE = /^<!-- telegram-fingerprint: ([^ ]+) -->$/m;
 const TELEGRAM_SECTION_TAG = '<!-- telegram-sync-section -->';

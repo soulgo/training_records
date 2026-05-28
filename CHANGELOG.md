@@ -13,10 +13,21 @@
 
 ## [Unreleased]
 
+## [1.1.9] - 2026-05-28
+
+### Changed
+
+- 完成 V5 重构收尾验收：补齐 `src/` 分层边界、Dashboard view model、DB facade、jobs、shared 工具和对应回归测试。
+- GitHub Pages 部署流程恢复部署前测试，并补充 `src/**`、`prompts/**` 等重构相关路径触发。
+- 同步项目包版本号到 `1.1.9`。
+
 ### Fixed
 
 - Telegram 同步的成功回执现在改为在 GitHub Action 最后阶段统一发送，不再在 `sync:telegram` 步骤完成时提前回发。
 - 修复训练数据回写在合并既有训练日时误触发 `core.thought` 读取而报 `Unexpected SQL` 的问题，避免 2026-05-26 这类训练截图数据卡在回退链路里。
+- 修复 Dashboard 构建时模板调用 JSON 中不可序列化函数导致 `public/index.html` 为空的问题。
+- 修复 `src/db/training/*` facade 的相对路径错误，避免新分层入口导入失败。
+- Hexo 构建后新增首页非空校验，避免静态站点构建日志失败但流程仍误判成功。
 
 ## [1.1.8] - 2026-05-27
 
@@ -136,7 +147,8 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.8...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.9...HEAD
+[1.1.9]: https://github.com/soulgo/training_records/compare/v1.1.8...v1.1.9
 [1.1.8]: https://github.com/soulgo/training_records/compare/v1.1.7...v1.1.8
 [1.1.7]: https://github.com/soulgo/training_records/compare/v1.1.6...v1.1.7
 [1.1.6]: https://github.com/soulgo/training_records/compare/v1.1.5...v1.1.6

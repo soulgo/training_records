@@ -78,7 +78,7 @@ test('createAiProvider sends the same chat completion shape used by analysis and
   assert.equal(response.ok, true);
 });
 
-test('createAiProvider rejects unsupported providers', () => {
+test('createAiProvider rejects unsupported providers with a typed adapter error', () => {
   assert.throws(
     () =>
       createAiProvider({
@@ -87,6 +87,11 @@ test('createAiProvider rejects unsupported providers', () => {
         AI_MODEL: 'gpt-test',
         AI_PROVIDER: 'custom',
       }),
-    AiProviderError,
+    (error) => {
+      assert.ok(error instanceof AiProviderError);
+      assert.equal(error.name, 'AiProviderError');
+      assert.match(error.message, /Unsupported AI provider: custom/);
+      return true;
+    },
   );
 });

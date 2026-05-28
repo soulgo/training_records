@@ -27,6 +27,8 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
   assert.match(action, /- name: Backfill thought markdown back to core/);
   assert.match(action, /- name: Run tests/);
   assert.match(action, /- name: Build site data and static files/);
+  assert.match(action, /- name: Verify generated site artifact/);
+  assert.match(action, /test -s public\/index\.html/);
   assert.match(action, /actions\/configure-pages@v5/);
   assert.match(action, /actions\/upload-pages-artifact@v3/);
   assert.match(action, /actions\/deploy-pages@v4/);
@@ -40,7 +42,7 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /- name: Build and deploy site/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
-  assert.match(workflow, /run_tests:\s*'false'/);
+  assert.match(workflow, /run_tests:\s*'true'/);
   assert.match(workflow, /deploy:\s*'true'/);
 });
 
@@ -55,9 +57,14 @@ test('ci-tests workflow runs npm test without deploying Pages', async () => {
     '训练记录.md',
     '_config.yml',
     'source/**',
+    'src/**',
     'test/**',
     'themes/**',
     'tools/**',
+    'cloudflare/**',
+    'docs/**',
+    'prompts/**',
+    'sql/**',
     '.github/actions/site-build/action.yml',
     '.github/workflows/deploy-pages.yml',
     '.github/workflows/telegram-sync.yml',
@@ -121,8 +128,10 @@ test('deploy-pages workflow still triggers for site-relevant changes', async () 
     '训练记录.md',
     '_config.yml',
     'source/**',
+    'src/**',
     'themes/**',
     'tools/**',
+    'prompts/**',
     '.github/actions/site-build/action.yml',
     '.github/workflows/deploy-pages.yml',
     '.github/workflows/telegram-sync.yml',
