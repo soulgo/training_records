@@ -51,10 +51,12 @@ export function inferMealSlot(value) {
   if (!trimmed) {
     return null;
   }
+  // 标准餐次：直接返回
   if (/^(早餐|午餐|晚餐|加餐)$/.test(trimmed)) {
     return trimmed;
   }
 
+  // 从括号内提取餐次
   const parenthetical = trimmed.match(/[（(]([^）)]+)[）)]/);
   if (parenthetical) {
     const fromParentheses = parenthetical[1].match(/早餐|午餐|晚餐|加餐/)?.[0];
@@ -63,7 +65,18 @@ export function inferMealSlot(value) {
     }
   }
 
-  return trimmed.match(/早餐|午餐|晚餐|加餐/)?.[0] ?? null;
+  // 从文本中提取任何标准餐次
+  const mealType = trimmed.match(/早餐|午餐|晚餐|加餐/)?.[0];
+  if (mealType) {
+    return mealType;
+  }
+
+  // 若无标准餐次，但包含食物信息，返回原始名称作为自定义餐次
+  if (trimmed && trimmed.length > 0) {
+    return trimmed;
+  }
+
+  return null;
 }
 
 export function normalizeActivityType(type) {
