@@ -79,6 +79,14 @@ export function inferMealSlot(value) {
   return null;
 }
 
+export function normalizeNutritionTotalLabel(value) {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.replace(/^(?:当日截图内已记录|当日已记录|已记录|摄入|总)?\s*总热量[:：]?\s*/i, '').trim();
+}
+
 export function normalizeActivityType(type) {
   const normalized = type?.trim();
   const aliases = {

@@ -187,9 +187,19 @@ function parseNutritionBlock(content) {
       continue;
     }
 
-    const totalMatch = line.match(/^- 当日截图内已记录总热量：(\d+(?:\.\d+)?)千卡$/);
-    if (totalMatch) {
-      totalCalories = Number(totalMatch[1]);
+    const normalizedTotal = parseNutritionTotalLine(line);
+    if (normalizedTotal !== null) {
+      totalCalories = normalizedTotal;
+    }
+  }
+
+  if (totalCalories === null) {
+    for (const rawLine of content.split(/\r?\n/)) {
+      const fallbackTotal = parseNutritionTotalLine(rawLine.trim());
+      if (fallbackTotal !== null) {
+        totalCalories = fallbackTotal;
+        break;
+      }
     }
   }
 
@@ -203,7 +213,7 @@ function parseNutritionBlock(content) {
 }
 
 function parseNutritionSummaryLine(line) {
-  const match = line.match(/^- (.+)：\s*(\d+(?:\.\d+)?)\s*千卡，建议范围\s*(\d+)[–-](\d+)\s*千卡$/);
+  const match = line.match(/^- (.+?)[:：]\s*(\d+(?:\.\d+)?)\s*(?:千卡|kcal)(?:，?\s*建议范围\s*(\d+)[–-](\d+)\s*(?:千卡|kcal))?$/i);
   if (!match) {
     return null;
   }
@@ -217,8 +227,23 @@ function parseNutritionSummaryLine(line) {
   return {
     name: mealName,
     calories: Number(calories),
-    recommendedMin: Number(recommendedMin),
-    recommendedMax: Number(recommendedMax),
+    recommendedMin: recommendedMin ? Number(recommendedMin) : null,
+    recommendedMax: recommendedMax ? Number(recommendedMax) : null,
     isSummary: rawName.trim() === mealName,
   };
+}
+
+function parseNutritionTotalLine(line) {
+  const normalized = line.replace(/\s+/g, '').replace(/^[-•]/, '');
+  if (!/(?:总热量|已记录总热量|当日截图内已记录总热量|摄入总热量)/i.test(normalized)) {
+    return null;
+  }
+
+  const numericMatch = normalized.match(/(\d+(?:\.\d+)?)(?:千卡|kcal)/i);
+  if (numericMatch) {
+    return Number(numericMatch[1]);
+  }
+
+  const fallbackNumber = normalized.match(/(\d+(?:\.\d+)?)/)?.[1];
+  return fallbackNumber ? Number(fallbackNumber) : null;
 }
