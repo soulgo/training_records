@@ -243,6 +243,7 @@ export async function runTelegramSync(options = {}) {
     entries: pendingRecognitionEntries,
     recognizeBatchRunner,
     persistBatch,
+    appendPendingRecognitionBatch,
     markPendingRecognitionResolved,
     now,
   });
@@ -527,6 +528,9 @@ export function buildTelegramSyncReport(result) {
       persistenceError: batch.persistenceError ?? null,
       failureCategory: batch.failureCategory ?? null,
       failureReason: batch.failureReason ?? null,
+      recognitionPendingStatus: batch.recognitionPendingStatus ?? null,
+      recognitionPendingError: batch.recognitionPendingError ?? null,
+      pendingReplay: batch.pendingReplay ?? false,
       recognitionErrors: batch.recognitionErrors ?? [],
       warnings: batch.warnings ?? [],
       issues: batch.issues ?? [],
@@ -1134,6 +1138,7 @@ async function replayPendingRecognitionBatches({
   entries,
   recognizeBatchRunner,
   persistBatch,
+  appendPendingRecognitionBatch,
   markPendingRecognitionResolved,
   now,
 }) {
@@ -1180,6 +1185,13 @@ async function replayPendingRecognitionBatches({
     attachFailureMetadata(persistedBatch);
 
     if (persistedBatch.status !== 'ready') {
+      await queueRecognitionFailureIfNeeded({
+        batch: persistedBatch,
+        appendPendingRecognitionBatch,
+        now,
+        immediateRetry: false,
+        nextRetryAt: new Date(now.getTime() + 10 * 60 * 1000),
+      });
       batchResults.push(persistedBatch);
       continue;
     }
@@ -1209,6 +1221,8 @@ async function queueRecognitionFailureIfNeeded({
   batch,
   appendPendingRecognitionBatch,
   now,
+  immediateRetry = true,
+  nextRetryAt,
 }) {
   if (!shouldQueueRecognitionFailure(batch)) {
     return batch;
@@ -1224,6 +1238,7 @@ async function queueRecognitionFailureIfNeeded({
       failureCategory: batch.failureCategory,
       error: batch.failureReason,
       failedAt: now.toISOString(),
+      nextRetryAt: nextRetryAt ?? (immediateRetry ? now : undefined),
     });
     batch.recognitionPendingStatus = queueResult.status;
   } catch (error) {

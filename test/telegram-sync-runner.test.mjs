@@ -599,6 +599,7 @@ test('runTelegramSync skips undated batches without persisting fallback or markd
 test('runTelegramSync skips conflicting-date batches and continues processing ready batches', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-skip-conflicting-'));
   const persistedBatches = [];
+  const queuedRecognitionBatches = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -718,6 +719,10 @@ test('runTelegramSync skips conflicting-date batches and continues processing re
       persistedBatches.push(batch.batchId);
       return { status: 'stored', archivedDate: batch.archivedDate };
     },
+    appendPendingRecognitionBatch: async (entry) => {
+      queuedRecognitionBatches.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
     buildTrainingSnapshot: async () => ({
       generatedAt: '2026-05-14T00:00:00.000Z',
       latest: {
@@ -762,7 +767,10 @@ test('runTelegramSync skips conflicting-date batches and continues processing re
 
   assert.equal(result.changed, true);
   assert.deepEqual(persistedBatches, ['album-ready']);
+  assert.deepEqual(queuedRecognitionBatches, []);
   assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batchResults[0].failureCategory, 'user_input');
+  assert.match(result.batchResults[0].failureReason, /conflicting detected dates/);
   assert.equal(result.batchResults[1].status, 'ready');
   assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /2026-05-14/);
   assert.equal(
@@ -810,6 +818,9 @@ test('buildTelegramSyncReport exposes fallback and archived date details for log
         persistenceError: 'database unavailable',
         failureCategory: null,
         failureReason: null,
+        recognitionPendingStatus: null,
+        recognitionPendingError: null,
+        pendingReplay: false,
         recognitionErrors: [],
         warnings: [],
         issues: [],
@@ -4358,9 +4369,11 @@ test('runTelegramSync queues image batches when AI recognition fails before any 
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-pending-recognition-failure-'));
   const queued = [];
   const sentMessages = [];
+  const now = new Date('2026-05-31T03:05:00.000Z');
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
+    now,
     env: {
       TELEGRAM_BOT_TOKEN: 'token',
       AI_API_KEY: 'key',
@@ -4411,6 +4424,11 @@ test('runTelegramSync queues image batches when AI recognition fails before any 
   assert.equal(queued[0].batch.batchId, 'single-383');
   assert.equal(queued[0].batch.messages[0].photos[0].fileId, 'file-food-383');
   assert.match(queued[0].error, /invalid JSON/);
+  assert.equal(queued[0].nextRetryAt.toISOString(), now.toISOString());
+  const report = buildTelegramSyncReport(result);
+  assert.equal(report.batches[0].recognitionPendingStatus, 'queued');
+  assert.equal(report.batches[0].recognitionPendingError, null);
+  assert.equal(report.batches[0].pendingReplay, false);
   assert.equal(sentMessages.length, 1);
   assert.match(sentMessages[0].text, /AI 识别失败，已加入重试队列/);
 });
@@ -4525,9 +4543,80 @@ test('runTelegramSync replays pending recognition batches and marks them resolve
   assert.equal(result.changed, true);
   assert.equal(result.batchResults[0].status, 'ready');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batchResults[0].pendingReplay, true);
+  assert.equal(buildTelegramSyncReport(result).batches[0].pendingReplay, true);
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].nutrition.totalCalories, 868);
   assert.deepEqual(resolved, ['single-383']);
+});
+
+test('runTelegramSync keeps pending recognition batches queued when replay still fails', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-replay-pending-recognition-fails-'));
+  const queued = [];
+  const resolved = [];
+  const now = new Date('2026-05-31T03:06:00.000Z');
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    now,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [],
+    readPendingRecognitionBatches: async () => [
+      {
+        batchId: 'single-383',
+        batch: {
+          kind: 'image',
+          batchId: 'single-383',
+          messages: [
+            {
+              messageId: 383,
+              updateId: 901,
+              mediaGroupId: null,
+              caption: '',
+              text: '',
+              chatId: 42,
+              dateUnix: Math.floor(new Date('2026-05-31T03:00:00Z').getTime() / 1000),
+              photos: [{ fileId: 'file-food-383', fileUniqueId: 'uniq-food-383', source: 'photo' }],
+            },
+          ],
+        },
+      },
+    ],
+    recognizeBatch: async () => {
+      throw new Error('telegram_training_image returned invalid JSON');
+    },
+    appendPendingRecognitionBatch: async (entry) => {
+      queued.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
+    markPendingRecognitionResolved: async ({ batchId }) => {
+      resolved.push(batchId);
+      return { status: 'resolved', batchId };
+    },
+  });
+
+  const batch = result.batchResults[0];
+  assert.equal(batch.status, 'skipped');
+  assert.equal(batch.pendingReplay, true);
+  assert.equal(batch.failureCategory, 'ai_service');
+  assert.equal(batch.recognitionPendingStatus, 'queued');
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].batch.batchId, 'single-383');
+  assert.match(queued[0].error, /invalid JSON/);
+  assert.ok(queued[0].nextRetryAt > now);
+  assert.deepEqual(resolved, []);
+  const report = buildTelegramSyncReport(result);
+  assert.equal(report.batches[0].pendingReplay, true);
+  assert.equal(report.batches[0].recognitionPendingStatus, 'queued');
 });
 
 test('runTelegramSync marks ready image albums with failed photos as partial failures in reports and notifications', async () => {

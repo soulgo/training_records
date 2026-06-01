@@ -23,6 +23,8 @@
 
 ### Fixed
 
+- Telegram AI 图片识别失败写入 pending 后，下次 sync 会立即重放一次，并在仍失败时继续更新待重试队列，避免刚入队的图片因为默认重试窗口而看起来“成功但没更新”。
+- Telegram Sync 的 Actions 日志现在输出 `recognitionPendingStatus`、`recognitionPendingError` 与 `pendingReplay`，可以直接看出图片是否已进入重试队列、是否来自 pending 重放、以及排队是否失败。
 - 修复 Telegram 饮食图片在 AI 识别返回无效 JSON 后被一次性丢弃的问题：识别失败的图片批次现在会写入数据库待重试队列，后续同步会先重放 pending 批次，成功后再入库并标记 resolved，避免首页饮食热量长期显示为空。
 - Telegram 图片识别在 message content 不是合法 JSON 时会追加一次严格 JSON 修复重试，仍失败才进入待重试队列，减少上游偶发非 JSON 响应导致的整批跳过。
 - Telegram 同步回执新增“AI 识别失败，已加入重试队列”状态，区分已排队可重试和真正无法入库的失败。
