@@ -23,6 +23,9 @@
 
 ### Fixed
 
+- 修复 Telegram 训练相册中饮食图 AI 返回无效 JSON 时“部分成功被误报为全部成功”的问题：schema/JSON 解析失败会改用同一图片的 inline base64 再试一次，5 月 31 日饮食截图可正确入库午餐 754 千卡、晚餐 114 千卡、总热量 868 千卡。
+- Telegram 训练相册仍允许已识别的运动数据先入库，但只要同批存在识别失败或缺失图片，报告与 Telegram 回执都会标记 `partialFailure` 并显示“部分解析失败”、失败消息号和安全截断原因，不再回“解析成功”。
+- AI 识别无效 JSON 错误现在附带安全排查摘要（内容类型、解析阶段、前 200 字符截断），避免日志只有笼统失败原因。
 - 修复 Telegram 训练图片识别对饮食截图总热量与餐次汇总的兼容解析，避免因为标题措辞、冒号格式或 `kcal` / `千卡` 表达差异导致 `totalCalories` 为空。
 - 修复 Telegram 训练图片识别对 AI 流式前缀、代码块包裹和非纯 JSON 输出的容错解析，避免 `data:` 前缀或残留标记导致整批截图识别失败。
 - 修复 Telegram 训练图片识别的结果规范化，确保 `measurement`、`activities`、`meals`、`totalCalories`、`details` 与 `dailyWorkoutSummary` 等字段始终补齐，减少 schema 校验失败。

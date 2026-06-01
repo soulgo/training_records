@@ -95,3 +95,61 @@ test('telegram sync notifier passes the bot token to the transport sender', asyn
   assert.equal(sentMessages[0].botToken, 'bot-token');
   assert.equal(sentMessages[0].chatId, 42);
 });
+
+test('telegram sync notifier reports partial failures instead of success for stored image albums', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notifier-partial-'));
+  const resultPath = path.join(tempRoot, 'result.json');
+  const sentMessages = [];
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'image',
+          status: 'ready',
+          batchId: 'album-2026-05-31',
+          archivedDate: '2026-05-31',
+          messages: [
+            { chatId: 42, messageId: 379 },
+            { chatId: 42, messageId: 380 },
+          ],
+          persistenceStatus: 'stored',
+          partialFailure: true,
+          failureCategory: 'ai_service',
+          failureReason: 'telegram_training_image returned invalid JSON',
+          recognitionErrors: [
+            {
+              messageId: 380,
+              error: 'telegram_training_image returned invalid JSON',
+              failureCategory: 'ai_service',
+            },
+          ],
+          issues: ['missing recognition for message 380'],
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  const result = await notifyTelegramSyncResultFromFile({
+    resultPath,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+      TELEGRAM_SYNC_TRANSPORT: 'webhook',
+    },
+    sendMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9903 };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].replyToMessageId, 379);
+  assert.match(sentMessages[0].text, /部分解析失败/);
+  assert.match(sentMessages[0].text, /380/);
+  assert.match(sentMessages[0].text, /invalid JSON/);
+  assert.doesNotMatch(sentMessages[0].text, /解析成功/);
+});

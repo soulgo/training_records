@@ -802,6 +802,7 @@ test('buildTelegramSyncReport exposes fallback and archived date details for log
         kind: 'image',
         batchId: 'album-1',
         status: 'ready',
+        partialFailure: false,
         archivedDate: '2026-04-06',
         postPath: null,
         thoughtWriteStatus: null,
@@ -3301,6 +3302,259 @@ test('runTelegramSync falls back to inline image data when AI rejects a Telegram
   }
 });
 
+test('runTelegramSync retries invalid JSON recognition with inline image data and stores 2026-05-31 nutrition', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-invalid-json-inline-retry-'));
+  const persistedBatches = [];
+  const originalFetch = globalThis.fetch;
+  let foodRemoteAttempts = 0;
+  let foodInlineAttempts = 0;
+
+  globalThis.fetch = async (url, init = {}) => {
+    const requestUrl = String(url);
+
+    if (requestUrl.includes('/getFile?')) {
+      const fileId = new URL(requestUrl).searchParams.get('file_id');
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            file_path:
+              fileId === 'file-food-380'
+                ? 'photos/food_380.jpg'
+                : 'photos/workout_379.jpg',
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      );
+    }
+
+    if (requestUrl.includes('/file/bottoken/photos/food_380.jpg')) {
+      return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
+        status: 200,
+        headers: {
+          'content-type': 'image/jpeg',
+        },
+      });
+    }
+
+    if (requestUrl.includes('/chat/completions')) {
+      const body = JSON.parse(init.body);
+      const imagePart = body.messages?.[1]?.content?.find((part) => part.type === 'image_url');
+      const imageUrl = imagePart?.image_url?.url ?? '';
+
+      if (imageUrl === 'https://api.telegram.org/file/bottoken/photos/workout_379.jpg') {
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    messageId: 379,
+                    imageType: 'workout',
+                    detectedDate: '2026-05-31',
+                    dateEvidence: 'image header',
+                    confidence: 0.98,
+                    warnings: [],
+                    records: {
+                      measurement: null,
+                      activities: [],
+                      meals: [],
+                      totalCalories: null,
+                      details: [],
+                      dailyWorkoutSummary: {
+                        activityCaloriesKcal: 874,
+                        workoutDurationMinutes: 58,
+                        activeHours: 15,
+                      },
+                    },
+                  }),
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        );
+      }
+
+      if (imageUrl === 'https://api.telegram.org/file/bottoken/photos/food_380.jpg') {
+        foodRemoteAttempts += 1;
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: 'telegram_training_image returned invalid JSON',
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        );
+      }
+
+      if (imageUrl.startsWith('data:image/jpeg;base64,')) {
+        foodInlineAttempts += 1;
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    messageId: 380,
+                    imageType: 'nutrition',
+                    detectedDate: null,
+                    dateEvidence: 'same album as dated workout overview',
+                    confidence: 0.96,
+                    warnings: [],
+                    records: {
+                      measurement: null,
+                      activities: [],
+                      meals: [
+                        { name: '午餐', calories: 754, recommendedMin: 620, recommendedMax: 1033 },
+                        { name: '晚餐', calories: 114, recommendedMin: 310, recommendedMax: 723 },
+                      ],
+                      totalCalories: 868,
+                      details: ['午餐 754 千卡', '晚餐 114 千卡'],
+                      dailyWorkoutSummary: null,
+                    },
+                  }),
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        );
+      }
+
+      throw new Error(`Unexpected image URL: ${imageUrl}`);
+    }
+
+    throw new Error(`Unexpected fetch call: ${requestUrl}`);
+  };
+
+  try {
+    const result = await runTelegramSync({
+      rootDir: tempRoot,
+      env: {
+        TELEGRAM_BOT_TOKEN: 'token',
+        AI_API_KEY: 'key',
+        AI_BASE_URL: 'https://example.com/v1',
+        AI_MODEL: 'gpt-test',
+        TELEGRAM_ALLOWED_CHAT_IDS: '42',
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      getLastProcessedUpdateId: async () => 900,
+      fetchTelegramUpdates: async () => [
+        {
+          update_id: 901,
+          message: {
+            message_id: 379,
+            media_group_id: 'album-2026-05-31',
+            date: Math.floor(new Date('2026-05-31T02:30:00Z').getTime() / 1000),
+            chat: { id: 42 },
+            photo: [{ file_id: 'file-workout-379', file_unique_id: 'uniq-workout-379' }],
+          },
+        },
+        {
+          update_id: 902,
+          message: {
+            message_id: 380,
+            media_group_id: 'album-2026-05-31',
+            date: Math.floor(new Date('2026-05-31T02:31:00Z').getTime() / 1000),
+            chat: { id: 42 },
+            photo: [{ file_id: 'file-food-380', file_unique_id: 'uniq-food-380' }],
+          },
+        },
+      ],
+      persistNormalizedBatch: async ({ batch }) => {
+        persistedBatches.push(batch);
+        return { status: 'stored', archivedDate: batch.archivedDate };
+      },
+      buildTrainingSnapshot: async () => ({
+        generatedAt: '2026-05-31T00:00:00.000Z',
+        latest: {
+          measurement: null,
+          daily: { date: '2026-05-31' },
+        },
+        daily: [
+          {
+            date: '2026-05-31',
+            measurement: null,
+            measurements: [],
+            activities: [],
+            workoutSummary: {
+              totalActivities: 0,
+              totalDurationSeconds: 0,
+              trainingCalories: 874,
+              workoutDurationMinutes: 58,
+              activeHours: 15,
+              cyclingDistanceKm: 0,
+              countsByType: {},
+            },
+            nutrition: {
+              meals: [
+                { name: '午餐', calories: 754, recommendedMin: 620, recommendedMax: 1033 },
+                { name: '晚餐', calories: 114, recommendedMin: 310, recommendedMax: 723 },
+              ],
+              totalCalories: 868,
+              details: ['午餐 754 千卡', '晚餐 114 千卡'],
+            },
+          },
+        ],
+        charts: {
+          weightKg: [],
+          bodyFatPct: [],
+          skeletalMuscleKg: [],
+          basalMetabolism: [],
+          visceralFatLevel: [],
+          intakeCalories: [],
+          trainingCalories: [],
+          cyclingDistanceKm: [],
+        },
+      }),
+      exportTrainingMarkdown: () => '### 2026-05-31\n',
+    });
+
+    assert.equal(result.batchResults[0].status, 'ready');
+    assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+    assert.equal(foodRemoteAttempts, 1);
+    assert.equal(foodInlineAttempts, 1);
+    assert.equal(persistedBatches.length, 1);
+    assert.equal(persistedBatches[0].workoutDailySummary.activityCaloriesKcal, 874);
+    assert.equal(persistedBatches[0].nutrition.totalCalories, 868);
+    assert.deepEqual(
+      persistedBatches[0].nutrition.meals.map((meal) => [meal.name, meal.calories]),
+      [
+        ['午餐', 754],
+        ['晚餐', 114],
+      ],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('runTelegramSync retries recognition with json_object when json_schema response format is rejected', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-json-format-fallback-'));
   const persistedBatches = [];
@@ -4098,6 +4352,120 @@ test('runTelegramSync preserves image recognition failure reason in report and n
   assert.equal(sentMessages.length, 1);
   assert.match(sentMessages[0].text, /AI 服务失败/);
   assert.match(sentMessages[0].text, /HTTP 429/);
+});
+
+test('runTelegramSync marks ready image albums with failed photos as partial failures in reports and notifications', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notification-partial-ai-failure-'));
+  const sentMessages = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 379,
+          media_group_id: 'album-2026-05-31',
+          date: Math.floor(new Date('2026-05-31T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          photo: [{ file_id: 'file-workout-379', file_unique_id: 'uniq-workout-379' }],
+        },
+      },
+      {
+        update_id: 902,
+        message: {
+          message_id: 380,
+          media_group_id: 'album-2026-05-31',
+          date: Math.floor(new Date('2026-05-31T02:31:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          photo: [{ file_id: 'file-food-380', file_unique_id: 'uniq-food-380' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => ({
+      recognitions: [
+        {
+          messageId: 379,
+          imageType: 'workout',
+          detectedDate: '2026-05-31',
+          dateEvidence: 'image header',
+          confidence: 0.98,
+          warnings: [],
+          records: {
+            measurement: null,
+            activities: [],
+            meals: [],
+            totalCalories: null,
+            details: [],
+            dailyWorkoutSummary: {
+              activityCaloriesKcal: 874,
+              workoutDurationMinutes: 58,
+              activeHours: 15,
+            },
+          },
+        },
+      ],
+      recognitionErrors: [
+        {
+          messageId: 380,
+          error: 'telegram_training_image returned invalid JSON',
+          failureCategory: 'ai_service',
+          summary: {
+            contentType: 'application/json',
+            parseStage: 'message_content_json',
+            snippet: 'telegram_training_image returned invalid JSON',
+          },
+        },
+      ],
+    }),
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    buildTrainingSnapshot: async () => ({
+      generatedAt: '2026-05-31T00:00:00.000Z',
+      latest: { measurement: null, daily: { date: '2026-05-31' } },
+      daily: [],
+      charts: {
+        weightKg: [],
+        bodyFatPct: [],
+        skeletalMuscleKg: [],
+        basalMetabolism: [],
+        visceralFatLevel: [],
+        intakeCalories: [],
+        trainingCalories: [],
+        cyclingDistanceKm: [],
+      },
+    }),
+    exportTrainingMarkdown: () => '### 2026-05-31\n',
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9908 };
+    },
+  });
+
+  const batch = result.batchResults[0];
+  const report = buildTelegramSyncReport(result);
+  assert.equal(batch.status, 'ready');
+  assert.equal(batch.persistenceStatus, 'stored');
+  assert.equal(batch.partialFailure, true);
+  assert.equal(batch.failureCategory, 'ai_service');
+  assert.match(batch.failureReason, /invalid JSON/);
+  assert.equal(report.batches[0].partialFailure, true);
+  assert.equal(report.batches[0].recognitionErrors[0].messageId, 380);
+  assert.equal(report.batches[0].recognitionErrors[0].summary.contentType, 'application/json');
+  assert.equal(sentMessages.length, 1);
+  assert.match(sentMessages[0].text, /部分解析失败/);
+  assert.match(sentMessages[0].text, /380/);
+  assert.doesNotMatch(sentMessages[0].text, /解析成功/);
 });
 
 test('runTelegramSync sends Telegram result notification when an image batch is skipped', async () => {

@@ -226,20 +226,40 @@ async function requestRecognition({
     });
   } catch (error) {
     if (error instanceof AiProviderError || error instanceof AiSchemaError) {
+      if (!error.summary) {
+        error.summary = buildSafeAiContentSummary({
+          content,
+          contentType: payload?.__aiResponseContentType,
+          parseStage: 'message_content_json',
+        });
+      }
       throw error;
     }
-    throw new AiSchemaError('AI recognition returned invalid schema', {
+    const schemaError = new AiSchemaError('AI recognition returned invalid schema', {
       cause: error,
       schemaName,
       schemaVersion,
     });
+    schemaError.summary = buildSafeAiContentSummary({
+      content,
+      contentType: payload?.__aiResponseContentType,
+      parseStage: 'message_content_schema',
+    });
+    throw schemaError;
   }
 }
 
 async function parseAiResponsePayload(response, { schemaName, schemaVersion }) {
   if (typeof response.text === 'function') {
     const body = await response.text();
-    return parseAiJsonContentToValue(body, { schemaName, schemaVersion });
+    const payload = parseAiJsonContentToValue(body, { schemaName, schemaVersion });
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      return {
+        ...payload,
+        __aiResponseContentType: response.headers?.get?.('content-type') ?? null,
+      };
+    }
+    return payload;
   }
 
   return response.json();
@@ -510,6 +530,23 @@ function summarizeErrorText(value) {
     return null;
   }
   return text.length > 240 ? `${text.slice(0, 237)}...` : text;
+}
+
+function buildSafeAiContentSummary({ content, contentType, parseStage }) {
+  return {
+    contentType: String(contentType ?? '').split(';', 1)[0].trim() || null,
+    parseStage,
+    snippet: summarizeAiContentSnippet(content),
+  };
+}
+
+function summarizeAiContentSnippet(content) {
+  const text = String(content ?? '')
+    .replace(/https:\/\/api\.telegram\.org\/file\/bot[^\s"'<>]+/gi, '[telegram-file-url]')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+/gi, 'Bearer [redacted]')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length > 200 ? `${text.slice(0, 197)}...` : text;
 }
 
 function stripRecognitionRuntimeMetadata(recognition) {

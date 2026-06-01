@@ -272,6 +272,59 @@ test('recognizeTelegramImageMessage parses SSE-style data response bodies', asyn
   assert.equal(result.records.meals.length, 3);
 });
 
+test('recognizeTelegramImageMessage includes a safe summary when message content is invalid JSON', async () => {
+  await assert.rejects(
+    () =>
+      recognizeTelegramImageMessage({
+        aiProvider: {
+          env: { model: 'gpt-test' },
+          async requestChatCompletion() {
+            return {
+              ok: true,
+              headers: new Headers({
+                'content-type': 'application/json',
+              }),
+              async text() {
+                return JSON.stringify({
+                  choices: [
+                    {
+                      message: {
+                        content: 'telegram_training_image returned invalid JSON with extra diagnostic text',
+                      },
+                    },
+                  ],
+                });
+              },
+            };
+          },
+        },
+        message: {
+          messageId: 82,
+          caption: '',
+          text: '',
+          photos: [{ fileUniqueId: 'file-6' }],
+        },
+        imageUrl: 'https://api.telegram.org/file/bottoken/photos/file_82.jpg',
+        systemPrompt: 'system prompt',
+        promptMetadata,
+        env: {
+          AI_MODEL: 'gpt-test',
+          TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
+        },
+      }),
+    (error) => {
+      assert.equal(error.name, 'AiSchemaError');
+      assert.match(error.message, /invalid JSON/);
+      assert.equal(error.summary.contentType, 'application/json');
+      assert.equal(error.summary.parseStage, 'message_content_json');
+      assert.match(error.summary.snippet, /telegram_training_image returned invalid JSON/);
+      assert.doesNotMatch(error.summary.snippet, /api\.telegram\.org/);
+      assert.equal(error.summary.snippet.length <= 200, true);
+      return true;
+    },
+  );
+});
+
 test('recognizeTelegramImageMessage lowers confidence when measurement payload has no measurement data', async () => {
   const result = await recognizeTelegramImageMessage({
     aiProvider: {
