@@ -531,10 +531,14 @@ export function buildTelegramSyncReport(result) {
       recognitionPendingStatus: batch.recognitionPendingStatus ?? null,
       recognitionPendingError: batch.recognitionPendingError ?? null,
       pendingReplay: batch.pendingReplay ?? false,
+      sourceImageCount: batch.sourceImageCount ?? 0,
+      recognizedImageCount: batch.recognizedImageCount ?? 0,
+      failedImageCount: batch.failedImageCount ?? 0,
       recognitionErrors: batch.recognitionErrors ?? [],
       warnings: batch.warnings ?? [],
       issues: batch.issues ?? [],
       reason: batch.reason ?? null,
+      dateSources: batch.dateSources ?? [],
     })),
   };
 
@@ -752,24 +756,27 @@ function formatTelegramSyncNotification(batch) {
   if (batch.status === 'ready') {
     const dateText = formatChineseDate(batch.archivedDate);
     const storageText = formatPersistenceStatus(batch.persistenceStatus);
+    const countText = formatImageCountText(batch);
     if (hasPartialRecognitionFailure(batch)) {
       const failedMessages = formatFailedRecognitionMessageIds(batch);
       const reason = summarizePartialFailureReason(batch);
+      const pendingText = batch.recognitionPendingStatus === 'queued' ? '，失败图片已加入重试队列' : '';
       return [
-        `部分解析失败，${storageText}${dateText ? ` ${dateText}数据` : ''}`,
+        `部分解析失败（${countText}），${storageText}${dateText ? ` ${dateText}数据` : ''}${pendingText}`,
         failedMessages ? `失败图片：${failedMessages}` : '',
         reason ? `原因：${reason}` : '',
       ]
         .filter(Boolean)
         .join('；');
     }
-    return `解析成功，${storageText}${dateText ? ` ${dateText}数据` : ''}`;
+    return `解析成功（${countText}），${storageText}${dateText ? ` ${dateText}数据` : ''}`;
   }
 
   if (batch.status === 'skipped') {
     if (batch.failureCategory === 'ai_service' && batch.recognitionPendingStatus === 'queued') {
+      const countText = formatImageCountText(batch);
       const reason = batch.failureReason ? `：${batch.failureReason}` : '';
-      return `AI 识别失败，已加入重试队列${reason}`;
+      return `AI 识别失败（${countText}），已加入重试队列${reason}`;
     }
     if (batch.failureCategory === 'ai_service') {
       const reason = batch.failureReason ? `：${batch.failureReason}` : '';
@@ -797,6 +804,16 @@ function formatPersistenceStatus(status) {
     return '已记录，等待数据库重放';
   }
   return '已处理';
+}
+
+function formatImageCountText(batch) {
+  const source = batch.sourceImageCount ?? 0;
+  const recognized = batch.recognizedImageCount ?? 0;
+  const failed = batch.failedImageCount ?? 0;
+  if (source <= 0) {
+    return '';
+  }
+  return `已识别 ${recognized}/${source}${failed > 0 ? `，失败 ${failed}` : ''}`;
 }
 
 function formatChineseDate(dateValue) {
@@ -1069,6 +1086,12 @@ function attachFailureMetadata(batch) {
 
   if (hasPartialRecognitionFailure(batch)) {
     batch.partialFailure = true;
+    if (!batch.failureCategory) {
+      batch.failureCategory = 'ai_service';
+    }
+    if (!batch.failureReason) {
+      batch.failureReason = summarizePartialFailureReason(batch);
+    }
   }
 
   if (Array.isArray(batch.recognitionErrors) && batch.recognitionErrors.length > 0) {
@@ -1108,10 +1131,18 @@ function attachFailureMetadata(batch) {
 }
 
 function shouldQueueRecognitionFailure(batch) {
-  if (!batch || batch.kind !== 'image' || batch.status !== 'skipped') {
+  if (!batch || batch.kind !== 'image') {
     return false;
   }
   if (batch.recognitionPendingStatus === 'queued') {
+    return false;
+  }
+
+  if (batch.status === 'ready' && hasPartialRecognitionFailure(batch)) {
+    return true;
+  }
+
+  if (batch.status !== 'skipped') {
     return false;
   }
   if (batch.failureCategory !== 'ai_service') {
@@ -1258,6 +1289,12 @@ function hasPartialRecognitionFailure(batch) {
     return false;
   }
   if (batch.partialFailure === true) {
+    return true;
+  }
+  if (batch.failedImageCount > 0) {
+    return true;
+  }
+  if (batch.sourceImageCount > 0 && batch.recognizedImageCount < batch.sourceImageCount) {
     return true;
   }
   if (Array.isArray(batch.recognitionErrors) && batch.recognitionErrors.length > 0) {

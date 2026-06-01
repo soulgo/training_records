@@ -157,16 +157,43 @@ export async function markPendingRecognitionResolved(options = {}) {
 }
 
 export function shouldQueueRecognitionFailure(batch) {
-  if (!batch || batch.kind !== 'image' || batch.status !== 'skipped') {
+  if (!batch || batch.kind !== 'image') {
     return false;
   }
   if (batch.recognitionPendingStatus === 'queued') {
+    return false;
+  }
+
+  if (batch.status === 'ready' && hasPartialRecognitionFailure(batch)) {
+    return true;
+  }
+
+  if (batch.status !== 'skipped') {
     return false;
   }
   if (batch.failureCategory !== 'ai_service') {
     return false;
   }
   return Array.isArray(batch.messages) && batch.messages.some((message) => (message.photos?.length ?? 0) > 0);
+}
+
+function hasPartialRecognitionFailure(batch) {
+  if (!batch || batch.status !== 'ready') {
+    return false;
+  }
+  if (batch.partialFailure === true) {
+    return true;
+  }
+  if (batch.failedImageCount > 0) {
+    return true;
+  }
+  if (batch.sourceImageCount > 0 && batch.recognizedImageCount < batch.sourceImageCount) {
+    return true;
+  }
+  if (Array.isArray(batch.recognitionErrors) && batch.recognitionErrors.length > 0) {
+    return true;
+  }
+  return (batch.issues ?? []).some((issue) => /missing recognition/i.test(String(issue)));
 }
 
 export function normalizePendingRecognitionBatchEntry(entry) {

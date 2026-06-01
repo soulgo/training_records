@@ -2810,6 +2810,542 @@ test('merges a daily activity overview screenshot into the same workout block', 
   assert.match(applied.markdown, /08:49 户外骑行：8.49公里/);
 });
 
+test('reports sourceImageCount recognizedImageCount and failedImageCount for image batches', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'album-counts',
+    messages: [
+      {
+        messageId: 1001,
+        mediaGroupId: 'album-counts',
+        dateUnix: Date.UTC(2026, 4, 14, 12, 0, 0) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1' }],
+      },
+      {
+        messageId: 1002,
+        mediaGroupId: 'album-counts',
+        dateUnix: Date.UTC(2026, 4, 14, 12, 0, 0) / 1000,
+        photos: [{ fileId: 'f2', fileUniqueId: 'u2' }],
+      },
+      {
+        messageId: 1003,
+        mediaGroupId: 'album-counts',
+        dateUnix: Date.UTC(2026, 4, 14, 12, 0, 0) / 1000,
+        photos: [{ fileId: 'f3', fileUniqueId: 'u3' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 1001,
+      imageType: 'workout',
+      detectedDate: '2026-05-14',
+      dateEvidence: 'image header: 2026-05-14',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        activities: [{ time: '19:12', type: '力量训练', detail: '总消耗189千卡' }],
+      },
+    },
+    {
+      messageId: 1003,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no reliable image date',
+      confidence: 0.96,
+      warnings: [],
+      records: {
+        meals: [{ name: '晚餐', calories: 465, recommendedMin: 309, recommendedMax: 721 }],
+        totalCalories: 465,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.sourceImageCount, 3);
+  assert.equal(analyzed.recognizedImageCount, 2);
+  assert.equal(analyzed.failedImageCount, 1);
+});
+
+test('reports dateSources with per-image date evidence', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'album-date-sources',
+    messages: [
+      {
+        messageId: 2001,
+        mediaGroupId: 'album-date-sources',
+        dateUnix: Date.UTC(2026, 4, 10, 2, 0, 0) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1' }],
+      },
+      {
+        messageId: 2002,
+        mediaGroupId: 'album-date-sources',
+        dateUnix: Date.UTC(2026, 4, 10, 2, 0, 0) / 1000,
+        photos: [{ fileId: 'f2', fileUniqueId: 'u2' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 2001,
+      imageType: 'workout',
+      detectedDate: '2026-05-09',
+      dateEvidence: 'image header: 2026年5月9日',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        activities: [{ time: '19:13', type: '力量训练', detail: '总消耗241千卡' }],
+      },
+    },
+    {
+      messageId: 2002,
+      imageType: 'nutrition',
+      detectedDate: '2026-05-10',
+      dateEvidence: 'image header: 2026年5月10日',
+      confidence: 0.96,
+      warnings: [],
+      records: {
+        meals: [{ name: '晚餐', calories: 465, recommendedMin: 309, recommendedMax: 721 }],
+        totalCalories: 465,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.match(analyzed.reason, /conflicting detected dates/);
+  assert.equal(analyzed.dateSources.length, 2);
+  assert.equal(analyzed.dateSources[0].messageId, 2001);
+  assert.equal(analyzed.dateSources[0].detectedDate, '2026-05-09');
+  assert.equal(analyzed.dateSources[0].source, 'image');
+  assert.equal(analyzed.dateSources[1].messageId, 2002);
+  assert.equal(analyzed.dateSources[1].detectedDate, '2026-05-10');
+  assert.equal(analyzed.dateSources[1].source, 'image');
+});
+
+test('overview screenshot only writes dailyWorkoutSummary and does not produce activities', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-overview',
+    messages: [
+      {
+        messageId: 3001,
+        mediaGroupId: null,
+        dateUnix: Date.UTC(2026, 4, 29, 8, 0, 0) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 3001,
+      imageType: 'workout',
+      detectedDate: '2026-05-29',
+      dateEvidence: 'image header: 2026年5月29日星期五',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: {
+          activityCaloriesKcal: 804,
+          workoutDurationMinutes: 71,
+          activeHours: 15,
+        },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-29');
+  assert.equal(analyzed.activities.length, 0);
+  assert.ok(analyzed.workoutDailySummary);
+  assert.equal(analyzed.workoutDailySummary.activityCaloriesKcal, 804);
+  assert.equal(analyzed.workoutDailySummary.workoutDurationMinutes, 71);
+});
+
+test('training detail screenshot only writes activities and does not produce dailyWorkoutSummary', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-training-detail',
+    messages: [
+      {
+        messageId: 4001,
+        mediaGroupId: null,
+        dateUnix: Date.UTC(2026, 4, 29, 8, 0, 0) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 4001,
+      imageType: 'workout',
+      detectedDate: '2026-05-29',
+      dateEvidence: 'image shows 5月29日, year from telegram message',
+      confidence: 0.96,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [
+          { time: '18:55', type: '力量训练', detail: '总消耗185千卡，时长00:27:50，平均心率111次/分钟' },
+          { time: '06:39', type: 'HIIT', detail: '总消耗203千卡，时长00:28:39，平均心率122次/分钟' },
+        ],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: null,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-29');
+  assert.equal(analyzed.activities.length, 2);
+  assert.equal(analyzed.workoutDailySummary, null);
+});
+
+test('skips single nutrition image sent as photo without filename date and warns about photo sending', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-nutrition-photo',
+    messages: [
+      {
+        messageId: 5001,
+        mediaGroupId: null,
+        dateUnix: Date.UTC(2026, 4, 14, 12, 0, 0) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1', fileName: null, source: 'photo' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 5001,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no reliable image date',
+      confidence: 0.96,
+      warnings: [],
+      records: {
+        meals: [{ name: '晚餐', calories: 465, recommendedMin: 309, recommendedMax: 721 }],
+        totalCalories: 465,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.match(analyzed.reason, /no reliable image or filename date/i);
+  assert.match(analyzed.warnings.join('\n'), /photo/);
+});
+
+test('skips single measurement image sent as photo without filename date and warns about photo sending', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-measurement-photo',
+    messages: [
+      {
+        messageId: 6001,
+        mediaGroupId: null,
+        dateUnix: Date.UTC(2026, 4, 14, 12, 0, 0) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1', fileName: null, source: 'photo' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 6001,
+      imageType: 'measurement',
+      detectedDate: null,
+      dateEvidence: 'no reliable image date',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: null,
+          bodyScore: 77,
+          weightKg: 73.55,
+          bmi: 23.7,
+          bodyFatPct: 22.4,
+          skeletalMuscleKg: 30.9,
+          visceralFatLevel: 9,
+          basalMetabolismKcal: 1609,
+          bodyWaterPct: 50.5,
+          proteinPct: 23,
+          boneMassKg: 2.98,
+          fatFreeMassKg: 57.1,
+          bodyAge: 31,
+          bodyType: '标准型',
+        },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.match(analyzed.reason, /no reliable image or filename date/i);
+  assert.match(analyzed.warnings.join('\n'), /photo/);
+});
+
+test('uses filename date for single nutrition image sent as document without image date', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-nutrition-document',
+    messages: [
+      {
+        messageId: 7001,
+        mediaGroupId: null,
+        dateUnix: Date.UTC(2026, 4, 13, 1, 0, 0) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1', fileName: '饮食记录 2026-05-12.jpg', source: 'document' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 7001,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no reliable image date',
+      confidence: 0.96,
+      warnings: [],
+      records: {
+        meals: [{ name: '晚餐', calories: 465, recommendedMin: 309, recommendedMax: 721 }],
+        totalCalories: 465,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-12');
+  assert.match(analyzed.warnings.join('\n'), /filename date/i);
+});
+
+test('uses filename date for single measurement image sent as document without image date', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-measurement-document',
+    messages: [
+      {
+        messageId: 8001,
+        mediaGroupId: null,
+        dateUnix: Date.UTC(2026, 4, 13, 1, 0, 0) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1', fileName: '体脂秤 2026-05-12.jpg', source: 'document' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 8001,
+      imageType: 'measurement',
+      detectedDate: null,
+      dateEvidence: 'no reliable image date',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: null,
+          bodyScore: 77,
+          weightKg: 73.55,
+          bmi: 23.7,
+          bodyFatPct: 22.4,
+          skeletalMuscleKg: 30.9,
+          visceralFatLevel: 9,
+          basalMetabolismKcal: 1609,
+          bodyWaterPct: 50.5,
+          proteinPct: 23,
+          boneMassKg: 2.98,
+          fatFreeMassKg: 57.1,
+          bodyAge: 31,
+          bodyType: '标准型',
+        },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-12');
+  assert.match(analyzed.warnings.join('\n'), /filename date/i);
+});
+
+test('measurement jin values are converted to kg: 142.2斤→71.1kg, 60.0斤→30.0kg, 5.8斤→2.9kg, 109.6斤→54.8kg', () => {
+  assert.equal(parseWeightKg('142.2 斤'), 71.1);
+  assert.equal(parseWeightKg('60.0 斤'), 30.0);
+  assert.equal(parseWeightKg('5.8 斤'), 2.9);
+  assert.equal(parseWeightKg('109.6 斤'), 54.8);
+  assert.equal(parseWeightKg('60.0斤'), 30.0);
+  assert.equal(parseWeightKg('143.8斤'), 71.9);
+  assert.equal(parseWeightKg('73.55 kg'), 73.55);
+});
+
+test('single training image with month-day only produces year-completion uncertainty warning', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-training-month-day',
+    messages: [
+      {
+        messageId: 9001,
+        mediaGroupId: null,
+        dateUnix: Date.UTC(2026, 4, 29, 8, 56, 29) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 9001,
+      imageType: 'workout',
+      detectedDate: '2026-05-29',
+      dateEvidence: 'image shows 5月29日, year from telegram message',
+      confidence: 0.96,
+      warnings: ['detectedDate补全年份不确定，需程序确认'],
+      records: {
+        activities: [{ time: '18:55', type: '力量训练', detail: '总消耗185千卡' }],
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-29');
+  assert.equal(analyzed.activities.length, 1);
+});
+
+test('two images with different dates where overview has full date and training has conflicting month-day after year completion causes skip', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'album-overview-conflict',
+    messages: [
+      {
+        messageId: 10001,
+        mediaGroupId: 'album-overview-conflict',
+        dateUnix: Date.UTC(2026, 5, 1, 8, 0, 0) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1' }],
+      },
+      {
+        messageId: 10002,
+        mediaGroupId: 'album-overview-conflict',
+        dateUnix: Date.UTC(2026, 5, 1, 8, 0, 0) / 1000,
+        photos: [{ fileId: 'f2', fileUniqueId: 'u2' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 10001,
+      imageType: 'workout',
+      detectedDate: '2026-05-31',
+      dateEvidence: 'image header: 2026年5月31日',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        dailyWorkoutSummary: { activityCaloriesKcal: 703, workoutDurationMinutes: 97, activeHours: 21 },
+      },
+    },
+    {
+      messageId: 10002,
+      imageType: 'workout',
+      detectedDate: '2026-06-01',
+      dateEvidence: 'image shows 6月1日, year from telegram message',
+      confidence: 0.96,
+      warnings: ['detectedDate补全年份不确定，需程序确认'],
+      records: {
+        activities: [{ time: '19:13', type: '力量训练', detail: '总消耗241千卡' }],
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.match(analyzed.reason, /conflicting detected dates/);
+  assert.match(analyzed.reason, /2026-05-31/);
+  assert.match(analyzed.reason, /2026-06-01/);
+  assert.equal(analyzed.dateSources.length, 2);
+});
+
+test('ready batch with partial recognition failure has partialFailure flag and proper counts', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'album-partial-fail',
+    messages: [
+      {
+        messageId: 11001,
+        mediaGroupId: 'album-partial-fail',
+        dateUnix: Date.UTC(2026, 4, 29, 8, 0, 0) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1' }],
+      },
+      {
+        messageId: 11002,
+        mediaGroupId: 'album-partial-fail',
+        dateUnix: Date.UTC(2026, 4, 29, 8, 0, 0) / 1000,
+        photos: [{ fileId: 'f2', fileUniqueId: 'u2' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 11001,
+      imageType: 'workout',
+      detectedDate: '2026-05-29',
+      dateEvidence: 'image header: 2026年5月29日星期五',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        dailyWorkoutSummary: { activityCaloriesKcal: 804, workoutDurationMinutes: 71, activeHours: 15 },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.sourceImageCount, 2);
+  assert.equal(analyzed.recognizedImageCount, 1);
+  assert.equal(analyzed.failedImageCount, 1);
+  assert.equal(analyzed.dateSources.length, 2);
+  assert.equal(analyzed.dateSources[1].source, 'none');
+});
+
 test('runs async work with a bounded concurrency limit while preserving result order', async () => {
   const lib = await importTelegramSyncLib();
 

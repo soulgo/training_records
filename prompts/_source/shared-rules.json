@@ -2,7 +2,7 @@
   "_description": "Shared rules referenced by both recognition and analysis prompts. Edit here, then regenerate prompts via `node tools/prompt-generator.mjs`.",
 
   "metadata": {
-    "version": "2026-05-24"
+    "version": "2026-06-01"
   },
 
   "nullConventions": {

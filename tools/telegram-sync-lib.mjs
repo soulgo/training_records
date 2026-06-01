@@ -253,18 +253,37 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const nutritionMeals = [];
   const nutritionDetails = [];
   let nutritionTotalCalories = null;
+  const dateSources = [];
+  const sourceImageCount = batch.messages.length;
+  let recognizedImageCount = 0;
+  const failedMessageIds = [];
 
   for (const message of batch.messages) {
     const recognition = recognitionMap.get(message.messageId);
     if (!recognition) {
       issues.push(`missing recognition for message ${message.messageId}`);
+      failedMessageIds.push(message.messageId);
+      dateSources.push({
+        messageId: message.messageId,
+        detectedDate: null,
+        dateEvidence: null,
+        source: 'none',
+      });
       continue;
     }
     if ((recognition.confidence ?? 0) < minConfidence) {
       issues.push(`low confidence for message ${message.messageId}`);
+      failedMessageIds.push(message.messageId);
+      dateSources.push({
+        messageId: message.messageId,
+        detectedDate: recognition.detectedDate ?? null,
+        dateEvidence: recognition.dateEvidence ?? null,
+        source: 'low_confidence',
+      });
       continue;
     }
 
+    recognizedImageCount += 1;
     const normalizedDetectedDate = normalizeRecognitionDate(recognition, message);
 
     for (const warning of recognition.warnings ?? []) {
@@ -274,6 +293,13 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     if (normalizedDetectedDate) {
       imageDates.add(normalizedDetectedDate);
     }
+
+    dateSources.push({
+      messageId: message.messageId,
+      detectedDate: normalizedDetectedDate ?? null,
+      dateEvidence: recognition.dateEvidence ?? null,
+      source: normalizedDetectedDate ? 'image' : 'no_date',
+    });
 
     if (recognition.imageType === 'measurement' && recognition.records?.measurement) {
       measurementCandidates.push({
@@ -314,6 +340,10 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       reason: `conflicting detected dates: ${[...imageDates].sort().join(', ')}`,
       warnings,
       issues,
+      dateSources,
+      sourceImageCount,
+      recognizedImageCount,
+      failedImageCount: sourceImageCount - recognizedImageCount,
     });
   }
 
@@ -331,6 +361,10 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       reason: `conflicting filename dates: ${[...filenameDates].sort().join(', ')}`,
       warnings,
       issues,
+      dateSources,
+      sourceImageCount,
+      recognizedImageCount,
+      failedImageCount: sourceImageCount - recognizedImageCount,
     });
   } else {
     archivedDate = resolveDetectedDate(filenameDates);
@@ -351,6 +385,10 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
         : 'no reliable image or filename date',
       warnings,
       issues,
+      dateSources,
+      sourceImageCount,
+      recognizedImageCount,
+      failedImageCount: sourceImageCount - recognizedImageCount,
     });
   }
 
@@ -368,6 +406,10 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     nutrition: normalizedNutrition,
     warnings,
     issues,
+    dateSources,
+    sourceImageCount,
+    recognizedImageCount,
+    failedImageCount: sourceImageCount - recognizedImageCount,
     confidence: calculateBatchConfidence(recognitions),
     fingerprints: buildFingerprints({
       archivedDate,
@@ -835,7 +877,7 @@ function resolveDetectedDate(detectedDates) {
   return null;
 }
 
-function buildSkippedBatchResult(batch, { reason, warnings = [], issues = [] }) {
+function buildSkippedBatchResult(batch, { reason, warnings = [], issues = [], dateSources = [], sourceImageCount = 0, recognizedImageCount = 0, failedImageCount = 0 }) {
   return {
     status: 'skipped',
     kind: batch.kind ?? 'image',
@@ -843,6 +885,10 @@ function buildSkippedBatchResult(batch, { reason, warnings = [], issues = [] }) 
     reason,
     warnings,
     issues,
+    dateSources,
+    sourceImageCount,
+    recognizedImageCount,
+    failedImageCount,
   };
 }
 

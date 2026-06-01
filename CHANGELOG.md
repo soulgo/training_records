@@ -13,13 +13,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- Telegram 图片同步报告新增 `sourceImageCount`、`recognizedImageCount`、`failedImageCount` 字段，支持 1-4 张可变批次的可观测性。
+- Telegram 图片同步报告新增 `dateSources` 数组，每条含 `messageId`/`detectedDate`/`dateEvidence`/`source`，支持按图片定位日期来源。
+- Telegram 同步回执新增 `已识别 N/M` 格式的图片计数，partial failure 路径附带"失败图片已加入重试队列"提示。
+- 图片识别 Prompt 新增"批次规则"和"常见截图类型职责分工"章节，明确每次只识别一张图、1-4 张可变批次、总消耗图/训练图/饮食图/体脂秤图的职责分离。
+- 图片识别 Prompt `dateEvidence` 规则强化：区分 `visible filename in image`（允许）和 `filename`（禁止）。
+- 新增 14 项回归测试覆盖：图片计数、日期来源、截图类型职责、photo/document 单图处理、斤-kg 单位转换、partial failure pending 队列等场景。
+
 ### Changed
 
-- DB 实现完整迁入 `src/db/training/`：read / write / archive 模块现为 SQL 实现主入口，`tools/training-db-*.mjs` 改为干净的 re-export 兼容层。
-- `tools/backfill-thoughts-to-core.mjs` 不再直接使用 `pg`，改为通过 `src/db/training/write.mjs` 共享 `persistThoughtToCore` 写入逻辑。
-- `exportTrainingMarkdown` 从 DB facade 提取到 `src/domain/training/training-exporter.mjs`，保持领域层纯粹。
-- 删除死代码 `tools/lib/format.mjs`（与 `src/shared/format.mjs` 完全重复且无引用）。
-- 更新 V5 验收清单：P0-3 与 P1-6（DB Repository 化）标记为已完成。
+- `analyzeTelegramBatch()` 新增 `sourceImageCount`、`recognizedImageCount`、`failedImageCount`、`dateSources` 返回字段。
+- `shouldQueueRecognitionFailure()` 支持 ready 状态 + partialFailure 的批次进入 pending recognition 队列。
+- `hasPartialRecognitionFailure()` 增加 `failedImageCount > 0` 和 `recognizedImageCount < sourceImageCount` 的计数检测。
+- `buildTelegramSyncReport()` 输出新增的计数和日期来源字段。
+- `formatTelegramSyncNotification()` 增加 `formatImageCountText()` 输出已识别/失败计数。
+- Prompt 结构化源版本更新为 `2026-06-01`，`prompt-generator.mjs` 新增 batchRules/screenshotTypeRules 章节渲染。
+- 同步更新 `src/db/training/pending-recognition.mjs` 中的 `shouldQueueRecognitionFailure` 以保持一致。
 
 ### Fixed
 

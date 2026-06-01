@@ -17,7 +17,7 @@ test('generateRecognitionPrompt includes all key constraints', async () => {
   const prompt = await generateRecognitionPrompt();
 
   assert.match(prompt, /^<!-- prompt-metadata /);
-  assert.equal(parsePromptMetadataHeader(prompt).version, '2026-05-24');
+  assert.equal(parsePromptMetadataHeader(prompt).version, '2026-06-01');
   assert.equal(parsePromptMetadataHeader(prompt).schemaName, 'telegram_training_image');
   assert.equal(parsePromptMetadataHeader(prompt).schemaVersion, 'v1');
   assert.match(prompt, /只能输出符合 schema 的 JSON/);
@@ -49,7 +49,7 @@ test('generateAnalysisPrompt includes all key sections', async () => {
   const prompt = await generateAnalysisPrompt();
 
   assert.match(prompt, /^<!-- prompt-metadata /);
-  assert.equal(parsePromptMetadataHeader(prompt).version, '2026-05-24');
+  assert.equal(parsePromptMetadataHeader(prompt).version, '2026-06-01');
   assert.match(prompt, /训练数据分析助手/);
   assert.match(prompt, /## 输出要求/);
   assert.match(prompt, /只能基于给到你的结构化证据说话/);

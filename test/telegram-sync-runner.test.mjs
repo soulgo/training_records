@@ -821,10 +821,14 @@ test('buildTelegramSyncReport exposes fallback and archived date details for log
         recognitionPendingStatus: null,
         recognitionPendingError: null,
         pendingReplay: false,
+        sourceImageCount: 0,
+        recognizedImageCount: 0,
+        failedImageCount: 0,
         recognitionErrors: [],
         warnings: [],
         issues: [],
         reason: null,
+        dateSources: [],
       },
     ],
   });
@@ -4159,7 +4163,7 @@ test('runTelegramSync sends Telegram result notification after storing an image 
   assert.equal(sentMessages.length, 1);
   assert.deepEqual(sentMessages[0], {
     chatId: 42,
-    text: '解析成功，已入库 2026 年 5 月 22 日数据',
+    text: '解析成功（已识别 1/1），已入库 2026 年 5 月 22 日数据',
     replyToMessageId: 901,
   });
 });
@@ -4430,7 +4434,7 @@ test('runTelegramSync queues image batches when AI recognition fails before any 
   assert.equal(report.batches[0].recognitionPendingError, null);
   assert.equal(report.batches[0].pendingReplay, false);
   assert.equal(sentMessages.length, 1);
-  assert.match(sentMessages[0].text, /AI 识别失败，已加入重试队列/);
+  assert.match(sentMessages[0].text, /AI 识别失败（已识别 \d+\/\d+.*），已加入重试队列/);
 });
 
 test('runTelegramSync replays pending recognition batches and marks them resolved after storage', async () => {
@@ -4774,4 +4778,236 @@ test('runTelegramSync sends Telegram result notification when an image batch is 
   assert.equal(sentMessages[0].replyToMessageId, 902);
   assert.match(sentMessages[0].text, /解析未入库/);
   assert.match(sentMessages[0].text, /no reliable image or filename date/);
+});
+
+test('runTelegramSync queues partial failure ready batches for pending recognition', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-partial-failure-pending-'));
+  const queued = [];
+  const sentMessages = [];
+  const now = new Date('2026-05-31T03:05:00.000Z');
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    now,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 391,
+          media_group_id: 'album-partial-pending',
+          date: Math.floor(new Date('2026-05-31T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          photo: [{ file_id: 'file-overview-391', file_unique_id: 'uniq-overview-391' }],
+        },
+      },
+      {
+        update_id: 902,
+        message: {
+          message_id: 392,
+          media_group_id: 'album-partial-pending',
+          date: Math.floor(new Date('2026-05-31T02:31:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          photo: [{ file_id: 'file-nutrition-392', file_unique_id: 'uniq-nutrition-392' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => ({
+      recognitions: [
+        {
+          messageId: 391,
+          imageType: 'workout',
+          detectedDate: '2026-05-31',
+          dateEvidence: 'image header: 2026年5月31日',
+          confidence: 0.98,
+          warnings: [],
+          records: {
+            measurement: null,
+            activities: [],
+            meals: [],
+            totalCalories: null,
+            details: [],
+            dailyWorkoutSummary: {
+              activityCaloriesKcal: 804,
+              workoutDurationMinutes: 71,
+              activeHours: 15,
+            },
+          },
+        },
+      ],
+      recognitionErrors: [
+        {
+          messageId: 392,
+          error: 'telegram_training_image returned invalid JSON',
+          failureCategory: 'ai_service',
+        },
+      ],
+    }),
+    appendPendingRecognitionBatch: async (entry) => {
+      queued.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    buildTrainingSnapshot: async () => ({
+      generatedAt: '2026-05-31T00:00:00.000Z',
+      latest: { measurement: null, daily: { date: '2026-05-31' } },
+      daily: [],
+      charts: {
+        weightKg: [],
+        bodyFatPct: [],
+        skeletalMuscleKg: [],
+        basalMetabolism: [],
+        visceralFatLevel: [],
+        intakeCalories: [],
+        trainingCalories: [],
+        cyclingDistanceKm: [],
+      },
+    }),
+    exportTrainingMarkdown: () => '### 2026-05-31\n',
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9910 };
+    },
+  });
+
+  const batch = result.batchResults[0];
+  assert.equal(batch.status, 'ready');
+  assert.equal(batch.partialFailure, true);
+  assert.equal(batch.sourceImageCount, 2);
+  assert.equal(batch.recognizedImageCount, 1);
+  assert.equal(batch.failedImageCount, 1);
+  assert.equal(batch.recognitionPendingStatus, 'queued');
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].batch.batchId, 'album-partial-pending');
+  assert.equal(queued[0].batch.messages.length, 2);
+  assert.equal(sentMessages.length, 1);
+  assert.match(sentMessages[0].text, /部分解析失败/);
+  assert.match(sentMessages[0].text, /已识别 1\/2/);
+  assert.match(sentMessages[0].text, /失败图片已加入重试队列/);
+});
+
+test('runTelegramSync report includes image counts for pending replay batches', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-replay-counts-'));
+  const persistedBatches = [];
+  const resolved = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [],
+    readPendingRecognitionBatches: async () => [
+      {
+        batchId: 'album-replay-counts',
+        batch: {
+          kind: 'image',
+          batchId: 'album-replay-counts',
+          messages: [
+            {
+              messageId: 401,
+              updateId: 911,
+              mediaGroupId: 'album-replay-counts',
+              chatId: 42,
+              dateUnix: Math.floor(new Date('2026-05-31T03:00:00Z').getTime() / 1000),
+              photos: [{ fileId: 'f1', fileUniqueId: 'u1', source: 'photo' }],
+            },
+            {
+              messageId: 402,
+              updateId: 912,
+              mediaGroupId: 'album-replay-counts',
+              chatId: 42,
+              dateUnix: Math.floor(new Date('2026-05-31T03:00:01Z').getTime() / 1000),
+              photos: [{ fileId: 'f2', fileUniqueId: 'u2', source: 'photo' }],
+            },
+          ],
+        },
+      },
+    ],
+    recognizeBatch: async () => ({
+      recognitions: [
+        {
+          messageId: 401,
+          imageType: 'workout',
+          detectedDate: '2026-05-31',
+          dateEvidence: 'image header: 2026-05-31',
+          confidence: 0.98,
+          warnings: [],
+          records: {
+            activities: [{ time: '19:13', type: '力量训练', detail: '总消耗241千卡' }],
+          },
+        },
+        {
+          messageId: 402,
+          imageType: 'nutrition',
+          detectedDate: null,
+          dateEvidence: 'no reliable image date',
+          confidence: 0.96,
+          warnings: [],
+          records: {
+            meals: [{ name: '晚餐', calories: 868, recommendedMin: 310, recommendedMax: 723 }],
+            totalCalories: 868,
+          },
+        },
+      ],
+      recognitionErrors: [],
+    }),
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    markPendingRecognitionResolved: async ({ batchId }) => {
+      resolved.push(batchId);
+      return { status: 'resolved', batchId };
+    },
+    buildTrainingSnapshot: async () => ({
+      generatedAt: '2026-05-31T00:00:00.000Z',
+      latest: { measurement: null, daily: { date: '2026-05-31' } },
+      daily: [],
+      charts: {
+        weightKg: [],
+        bodyFatPct: [],
+        skeletalMuscleKg: [],
+        basalMetabolism: [],
+        visceralFatLevel: [],
+        intakeCalories: [],
+        trainingCalories: [],
+        cyclingDistanceKm: [],
+      },
+    }),
+    exportTrainingMarkdown: () => '### 2026-05-31\n',
+  });
+
+  const report = buildTelegramSyncReport(result);
+  assert.equal(result.changed, true);
+  assert.equal(result.batchResults[0].pendingReplay, true);
+  assert.equal(result.batchResults[0].sourceImageCount, 2);
+  assert.equal(result.batchResults[0].recognizedImageCount, 2);
+  assert.equal(result.batchResults[0].failedImageCount, 0);
+  assert.equal(report.batches[0].sourceImageCount, 2);
+  assert.equal(report.batches[0].recognizedImageCount, 2);
+  assert.equal(report.batches[0].failedImageCount, 0);
+  assert.equal(report.batches[0].pendingReplay, true);
+  assert.equal(persistedBatches.length, 1);
+  assert.equal(persistedBatches[0].sourceImageCount, 2);
+  assert.equal(persistedBatches[0].recognizedImageCount, 2);
+  assert.equal(persistedBatches[0].failedImageCount, 0);
+  assert.deepEqual(resolved, ['album-replay-counts']);
 });

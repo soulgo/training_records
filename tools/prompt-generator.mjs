@@ -60,6 +60,8 @@ export async function generateRecognitionPrompt() {
     renderPromptMetadataHeader(metadata),
     recognition.role,
     '',
+    renderSection(recognition.batchRules),
+    renderSection(recognition.screenshotTypeRules),
     renderSection(recognition.outputType),
     renderSection(recognition.dateRules),
     renderSection(shared.sharedDateRules),
