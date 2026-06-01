@@ -24,6 +24,10 @@
 ### Fixed
 
 - 修复 Telegram 训练图片识别对饮食截图总热量与餐次汇总的兼容解析，避免因为标题措辞、冒号格式或 `kcal` / `千卡` 表达差异导致 `totalCalories` 为空。
+- 修复 Telegram 训练图片识别对 AI 流式前缀、代码块包裹和非纯 JSON 输出的容错解析，避免 `data:` 前缀或残留标记导致整批截图识别失败。
+- 修复 Telegram 训练图片识别的结果规范化，确保 `measurement`、`activities`、`meals`、`totalCalories`、`details` 与 `dailyWorkoutSummary` 等字段始终补齐，减少 schema 校验失败。
+- 修复体脂秤截图被识别为 `measurement` 但缺少体脂数据时仍以高置信通过的问题，现在会降置信并记录 warning，避免空体脂结果静默入库。
+- 修复 Telegram 训练截图同日重复写入时的覆盖策略，改为按模块保留历史内容、按条目去重覆盖，避免补发截图时误删旧的有效运动或饮食记录。
 - 修复 Telegram 训练图片识别对体脂秤截图中“斤”单位的换算与归一逻辑，避免 `weightKg`、`skeletalMuscleKg`、`boneMassKg`、`fatFreeMassKg` 被误写为原始斤数。
 - 补充相关识别提示词与回归测试，确保体重类字段统一按 kg 口径入库，并保留必要的小数精度。
 

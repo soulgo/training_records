@@ -208,3 +208,121 @@ test('recognizeTelegramImageMessage misses cache when prompt version changes', a
   assert.equal(result.promptVersion, '2026-05-25');
   assert.equal(result.schemaVersion, 'v1');
 });
+
+test('recognizeTelegramImageMessage parses SSE-style data response bodies', async () => {
+  const recognitionContent = JSON.stringify({
+    imageType: 'nutrition',
+    detectedDate: '2026-05-29',
+    dateEvidence: 'image header: 2026-05-29',
+    confidence: 0.95,
+    warnings: [],
+    records: {
+      measurement: null,
+      activities: [],
+      meals: [
+        { name: '早餐', calories: 225, recommendedMin: 512, recommendedMax: 922 },
+        { name: '午餐', calories: 266, recommendedMin: 615, recommendedMax: 1024 },
+        { name: '晚餐', calories: 360, recommendedMin: 308, recommendedMax: 717 },
+      ],
+      totalCalories: 851,
+      details: ['粗粮粥 111 千卡', '炸鸡排 266 千卡', '炒拉条 360 千卡'],
+      dailyWorkoutSummary: null,
+    },
+  });
+  const payload = {
+    choices: [
+      {
+        message: {
+          content: `\`\`\`json\n${recognitionContent}\n\`\`\``,
+        },
+      },
+    ],
+  };
+
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      env: { model: 'gpt-test' },
+      async requestChatCompletion() {
+        return {
+          ok: true,
+          async text() {
+            return `data: ${JSON.stringify(payload)}\n\n`;
+          },
+        };
+      },
+    },
+    message: {
+      messageId: 80,
+      caption: '',
+      text: '',
+      photos: [{ fileUniqueId: 'file-4' }],
+    },
+    imageUrl: 'https://example.com/image.jpg',
+    systemPrompt: 'system prompt',
+    promptMetadata,
+    env: {
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
+    },
+  });
+
+  assert.equal(result.imageType, 'nutrition');
+  assert.equal(result.detectedDate, '2026-05-29');
+  assert.equal(result.records.totalCalories, 851);
+  assert.equal(result.records.meals.length, 3);
+});
+
+test('recognizeTelegramImageMessage lowers confidence when measurement payload has no measurement data', async () => {
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      env: { model: 'gpt-test' },
+      async requestChatCompletion() {
+        return {
+          ok: true,
+          async json() {
+            return {
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      imageType: 'measurement',
+                      detectedDate: '2026-05-29',
+                      dateEvidence: 'image header: 2026-05-29',
+                      confidence: 0.96,
+                      warnings: [],
+                      records: {
+                        activities: [],
+                        meals: [],
+                        totalCalories: null,
+                        details: [],
+                        dailyWorkoutSummary: null,
+                      },
+                    }),
+                  },
+                },
+              ],
+            };
+          },
+        };
+      },
+    },
+    message: {
+      messageId: 81,
+      caption: '',
+      text: '',
+      photos: [{ fileUniqueId: 'file-5' }],
+    },
+    imageUrl: 'https://example.com/image.jpg',
+    systemPrompt: 'system prompt',
+    promptMetadata,
+    env: {
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
+    },
+  });
+
+  assert.equal(result.imageType, 'measurement');
+  assert.equal(result.records.measurement, null);
+  assert.equal(result.confidence < 0.75, true);
+  assert.match(result.warnings.join('\n'), /measurement image missing measurement data/i);
+});

@@ -1357,18 +1357,16 @@ function findLevel4BlockRange(sectionBody, headingPattern) {
 }
 
 function mergeBlock(existingBlock, nextBlock) {
-  const existingFingerprints = new Set(
-    [...existingBlock.matchAll(/<!-- telegram-fingerprint: ([^ ]+) -->/g)].map((match) => match[1]),
-  );
-  const incomingFingerprints = [...nextBlock.matchAll(/<!-- telegram-fingerprint: ([^ ]+) -->/g)].map(
-    (match) => match[1],
-  );
-
-  if (incomingFingerprints.length > 0 && incomingFingerprints.every((fingerprint) => existingFingerprints.has(fingerprint))) {
+  const incoming = nextBlock.trim();
+  if (!incoming) {
     return existingBlock;
   }
 
-  return nextBlock.trim();
+  if (incoming === existingBlock.trim()) {
+    return existingBlock;
+  }
+
+  return incoming;
 }
 
 function mergeWorkoutBlock(existingBlock, nextBlock) {

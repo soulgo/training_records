@@ -30,20 +30,7 @@ export function parseAiJsonContent(content, schema, options = {}) {
     });
   }
 
-  let value = normalizedContent;
-  if (typeof normalizedContent === 'string') {
-    try {
-      value = JSON.parse(normalizedContent);
-    } catch (error) {
-      throw new AiSchemaError(`${schemaName} returned invalid JSON`, {
-        cause: error,
-        schemaName,
-        schemaVersion,
-        path: rootPath,
-      });
-    }
-  }
-
+  const value = parseJsonLikeContent(normalizedContent, { schemaName, schemaVersion, rootPath });
   validateAiJsonValue(value, schema, {
     schemaName,
     schemaVersion,
@@ -52,6 +39,63 @@ export function parseAiJsonContent(content, schema, options = {}) {
   });
 
   return value;
+}
+
+function parseJsonLikeContent(content, { schemaName, schemaVersion, rootPath }) {
+  if (typeof content !== 'string') {
+    return content;
+  }
+
+  const candidates = collectJsonCandidates(content);
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new AiSchemaError(`${schemaName} returned invalid JSON`, {
+    cause: lastError,
+    schemaName,
+    schemaVersion,
+    path: rootPath,
+  });
+}
+
+function collectJsonCandidates(content) {
+  const candidates = [];
+  const trimmed = String(content ?? '').trim();
+  if (!trimmed) {
+    return candidates;
+  }
+
+  candidates.push(trimmed);
+
+  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fencedMatch?.[1]) {
+    candidates.push(fencedMatch[1].trim());
+  }
+
+  const dataLines = trimmed
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^data:\s*$/i.test(line))
+    .map((line) => line.replace(/^data:\s*/i, ''));
+
+  if (dataLines.length > 0) {
+    candidates.push(dataLines.join('\n').trim());
+  }
+
+  const jsonStart = trimmed.search(/[{[]/);
+  const jsonEnd = Math.max(trimmed.lastIndexOf('}'), trimmed.lastIndexOf(']'));
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    candidates.push(trimmed.slice(jsonStart, jsonEnd + 1).trim());
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
 }
 
 export function validateAiJsonValue(value, schema, options = {}) {

@@ -2553,6 +2553,157 @@ test('merges legacy same-day screenshot blocks without duplicating headings', as
   assert.equal(day.nutrition.meals.length, 3);
 });
 
+test('merges 2026-05-29 overview workout details and nutrition into one day', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+  assert.ok(lib?.applyTelegramSyncToMarkdown, 'applyTelegramSyncToMarkdown export missing');
+
+  const batch = {
+    batchId: 'album-2026-05-29',
+    messages: [
+      {
+        messageId: 901,
+        dateUnix: 1_748_620_800,
+        photos: [{ source: 'photo', fileUniqueId: 'overview-2026-05-29' }],
+      },
+      {
+        messageId: 902,
+        dateUnix: 1_748_620_900,
+        photos: [{ source: 'photo', fileUniqueId: 'measurement-2026-05-29' }],
+      },
+      {
+        messageId: 903,
+        dateUnix: 1_748_621_000,
+        photos: [{ source: 'photo', fileUniqueId: 'workouts-2026-05-29' }],
+      },
+      {
+        messageId: 904,
+        dateUnix: 1_748_621_100,
+        photos: [{ source: 'photo', fileUniqueId: 'nutrition-2026-05-29' }],
+      },
+    ],
+  };
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 901,
+      imageType: 'workout',
+      detectedDate: '2026-05-29',
+      dateEvidence: 'image header: 2026年5月29日星期五',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: {
+          activityCaloriesKcal: 804,
+          workoutDurationMinutes: 71,
+          activeHours: 15,
+        },
+      },
+    },
+    {
+      messageId: 902,
+      imageType: 'measurement',
+      detectedDate: null,
+      dateEvidence: 'no reliable image date',
+      confidence: 0.95,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: null,
+          bodyScore: null,
+          weightKg: 71.1,
+          bmi: 22.9,
+          bodyFatPct: 22.9,
+          skeletalMuscleKg: 30,
+          visceralFatLevel: 8,
+          basalMetabolismKcal: 1563,
+          bodyWaterPct: 49.3,
+          proteinPct: 23.8,
+          boneMassKg: 3,
+          fatFreeMassKg: 54.8,
+          bodyAge: 30,
+          bodyType: '肥胖型',
+        },
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: null,
+      },
+    },
+    {
+      messageId: 903,
+      imageType: 'workout',
+      detectedDate: '2026-05-29',
+      dateEvidence: 'image shows 5月29日, year from telegram message',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [
+          {
+            time: '18:55',
+            type: '力量训练',
+            detail: '总消耗185千卡，时长00:27:50，平均心率111次/分钟',
+          },
+          {
+            time: '06:39',
+            type: 'HIIT',
+            detail: '总消耗203千卡，时长00:28:39，平均心率122次/分钟',
+          },
+        ],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: null,
+      },
+    },
+    {
+      messageId: 904,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no reliable image date',
+      confidence: 0.94,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [
+          { name: '早餐', calories: 225, recommendedMin: 512, recommendedMax: 922 },
+          { name: '午餐', calories: 266, recommendedMin: 615, recommendedMax: 1024 },
+          { name: '晚餐', calories: 360, recommendedMin: 308, recommendedMax: 717 },
+        ],
+        totalCalories: 851,
+        details: [
+          '早餐：粗粮粥 1碗 111千卡；康比特奶味分离乳清蛋白粉750g 1勺 114千卡；康比特肌酸250g 3克 0千卡',
+          '午餐：炸鸡排 2份 266千卡',
+          '晚餐：炒拉条 1盘 360千卡',
+        ],
+        dailyWorkoutSummary: null,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-29');
+
+  const result = lib.applyTelegramSyncToMarkdown('', analyzed);
+  const parsed = parseTrainingRecord(result.markdown);
+  const day = parsed.daily.find((entry) => entry.date === '2026-05-29');
+
+  assert.equal(day.workoutSummary.trainingCalories, 804);
+  assert.equal(day.workoutSummary.workoutDurationMinutes, 71);
+  assert.equal(day.activities.length, 2);
+  assert.equal(day.nutrition.totalCalories, 851);
+  assert.equal(day.nutrition.meals.length, 3);
+  assert.equal(day.measurement.weightKg, 71.1);
+});
+
 test('merges a daily activity overview screenshot into the same workout block', async () => {
   const lib = await importTelegramSyncLib();
 

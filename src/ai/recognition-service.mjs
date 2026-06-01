@@ -209,7 +209,10 @@ async function requestRecognition({
     throw error;
   }
 
-  const payload = await response.json();
+  const payload = await parseAiResponsePayload(response, {
+    schemaName,
+    schemaVersion,
+  });
   const content = extractAiResponseContent(payload, {
     label: 'AI recognition',
     schemaName,
@@ -231,6 +234,15 @@ async function requestRecognition({
       schemaVersion,
     });
   }
+}
+
+async function parseAiResponsePayload(response, { schemaName, schemaVersion }) {
+  if (typeof response.text === 'function') {
+    const body = await response.text();
+    return parseAiJsonContentToValue(body, { schemaName, schemaVersion });
+  }
+
+  return response.json();
 }
 
 function parseRecognitionContent(content, { schemaName, schemaVersion }) {
@@ -261,28 +273,73 @@ function parseAiJsonContentToValue(content, { schemaName, schemaVersion }) {
     return normalizedContent;
   }
 
-  try {
-    return JSON.parse(normalizedContent);
-  } catch (error) {
-    throw new AiSchemaError(`${schemaName} returned invalid JSON`, {
-      cause: error,
-      schemaName,
-      schemaVersion,
-      path: '$',
-    });
+  const candidates = collectJsonCandidates(normalizedContent);
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  throw new AiSchemaError(`${schemaName} returned invalid JSON`, {
+    cause: lastError,
+    schemaName,
+    schemaVersion,
+    path: '$',
+  });
+}
+
+function collectJsonCandidates(content) {
+  const trimmed = String(content ?? '').trim();
+  const candidates = [trimmed];
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1]?.trim();
+  if (fenced) {
+    candidates.push(fenced);
+  }
+
+  const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (lines.length > 0) {
+    const withoutDataPrefix = lines.map((line) => line.replace(/^data:\s*/i, '')).join('');
+    if (withoutDataPrefix && withoutDataPrefix !== trimmed) {
+      candidates.push(withoutDataPrefix);
+    }
+  }
+
+  const jsonStart = trimmed.search(/[\[{]/);
+  const jsonEnd = Math.max(trimmed.lastIndexOf('}'), trimmed.lastIndexOf(']'));
+  if (jsonStart !== -1 && jsonEnd > jsonStart) {
+    candidates.push(trimmed.slice(jsonStart, jsonEnd + 1).trim());
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
 }
 
 function normalizeRecognitionPayload(value) {
-  if (!isPlainObject(value) || !isPlainObject(value.records)) {
+  if (!isPlainObject(value)) {
     return value;
   }
 
+  const records = isPlainObject(value.records) ? value.records : {};
+  const warnings = Array.isArray(value.warnings) ? value.warnings : [];
+  const missingMeasurementData = value.imageType === 'measurement' && !isPlainObject(records.measurement);
   return {
     ...value,
+    confidence: missingMeasurementData
+      ? Math.min(Number.isFinite(value.confidence) ? value.confidence : 0, 0.5)
+      : value.confidence,
+    warnings: missingMeasurementData
+      ? [...warnings, 'measurement image missing measurement data']
+      : warnings,
     records: {
-      ...value.records,
-      details: normalizeRecognitionDetails(value.records.details),
+      measurement: records.measurement ?? null,
+      activities: Array.isArray(records.activities) ? records.activities : [],
+      meals: Array.isArray(records.meals) ? records.meals : [],
+      totalCalories: records.totalCalories ?? null,
+      details: normalizeRecognitionDetails(records.details),
+      dailyWorkoutSummary: records.dailyWorkoutSummary ?? null,
     },
   };
 }
