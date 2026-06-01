@@ -226,6 +226,16 @@ async function requestRecognition({
     });
   } catch (error) {
     if (error instanceof AiProviderError || error instanceof AiSchemaError) {
+      const retryResult = await retryRecognitionAfterInvalidContent({
+        aiProvider,
+        requestInput,
+        schemaName,
+        schemaVersion,
+        invalidContent: content,
+      });
+      if (retryResult.ok) {
+        return retryResult.value;
+      }
       if (!error.summary) {
         error.summary = buildSafeAiContentSummary({
           content,
@@ -246,6 +256,50 @@ async function requestRecognition({
       parseStage: 'message_content_schema',
     });
     throw schemaError;
+  }
+}
+
+async function retryRecognitionAfterInvalidContent({
+  aiProvider,
+  requestInput,
+  schemaName,
+  schemaVersion,
+  invalidContent,
+}) {
+  const retryInput = {
+    ...requestInput,
+    messages: buildStrictJsonRetryMessages(requestInput.messages, invalidContent),
+  };
+
+  try {
+    const response = await requestRecognitionWithFormatFallback({
+      aiProvider,
+      requestInput: retryInput,
+      schemaName,
+    });
+
+    if (!response.ok) {
+      return { ok: false };
+    }
+
+    const payload = await parseAiResponsePayload(response, {
+      schemaName,
+      schemaVersion,
+    });
+    const content = extractAiResponseContent(payload, {
+      label: 'AI recognition retry',
+      schemaName,
+      schemaVersion,
+    });
+    return {
+      ok: true,
+      value: parseRecognitionContent(content, {
+        schemaName,
+        schemaVersion,
+      }),
+    };
+  } catch {
+    return { ok: false };
   }
 }
 
@@ -466,6 +520,25 @@ function buildRecognitionMessages({ imageUrl, message, systemPrompt }) {
       ],
     },
   ];
+}
+
+function buildStrictJsonRetryMessages(messages, invalidContent) {
+  const nextMessages = structuredClone(messages);
+  const userMessage = nextMessages.find((message) => message.role === 'user');
+  if (Array.isArray(userMessage?.content)) {
+    const textPart = userMessage.content.find((part) => part?.type === 'text');
+    if (textPart) {
+      textPart.text = [
+        textPart.text,
+        '',
+        'The previous response was not valid json.',
+        'Return only one valid JSON object matching the telegram_training_image schema.',
+        'Do not include markdown, diagnostics, explanations, or error text.',
+        `Previous response summary: ${summarizeAiContentSnippet(invalidContent)}`,
+      ].join('\n');
+    }
+  }
+  return nextMessages;
 }
 
 function shouldRetryWithJsonObjectFormat(status, details) {

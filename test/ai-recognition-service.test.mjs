@@ -325,6 +325,82 @@ test('recognizeTelegramImageMessage includes a safe summary when message content
   );
 });
 
+test('recognizeTelegramImageMessage retries once with strict JSON guidance when content is invalid JSON', async () => {
+  let requestCount = 0;
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      env: { model: 'gpt-test' },
+      async requestChatCompletion(input) {
+        requestCount += 1;
+        if (requestCount === 1) {
+          return {
+            ok: true,
+            async json() {
+              return {
+                choices: [
+                  {
+                    message: {
+                      content: 'telegram_training_image returned invalid JSON',
+                    },
+                  },
+                ],
+              };
+            },
+          };
+        }
+
+        const userText = input.messages?.[1]?.content?.find((part) => part.type === 'text')?.text ?? '';
+        assert.match(userText, /previous response was not valid json/i);
+        return {
+          ok: true,
+          async json() {
+            return {
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      imageType: 'nutrition',
+                      detectedDate: '2026-05-31',
+                      dateEvidence: 'image header: 2026-05-31',
+                      confidence: 0.96,
+                      warnings: [],
+                      records: {
+                        measurement: null,
+                        activities: [],
+                        meals: [{ name: '晚餐', calories: 868, recommendedMin: 310, recommendedMax: 723 }],
+                        totalCalories: 868,
+                        details: ['晚餐 868 千卡'],
+                        dailyWorkoutSummary: null,
+                      },
+                    }),
+                  },
+                },
+              ],
+            };
+          },
+        };
+      },
+    },
+    message: {
+      messageId: 83,
+      caption: '',
+      text: '',
+      photos: [{ fileUniqueId: 'file-7' }],
+    },
+    imageUrl: 'https://example.com/image.jpg',
+    systemPrompt: 'system prompt',
+    promptMetadata,
+    env: {
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
+    },
+  });
+
+  assert.equal(requestCount, 2);
+  assert.equal(result.imageType, 'nutrition');
+  assert.equal(result.records.totalCalories, 868);
+});
+
 test('recognizeTelegramImageMessage lowers confidence when measurement payload has no measurement data', async () => {
   const result = await recognizeTelegramImageMessage({
     aiProvider: {

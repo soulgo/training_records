@@ -10,9 +10,12 @@ import {
   mapWithConcurrency,
 } from './telegram-sync-lib.mjs';
 import {
+  appendPendingRecognitionBatch as appendPendingRecognitionBatchToDatabase,
   exportTrainingMarkdown as exportTrainingMarkdownFromSnapshot,
   getLastProcessedTelegramUpdateId,
+  markPendingRecognitionResolved as markPendingRecognitionResolvedInDatabase,
   persistNormalizedBatch as persistNormalizedBatchToDatabase,
+  readPendingRecognitionBatches as readPendingRecognitionBatchesFromDatabase,
   resolveTrainingCoreConfig,
 } from './training-db-core.mjs';
 import { buildTrainingSnapshot as buildTrainingSnapshotFromSource } from './training-snapshot.mjs';
@@ -92,6 +95,42 @@ export async function runTelegramSync(options = {}) {
         ...input,
         env: options.env ?? process.env,
       }));
+  const useDefaultPendingRecognitionStore =
+    !options.persistNormalizedBatch &&
+    !options.fetchTelegramUpdates &&
+    !options.repositoryDispatchEvent &&
+    !options.readPendingRecognitionBatches &&
+    !options.appendPendingRecognitionBatch &&
+    !options.markPendingRecognitionResolved;
+  const readPendingRecognitionBatches =
+    options.readPendingRecognitionBatches ??
+    (useDefaultPendingRecognitionStore
+      ? () =>
+          readPendingRecognitionBatchesFromDatabase({
+            env: options.env ?? process.env,
+            now,
+          })
+      : async () => []);
+  const appendPendingRecognitionBatch =
+    options.appendPendingRecognitionBatch ??
+    (useDefaultPendingRecognitionStore
+      ? (input) =>
+          appendPendingRecognitionBatchToDatabase({
+            ...input,
+            env: options.env ?? process.env,
+            now,
+          })
+      : async (input) => ({ status: 'skipped', reason: 'not_configured', batchId: input?.batch?.batchId }));
+  const markPendingRecognitionResolved =
+    options.markPendingRecognitionResolved ??
+    (useDefaultPendingRecognitionStore
+      ? (input) =>
+          markPendingRecognitionResolvedInDatabase({
+            ...input,
+            env: options.env ?? process.env,
+            now,
+          })
+      : async (input) => ({ status: 'skipped', reason: 'not_configured', batchId: input?.batchId }));
   const buildSnapshot =
     options.buildTrainingSnapshot ??
     ((input) =>
@@ -199,6 +238,18 @@ export async function runTelegramSync(options = {}) {
   let fallbackMarkdown = null;
   let fallbackMarkdownLoaded = false;
 
+  const pendingRecognitionEntries = await readPendingRecognitionBatches();
+  const replayRecognitionResults = await replayPendingRecognitionBatches({
+    entries: pendingRecognitionEntries,
+    recognizeBatchRunner,
+    persistBatch,
+    markPendingRecognitionResolved,
+    now,
+  });
+  changed ||= replayRecognitionResults.changed;
+  replayStoredImageAny ||= replayRecognitionResults.replayStoredImageAny;
+  batchResults.push(...replayRecognitionResults.batchResults);
+
   async function getFallbackMarkdown() {
     if (!fallbackMarkdownLoaded) {
       fallbackMarkdown = await readMarkdownOrDefault(recordPath);
@@ -251,6 +302,11 @@ export async function runTelegramSync(options = {}) {
       recognitionErrors,
     };
     attachFailureMetadata(persistedBatch);
+    await queueRecognitionFailureIfNeeded({
+      batch: persistedBatch,
+      appendPendingRecognitionBatch,
+      now,
+    });
 
     if (analyzed.status !== 'ready') {
       batchResults.push(persistedBatch);
@@ -346,6 +402,7 @@ export async function runTelegramSync(options = {}) {
         ...persistedBatch,
         persistenceStatus: persistResult.status,
       });
+      await markPendingRecognitionResolved({ batchId: persistedBatch.batchId });
     } catch (error) {
       if (analyzed.status === 'ready') {
         const applied = applyTelegramSyncToMarkdown(await getFallbackMarkdown(), persistedBatch);
@@ -706,6 +763,10 @@ function formatTelegramSyncNotification(batch) {
   }
 
   if (batch.status === 'skipped') {
+    if (batch.failureCategory === 'ai_service' && batch.recognitionPendingStatus === 'queued') {
+      const reason = batch.failureReason ? `：${batch.failureReason}` : '';
+      return `AI 识别失败，已加入重试队列${reason}`;
+    }
     if (batch.failureCategory === 'ai_service') {
       const reason = batch.failureReason ? `：${batch.failureReason}` : '';
       return `解析失败：AI 服务失败${reason}`;
@@ -985,6 +1046,18 @@ function normalizeRecognitionOutput(output) {
   };
 }
 
+function normalizePendingRecognitionBatchEntry(entry) {
+  const batch = entry?.batch ?? entry?.batch_payload_json ?? entry;
+  if (!batch?.batchId || !Array.isArray(batch.messages)) {
+    return null;
+  }
+  return {
+    kind: batch.kind ?? 'image',
+    batchId: batch.batchId,
+    messages: batch.messages,
+  };
+}
+
 function attachFailureMetadata(batch) {
   if (!batch) {
     return batch;
@@ -1030,6 +1103,19 @@ function attachFailureMetadata(batch) {
   return batch;
 }
 
+function shouldQueueRecognitionFailure(batch) {
+  if (!batch || batch.kind !== 'image' || batch.status !== 'skipped') {
+    return false;
+  }
+  if (batch.recognitionPendingStatus === 'queued') {
+    return false;
+  }
+  if (batch.failureCategory !== 'ai_service') {
+    return false;
+  }
+  return Array.isArray(batch.messages) && batch.messages.some((message) => (message.photos?.length ?? 0) > 0);
+}
+
 function shouldRetryRecognitionInline(error) {
   if (error?.status === 400) {
     return true;
@@ -1042,6 +1128,114 @@ function shouldRetryRecognitionInline(error) {
     /invalid schema/i.test(message) ||
     /schema/i.test(message)
   );
+}
+
+async function replayPendingRecognitionBatches({
+  entries,
+  recognizeBatchRunner,
+  persistBatch,
+  markPendingRecognitionResolved,
+  now,
+}) {
+  const batchResults = [];
+  let changed = false;
+  let replayStoredImageAny = false;
+
+  for (const entry of entries ?? []) {
+    const batch = normalizePendingRecognitionBatchEntry(entry);
+    if (!batch) {
+      continue;
+    }
+
+    let recognitions = [];
+    let recognitionErrors = [];
+    try {
+      const recognitionOutput = normalizeRecognitionOutput(await recognizeBatchRunner(batch, {}));
+      recognitions = recognitionOutput.recognitions;
+      recognitionErrors = recognitionOutput.recognitionErrors;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      recognitionErrors = (batch.messages ?? []).map((message) => ({
+        messageId: message.messageId,
+        error: errorMessage,
+        failureCategory: classifyFailureCategory(errorMessage, { phase: 'ai_recognition' }),
+      }));
+      process.stderr.write(
+        `[telegram-sync] pending image recognition failed for ${batch.batchId}: ${errorMessage}\n`,
+      );
+    }
+
+    const analyzed = analyzeTelegramBatch(batch, recognitions, {
+      minConfidence: 0.75,
+    });
+    const persistedBatch = {
+      ...analyzed,
+      kind: batch.kind ?? analyzed.kind ?? 'image',
+      updateIds: batch.messages?.map((message) => message.updateId).filter(Boolean) ?? [],
+      messages: batch.messages ?? [],
+      recognitions,
+      recognitionErrors,
+      pendingReplay: true,
+    };
+    attachFailureMetadata(persistedBatch);
+
+    if (persistedBatch.status !== 'ready') {
+      batchResults.push(persistedBatch);
+      continue;
+    }
+
+    const persistResult = await persistBatch({
+      batch: persistedBatch,
+      processedAt: now,
+    });
+    const resolvedResult = await markPendingRecognitionResolved({ batchId: persistedBatch.batchId });
+    changed ||= persistResult.status === 'stored';
+    replayStoredImageAny ||= persistResult.status === 'stored';
+    batchResults.push({
+      ...persistedBatch,
+      persistenceStatus: persistResult.status,
+      recognitionPendingStatus: resolvedResult.status,
+    });
+  }
+
+  return {
+    changed,
+    replayStoredImageAny,
+    batchResults,
+  };
+}
+
+async function queueRecognitionFailureIfNeeded({
+  batch,
+  appendPendingRecognitionBatch,
+  now,
+}) {
+  if (!shouldQueueRecognitionFailure(batch)) {
+    return batch;
+  }
+
+  try {
+    const queueResult = await appendPendingRecognitionBatch({
+      batch: {
+        kind: batch.kind ?? 'image',
+        batchId: batch.batchId,
+        messages: batch.messages ?? [],
+      },
+      failureCategory: batch.failureCategory,
+      error: batch.failureReason,
+      failedAt: now.toISOString(),
+    });
+    batch.recognitionPendingStatus = queueResult.status;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    batch.recognitionPendingStatus = 'failed';
+    batch.recognitionPendingError = errorMessage;
+    process.stderr.write(
+      `[telegram-sync] failed to queue pending recognition for ${batch.batchId}: ${errorMessage}\n`,
+    );
+  }
+
+  return batch;
 }
 
 function hasPartialRecognitionFailure(batch) {

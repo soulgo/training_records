@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 
 import {
+  appendPendingRecognitionBatch,
   backfillCoreFromLatestArchiveSnapshot,
   exportTrainingMarkdown,
   getLastProcessedTelegramUpdateId,
+  markPendingRecognitionResolved,
   persistNormalizedBatch,
+  readPendingRecognitionBatches,
   readTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabase,
 } from '../tools/training-db-core.mjs';
@@ -328,6 +331,79 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.ok(calls.some(([sql]) => /insert into core\.meal/i.test(sql)));
   assert.equal(calls.at(-2)[0], 'COMMIT');
   assert.equal(calls.at(-1)[0], 'end');
+});
+
+test('pending recognition store reads, queues, and resolves database rows', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from ingest\.telegram_pending_batch/i.test(sql)) {
+        return {
+          rows: [
+            {
+              batch_id: 'single-383',
+              kind: 'image',
+              batch_payload_json: {
+                kind: 'image',
+                batchId: 'single-383',
+                messages: [{ messageId: 383, photos: [{ fileId: 'file-food-383' }] }],
+              },
+              failure_category: 'ai_service',
+              failure_reason: 'invalid JSON',
+              attempt_count: 1,
+              next_retry_at: '2026-05-31T03:10:00.000Z',
+              last_failed_at: '2026-05-31T03:00:00.000Z',
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+  const env = {
+    TRAINING_DB_ENABLED: 'true',
+    TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+  };
+  const createClient = () => fakeClient;
+
+  const pending = await readPendingRecognitionBatches({
+    env,
+    createClient,
+    now: new Date('2026-05-31T03:11:00.000Z'),
+  });
+  const queued = await appendPendingRecognitionBatch({
+    env,
+    createClient,
+    now: new Date('2026-05-31T03:12:00.000Z'),
+    nextRetryAt: new Date('2026-05-31T03:22:00.000Z'),
+    batch: {
+      kind: 'image',
+      batchId: 'single-384',
+      messages: [{ messageId: 384, photos: [{ fileId: 'file-food-384' }] }],
+    },
+    failureCategory: 'ai_service',
+    error: 'telegram_training_image returned invalid JSON',
+  });
+  const resolved = await markPendingRecognitionResolved({
+    env,
+    createClient,
+    now: new Date('2026-05-31T03:30:00.000Z'),
+    batchId: 'single-384',
+  });
+
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].batchId, 'single-383');
+  assert.equal(queued.status, 'queued');
+  assert.equal(resolved.status, 'resolved');
+  assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_pending_batch/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /update ingest\.telegram_pending_batch/i.test(sql)));
 });
 
 test('persistNormalizedBatch can merge an existing core day without failing on body feedback reads', async () => {
