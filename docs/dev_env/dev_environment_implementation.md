@@ -80,10 +80,10 @@ postgresql://training_writer:<密码>@<主机>:5432/training_records_dev
 
 | Name | Value |
 | --- | --- |
-| `DEV_TELEGRAM_WEBHOOK_URL` | `https://telegram-sync-dispatch-dev.<你的Cloudflare账号ID>.workers.dev/` |
+| `DEV_TELEGRAM_WEBHOOK_URL` | `https://telegram-sync-dispatch-dev.<你的Workers子域名>.workers.dev/` |
 | `DEV_TRAINING_DB_APP_NAME` | `training-records-dev` |
 
-<你的Cloudflare账号ID> 替换为实际 Account ID（在 Cloudflare Dashboard 右侧可见）。
+`<你的Workers子域名>` 来自 Wrangler 部署成功后输出的 Worker URL，例如当前 Dev Worker 为 `https://telegram-sync-dispatch-dev.1406221797.workers.dev/`。不要填 Cloudflare Dashboard 右侧的 `Account ID`；Account ID 通常是 32 位十六进制字符串，不能直接作为 `workers.dev` 子域名。
 
 ---
 
@@ -155,7 +155,7 @@ npx wrangler deploy -c wrangler.dev.toml
 ```
 Uploaded telegram-sync-dispatch-dev (xx sec)
 Deployed telegram-sync-dispatch-dev triggers
-  https://telegram-sync-dispatch-dev.<你的Cloudflare账号ID>.workers.dev
+  https://telegram-sync-dispatch-dev.<你的Workers子域名>.workers.dev
 ```
 
 记下这个 URL——这就是 Dev Bot 的 webhook 地址，步骤 6 要用。
@@ -211,7 +211,7 @@ Worker 代码已部署，但运行所需的 Bot Token、GitHub Token 等凭证�
 Dev Worker 的 URL 格式为：
 
 ```
-https://telegram-sync-dispatch-dev.<你的Cloudflare账号ID>.workers.dev/
+https://telegram-sync-dispatch-dev.<你的Workers子域名>.workers.dev/
 ```
 
 如果部署时没记下，可以在 Cloudflare Dashboard → Workers & Pages → telegram-sync-dispatch-dev → 顶部 Trigger 区域查看。
@@ -222,7 +222,7 @@ https://telegram-sync-dispatch-dev.<你的Cloudflare账号ID>.workers.dev/
 
 ```powershell
 $env:TELEGRAM_BOT_TOKEN = "步骤1获取的DEV_TELEGRAM_BOT_TOKEN"
-$env:TELEGRAM_WEBHOOK_URL = "https://telegram-sync-dispatch-dev.<Cloudflare账号ID>.workers.dev/"
+$env:TELEGRAM_WEBHOOK_URL = "https://telegram-sync-dispatch-dev.<你的Workers子域名>.workers.dev/"
 $env:TELEGRAM_SECRET_TOKEN = "步骤3生成的DEV_TELEGRAM_SECRET_TOKEN"
 npm run telegram:webhook
 ```

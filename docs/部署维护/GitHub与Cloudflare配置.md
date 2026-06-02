@@ -191,6 +191,8 @@ training-records-dashboard
 https://telegram-sync-dispatch.1406221797.workers.dev/
 ```
 
+其中 `1406221797` 是 Cloudflare Workers 子域名，不是 `CLOUDFLARE_ACCOUNT_ID`。不要把 Dashboard 右侧的 32 位十六进制 Account ID 填到 `workers.dev` URL 中。
+
 #### `CLOUDFLARE_PAGES_DEV_PROJECT_NAME`
 
 - 用途：Dev 分支 Cloudflare Pages 预览项目名
