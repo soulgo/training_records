@@ -13,3 +13,4 @@ telegram/inbox/
 .claude*
 .tmp*
 logs*
+runtime/*
