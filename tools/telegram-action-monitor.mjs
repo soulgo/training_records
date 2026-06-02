@@ -13,6 +13,7 @@ const stepLabels = [
   ['rebase', 'Rebase on latest main'],
   ['push', 'Push changes'],
   ['site_build', 'Build and deploy site snapshot'],
+  ['pages_deploy', 'Deploy dev site to Cloudflare Pages'],
 ];
 
 export async function main() {
