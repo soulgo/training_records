@@ -81,6 +81,29 @@ jobs:
         if: steps.detect.outputs.repo_changed == 'true'
         run: git push origin HEAD:dev
 
+      - name: Build and deploy dev site snapshot
+        id: site_build
+        if: steps.detect.outputs.repo_changed == 'true'
+        uses: ./.github/actions/site-build
+        with:
+          run_backfill: 'true'
+          run_tests: 'true'
+          deploy: 'false'
+
+      - name: Remove production custom domain file
+        if: steps.detect.outputs.repo_changed == 'true'
+        shell: bash
+        run: rm -f public/CNAME
+
+      - name: Deploy dev site to Cloudflare Pages
+        id: pages_deploy
+        if: steps.detect.outputs.repo_changed == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy public --project-name ${{ vars.CLOUDFLARE_PAGES_DEV_PROJECT_NAME || 'training-records-dev' }} --branch dev
+
       - name: Notify Telegram sync success
         if: success() && github.event_name == 'repository_dispatch'
         continue-on-error: true
@@ -101,4 +124,6 @@ jobs:
           STEP_DETECT_OUTCOME: ${{ steps.detect.outcome }}
           STEP_COMMIT_OUTCOME: ${{ steps.commit.outcome }}
           STEP_PUSH_OUTCOME: ${{ steps.push.outcome }}
+          STEP_SITE_BUILD_OUTCOME: ${{ steps.site_build.outcome }}
+          STEP_PAGES_DEPLOY_OUTCOME: ${{ steps.pages_deploy.outcome }}
         run: node tools/telegram-action-monitor.mjs
