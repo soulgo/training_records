@@ -460,6 +460,7 @@ on:
 | `GITHUB_DISPATCH_EVENT_TYPE` | Cloudflare Dev Worker Variables | 必填 |
 | `GITHUB_OWNER` | Cloudflare Dev Worker Variables | 可选（默认 `soulgo`） |
 | `GITHUB_REPO` | Cloudflare Dev Worker Variables | 可选（默认 `training_records`） |
+| `CLOUDFLARE_PAGES_DEV_PROJECT_NAME` | GitHub Variables | 可选（默认 `training-records-dev`） |
 
 ### 代码变更清单
 
@@ -469,6 +470,7 @@ on:
 | `wrangler.dev.toml` | **新增** | Dev Worker 部署配置 |
 | `.github/workflows/telegram-sync-dev.yml` | **新增** | Dev Telegram 同步工作流 |
 | `.github/workflows/deploy-cloudflare-worker-dev.yml` | **新增** | Dev Worker 自动部署工作流（可选） |
+| `.github/workflows/deploy-cloudflare-pages-dev.yml` | **新增** | Dev Cloudflare Pages 预览部署工作流 |
 | `.github/workflows/ci-tests.yml` | **修改 1 行** | push branches 增加 `dev` |
 
 ---
@@ -479,8 +481,14 @@ on:
 1. 在 `dev` 分支修改代码
 2. Dev Bot 发送测试消息 → 自动触发 Dev Sync → 写入 `training_records_dev`
 3. 本地运行 `npm test` 验证
-4. 本地运行 `npm run server` 预览站点效果
-5. Dev 分支测试通过后，创建 PR 合并到 `main`
+4. 本地运行 `npm run server` 快速预览站点效果
+5. push 到 `dev` 后等待 `Deploy Cloudflare Pages (Dev)` 完成，访问 `https://training-records-dev.pages.dev`
+6. Dev 分支测试通过后，创建 PR 合并到 `main`
+
+**Dev Pages 在线预览：**
+- 默认 Cloudflare Pages 项目名：`training-records-dev`
+- 默认 dev 分支预览地址：`https://training-records-dev.pages.dev`
+- 如修改项目名，请同步设置 GitHub Variable `CLOUDFLARE_PAGES_DEV_PROJECT_NAME`
 
 **清理 Dev 数据库：**
 ```sql

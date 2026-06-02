@@ -13,6 +13,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增 `deploy-cloudflare-pages-dev.yml`，将 `dev` 分支构建产物发布到 Cloudflare Pages 预览环境，默认地址为 `https://training-records-dev.pages.dev`。
+
+### Changed
+
+- Dev 环境文档改为包含 Cloudflare Pages 在线预览流程，保留本地 `npm run server` 作为快速调试入口。
+
 ## [1.2.0] - 2026-06-02
 
 ### Added

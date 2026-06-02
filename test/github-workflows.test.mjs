@@ -70,7 +70,10 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
     '.github/actions/site-build/action.yml',
     '.github/workflows/deploy-pages.yml',
     '.github/workflows/telegram-sync.yml',
+    '.github/workflows/telegram-sync-dev.yml',
     '.github/workflows/deploy-cloudflare-worker.yml',
+    '.github/workflows/deploy-cloudflare-worker-dev.yml',
+    '.github/workflows/deploy-cloudflare-pages-dev.yml',
     '.github/workflows/refresh-telegram-webhook.yml',
     '.github/workflows/ci-tests.yml',
     'package.json',
@@ -86,6 +89,29 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
   assert.match(workflow, /run:\s*npm ci/);
   assert.match(workflow, /run:\s*npm run test:fast/);
   assert.doesNotMatch(workflow, /actions\/deploy-pages@v4/);
+});
+
+test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pages preview', async () => {
+  const workflow = await readWorkflow('.github/workflows/deploy-cloudflare-pages-dev.yml');
+
+  assert.match(workflow, /name:\s*Deploy Cloudflare Pages \(Dev\)/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
+  assert.match(workflow, /group:\s*cloudflare-pages-dev/);
+  assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_URL\s*\}\}/);
+  assert.match(workflow, /TRAINING_DB_APP_NAME:\s*\$\{\{\s*vars\.DEV_TRAINING_DB_APP_NAME\s*\}\}/);
+  assert.match(workflow, /ref:\s*dev/);
+  assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
+  assert.match(workflow, /run_backfill:\s*'true'/);
+  assert.match(workflow, /run_tests:\s*'true'/);
+  assert.match(workflow, /deploy:\s*'false'/);
+  assert.match(workflow, /rm -f public\/CNAME/);
+  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
+  assert.match(workflow, /apiToken:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+  assert.match(workflow, /accountId:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
+  assert.match(workflow, /pages deploy public/);
+  assert.match(workflow, /--project-name \$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\}/);
+  assert.match(workflow, /--branch dev/);
 });
 
 test('deploy-cloudflare-worker workflow refreshes Telegram webhook after deployment', async () => {

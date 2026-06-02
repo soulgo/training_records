@@ -1,0 +1,60 @@
+name: Deploy Cloudflare Pages (Dev)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+    paths:
+      - 训练记录.md
+      - _config.yml
+      - source/**
+      - src/**
+      - themes/**
+      - tools/**
+      - prompts/**
+      - .github/actions/site-build/action.yml
+      - .github/workflows/deploy-cloudflare-pages-dev.yml
+      - package.json
+      - package-lock.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-pages-dev
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      TRAINING_DB_ENABLED: 'true'
+      TRAINING_DB_URL: ${{ secrets.DEV_TRAINING_DB_URL }}
+      TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
+      TRAINING_DB_APP_NAME: ${{ vars.DEV_TRAINING_DB_APP_NAME }}
+      TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
+    steps:
+      - name: Checkout dev branch
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Build dev site
+        uses: ./.github/actions/site-build
+        with:
+          run_backfill: 'true'
+          run_tests: 'true'
+          deploy: 'false'
+
+      - name: Remove production custom domain file
+        shell: bash
+        run: rm -f public/CNAME
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy public --project-name ${{ vars.CLOUDFLARE_PAGES_DEV_PROJECT_NAME || 'training-records-dev' }} --branch dev

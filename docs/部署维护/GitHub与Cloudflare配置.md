@@ -5,6 +5,7 @@
 ## 适用工作流
 
 - `.github/workflows/deploy-pages.yml`
+- `.github/workflows/deploy-cloudflare-pages-dev.yml`
 - `.github/workflows/telegram-sync.yml`
 - `.github/workflows/deploy-cloudflare-worker.yml`
 - `.github/workflows/refresh-telegram-webhook.yml`
@@ -190,6 +191,17 @@ training-records-dashboard
 https://telegram-sync-dispatch.1406221797.workers.dev/
 ```
 
+#### `CLOUDFLARE_PAGES_DEV_PROJECT_NAME`
+
+- 用途：Dev 分支 Cloudflare Pages 预览项目名
+- 使用工作流：`deploy-cloudflare-pages-dev.yml`
+- 是否必填：否；未设置时使用 `training-records-dev`
+- 默认访问地址：
+
+```text
+https://training-records-dev.pages.dev
+```
+
 ### 建议的初始值
 
 #### Secrets 模板
@@ -217,6 +229,7 @@ TRAINING_DB_ENABLED=false
 TRAINING_DB_TIMEOUT_MS=3000
 TRAINING_DB_APP_NAME=training-records-dashboard
 TELEGRAM_WEBHOOK_URL=https://telegram-sync-dispatch.1406221797.workers.dev/
+CLOUDFLARE_PAGES_DEV_PROJECT_NAME=training-records-dev
 ```
 
 ## 2. Cloudflare Worker

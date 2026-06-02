@@ -159,12 +159,15 @@ Telegram 自动流程：
 
 站点配置在 `_config.yml`，当前 URL 为 `https://soulgo.chat`，`source/CNAME` 也指向 `soulgo.chat`。GitHub Pages 自定义域名、DNS 和 Cloudflare 控制台状态需要在对应平台人工确认。
 
+Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` 发布到 Cloudflare Pages，默认地址为 `https://training-records-dev.pages.dev`。该 workflow 构建前使用 Dev 数据库变量，上传前会删除 `public/CNAME`，避免覆盖生产域名。
+
 ## GitHub Actions
 
 | Workflow | 作用 |
 | --- | --- |
 | `ci-tests.yml` | 运行 `npm test` |
 | `deploy-pages.yml` | 构建并部署 GitHub Pages |
+| `deploy-cloudflare-pages-dev.yml` | 构建 dev 分支并部署 Cloudflare Pages 预览 |
 | `telegram-sync.yml` | 处理 Telegram 同步、提交内容变化并部署站点 |
 | `deploy-cloudflare-worker.yml` | 部署 Cloudflare Worker，并刷新 Telegram webhook |
 | `refresh-telegram-webhook.yml` | 手动或每 6 小时刷新 Telegram webhook |

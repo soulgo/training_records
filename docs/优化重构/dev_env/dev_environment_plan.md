@@ -119,14 +119,15 @@
 3. Dev 可以放心执行 `backfill:core`、`export:markdown`、`reconcile:markdown` 等操作
 4. 删除重建成本极低：`DROP DATABASE training_records_dev; CREATE DATABASE ...;`
 
-### 2.4 GitHub Pages：推荐本地 `npm run server`，不额外部署
+### 2.4 Dev Pages：使用 Cloudflare Pages 在线预览
 
 | 决策 | 理由 |
 | --- | --- |
-| 不单独部署 Dev Pages | GitHub Pages 一个仓库只支持一个站点；Dev 站点构建和渲染可通过 `npm run server` 本地验证；`deploy-pages-dev.yml` 仅执行构建和测试，不部署 |
-| 可选：Cloudflare Pages 部署 | 如果需要在线预览 dev 站点，可配置 Cloudflare Pages 指向 dev 分支，但增加维护成本 |
+| GitHub Pages 只保留生产站点 | GitHub Pages 一个仓库只支持一个站点，继续由 `main` 部署到 `soulgo.chat` |
+| Dev 站点部署到 Cloudflare Pages | `dev` 分支 push 后构建 `public/`，通过 Wrangler Direct Upload 发布到独立 Pages 项目，默认地址为 `https://training-records-dev.pages.dev` |
+| 保留本地预览 | 本地仍可用 `npm run server` 快速调试，Cloudflare Pages 用于手机或远端浏览器验收 |
 
-当前站点构建链路已支持本地开发（`npm run server` = `build:data` + `hexo server`），开发期间通过本地服务验证页面渲染即可。
+Dev Pages workflow 会在上传前删除 `public/CNAME`，避免 dev 预览携带生产域名 `soulgo.chat`。
 
 ### 2.5 GitHub 分支策略：推荐 `main` + `dev` 双分支
 
@@ -278,6 +279,16 @@ Dev Bot 收到消息 → Dev Cloudflare Worker
 - 触发条件：`workflow_dispatch` 或 push 到 main 的 dev Worker 相关文件
 - 部署后自动刷新 Dev Bot webhook
 
+#### `deploy-cloudflare-pages-dev.yml`（放在 main 分支）
+
+用于部署 Dev 站点预览：
+- 触发条件：push 到 `dev` 的站点相关路径、`workflow_dispatch`
+- checkout `dev` 分支
+- 使用 `DEV_TRAINING_DB_URL` 和 `DEV_TRAINING_DB_APP_NAME`
+- 调用共享 `site-build` action 构建和测试，但不部署 GitHub Pages
+- 删除 `public/CNAME`
+- 通过 `wrangler pages deploy public --project-name ... --branch dev` 发布 Cloudflare Pages
+
 ### 4.4 Dev 同步流程详情
 
 `telegram-sync-dev.yml` 核心步骤：
@@ -370,6 +381,7 @@ dev   --- * --- * -- * -- *  (开发集成)
 | --- | --- | --- |
 | `.github/workflows/telegram-sync-dev.yml` | **新增** | Dev Telegram 同步工作流 |
 | `.github/workflows/deploy-cloudflare-worker-dev.yml` | **新增** | Dev Worker 部署工作流 |
+| `.github/workflows/deploy-cloudflare-pages-dev.yml` | **新增** | Dev Cloudflare Pages 预览部署工作流 |
 | `wrangler.dev.toml` | **新增** | Dev Worker 配置（仅修改 `name`） |
 | 现有源码 | **零修改** | `tools/telegram-sync.mjs`、`cloudflare/telegram-sync-dispatch-worker.mjs` 等均通过环境变量切换 |
 
@@ -402,6 +414,7 @@ dev   --- * --- * -- * -- *  (开发集成)
 
 - [ ] 添加 Secrets：`DEV_TELEGRAM_BOT_TOKEN`、`DEV_TRAINING_DB_URL`、`DEV_GITHUB_TOKEN`、`DEV_TELEGRAM_SECRET_TOKEN`
 - [ ] 添加 Variables：`DEV_TELEGRAM_WEBHOOK_URL`、`DEV_TRAINING_DB_APP_NAME`
+- [ ] 可选添加 Variable：`CLOUDFLARE_PAGES_DEV_PROJECT_NAME`，默认 `training-records-dev`
 - [ ] 创建 `dev` 分支并推送
 
 ### 7.3 Cloudflare 配置
@@ -410,11 +423,13 @@ dev   --- * --- * -- * -- *  (开发集成)
 - [ ] 部署 Dev Worker
 - [ ] 配置 Dev Worker Secrets（Dashboard）
 - [ ] 设置 Dev Bot webhook 指向 Dev Worker
+- [ ] 创建 Cloudflare Pages 项目 `training-records-dev`
 
 ### 7.4 工作流文件
 
 - [ ] 创建 `.github/workflows/telegram-sync-dev.yml`
 - [ ] 创建 `.github/workflows/deploy-cloudflare-worker-dev.yml`（可选，可手动部署 Dev Worker）
+- [ ] 创建 `.github/workflows/deploy-cloudflare-pages-dev.yml`
 - [ ] 修改 `.github/workflows/ci-tests.yml` 使其在 `dev` 分支 push 时也触发
 
 ---
