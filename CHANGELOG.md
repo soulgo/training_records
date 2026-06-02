@@ -20,6 +20,7 @@
 ### Changed
 
 - Dev 环境文档改为包含 Cloudflare Pages 在线预览流程，保留本地 `npm run server` 作为快速调试入口。
+- 将 Dev 环境配置手册提升到 `docs/dev_env/`，仅保留实施步骤文档，删除优化方案目录下的旧 plan 文档。
 
 ## [1.2.0] - 2026-06-02
 

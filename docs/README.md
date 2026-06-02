@@ -10,7 +10,8 @@
 4. [训练记录生成与解析](训练系统/训练记录生成与解析.md)
 5. [GitHub 与 Cloudflare 配置](部署维护/GitHub与Cloudflare配置.md)
 6. [日常维护手册](部署维护/日常维护手册.md)
-7. [常见问题排查](问题排查/常见问题排查.md)
+7. [Dev 环境搭建步骤](dev_env/dev_environment_implementation.md)
+8. [常见问题排查](问题排查/常见问题排查.md)
 
 ## 文档目录
 
@@ -19,6 +20,7 @@
 | [系统架构](系统架构/) | 系统总览、内部接口、架构图、模块依赖图 |
 | [数据流转](数据流转/) | Markdown、PostgreSQL、Telegram、Hexo、GitHub Pages 的数据链路 |
 | [训练系统](训练系统/) | 训练记录格式、Telegram 使用、图片日期归档、随想、分析和 prompt 维护 |
+| [dev_env](dev_env/) | Dev Bot、Dev 数据库、Dev Worker 和 Cloudflare Pages 预览环境配置 |
 | [部署维护](部署维护/) | GitHub Actions、Cloudflare Worker、MCP、本地和线上维护 |
 | [模块说明](模块说明/) | AI provider、AI schema 校验等内部模块说明 |
 | [问题排查](问题排查/) | 同步、构建、日期、数据库、AI、部署常见问题 |
@@ -31,4 +33,3 @@
 - 文档与代码不一致时，以代码为准，并同步修正文档。
 - `训练数据解析.md` 是构建生成的排查输出，不作为长期维护手册。
 - `历史归档/` 下文档只保留背景和方案脉络，日常维护优先阅读其它目录。
-
