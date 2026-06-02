@@ -2802,6 +2802,50 @@ test('telegram action monitor reports the failed workflow stage to the original 
   assert.match(sentMessages[0].text, /https:\/\/github\.com\/soulgo\/training_records\/actions\/runs\/123456/);
 });
 
+test('telegram action monitor reports Cloudflare Pages deploy failures', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-action-monitor-pages-'));
+  const eventPath = path.join(tempRoot, 'event.json');
+  const sentMessages = [];
+  await writeFile(
+    eventPath,
+    JSON.stringify({
+      client_payload: {
+        telegram_updates: [
+          {
+            update_id: 902,
+            message: {
+              message_id: 78,
+              chat: { id: 42 },
+            },
+          },
+        ],
+      },
+    }),
+    'utf8',
+  );
+
+  const result = await notifyTelegramActionFailure({
+    env: {
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+      GITHUB_EVENT_PATH: eventPath,
+      GITHUB_SERVER_URL: 'https://github.com',
+      GITHUB_REPOSITORY: 'soulgo/training_records',
+      GITHUB_RUN_ID: '123457',
+      TELEGRAM_BOT_TOKEN: 'token',
+      STEP_PAGES_DEPLOY_OUTCOME: 'failure',
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(result.failureStage, 'Deploy dev site to Cloudflare Pages');
+  assert.match(sentMessages[0].text, /GitHub Action 执行失败：Deploy dev site to Cloudflare Pages/);
+  assert.doesNotMatch(sentMessages[0].text, /Unknown workflow stage/);
+});
+
 test('runTelegramSync replies to /ai through the telegram ai agent without file writes', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-ai-agent-'));
   const sentMessages = [];
