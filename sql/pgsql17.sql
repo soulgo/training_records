@@ -312,6 +312,47 @@ create table if not exists ingest.telegram_recognition (
 create index if not exists idx_ingest_telegram_message_update_id
 on ingest.telegram_message (update_id desc);
 
+
+-- Telegram 识别失败待重试批次表
+create sequence if not exists ingest.telegram_pending_batch_pending_id_seq;
+
+create table if not exists ingest.telegram_pending_batch (
+  pending_id bigint primary key default nextval('ingest.telegram_pending_batch_pending_id_seq'),
+  batch_id text not null unique,
+  kind text not null default 'image',
+  status text not null default 'pending',
+  batch_payload_json jsonb not null,
+  failure_category text null,
+  failure_reason text null,
+  attempt_count integer not null default 0,
+  next_retry_at timestamptz not null default now(),
+  last_failed_at timestamptz not null default now(),
+  resolved_at timestamptz null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table ingest.telegram_pending_batch is 'Telegram 同步待重试批次表，用于保存 AI 识别失败但不能丢弃的图片批次';
+
+comment on column ingest.telegram_pending_batch.pending_id is '待重试记录自增主键';
+comment on column ingest.telegram_pending_batch.batch_id is 'Telegram 批次 ID，单图为 single-messageId，相册为 media_group_id';
+comment on column ingest.telegram_pending_batch.kind is '批次类型，当前主要为 image';
+comment on column ingest.telegram_pending_batch.status is '重试状态：pending 待重试，resolved 已成功处理，abandoned 放弃处理';
+comment on column ingest.telegram_pending_batch.batch_payload_json is '完整批次 payload，包含 messageId、updateId、chatId、photo file_id 等重放所需数据';
+comment on column ingest.telegram_pending_batch.failure_category is '最近一次失败分类，例如 ai_service、telegram_api、system_bug';
+comment on column ingest.telegram_pending_batch.failure_reason is '最近一次失败原因摘要';
+comment on column ingest.telegram_pending_batch.attempt_count is '已重试次数';
+comment on column ingest.telegram_pending_batch.next_retry_at is '下次允许重试时间';
+comment on column ingest.telegram_pending_batch.last_failed_at is '最近一次失败时间';
+comment on column ingest.telegram_pending_batch.resolved_at is '成功处理或人工关闭时间';
+comment on column ingest.telegram_pending_batch.created_at is '记录创建时间';
+comment on column ingest.telegram_pending_batch.updated_at is '记录更新时间';
+
+create index if not exists idx_ingest_telegram_pending_batch_status_retry
+on ingest.telegram_pending_batch (status, next_retry_at);
+
+create index if not exists idx_ingest_telegram_pending_batch_updated_at
+on ingest.telegram_pending_batch (updated_at desc);
 -- 16. 创建 core schema
 create schema if not exists core authorization training_writer;
 
