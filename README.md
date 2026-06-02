@@ -189,6 +189,7 @@ Telegram 自动流程：
 | 生成训练数据 | `npm run build:data` |
 | 构建站点 | `npm run build` |
 | 本地预览 | `npm run server` |
+| 同步 archive/Markdown/随想到数据库 | `npm run sync:db` |
 | Markdown 导入数据库 | `npm run import:markdown` |
 | 数据库导出 Markdown | `npm run export:markdown` |
 | Markdown 与数据库对账 | `npm run reconcile:markdown` |

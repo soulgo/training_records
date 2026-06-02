@@ -13,8 +13,13 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-02
+
 ### Added
 
+- 新增统一数据库同步命令 `npm run sync:db`，顺序执行 archive 回填、训练 Markdown 对账和随想回填，并输出 `archive`、`markdown`、`thoughts` 三段 JSON 结果。
+- 新增 `tools/sync-training-core.mjs`，在数据库不可用或单段失败时返回 `deferred`/`partial`，保持 Pages 构建部署的降级行为。
+- 新增训练核心数据库写入回归测试，覆盖单 client archive/core 读取、多日批量替换、Markdown 等价快跳过和统一同步脚本聚合结果。
 - Telegram 图片同步报告新增 `sourceImageCount`、`recognizedImageCount`、`failedImageCount` 字段，支持 1-4 张可变批次的可观测性。
 - Telegram 图片同步报告新增 `dateSources` 数组，每条含 `messageId`/`detectedDate`/`dateEvidence`/`source`，支持按图片定位日期来源。
 - Telegram 同步回执新增 `已识别 N/M` 格式的图片计数，partial failure 路径附带"失败图片已加入重试队列"提示。
@@ -24,6 +29,12 @@
 
 ### Changed
 
+- Deploy Pages 与 Telegram Sync 的数据库维护步骤改为统一调用 `npm run sync:db`，避免三段脚本重复建连和重复扫描。
+- 训练核心写入改为批量“按日期删除子表 -> upsert 父表 -> 批量插入子表”，保留整日替换语义并减少远程 PostgreSQL 往返。
+- archive 回填新增反连接快跳过；Markdown 回写新增规范化签名比较，core 与 Markdown 等价时直接返回 `unchanged`。
+- Hexo GitHub Actions cache 改为缓存实际 `db.json`，cache key 覆盖 `package-lock.json`、`_config.yml`、`source/**` 和 `themes/**`。
+- `test:fast` skip pattern 增加 `thought module pages`，将完整 Hexo generate 慢测试移出快速 CI 路径。
+- 同步项目包版本号到 `1.2.0`。
 - `analyzeTelegramBatch()` 新增 `sourceImageCount`、`recognizedImageCount`、`failedImageCount`、`dateSources` 返回字段。
 - `shouldQueueRecognitionFailure()` 支持 ready 状态 + partialFailure 的批次进入 pending recognition 队列。
 - `hasPartialRecognitionFailure()` 增加 `failedImageCount > 0` 和 `recognizedImageCount < sourceImageCount` 的计数检测。
@@ -34,6 +45,8 @@
 
 ### Fixed
 
+- 修复 Hexo cache 在 GitHub Actions 中因缓存路径不存在而无法保存的问题，改为缓存 Hexo 实际生成的 `db.json`。
+- 统一数据库同步脚本在共享 DB client 关闭失败时也会记录错误并降级返回，避免部署脚本被连接清理阶段中断。
 - Telegram AI 图片识别失败写入 pending 后，下次 sync 会立即重放一次，并在仍失败时继续更新待重试队列，避免刚入队的图片因为默认重试窗口而看起来“成功但没更新”。
 - Telegram Sync 的 Actions 日志现在输出 `recognitionPendingStatus`、`recognitionPendingError` 与 `pendingReplay`，可以直接看出图片是否已进入重试队列、是否来自 pending 重放、以及排队是否失败。
 - 修复 Telegram 饮食图片在 AI 识别返回无效 JSON 后被一次性丢弃的问题：识别失败的图片批次现在会写入数据库待重试队列，后续同步会先重放 pending 批次，成功后再入库并标记 resolved，避免首页饮食热量长期显示为空。
@@ -184,7 +197,8 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.1.9...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/soulgo/training_records/compare/v1.1.9...v1.2.0
 [1.1.9]: https://github.com/soulgo/training_records/compare/v1.1.8...v1.1.9
 [1.1.8]: https://github.com/soulgo/training_records/compare/v1.1.7...v1.1.8
 [1.1.7]: https://github.com/soulgo/training_records/compare/v1.1.6...v1.1.7

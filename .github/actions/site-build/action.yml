@@ -28,27 +28,17 @@ runs:
       uses: actions/cache@v4
       with:
         path: |
-          .hexo_cache
-        key: hexo-${{ runner.os }}-${{ hashFiles('训练记录.md', 'source/_posts/**', 'themes/**') }}
+          db.json
+        key: hexo-${{ runner.os }}-${{ hashFiles('package-lock.json', '_config.yml', 'source/**', 'themes/**') }}
 
     - name: Install dependencies
       shell: bash
       run: npm ci
 
-    - name: Backfill core from archive snapshot
+    - name: Sync archive and markdown to database
       if: ${{ inputs.run_backfill == 'true' }}
       shell: bash
-      run: npm run backfill:core
-
-    - name: Reconcile committed markdown back to core
-      if: ${{ inputs.run_backfill == 'true' }}
-      shell: bash
-      run: npm run reconcile:markdown
-
-    - name: Backfill thought markdown back to core
-      if: ${{ inputs.run_backfill == 'true' }}
-      shell: bash
-      run: npm run backfill:thoughts
+      run: npm run sync:db
 
     - name: Run tests
       if: ${{ inputs.run_tests == 'true' }}

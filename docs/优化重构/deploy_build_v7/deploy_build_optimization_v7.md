@@ -142,19 +142,21 @@ Path Validation Error: Path(s) specified in the action for caching do(es) not ex
 
 ## 3. 优化方案
 
-### P0（高收益、低风险，建议优先实施）
+### P0（高收益、低风险，已实施）
 
 #### P0-1：合并数据库回填步骤，减少建连和全量扫描
 
 **目标**：将 `backfill:core` + `reconcile:markdown` 两次数据库操作合并为一次。
 
-**方案**：
+**实施结果**：
 
-1. 新建 `tools/backfill-and-reconcile.mjs`，在一个脚本中完成：
-   - 读取 archive snapshot → 对比 core 已有日期 → 确定缺失日
-   - 解析 `训练记录.md` → 将新数据合并到同一次写入
-   - 使用**单连接、单事务**完成所有写操作
-2. 将 `site-build/action.yml` 中三个 backfill 步骤替换为一步：
+1. 新增 `tools/sync-training-core.mjs`，统一执行：
+   - archive 回填：通过数据库反连接判断是否存在 archive 有、core 无的日期。
+   - Markdown 对账：解析 `训练记录.md` 后读取目标日期 core 快照，规范化签名一致时直接返回 `unchanged`。
+   - thought 回填：保持独立事务和现有 `core.thought` 写入语义。
+2. archive 回填与 Markdown 对账在 CI 默认路径复用**同一个数据库连接**；thought 回填独立执行，避免和训练日整日替换事务耦合。
+3. 数据库不可用或单段失败时返回 `deferred`/`partial`，不阻断 Pages 构建部署。
+4. 将 `site-build/action.yml` 中三个 backfill 步骤替换为一步：
 
 ```yaml
 - name: Sync archive and markdown to database
@@ -189,24 +191,23 @@ Path Validation Error: Path(s) specified in the action for caching do(es) not ex
 
 ---
 
-### P1（中等收益，建议排入迭代）
+### P1（中等收益，已实施）
 
 #### P1-1：修复 Hexo 缓存持久化
 
-**目标**：让 `.hexo_cache` 在 GitHub Actions Cache 中生效，加速 hexo init。
+**目标**：让 Hexo database cache 在 GitHub Actions Cache 中生效，加速 hexo init。
 
-**方案**：
+**实施结果**：
 
-1. 确认 `.hexo_cache` 目录的实际路径（Hexo 默认在 `{rootDir}/.hexo_cache` 还是其他地方）
-2. 检查 `_config.yml` 中 Hexo cache 配置是否指向正确路径
-3. 修复 `actions/cache@v4` 的 path 参数，确保目录存在后再缓存
-
-在 `site-build/action.yml` 中增加一个步骤确保缓存目录存在：
+Hexo 实际缓存文件是根目录 `db.json`，不是 `.hexo_cache`。`site-build/action.yml` 已改为缓存 `db.json`，并让 cache key 覆盖会影响 Hexo database 的输入：
 
 ```yaml
-- name: Ensure Hexo cache dir exists
-  shell: bash
-  run: mkdir -p .hexo_cache
+- name: Cache Hexo
+  uses: actions/cache@v4
+  with:
+    path: |
+      db.json
+    key: hexo-${{ runner.os }}-${{ hashFiles('package-lock.json', '_config.yml', 'source/**', 'themes/**') }}
 ```
 
 **预期收益**：Hexo init 时间可能从 ~80s 降到 ~20-30s（首次缓存填充后）。
@@ -221,6 +222,11 @@ Path Validation Error: Path(s) specified in the action for caching do(es) not ex
 
 **方案**：在 `backfillCoreFromLatestArchiveSnapshot` 和 `importTrainingMarkdownToDatabase` 前增加轻量级检查（例如对比 archive snapshot 的最新日期与 core 的最新日期），如果一致则直接返回 `skipped`，无需完整读取和比对。
 
+**实施结果**：
+
+- archive 回填使用 `archive.training_day` 到 `core.training_day` 的反连接判断缺失日期，无缺失时返回 `unchanged`。
+- Markdown 对账解析目标日期集合后读取 core 快照并比较规范化签名，完全一致时返回 `unchanged` 且不写入。
+
 **预期收益**：大多数 push（没有新训练数据时）可节省 ~5-6 分钟。
 
 **风险**：低。快速跳过逻辑本质上是提前执行现有的"对比后判断 unchanged"逻辑。
@@ -232,6 +238,10 @@ Path Validation Error: Path(s) specified in the action for caching do(es) not ex
 **目标**：减少逐天串行写入的数据库往返次数。
 
 **方案**：将 `backfillCoreFromLatestArchiveSnapshot` 中的 `for (const day of missingDays) { await replaceCoreDay(...) }` 替换为批量 upsert（单条 SQL 的多行 INSERT ... ON CONFLICT）。
+
+**实施结果**：
+
+训练日写入改为批量“按日期删除子表 -> upsert 父表 -> 批量插入子表”，保留当前整日替换语义，并保持 `source_channel`、`source_batch_id` 写入口径。
 
 **预期收益**：当缺失天数较多时，可减少 ~30-60 秒。
 
@@ -280,17 +290,16 @@ on September 16th, 2026.
 
 ## 5. 实施 Checklist
 
-- [ ] **P0-1**：创建 `tools/backfill-and-reconcile.mjs` 合并脚本
-- [ ] **P0-1**：更新 `site-build/action.yml`，替换三个 backfill 步骤为一步
-- [ ] **P0-1**：更新 `package.json` 添加 `sync:db` 脚本
-- [ ] **P0-1**：运行一次完整 deploy 验证功能和耗时
-- [ ] **P0-2**：在 `package.json` 的 `test:fast` skip pattern 中增加 `thought module pages`
-- [ ] **P0-2**：运行 `npm run test:fast` 确认跳过且其他测试正常
-- [ ] **P1-1**：确认 `.hexo_cache` 目录路径
-- [ ] **P1-1**：在 `site-build/action.yml` 中增加 `mkdir -p .hexo_cache`
-- [ ] **P1-1**：验证 CI 日志中 Hexo cache 命中
-- [ ] **P1-2**：实现快速跳过检查逻辑
-- [ ] **P1-2**：添加相关测试
-- [ ] **P1-3**：实现批量 upsert 版本的 `replaceCoreDay`
-- [ ] **P1-3**：确保测试覆盖 merge 逻辑等价性
-- [ ] 每次 PR 后对比 `logs/build.txt` 中的步骤耗时
+- [x] **P0-1**：创建 `tools/sync-training-core.mjs` 统一同步脚本
+- [x] **P0-1**：更新 `site-build/action.yml`，替换三个 backfill 步骤为一步
+- [x] **P0-1**：更新 `telegram-sync.yml`，非 `repository_dispatch` 维护步骤也改为 `npm run sync:db`
+- [x] **P0-1**：更新 `package.json` 添加 `sync:db` 脚本
+- [x] **P0-2**：在 `package.json` 的 `test:fast` skip pattern 中增加 `thought module pages`
+- [x] **P0-2**：运行 `npm run test:fast` 确认跳过且其他测试正常
+- [x] **P1-1**：确认 Hexo 实际缓存文件为 `db.json`
+- [x] **P1-1**：在 `site-build/action.yml` 中缓存 `db.json`，cache key 覆盖 Hexo database 输入
+- [x] **P1-2**：实现 archive 和 Markdown 快速跳过检查逻辑
+- [x] **P1-2**：添加相关测试
+- [x] **P1-3**：实现批量写入版本的训练日整日替换
+- [x] **P1-3**：确保测试覆盖批量写入与 Markdown 等价跳过
+- [ ] 对比下一次线上 deploy 日志中的步骤耗时

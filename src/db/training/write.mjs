@@ -11,7 +11,7 @@ import {
 } from '../../domain/training/training-domain.mjs';
 import { resolveTrainingCoreConfig } from './config.mjs';
 import {
-  readArchiveTrainingSnapshotFromDatabase,
+  readArchiveTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabaseClient,
 } from './read.mjs';
 import {
@@ -127,28 +127,14 @@ export async function persistTrainingSnapshotToCore(options) {
 
   try {
     await client.connect();
-    await client.query('BEGIN');
-
-    for (const day of options.snapshot.daily ?? []) {
-      await replaceCoreDay(
-        client,
-        {
-          ...day,
-          date: day.date,
-        },
-        options.batchId ?? `markdown-import-${day.date}`,
-        processedAt,
-        options.sourceChannel ?? 'markdown_import',
-      );
-    }
-
-    await client.query('COMMIT');
-    return {
-      status: 'stored',
-      days: options.snapshot.daily?.length ?? 0,
-    };
+    return await persistTrainingSnapshotToCoreClient(client, {
+      snapshot: options.snapshot,
+      batchId: options.batchId,
+      processedAt,
+      sourceChannel: options.sourceChannel ?? 'markdown_import',
+      skipIfUnchanged: options.skipIfUnchanged ?? false,
+    });
   } catch (error) {
-    await client.query('ROLLBACK');
     throw error;
   } finally {
     await client.end();
@@ -178,61 +164,12 @@ export async function backfillCoreFromLatestArchiveSnapshot(options = {}) {
 
   try {
     await client.connect();
-    const snapshot = await readArchiveTrainingSnapshotFromDatabase({
-      env: options.env,
-      createClient: options.createClient,
-      now: processedAt,
+    return await backfillCoreFromLatestArchiveSnapshotClient(client, {
+      processedAt,
+      batchId: options.batchId,
+      sourceChannel: options.sourceChannel ?? 'archive_backfill',
     });
-    if ((snapshot.daily?.length ?? 0) === 0) {
-      return {
-        status: 'skipped',
-        reason: 'missing_archive_days',
-        daysBackfilled: 0,
-      };
-    }
-
-    const coreDayResult = await client.query(`
-      select archived_date
-      from core.training_day
-    `);
-    const existingDates = new Set(
-      coreDayResult.rows.map((row) => String(row.archived_date)).filter(Boolean),
-    );
-    const missingDays = (snapshot.daily ?? []).filter((day) => day?.date && !existingDates.has(day.date));
-
-    if (missingDays.length === 0) {
-      return {
-        status: 'unchanged',
-        reason: 'no_missing_days',
-        daysBackfilled: 0,
-      };
-    }
-
-    await client.query('BEGIN');
-
-    for (const day of missingDays) {
-      await replaceCoreDay(
-        client,
-        {
-          ...day,
-          date: day.date,
-        },
-        options.batchId ?? `archive-backfill-${day.date}`,
-        processedAt,
-        options.sourceChannel ?? 'archive_backfill',
-      );
-    }
-
-    await client.query('COMMIT');
-
-    return {
-      status: 'stored',
-      daysBackfilled: missingDays.length,
-    };
   } catch (error) {
-    try {
-      await client.query('ROLLBACK');
-    } catch {}
     throw error;
   } finally {
     await client.end();
@@ -247,7 +184,98 @@ export async function importTrainingMarkdownToDatabase(options) {
     createClient: options.createClient,
     processedAt: options.processedAt,
     sourceChannel: 'markdown_import',
+    skipIfUnchanged: options.skipIfUnchanged ?? true,
   });
+}
+
+export async function backfillCoreFromLatestArchiveSnapshotClient(client, options = {}) {
+  const processedAt = options.processedAt ?? new Date();
+  const missingDateResult = await client.query(`
+    select a.archived_date
+    from archive.training_day a
+    left join core.training_day c on c.archived_date = a.archived_date
+    where c.archived_date is null
+    order by a.archived_date asc
+  `);
+  const missingDates = missingDateResult.rows.map((row) => normalizeDateKey(row.archived_date)).filter(Boolean);
+
+  if (missingDates.length === 0) {
+    const archiveDayResult = await client.query(`
+      select archived_date
+      from archive.training_day
+      limit 1
+    `);
+    if (archiveDayResult.rows.length === 0) {
+      return {
+        status: 'skipped',
+        reason: 'missing_archive_days',
+        daysBackfilled: 0,
+      };
+    }
+    return {
+      status: 'unchanged',
+      reason: 'no_missing_days',
+      daysBackfilled: 0,
+    };
+  }
+
+  const snapshot = await readArchiveTrainingSnapshotFromDatabaseClient(client, processedAt);
+  const missingDateSet = new Set(missingDates);
+  const missingDays = (snapshot.daily ?? []).filter((day) => day?.date && missingDateSet.has(day.date));
+  if (missingDays.length === 0) {
+    return {
+      status: 'skipped',
+      reason: 'missing_archive_days',
+      daysBackfilled: 0,
+    };
+  }
+
+  await replaceCoreDays(client, missingDays, {
+    batchId: options.batchId,
+    batchIdPrefix: 'archive-backfill',
+    processedAt,
+    sourceChannel: options.sourceChannel ?? 'archive_backfill',
+  });
+
+  return {
+    status: 'stored',
+    daysBackfilled: missingDays.length,
+  };
+}
+
+export async function persistTrainingSnapshotToCoreClient(client, options) {
+  const snapshot = options.snapshot ?? { daily: [] };
+  const days = (snapshot.daily ?? []).map((day) => ({ ...day, date: day.date })).filter((day) => day.date);
+  if (days.length === 0) {
+    return {
+      status: 'skipped',
+      reason: 'missing_snapshot_days',
+      days: 0,
+    };
+  }
+
+  if (options.skipIfUnchanged) {
+    const coreDays = await readCoreDays(client, days.map((day) => day.date));
+    if (snapshotDaysEqual(days, coreDays)) {
+      return {
+        status: 'unchanged',
+        reason: 'core_matches_markdown',
+        days: days.length,
+      };
+    }
+  }
+
+  await replaceCoreDays(client, days, {
+    batchId: options.batchId,
+    batchIdPrefix: 'markdown-import',
+    processedAt: options.processedAt ?? new Date(),
+    sourceChannel: options.sourceChannel ?? 'markdown_import',
+  });
+
+  return {
+    status: 'stored',
+    days: days.length,
+  };
 }
 
 async function upsertIngestBatch(client, batch, payloadHash, processedAt) {
@@ -758,18 +786,64 @@ async function replaceCoreDay(
   processedAt,
   sourceChannel = 'telegram',
 ) {
-  // Delete child records first since we rebuild the full day — orphaned records must be cleaned up
-  await client.query(`delete from core.measurement where archived_date = $1`, [day.date]);
-  await client.query(`delete from core.activity where archived_date = $1`, [day.date]);
-  await client.query(`delete from core.meal where archived_date = $1`, [day.date]);
-  await client.query(`delete from core.training_day where archived_date = $1`, [day.date]);
+  await writeCoreDays(client, [day], {
+    batchId,
+    processedAt,
+    sourceChannel,
+  });
+}
+
+async function replaceCoreDays(client, days, options) {
+  let transactionStarted = false;
+  try {
+    await client.query('BEGIN');
+    transactionStarted = true;
+    await writeCoreDays(client, days, options);
+    await client.query('COMMIT');
+    transactionStarted = false;
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {}
+    }
+    throw error;
+  }
+}
+
+async function writeCoreDays(client, days, options) {
+  const normalizedDays = days.map((day) => ({ ...day, date: normalizeDateKey(day.date) })).filter((day) => day.date);
+  if (normalizedDays.length === 0) {
+    return;
+  }
+
+  const dates = normalizedDays.map((day) => day.date);
+  await client.query(`delete from core.measurement where archived_date = any($1::date[])`, [dates]);
+  await client.query(`delete from core.activity where archived_date = any($1::date[])`, [dates]);
+  await client.query(`delete from core.meal where archived_date = any($1::date[])`, [dates]);
+
+  const processedAtIso = (options.processedAt ?? new Date()).toISOString();
+  const dayRows = normalizedDays.map((day) => ({
+    archivedDate: day.date,
+    sourceChannel: options.sourceChannel ?? 'telegram',
+    sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
+    totalActivities: day.workoutSummary?.totalActivities ?? 0,
+    totalDurationSeconds: day.workoutSummary?.totalDurationSeconds ?? 0,
+    trainingCalories: day.workoutSummary?.trainingCalories ?? 0,
+    workoutDurationMinutes: day.workoutSummary?.workoutDurationMinutes ?? null,
+    activeHours: day.workoutSummary?.activeHours ?? null,
+    cyclingDistanceKm: day.workoutSummary?.cyclingDistanceKm ?? 0,
+    intakeCalories: day.nutrition?.totalCalories ?? null,
+    nutritionDetailsJson: JSON.stringify(day.nutrition?.details ?? []),
+    updatedAt: processedAtIso,
+  }));
 
   await client.query(
     `
       insert into core.training_day (
         archived_date,
-        source_channel,
         source_batch_id,
+        source_channel,
         total_activities,
         total_duration_seconds,
         training_calories,
@@ -780,195 +854,339 @@ async function replaceCoreDay(
         nutrition_details_json,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
+      select *
+      from unnest($1::date[],
+        $2::text[],
+        $3::text[],
+        $4::integer[],
+        $5::integer[],
+        $6::numeric[],
+        $7::integer[],
+        $8::integer[],
+        $9::numeric[],
+        $10::integer[],
+        $11::jsonb[],
+        $12::timestamptz[]
+      )
+      on conflict (archived_date) do update set
+        source_batch_id = excluded.source_batch_id,
+        source_channel = excluded.source_channel,
+        total_activities = excluded.total_activities,
+        total_duration_seconds = excluded.total_duration_seconds,
+        training_calories = excluded.training_calories,
+        workout_duration_minutes = excluded.workout_duration_minutes,
+        active_hours = excluded.active_hours,
+        cycling_distance_km = excluded.cycling_distance_km,
+        intake_calories = excluded.intake_calories,
+        nutrition_details_json = excluded.nutrition_details_json,
+        updated_at = excluded.updated_at
     `,
     [
-      day.date,
-      sourceChannel,
-      batchId,
-      day.workoutSummary.totalActivities,
-      day.workoutSummary.totalDurationSeconds,
-      day.workoutSummary.trainingCalories,
-      day.workoutSummary.workoutDurationMinutes,
-      day.workoutSummary.activeHours,
-      day.workoutSummary.cyclingDistanceKm,
-      day.nutrition.totalCalories,
-      JSON.stringify(day.nutrition.details ?? []),
-      processedAt.toISOString(),
+      dayRows.map((row) => row.archivedDate),
+      dayRows.map((row) => row.sourceBatchId),
+      dayRows.map((row) => row.sourceChannel),
+      dayRows.map((row) => row.totalActivities),
+      dayRows.map((row) => row.totalDurationSeconds),
+      dayRows.map((row) => row.trainingCalories),
+      dayRows.map((row) => row.workoutDurationMinutes),
+      dayRows.map((row) => row.activeHours),
+      dayRows.map((row) => row.cyclingDistanceKm),
+      dayRows.map((row) => row.intakeCalories),
+      dayRows.map((row) => row.nutritionDetailsJson),
+      dayRows.map((row) => row.updatedAt),
     ],
   );
 
-  // Use UPSERT for child tables too
-  if (day.measurement) {
-    const measurementKey = createHash('md5')
-      .update([day.date, day.measurement.measuredAt ?? '', day.measurement.weightKg ?? ''].join('|'))
-      .digest('hex');
-    await client.query(
-      `
-        insert into core.measurement (
-          measurement_key,
-          archived_date,
-          source_channel,
-          source_batch_id,
-          measured_at,
-          body_score,
-          weight_kg,
-          bmi,
-          body_fat_pct,
-          skeletal_muscle_kg,
-          visceral_fat_level,
-          basal_metabolism_kcal,
-          body_water_pct,
-          protein_pct,
-          bone_mass_kg,
-          fat_free_mass_kg,
-          body_age,
-          body_type,
-          updated_at
-        )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-        on conflict (measurement_key) do update set
-          source_channel = excluded.source_channel,
-          source_batch_id = excluded.source_batch_id,
-          measured_at = excluded.measured_at,
-          body_score = excluded.body_score,
-          weight_kg = excluded.weight_kg,
-          bmi = excluded.bmi,
-          body_fat_pct = excluded.body_fat_pct,
-          skeletal_muscle_kg = excluded.skeletal_muscle_kg,
-          visceral_fat_level = excluded.visceral_fat_level,
-          basal_metabolism_kcal = excluded.basal_metabolism_kcal,
-          body_water_pct = excluded.body_water_pct,
-          protein_pct = excluded.protein_pct,
-          bone_mass_kg = excluded.bone_mass_kg,
-          fat_free_mass_kg = excluded.fat_free_mass_kg,
-          body_age = excluded.body_age,
-          body_type = excluded.body_type,
-          updated_at = excluded.updated_at
-      `,
-      [
-        measurementKey,
-        day.date,
-        sourceChannel,
-        batchId,
-        day.measurement.measuredAt ?? null,
-        day.measurement.bodyScore ?? null,
-        day.measurement.weightKg ?? null,
-        day.measurement.bmi ?? null,
-        day.measurement.bodyFatPct ?? null,
-        day.measurement.skeletalMuscleKg ?? null,
-        day.measurement.visceralFatLevel ?? null,
-        day.measurement.basalMetabolismKcal ?? null,
-        day.measurement.bodyWaterPct ?? null,
-        day.measurement.proteinPct ?? null,
-        day.measurement.boneMassKg ?? null,
-        day.measurement.fatFreeMassKg ?? null,
-        day.measurement.bodyAge ?? null,
-        day.measurement.bodyType ?? null,
-        processedAt.toISOString(),
-      ],
-    );
+  await insertCoreMeasurements(client, normalizedDays, options, processedAtIso);
+  await insertCoreActivities(client, normalizedDays, options, processedAtIso);
+  await insertCoreMeals(client, normalizedDays, options, processedAtIso);
+}
+
+async function insertCoreMeasurements(client, days, options, processedAtIso) {
+  const rows = days
+    .filter((day) => day.measurement)
+    .map((day) => {
+      const measurement = day.measurement;
+      return {
+        measurementKey: createHash('md5')
+          .update([day.date, measurement.measuredAt ?? '', measurement.weightKg ?? ''].join('|'))
+          .digest('hex'),
+        archivedDate: day.date,
+        sourceChannel: options.sourceChannel ?? 'telegram',
+        sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
+        measuredAt: measurement.measuredAt ?? null,
+        bodyScore: measurement.bodyScore ?? null,
+        weightKg: measurement.weightKg ?? null,
+        bmi: measurement.bmi ?? null,
+        bodyFatPct: measurement.bodyFatPct ?? null,
+        skeletalMuscleKg: measurement.skeletalMuscleKg ?? null,
+        visceralFatLevel: measurement.visceralFatLevel ?? null,
+        basalMetabolismKcal: measurement.basalMetabolismKcal ?? null,
+        bodyWaterPct: measurement.bodyWaterPct ?? null,
+        proteinPct: measurement.proteinPct ?? null,
+        boneMassKg: measurement.boneMassKg ?? null,
+        fatFreeMassKg: measurement.fatFreeMassKg ?? null,
+        bodyAge: measurement.bodyAge ?? null,
+        bodyType: measurement.bodyType ?? null,
+        updatedAt: processedAtIso,
+      };
+    });
+  if (rows.length === 0) {
+    return;
   }
 
-  for (const activity of day.activities ?? []) {
-    const activityKey = createHash('md5')
-      .update([day.date, activity.time ?? '', activity.type ?? '', activity.detail ?? ''].join('|'))
-      .digest('hex');
-    await client.query(
-      `
-        insert into core.activity (
-          activity_key,
-          archived_date,
-          source_channel,
-          source_batch_id,
-          activity_time,
-          activity_type,
-          raw_type,
-          detail,
-          calories,
-          heart_rate,
-          distance_km,
-          avg_speed_kmh,
-          duration_text,
-          duration_seconds,
-          updated_at
-        )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-        on conflict (activity_key) do update set
-          source_channel = excluded.source_channel,
-          source_batch_id = excluded.source_batch_id,
-          activity_time = excluded.activity_time,
-          activity_type = excluded.activity_type,
-          raw_type = excluded.raw_type,
-          detail = excluded.detail,
-          calories = excluded.calories,
-          heart_rate = excluded.heart_rate,
-          distance_km = excluded.distance_km,
-          avg_speed_kmh = excluded.avg_speed_kmh,
-          duration_text = excluded.duration_text,
-          duration_seconds = excluded.duration_seconds,
-          updated_at = excluded.updated_at
-      `,
-      [
-        activityKey,
-        day.date,
-        sourceChannel,
-        batchId,
-        activity.time ?? null,
-        activity.type ?? '未知活动',
-        activity.rawType ?? activity.type ?? null,
-        activity.detail ?? null,
-        activity.calories ?? null,
-        activity.heartRate ?? null,
-        activity.distanceKm ?? null,
-        activity.avgSpeedKmh ?? null,
-        activity.durationText ?? null,
-        activity.durationSeconds ?? null,
-        processedAt.toISOString(),
-      ],
-    );
+  await client.query(
+    `
+      insert into core.measurement (
+        measurement_key,
+        archived_date,
+        source_channel,
+        source_batch_id,
+        measured_at,
+        body_score,
+        weight_kg,
+        bmi,
+        body_fat_pct,
+        skeletal_muscle_kg,
+        visceral_fat_level,
+        basal_metabolism_kcal,
+        body_water_pct,
+        protein_pct,
+        bone_mass_kg,
+        fat_free_mass_kg,
+        body_age,
+        body_type,
+        updated_at
+      )
+      select *
+      from unnest(
+        $1::text[],
+        $2::date[],
+        $3::text[],
+        $4::text[],
+        $5::text[],
+        $6::integer[],
+        $7::numeric[],
+        $8::numeric[],
+        $9::numeric[],
+        $10::numeric[],
+        $11::numeric[],
+        $12::integer[],
+        $13::numeric[],
+        $14::numeric[],
+        $15::numeric[],
+        $16::numeric[],
+        $17::integer[],
+        $18::text[],
+        $19::timestamptz[]
+      )
+      on conflict (measurement_key) do update set
+        source_channel = excluded.source_channel,
+        source_batch_id = excluded.source_batch_id,
+        measured_at = excluded.measured_at,
+        body_score = excluded.body_score,
+        weight_kg = excluded.weight_kg,
+        bmi = excluded.bmi,
+        body_fat_pct = excluded.body_fat_pct,
+        skeletal_muscle_kg = excluded.skeletal_muscle_kg,
+        visceral_fat_level = excluded.visceral_fat_level,
+        basal_metabolism_kcal = excluded.basal_metabolism_kcal,
+        body_water_pct = excluded.body_water_pct,
+        protein_pct = excluded.protein_pct,
+        bone_mass_kg = excluded.bone_mass_kg,
+        fat_free_mass_kg = excluded.fat_free_mass_kg,
+        body_age = excluded.body_age,
+        body_type = excluded.body_type,
+        updated_at = excluded.updated_at
+    `,
+    [
+      rows.map((row) => row.measurementKey),
+      rows.map((row) => row.archivedDate),
+      rows.map((row) => row.sourceChannel),
+      rows.map((row) => row.sourceBatchId),
+      rows.map((row) => row.measuredAt),
+      rows.map((row) => row.bodyScore),
+      rows.map((row) => row.weightKg),
+      rows.map((row) => row.bmi),
+      rows.map((row) => row.bodyFatPct),
+      rows.map((row) => row.skeletalMuscleKg),
+      rows.map((row) => row.visceralFatLevel),
+      rows.map((row) => row.basalMetabolismKcal),
+      rows.map((row) => row.bodyWaterPct),
+      rows.map((row) => row.proteinPct),
+      rows.map((row) => row.boneMassKg),
+      rows.map((row) => row.fatFreeMassKg),
+      rows.map((row) => row.bodyAge),
+      rows.map((row) => row.bodyType),
+      rows.map((row) => row.updatedAt),
+    ],
+  );
+}
+
+async function insertCoreActivities(client, days, options, processedAtIso) {
+  const rows = days.flatMap((day) =>
+    (day.activities ?? []).map((activity) => ({
+      activityKey: createHash('md5')
+        .update([day.date, activity.time ?? '', activity.type ?? '', activity.detail ?? ''].join('|'))
+        .digest('hex'),
+      archivedDate: day.date,
+      sourceChannel: options.sourceChannel ?? 'telegram',
+      sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
+      activityTime: activity.time ?? null,
+      activityType: activity.type ?? '未知活动',
+      rawType: activity.rawType ?? activity.type ?? null,
+      detail: activity.detail ?? null,
+      calories: activity.calories ?? null,
+      heartRate: activity.heartRate ?? null,
+      distanceKm: activity.distanceKm ?? null,
+      avgSpeedKmh: activity.avgSpeedKmh ?? null,
+      durationText: activity.durationText ?? null,
+      durationSeconds: activity.durationSeconds ?? null,
+      updatedAt: processedAtIso,
+    })),
+  );
+  if (rows.length === 0) {
+    return;
   }
 
-  for (const meal of day.nutrition.meals ?? []) {
-    const mealKey = createHash('md5')
-      .update([day.date, meal.name ?? '', meal.calories ?? ''].join('|'))
-      .digest('hex');
-    await client.query(
-      `
-        insert into core.meal (
-          meal_key,
-          archived_date,
-          source_channel,
-          source_batch_id,
-          meal_name,
-          calories,
-          recommended_min,
-          recommended_max,
-          updated_at
-        )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        on conflict (meal_key) do update set
-          source_channel = excluded.source_channel,
-          source_batch_id = excluded.source_batch_id,
-          meal_name = excluded.meal_name,
-          calories = excluded.calories,
-          recommended_min = excluded.recommended_min,
-          recommended_max = excluded.recommended_max,
-          updated_at = excluded.updated_at
-      `,
-      [
-        mealKey,
-        day.date,
-        sourceChannel,
-        batchId,
-        meal.name ?? '未命名餐次',
-        meal.calories ?? null,
-        meal.recommendedMin ?? null,
-        meal.recommendedMax ?? null,
-        processedAt.toISOString(),
-      ],
-    );
+  await client.query(
+    `
+      insert into core.activity (
+        activity_key,
+        archived_date,
+        source_channel,
+        source_batch_id,
+        activity_time,
+        activity_type,
+        raw_type,
+        detail,
+        calories,
+        heart_rate,
+        distance_km,
+        avg_speed_kmh,
+        duration_text,
+        duration_seconds,
+        updated_at
+      )
+      select *
+      from unnest(
+        $1::text[],
+        $2::date[],
+        $3::text[],
+        $4::text[],
+        $5::text[],
+        $6::text[],
+        $7::text[],
+        $8::text[],
+        $9::integer[],
+        $10::integer[],
+        $11::numeric[],
+        $12::numeric[],
+        $13::text[],
+        $14::integer[],
+        $15::timestamptz[]
+      )
+      on conflict (activity_key) do update set
+        source_channel = excluded.source_channel,
+        source_batch_id = excluded.source_batch_id,
+        activity_time = excluded.activity_time,
+        activity_type = excluded.activity_type,
+        raw_type = excluded.raw_type,
+        detail = excluded.detail,
+        calories = excluded.calories,
+        heart_rate = excluded.heart_rate,
+        distance_km = excluded.distance_km,
+        avg_speed_kmh = excluded.avg_speed_kmh,
+        duration_text = excluded.duration_text,
+        duration_seconds = excluded.duration_seconds,
+        updated_at = excluded.updated_at
+    `,
+    [
+      rows.map((row) => row.activityKey),
+      rows.map((row) => row.archivedDate),
+      rows.map((row) => row.sourceChannel),
+      rows.map((row) => row.sourceBatchId),
+      rows.map((row) => row.activityTime),
+      rows.map((row) => row.activityType),
+      rows.map((row) => row.rawType),
+      rows.map((row) => row.detail),
+      rows.map((row) => row.calories),
+      rows.map((row) => row.heartRate),
+      rows.map((row) => row.distanceKm),
+      rows.map((row) => row.avgSpeedKmh),
+      rows.map((row) => row.durationText),
+      rows.map((row) => row.durationSeconds),
+      rows.map((row) => row.updatedAt),
+    ],
+  );
+}
+
+async function insertCoreMeals(client, days, options, processedAtIso) {
+  const rows = days.flatMap((day) =>
+    (day.nutrition?.meals ?? []).map((meal) => ({
+      mealKey: createHash('md5')
+        .update([day.date, meal.name ?? '', meal.calories ?? ''].join('|'))
+        .digest('hex'),
+      archivedDate: day.date,
+      sourceChannel: options.sourceChannel ?? 'telegram',
+      sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
+      mealName: meal.name ?? '未命名餐次',
+      calories: meal.calories ?? null,
+      recommendedMin: meal.recommendedMin ?? null,
+      recommendedMax: meal.recommendedMax ?? null,
+      updatedAt: processedAtIso,
+    })),
+  );
+  if (rows.length === 0) {
+    return;
   }
+
+  await client.query(
+    `
+      insert into core.meal (
+        meal_key,
+        archived_date,
+        source_channel,
+        source_batch_id,
+        meal_name,
+        calories,
+        recommended_min,
+        recommended_max,
+        updated_at
+      )
+      select *
+      from unnest(
+        $1::text[],
+        $2::date[],
+        $3::text[],
+        $4::text[],
+        $5::text[],
+        $6::integer[],
+        $7::integer[],
+        $8::integer[],
+        $9::timestamptz[]
+      )
+      on conflict (meal_key) do update set
+        source_channel = excluded.source_channel,
+        source_batch_id = excluded.source_batch_id,
+        meal_name = excluded.meal_name,
+        calories = excluded.calories,
+        recommended_min = excluded.recommended_min,
+        recommended_max = excluded.recommended_max,
+        updated_at = excluded.updated_at
+    `,
+    [
+      rows.map((row) => row.mealKey),
+      rows.map((row) => row.archivedDate),
+      rows.map((row) => row.sourceChannel),
+      rows.map((row) => row.sourceBatchId),
+      rows.map((row) => row.mealName),
+      rows.map((row) => row.calories),
+      rows.map((row) => row.recommendedMin),
+      rows.map((row) => row.recommendedMax),
+      rows.map((row) => row.updatedAt),
+    ],
+  );
 }
 
 function normalizeBatchActivity(activity) {
@@ -987,6 +1205,221 @@ function normalizeBatchActivity(activity) {
     distanceKm: extractNumber(detail, /(\d+(?:\.\d+)?)\s*公里/),
     avgSpeedKmh: extractNumber(detail, /(?:均速|平均速度)\s*(\d+(?:\.\d+)?)\s*公里\/小时/),
   };
+}
+
+async function readCoreDays(client, dates) {
+  const normalizedDates = [...new Set(dates.map((date) => normalizeDateKey(date)).filter(Boolean))];
+  if (normalizedDates.length === 0) {
+    return [];
+  }
+
+  const dayResult = await client.query(
+    `
+      select
+        archived_date,
+        total_activities,
+        total_duration_seconds,
+        training_calories,
+        workout_duration_minutes,
+        active_hours,
+        cycling_distance_km,
+        intake_calories,
+        nutrition_details_json
+      from core.training_day
+      where archived_date = any($1::date[])
+      order by archived_date asc
+    `,
+    [normalizedDates],
+  );
+  const measurementResult = await client.query(
+    `
+      select
+        archived_date,
+        measured_at,
+        body_score,
+        weight_kg,
+        bmi,
+        body_fat_pct,
+        skeletal_muscle_kg,
+        visceral_fat_level,
+        basal_metabolism_kcal,
+        body_water_pct,
+        protein_pct,
+        bone_mass_kg,
+        fat_free_mass_kg,
+        body_age,
+        body_type
+      from core.measurement
+      where archived_date = any($1::date[])
+      order by archived_date asc, measured_at asc nulls last
+    `,
+    [normalizedDates],
+  );
+  const activityResult = await client.query(
+    `
+      select
+        archived_date,
+        activity_time,
+        activity_type,
+        raw_type,
+        detail,
+        calories,
+        heart_rate,
+        distance_km,
+        avg_speed_kmh,
+        duration_text,
+        duration_seconds
+      from core.activity
+      where archived_date = any($1::date[])
+      order by archived_date asc, activity_time asc nulls last
+    `,
+    [normalizedDates],
+  );
+  const mealResult = await client.query(
+    `
+      select
+        archived_date,
+        meal_name,
+        calories,
+        recommended_min,
+        recommended_max
+      from core.meal
+      where archived_date = any($1::date[])
+      order by archived_date asc, meal_name asc
+    `,
+    [normalizedDates],
+  );
+  const snapshot = await readTrainingSnapshotFromDatabaseClient(
+    {
+      async query(sql) {
+        if (/from core\.training_day/i.test(sql)) {
+          return dayResult;
+        }
+        if (/from core\.measurement/i.test(sql)) {
+          return measurementResult;
+        }
+        if (/from core\.activity/i.test(sql)) {
+          return activityResult;
+        }
+        if (/from core\.meal/i.test(sql)) {
+          return mealResult;
+        }
+        if (/from core\.thought/i.test(sql)) {
+          return { rows: [] };
+        }
+        throw new Error(`Unexpected SQL: ${sql}`);
+      },
+    },
+    new Date(),
+  );
+  return snapshot.daily ?? [];
+}
+
+function snapshotDaysEqual(expectedDays, actualDays) {
+  return stableStringify(expectedDays.map(normalizeDayForComparison).sort(compareDaysByDate)) ===
+    stableStringify(actualDays.map(normalizeDayForComparison).sort(compareDaysByDate));
+}
+
+function normalizeDayForComparison(day) {
+  const measurements = (Array.isArray(day.measurements) && day.measurements.length > 0
+    ? day.measurements
+    : day.measurement
+      ? [day.measurement]
+      : []
+  ).map(normalizeMeasurementForComparison);
+  const measurement = measurements.at(-1) ?? null;
+  return {
+    date: normalizeDateKey(day.date),
+    measurement,
+    measurements,
+    activities: (day.activities ?? []).map(normalizeActivityForComparison),
+    workoutSummary: {
+      totalActivities: normalizeNumber(day.workoutSummary?.totalActivities, 0),
+      totalDurationSeconds: normalizeNumber(day.workoutSummary?.totalDurationSeconds, 0),
+      trainingCalories: normalizeNumber(day.workoutSummary?.trainingCalories, 0),
+      workoutDurationMinutes: normalizeNumber(day.workoutSummary?.workoutDurationMinutes, null),
+      activeHours: normalizeNumber(day.workoutSummary?.activeHours, null),
+      cyclingDistanceKm: normalizeNumber(day.workoutSummary?.cyclingDistanceKm, 0),
+    },
+    nutrition: {
+      meals: (day.nutrition?.meals ?? []).map(normalizeMealForComparison),
+      totalCalories: normalizeNumber(day.nutrition?.totalCalories, null),
+      details: day.nutrition?.details ?? [],
+    },
+  };
+}
+
+function normalizeMeasurementForComparison(measurement) {
+  return {
+    archivedDate: normalizeDateKey(measurement.archivedDate),
+    measuredAt: measurement.measuredAt ?? null,
+    bodyScore: normalizeNumber(measurement.bodyScore, null),
+    weightKg: normalizeNumber(measurement.weightKg, null),
+    bmi: normalizeNumber(measurement.bmi, null),
+    bodyFatPct: normalizeNumber(measurement.bodyFatPct, null),
+    skeletalMuscleKg: normalizeNumber(measurement.skeletalMuscleKg, null),
+    visceralFatLevel: normalizeNumber(measurement.visceralFatLevel, null),
+    basalMetabolismKcal: normalizeNumber(measurement.basalMetabolismKcal, null),
+    bodyWaterPct: normalizeNumber(measurement.bodyWaterPct, null),
+    proteinPct: normalizeNumber(measurement.proteinPct, null),
+    boneMassKg: normalizeNumber(measurement.boneMassKg, null),
+    fatFreeMassKg: normalizeNumber(measurement.fatFreeMassKg, null),
+    bodyAge: normalizeNumber(measurement.bodyAge, null),
+    bodyType: measurement.bodyType ?? null,
+  };
+}
+
+function normalizeActivityForComparison(activity) {
+  return {
+    time: activity.time ?? null,
+    type: activity.type ?? '未知活动',
+    rawType: activity.rawType ?? activity.type ?? null,
+    detail: activity.detail ?? null,
+    calories: normalizeNumber(activity.calories, null),
+    heartRate: normalizeNumber(activity.heartRate, null),
+    distanceKm: normalizeNumber(activity.distanceKm, null),
+    avgSpeedKmh: normalizeNumber(activity.avgSpeedKmh, null),
+    durationText: activity.durationText ?? null,
+    durationSeconds: normalizeNumber(activity.durationSeconds, null),
+  };
+}
+
+function normalizeMealForComparison(meal) {
+  return {
+    name: meal.name ?? '未命名餐次',
+    calories: normalizeNumber(meal.calories, null),
+    recommendedMin: normalizeNumber(meal.recommendedMin, null),
+    recommendedMax: normalizeNumber(meal.recommendedMax, null),
+  };
+}
+
+function compareDaysByDate(left, right) {
+  return left.date.localeCompare(right.date);
+}
+
+function stableStringify(value) {
+  return JSON.stringify(value);
+}
+
+function normalizeNumber(value, fallback) {
+  if (value === null || value === undefined || value === '') {
+    return fallback;
+  }
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function normalizeDateKey(value) {
+  if (value instanceof Date) {
+    return [
+      value.getFullYear(),
+      String(value.getMonth() + 1).padStart(2, '0'),
+      String(value.getDate()).padStart(2, '0'),
+    ].join('-');
+  }
+
+  const match = String(value ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : String(value ?? '');
 }
 
 function extractNumber(value, regex) {

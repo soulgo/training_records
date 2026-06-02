@@ -8,7 +8,9 @@ export {
 export {
   persistNormalizedBatch,
   persistTrainingSnapshotToCore,
+  persistTrainingSnapshotToCoreClient,
   backfillCoreFromLatestArchiveSnapshot,
+  backfillCoreFromLatestArchiveSnapshotClient,
   importTrainingMarkdownToDatabase,
 } from './training-db-write.mjs';
 export {

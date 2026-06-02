@@ -47,17 +47,9 @@ jobs:
         id: install
         run: npm ci
 
-      - name: Backfill core from archive snapshot
+      - name: Sync archive and markdown to database
         if: github.event_name != 'repository_dispatch'
-        run: npm run backfill:core
-
-      - name: Reconcile committed markdown back to core
-        if: github.event_name != 'repository_dispatch'
-        run: npm run reconcile:markdown
-
-      - name: Backfill thought markdown back to core
-        if: github.event_name != 'repository_dispatch'
-        run: npm run backfill:thoughts
+        run: npm run sync:db
 
       - name: Sync Telegram updates
         id: sync

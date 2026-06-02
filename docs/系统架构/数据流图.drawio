@@ -54,7 +54,7 @@ DB 失败待补偿队列" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E
 source/_data/dashboardView.json" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontColor=#000000;strokeWidth=3" vertex="1" parent="f-store"><mxGeometry x="480" y="670" width="360" height="70" as="geometry"/></mxCell>
         <mxCell id="f-db-log" value="runtime/training-db-sync.ndjson
 archive 失败日志" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontColor=#000000;strokeWidth=1" vertex="1" parent="f-store"><mxGeometry x="880" y="670" width="320" height="70" as="geometry"/></mxCell>
-        <mxCell id="f-hexo-cache" value=".hexo_cache
+        <mxCell id="f-hexo-cache" value="db.json
 GitHub Actions cache" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontColor=#000000;strokeWidth=1" vertex="1" parent="f-store"><mxGeometry x="1240" y="670" width="260" height="70" as="geometry"/></mxCell>
         <mxCell id="f-dashboard-ejs" value="themes/cactus/layout/dashboard.ejs
 读取 site.data" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontColor=#000000;strokeWidth=3" vertex="1" parent="f-render"><mxGeometry x="50" y="860" width="330" height="70" as="geometry"/></mxCell>

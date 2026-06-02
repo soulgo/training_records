@@ -7,8 +7,10 @@ import {
   backfillCoreFromLatestArchiveSnapshot,
   exportTrainingMarkdown,
   getLastProcessedTelegramUpdateId,
+  importTrainingMarkdownToDatabase,
   markPendingRecognitionResolved,
   persistNormalizedBatch,
+  persistTrainingSnapshotToCore,
   readPendingRecognitionBatches,
   readTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabase,
@@ -807,6 +809,9 @@ test('backfillCoreFromLatestArchiveSnapshot writes only archive dates missing fr
       },
       async query(sql, params) {
         calls.push([sql, params]);
+        if (/from archive\.training_day\s+a/i.test(sql)) {
+          return { rows: [{ archived_date: '2026-04-03' }] };
+        }
         if (/from archive\.training_day/i.test(sql)) {
           return {
             rows: [
@@ -900,8 +905,276 @@ test('backfillCoreFromLatestArchiveSnapshot writes only archive dates missing fr
     ([sql]) => typeof sql === 'string' && /insert into core\.training_day/i.test(sql),
   );
   assert.equal(dayInserts.length, 1);
-  assert.equal(dayInserts[0][1][0], '2026-04-03');
-  assert.equal(dayInserts[0][1][1], 'archive_backfill');
+  assert.deepEqual(dayInserts[0][1][0], ['2026-04-03']);
+  assert.deepEqual(dayInserts[0][1][2], ['archive_backfill']);
+});
+
+test('backfillCoreFromLatestArchiveSnapshot reads archive and core through one client', async () => {
+  const clients = [];
+
+  function createClient() {
+    const calls = [];
+    const client = {
+      calls,
+      async connect() {
+        calls.push(['connect']);
+      },
+      async query(sql, params) {
+        calls.push([sql, params]);
+        if (/from archive\.training_day\s+a/i.test(sql)) {
+          return { rows: [{ archived_date: '2026-04-03' }] };
+        }
+        if (/from archive\.training_day/i.test(sql)) {
+          return {
+            rows: [
+              {
+                archived_date: '2026-04-03',
+                total_activities: 1,
+                total_duration_seconds: 1920,
+                training_calories: 459,
+                workout_duration_minutes: 32,
+                active_hours: 13,
+                cycling_distance_km: 0,
+                intake_calories: null,
+              },
+            ],
+          };
+        }
+        if (/from archive\.training_measurement/i.test(sql)) {
+          return { rows: [] };
+        }
+        if (/from archive\.training_activity/i.test(sql)) {
+          return { rows: [] };
+        }
+        if (/from archive\.training_meal/i.test(sql)) {
+          return { rows: [] };
+        }
+        return { rows: [] };
+      },
+      async end() {
+        calls.push(['end']);
+      },
+    };
+    clients.push(client);
+    return client;
+  }
+
+  const result = await backfillCoreFromLatestArchiveSnapshot({
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient,
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.equal(clients.length, 1);
+  assert.ok(clients[0].calls.some(([sql]) => /from archive\.training_day/i.test(sql)));
+  assert.ok(clients[0].calls.some(([sql]) => /insert into core\.training_day/i.test(sql)));
+});
+
+test('persistTrainingSnapshotToCore replaces multiple days with batched core writes', async () => {
+  const calls = [];
+  const snapshot = {
+    daily: [
+      buildCoreTestDay('2026-04-03', { calories: 459, activityTime: '20:18', mealName: '晚餐' }),
+      buildCoreTestDay('2026-04-04', { calories: 375, activityTime: '07:30', mealName: '早餐' }),
+    ],
+  };
+
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await persistTrainingSnapshotToCore({
+    snapshot,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+    sourceChannel: 'markdown_import',
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.equal(result.days, 2);
+
+  const deleteMeasurements = calls.filter(
+    ([sql]) => typeof sql === 'string' && /delete from core\.measurement/i.test(sql),
+  );
+  const dayInserts = calls.filter(
+    ([sql]) => typeof sql === 'string' && /insert into core\.training_day/i.test(sql),
+  );
+  const activityInserts = calls.filter(
+    ([sql]) => typeof sql === 'string' && /insert into core\.activity/i.test(sql),
+  );
+
+  assert.equal(deleteMeasurements.length, 1);
+  assert.match(deleteMeasurements[0][0], /archived_date = any\(\$1::date\[\]\)/i);
+  assert.deepEqual(deleteMeasurements[0][1][0], ['2026-04-03', '2026-04-04']);
+  assert.equal(dayInserts.length, 1);
+  assert.match(dayInserts[0][0], /unnest\(\$1::date\[\]/i);
+  assert.deepEqual(dayInserts[0][1][0], ['2026-04-03', '2026-04-04']);
+  assert.deepEqual(dayInserts[0][1][1], ['markdown-import-2026-04-03', 'markdown-import-2026-04-04']);
+  assert.equal(activityInserts.length, 1);
+  assert.deepEqual(activityInserts[0][1][1], ['2026-04-03', '2026-04-04']);
+});
+
+test('importTrainingMarkdownToDatabase returns unchanged when core already matches markdown', async () => {
+  const calls = [];
+  const markdown = `# 训练记录
+
+### 2026-04-03
+
+#### 当日体脂秤截图记录
+
+- 测量时间：2026-04-03 07:00
+- 身体得分：75分
+- 体重：72.5 kg
+- BMI：23.4
+- 体脂率：22.1%
+- 骨骼肌量：30.5 kg
+
+#### 当日运动截图记录
+
+##### 当日活动总览
+
+- 活动热量：459千卡
+- 锻炼时长：32分钟
+- 活动小时数：13小时
+
+##### 活动明细
+
+- 20:18 力量训练：总消耗459千卡，时长00:32:00
+
+#### 2026-04-03 饮食截图记录
+
+##### 餐次汇总
+
+- 晚餐：800千卡，建议范围317–740千卡
+- 当日截图内已记录总热量：800千卡
+`;
+
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from core\.training_day/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-04-03',
+              total_activities: 1,
+              total_duration_seconds: 1920,
+              training_calories: 459,
+              workout_duration_minutes: 32,
+              active_hours: 13,
+              cycling_distance_km: 0,
+              intake_calories: 800,
+              nutrition_details_json: [],
+            },
+          ],
+        };
+      }
+      if (/from core\.measurement/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-04-03',
+              measured_at: '2026-04-03 07:00',
+              body_score: 75,
+              weight_kg: 72.5,
+              bmi: 23.4,
+              body_fat_pct: 22.1,
+              skeletal_muscle_kg: 30.5,
+              visceral_fat_level: null,
+              basal_metabolism_kcal: null,
+              body_water_pct: null,
+              protein_pct: null,
+              bone_mass_kg: null,
+              fat_free_mass_kg: null,
+              body_age: null,
+              body_type: null,
+            },
+          ],
+        };
+      }
+      if (/from core\.activity/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-04-03',
+              activity_time: '20:18',
+              activity_type: '力量训练',
+              raw_type: '力量训练',
+              detail: '总消耗459千卡，时长00:32:00',
+              calories: 459,
+              heart_rate: null,
+              distance_km: null,
+              avg_speed_kmh: null,
+              duration_text: '00:32:00',
+              duration_seconds: 1920,
+            },
+          ],
+        };
+      }
+      if (/from core\.meal/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-04-03',
+              meal_name: '晚餐',
+              calories: 800,
+              recommended_min: 317,
+              recommended_max: 740,
+            },
+          ],
+        };
+      }
+      if (/from core\.thought/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await importTrainingMarkdownToDatabase({
+    markdown,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  assert.deepEqual(result, {
+    status: 'unchanged',
+    reason: 'core_matches_markdown',
+    days: 1,
+  });
+  assert.equal(calls.some(([sql]) => /delete from core\.measurement/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)), false);
 });
 
 test('exportTrainingMarkdown renders a readable markdown view from the canonical snapshot', async () => {
@@ -972,3 +1245,75 @@ test('exportTrainingMarkdown renders a readable markdown view from the canonical
   assert.match(markdown, /#### 2026-05-09 饮食截图记录/);
   assert.match(markdown, /- 19:13 力量训练：总消耗241千卡/);
 });
+
+function buildCoreTestDay(date, { calories, activityTime, mealName }) {
+  return {
+    date,
+    measurement: {
+      archivedDate: date,
+      measuredAt: `${date} 07:00`,
+      bodyScore: 75,
+      weightKg: 72.5,
+      bmi: 23.4,
+      bodyFatPct: 22.1,
+      skeletalMuscleKg: 30.5,
+      visceralFatLevel: null,
+      basalMetabolismKcal: null,
+      bodyWaterPct: null,
+      proteinPct: null,
+      boneMassKg: null,
+      fatFreeMassKg: null,
+      bodyAge: null,
+      bodyType: null,
+    },
+    measurements: [
+      {
+        archivedDate: date,
+        measuredAt: `${date} 07:00`,
+        bodyScore: 75,
+        weightKg: 72.5,
+        bmi: 23.4,
+        bodyFatPct: 22.1,
+        skeletalMuscleKg: 30.5,
+        visceralFatLevel: null,
+        basalMetabolismKcal: null,
+        bodyWaterPct: null,
+        proteinPct: null,
+        boneMassKg: null,
+        fatFreeMassKg: null,
+        bodyAge: null,
+        bodyType: null,
+      },
+    ],
+    activities: [
+      {
+        time: activityTime,
+        type: '力量训练',
+        rawType: '力量训练',
+        detail: `总消耗${calories}千卡，时长00:32:00`,
+        calories,
+        heartRate: null,
+        distanceKm: null,
+        avgSpeedKmh: null,
+        durationText: '00:32:00',
+        durationSeconds: 1920,
+      },
+    ],
+    workoutSummary: {
+      totalActivities: 1,
+      totalDurationSeconds: 1920,
+      trainingCalories: calories,
+      workoutDurationMinutes: 32,
+      activeHours: 13,
+      cyclingDistanceKm: 0,
+      countsByType: {
+        力量训练: 1,
+      },
+    },
+    nutrition: {
+      meals: [{ name: mealName, calories: 800, recommendedMin: 317, recommendedMax: 740 }],
+      totalCalories: 800,
+      details: [],
+    },
+  };
+}

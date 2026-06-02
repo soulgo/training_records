@@ -17,14 +17,16 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
   assert.match(action, /node-version:\s*22/);
   assert.match(action, /cache:\s*npm/);
   assert.match(action, /actions\/cache@v4/);
-  assert.match(action, /path:\s*\|\s*\n\s*\.hexo_cache/);
+  assert.match(action, /path:\s*\|\s*\n\s*db\.json/);
   assert.match(
     action,
-    /key:\s*hexo-\$\{\{\s*runner\.os\s*\}\}-\$\{\{\s*hashFiles\('训练记录\.md', 'source\/_posts\/\*\*', 'themes\/\*\*'\)\s*\}\}/,
+    /key:\s*hexo-\$\{\{\s*runner\.os\s*\}\}-\$\{\{\s*hashFiles\('package-lock\.json', '_config\.yml', 'source\/\*\*', 'themes\/\*\*'\)\s*\}\}/,
   );
-  assert.match(action, /- name: Backfill core from archive snapshot/);
-  assert.match(action, /- name: Reconcile committed markdown back to core/);
-  assert.match(action, /- name: Backfill thought markdown back to core/);
+  assert.match(action, /- name: Sync archive and markdown to database/);
+  assert.match(action, /run:\s*npm run sync:db/);
+  assert.doesNotMatch(action, /run:\s*npm run backfill:core/);
+  assert.doesNotMatch(action, /run:\s*npm run reconcile:markdown/);
+  assert.doesNotMatch(action, /run:\s*npm run backfill:thoughts/);
   assert.match(action, /- name: Run tests/);
   assert.match(action, /- name: Build site data and static files/);
   assert.match(action, /- name: Verify generated site artifact/);
@@ -165,20 +167,27 @@ test('telegram-sync workflow keeps change detection and maintenance gating intac
   assert.match(workflow, /- name: Detect changes/);
   assert.match(workflow, /repo_changed=false/);
   assert.match(workflow, /content_changed=false/);
-  for (const stepName of [
-    'Backfill core from archive snapshot',
-    'Reconcile committed markdown back to core',
-    'Backfill thought markdown back to core',
-    'Export markdown from database snapshot',
-  ]) {
-    assert.match(
-      workflow,
-      new RegExp(`- name: ${escapeRegExp(stepName)}\\n\\s+if: github\\.event_name != 'repository_dispatch'`),
-    );
-  }
+  assert.match(
+    workflow,
+    /- name: Sync archive and markdown to database\n\s+if: github\.event_name != 'repository_dispatch'\n\s+run:\s*npm run sync:db/,
+  );
+  assert.match(
+    workflow,
+    /- name: Export markdown from database snapshot\n\s+if: github\.event_name != 'repository_dispatch'/,
+  );
+  assert.doesNotMatch(workflow, /run:\s*npm run backfill:core/);
+  assert.doesNotMatch(workflow, /run:\s*npm run reconcile:markdown/);
+  assert.doesNotMatch(workflow, /run:\s*npm run backfill:thoughts/);
   assert.match(workflow, /- name: Commit sync results\s*\n\s*id: commit\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true'/);
   assert.match(workflow, /- name: Rebase on latest main\s*\n\s*id: rebase\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true'/);
   assert.match(workflow, /- name: Push changes\s*\n\s*id: push\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true'/);
+});
+
+test('package fast tests skip the slow thought module page render and exposes sync db', async () => {
+  const packageJson = JSON.parse(await readFile(new URL('package.json', rootDir), 'utf8'));
+
+  assert.match(packageJson.scripts['test:fast'], /thought module pages/);
+  assert.equal(packageJson.scripts['sync:db'], 'node tools/sync-training-core.mjs');
 });
 
 test('telegram-sync workflow reports repository dispatch failures back to Telegram', async () => {
