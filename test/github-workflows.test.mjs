@@ -222,6 +222,23 @@ test('telegram-sync dev workflow only handles dev dispatches and writes dev bran
   assert.match(workflow, /run:\s*git push origin HEAD:dev/);
 });
 
+test('telegram-sync dev workflow deploys Pages after bot-created changes', async () => {
+  const workflow = await readWorkflow('.github/workflows/telegram-sync-dev.yml');
+
+  assert.match(workflow, /- name: Build and deploy dev site snapshot\s*\n\s+id: site_build/);
+  assert.match(workflow, /if: steps\.detect\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /run_backfill:\s*'true'/);
+  assert.match(workflow, /run_tests:\s*'true'/);
+  assert.match(workflow, /deploy:\s*'false'/);
+  assert.match(workflow, /- name: Remove production custom domain file/);
+  assert.match(workflow, /rm -f public\/CNAME/);
+  assert.match(workflow, /- name: Deploy dev site to Cloudflare Pages/);
+  assert.match(
+    workflow,
+    /command: pages deploy public --project-name \$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\} --branch dev/,
+  );
+});
+
 test('dev Worker config dispatches to the dev Telegram workflow event', async () => {
   const config = await readFile(new URL('wrangler.dev.toml', rootDir), 'utf8');
 
