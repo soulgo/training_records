@@ -2,6 +2,9 @@ name = "telegram-sync-dispatch-dev"
 main = "cloudflare/telegram-sync-dispatch-worker.mjs"
 compatibility_date = "2026-05-14"
 
+[vars]
+GITHUB_DISPATCH_EVENT_TYPE = "telegram_update_dev"
+
 [[durable_objects.bindings]]
 name = "TELEGRAM_ALBUM_BUFFER"
 class_name = "TelegramAlbumBuffer"

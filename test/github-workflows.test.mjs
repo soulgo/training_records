@@ -209,6 +209,26 @@ test('telegram-sync workflow keeps change detection and maintenance gating intac
   assert.match(workflow, /- name: Push changes\s*\n\s*id: push\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true'/);
 });
 
+test('telegram-sync dev workflow only handles dev dispatches and writes dev branch', async () => {
+  const workflow = await readWorkflow('.github/workflows/telegram-sync-dev.yml');
+
+  assert.match(workflow, /name:\s*Telegram Sync \(Dev\)/);
+  assert.match(workflow, /repository_dispatch:\s*\n\s+types:\s*\n\s+- telegram_update_dev/);
+  assert.doesNotMatch(workflow, /-\s*telegram_update\s*(?:\n|$)/);
+  assert.match(workflow, /- name: Checkout dev branch\s*\n\s+uses: actions\/checkout@v4\s*\n\s+with:\s*\n\s+ref:\s*dev/);
+  assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_URL\s*\}\}/);
+  assert.match(workflow, /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.DEV_TELEGRAM_BOT_TOKEN\s*\}\}/);
+  assert.match(workflow, /git commit -m "chore\(dev\): sync Telegram updates"/);
+  assert.match(workflow, /run:\s*git push origin HEAD:dev/);
+});
+
+test('dev Worker config dispatches to the dev Telegram workflow event', async () => {
+  const config = await readFile(new URL('wrangler.dev.toml', rootDir), 'utf8');
+
+  assert.match(config, /name\s*=\s*"telegram-sync-dispatch-dev"/);
+  assert.match(config, /\[vars\]\s*\n(?:.*\n)*?GITHUB_DISPATCH_EVENT_TYPE\s*=\s*"telegram_update_dev"/);
+});
+
 test('package fast tests skip the slow thought module page render and exposes sync db', async () => {
   const packageJson = JSON.parse(await readFile(new URL('package.json', rootDir), 'utf8'));
 
