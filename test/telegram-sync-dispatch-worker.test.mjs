@@ -93,6 +93,34 @@ test('handleTelegramWebhook falls back to the documented repository when owner a
   assert.equal(calls[0].url, 'https://api.github.com/repos/soulgo/training_records/dispatches');
 });
 
+test('handleTelegramWebhook dispatches with a configured GitHub event type', async () => {
+  const calls = [];
+  const request = createTelegramRequest({
+    update_id: 128,
+    message: {
+      message_id: 8,
+    },
+  });
+
+  const response = await handleTelegramWebhook(
+    request,
+    {
+      ...createEnv(),
+      GITHUB_DISPATCH_EVENT_TYPE: 'telegram_update_dev',
+    },
+    {
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return new Response(null, { status: 204 });
+      },
+    },
+  );
+
+  assert.equal(response.status, 202);
+  assert.equal(calls.length, 1);
+  assert.equal(JSON.parse(calls[0].init.body).event_type, 'telegram_update_dev');
+});
+
 test('handleTelegramWebhook notifies Telegram when the GitHub token is missing', async () => {
   const calls = [];
   const request = createTelegramRequest({
@@ -400,6 +428,41 @@ test('TelegramAlbumBuffer deduplicates repeated updates inside the same album ba
       ],
     },
   });
+});
+
+test('TelegramAlbumBuffer dispatches with a configured GitHub event type after the alarm fires', async () => {
+  const calls = [];
+  const env = {
+    ...createEnv(),
+    GITHUB_DISPATCH_EVENT_TYPE: 'telegram_update_dev',
+    __dispatchFetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return new Response(null, { status: 204 });
+    },
+  };
+  const state = createDurableObjectState();
+  const buffer = new TelegramAlbumBuffer(state, env);
+
+  await buffer.fetch(
+    new Request('https://worker.example.com/buffer', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        update: {
+          update_id: 302,
+          message: {
+            message_id: 32,
+            media_group_id: 'album-dev',
+            chat: { id: 7 },
+          },
+        },
+      }),
+    }),
+  );
+  await buffer.alarm();
+
+  assert.equal(calls.length, 1);
+  assert.equal(JSON.parse(calls[0].init.body).event_type, 'telegram_update_dev');
 });
 
 test('handleTelegramWebhook rejects requests with the wrong Telegram secret', async () => {

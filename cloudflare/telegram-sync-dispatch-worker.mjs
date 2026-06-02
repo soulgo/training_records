@@ -322,6 +322,7 @@ async function safeReadText(response) {
 
 async function dispatchTelegramUpdates({ fetchImpl, env, updates }) {
   const { owner, repo } = resolveGithubRepository(env);
+  const eventType = env?.GITHUB_DISPATCH_EVENT_TYPE?.trim() || 'telegram_update';
   return fetchImpl(
     `${env.GITHUB_API_BASE_URL?.trim() || GITHUB_API_BASE_URL}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dispatches`,
     {
@@ -333,7 +334,7 @@ async function dispatchTelegramUpdates({ fetchImpl, env, updates }) {
         'user-agent': 'telegram-sync-dispatch-worker',
       },
       body: JSON.stringify({
-        event_type: 'telegram_update',
+        event_type: eventType,
         client_payload: {
           telegram_updates: updates,
         },
