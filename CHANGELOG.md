@@ -16,11 +16,13 @@
 ### Added
 
 - 新增 `deploy-cloudflare-pages-dev.yml`，将 `dev` 分支构建产物发布到 Cloudflare Pages 预览环境，默认地址为 `https://training-records-dev.pages.dev`。
+- 新增睡眠截图支持：Telegram 图片识别、训练解析和数据库归档现在可记录睡眠时长、入睡/起床时间与睡眠阶段摘要。
 
 ### Changed
 
 - Dev 环境文档改为包含 Cloudflare Pages 在线预览流程，保留本地 `npm run server` 作为快速调试入口。
 - 将 Dev 环境配置手册提升到 `docs/dev_env/`，仅保留实施步骤文档，删除优化方案目录下的旧 plan 文档。
+- 训练快照与 Telegram 同步链路开始汇总睡眠数据，便于首页与分析模块读取恢复相关指标。
 
 ### Fixed
 

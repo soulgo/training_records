@@ -46,17 +46,30 @@ export function emptyNutrition() {
   };
 }
 
+export function emptySleep() {
+  return {
+    records: [],
+    totalSleepMinutes: null,
+    nightSleepMinutes: null,
+    napMinutes: null,
+    sleepStartTime: null,
+    sleepEndTime: null,
+    deepSleepMinutes: null,
+    lightSleepMinutes: null,
+    remSleepMinutes: null,
+    awakeMinutes: null,
+  };
+}
+
 export function inferMealSlot(value) {
   const trimmed = value?.trim();
   if (!trimmed) {
     return null;
   }
-  // 标准餐次：直接返回
   if (/^(早餐|午餐|晚餐|加餐)$/.test(trimmed)) {
     return trimmed;
   }
 
-  // 从括号内提取餐次
   const parenthetical = trimmed.match(/[（(]([^）)]+)[）)]/);
   if (parenthetical) {
     const fromParentheses = parenthetical[1].match(/早餐|午餐|晚餐|加餐/)?.[0];
@@ -65,13 +78,11 @@ export function inferMealSlot(value) {
     }
   }
 
-  // 从文本中提取任何标准餐次
   const mealType = trimmed.match(/早餐|午餐|晚餐|加餐/)?.[0];
   if (mealType) {
     return mealType;
   }
 
-  // 若无标准餐次，但包含食物信息，返回原始名称作为自定义餐次
   if (trimmed && trimmed.length > 0) {
     return trimmed;
   }
@@ -100,6 +111,20 @@ export function normalizeActivityType(type) {
   }
   if (normalized === '自由训练' || normalized?.startsWith('燃脂训练')) {
     return '燃脂训练';
+  }
+  return normalized;
+}
+
+export function normalizeSleepType(type) {
+  const normalized = type?.trim();
+  if (!normalized) {
+    return '夜间睡眠';
+  }
+  if (/午睡|小睡|nap/i.test(normalized)) {
+    return '午睡';
+  }
+  if (/夜间|睡眠/i.test(normalized)) {
+    return '夜间睡眠';
   }
   return normalized;
 }
@@ -157,6 +182,16 @@ export function parseFirstMatch(value, regex) {
   return match ? Number(match[1]) : null;
 }
 
+export function parseMinutesText(value) {
+  if (!value) return null;
+  const match = String(value).match(/(\d+)小时(?:(\d+)分)?|(?:(\d+)分)(?:(\d+)秒)?/);
+  if (!match) return null;
+  if (match[1]) {
+    return Number(match[1]) * 60 + Number(match[2] ?? 0);
+  }
+  return Number(match[3] ?? 0);
+}
+
 export function toNullableNumber(value) {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -201,11 +236,33 @@ export function summarizeActivities(activities, workoutDailySummary = null) {
   };
 }
 
+export function summarizeSleep(sleepRecords) {
+  const records = sleepRecords.filter(Boolean);
+  if (!records.length) {
+    return emptySleep();
+  }
+  const latest = records.at(-1);
+  const sum = (key) => records.reduce((total, item) => total + Number(item[key] ?? 0), 0) || null;
+  return {
+    records,
+    totalSleepMinutes: latest.totalSleepMinutes ?? sum('totalSleepMinutes'),
+    nightSleepMinutes: latest.nightSleepMinutes ?? sum('nightSleepMinutes'),
+    napMinutes: latest.napMinutes ?? sum('napMinutes'),
+    sleepStartTime: latest.sleepStartTime ?? null,
+    sleepEndTime: latest.sleepEndTime ?? null,
+    deepSleepMinutes: latest.deepSleepMinutes ?? sum('deepSleepMinutes'),
+    lightSleepMinutes: latest.lightSleepMinutes ?? sum('lightSleepMinutes'),
+    remSleepMinutes: latest.remSleepMinutes ?? sum('remSleepMinutes'),
+    awakeMinutes: latest.awakeMinutes ?? sum('awakeMinutes'),
+  };
+}
+
 export function buildTrainingDay({
   date,
   measurements = [],
   activities = [],
   nutrition = emptyNutrition(),
+  sleep = emptySleep(),
   workoutDailySummary = null,
 }) {
   return {
@@ -213,6 +270,8 @@ export function buildTrainingDay({
     measurement: measurements.at(-1) ?? null,
     measurements,
     activities,
+    sleep: sleep.records ?? [],
+    sleepSummary: summarizeSleep(sleep.records ?? []),
     workoutSummary: summarizeActivities(activities, workoutDailySummary),
     nutrition: {
       meals: nutrition.meals ?? [],
@@ -251,6 +310,9 @@ export function buildTrainingSnapshotFromDaily(daily, generatedAt = new Date().t
     cyclingDistanceKm: daily
       .filter((entry) => entry.workoutSummary.cyclingDistanceKm > 0)
       .map((entry) => ({ date: entry.date, value: entry.workoutSummary.cyclingDistanceKm })),
+    sleepMinutes: daily
+      .filter((entry) => entry.sleepSummary?.totalSleepMinutes !== null)
+      .map((entry) => ({ date: entry.date, value: entry.sleepSummary.totalSleepMinutes })),
   };
 
   return {

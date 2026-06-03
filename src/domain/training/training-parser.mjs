@@ -2,11 +2,14 @@ import {
   buildTrainingDay,
   buildTrainingSnapshotFromDaily,
   emptyNutrition,
+  emptySleep,
   extractSubBlock,
   inferMealSlot,
   normalizeActivityType,
+  normalizeSleepType,
   parseDurationSeconds,
   parseFirstMatch,
+  parseMinutesText,
   parseNumber,
   parseWeightKg,
   roundTo,
@@ -39,12 +42,15 @@ function parseDateSection(date, content) {
 
   const nutritionBlock = blocks.find((block) => block.heading.includes('饮食截图记录'));
   const nutrition = nutritionBlock ? parseNutritionBlock(nutritionBlock.body) : emptyNutrition();
+  const sleepBlock = blocks.find((block) => block.heading.includes('睡眠截图记录') || block.heading.includes('睡眠记录'));
+  const sleep = sleepBlock ? parseSleepBlock(sleepBlock.body) : emptySleep();
 
   return buildTrainingDay({
     date,
     measurements: measurementBlocks,
     activities,
     nutrition,
+    sleep,
     workoutDailySummary,
   });
 }
@@ -209,6 +215,42 @@ function parseNutritionBlock(content) {
       .filter(Boolean)
       .map(({ isSummary, ...meal }) => meal),
     totalCalories,
+  };
+}
+
+function parseSleepBlock(content) {
+  const fields = parseBulletFields(content);
+  const record = {
+    sleepType: normalizeSleepType(fields['睡眠类型']),
+    sleepStartTime: fields['入睡时间'] ?? fields['开始时间'] ?? null,
+    sleepEndTime: fields['起床时间'] ?? fields['结束时间'] ?? null,
+    nightSleepMinutes: parseMinutesText(fields['夜间睡眠']) ?? parseMinutesText(fields['睡眠时长']) ?? null,
+    totalSleepMinutes: parseMinutesText(fields['总睡眠']) ?? parseMinutesText(fields['睡眠总时长']) ?? null,
+    napMinutes: parseMinutesText(fields['午睡']) ?? parseMinutesText(fields['小睡']) ?? null,
+    deepSleepMinutes: parseMinutesText(fields['深睡']) ?? null,
+    lightSleepMinutes: parseMinutesText(fields['浅睡']) ?? null,
+    remSleepMinutes: parseMinutesText(fields['快速眼动']) ?? parseMinutesText(fields['REM']) ?? null,
+    awakeMinutes: parseMinutesText(fields['清醒']) ?? null,
+    sleepStageText: fields['睡眠阶段'] ?? null,
+    sleepStageDetail: null,
+  };
+
+  const hasAnyValue = Object.values(record).some((value) => value !== null);
+  if (!hasAnyValue) {
+    return emptySleep();
+  }
+
+  return {
+    records: [record],
+    totalSleepMinutes: record.totalSleepMinutes,
+    nightSleepMinutes: record.nightSleepMinutes,
+    napMinutes: record.napMinutes,
+    sleepStartTime: record.sleepStartTime,
+    sleepEndTime: record.sleepEndTime,
+    deepSleepMinutes: record.deepSleepMinutes,
+    lightSleepMinutes: record.lightSleepMinutes,
+    remSleepMinutes: record.remSleepMinutes,
+    awakeMinutes: record.awakeMinutes,
   };
 }
 
