@@ -29,6 +29,24 @@
 - 修复 Dev Telegram Sync 内嵌 Cloudflare Pages 部署误用 Worker API Token 导致认证失败的问题，并让 Telegram 失败回执正确显示 `Deploy dev site to Cloudflare Pages` 阶段。
 - 修复 Telegram 训练同步在第二次更新后只能写入 Markdown、却没有同步触发站点重建与部署的问题；现在数据库回填失败或超时时会降级为 Markdown 重建，并继续发布最新静态站点，避免页面停留在旧数据。
 
+## [1.2.1] - 2026-06-03
+
+### Added
+
+- 新增 `tools/training-maintenance.mjs` 统一维护入口，提供 `maintenance:inspect`、`maintenance:sync`、`maintenance:migrate` 三类命令，并保留旧 `backfill/reconcile/import/export/sync:db` npm scripts 的兼容转发。
+- `site-build` 公共 action 新增 `sync_db_mode` 输入（`auto`/`always`/`never`）与数据库同步输入变更检测，无数据相关文件变更时可跳过 `sync:db`。
+- `ci-tests.yml` 新增 `full-test` job，仅在 `schedule` 或 `workflow_dispatch` 时运行完整 `npm test`，常规 CI 与部署继续使用 `test:fast`。
+- Telegram 同步报告新增 `taskStatus`、`taskId`、`sourceType`、`sourceId`、`retryCount`、`messageIds`、`updateIds`、`failureDisposition` 等任务审计字段，统一 queued / processing / ready / stored / skipped / deferred / partialFailure / resolved / failed 九种状态语义。
+- 新增 `maintenance_scripts.md` 与 v8 checklist，记录维护脚本边界、安全规则与第八轮优化验收状态。
+- 新增维护脚本与 Telegram 报告审计字段回归测试。
+
+### Changed
+
+- `syncTrainingCore` 复用同一数据库 client 处理 archive 与 markdown 阶段，减少远程 PostgreSQL 连接与事务开销。
+- Telegram 首次图片处理与 pending recognition replay 共用 `buildImageProcessingBatch()` 与规范化 runtime env。
+- main/dev Pages 部署 workflow 统一通过 `site-build` 的 `sync_db_mode: auto` 按需执行数据库同步。
+- 同步项目包版本号到 `1.2.1`。
+
 ## [1.2.0] - 2026-06-02
 
 ### Added
@@ -213,7 +231,8 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/soulgo/training_records/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/soulgo/training_records/compare/v1.1.9...v1.2.0
 [1.1.9]: https://github.com/soulgo/training_records/compare/v1.1.8...v1.1.9
 [1.1.8]: https://github.com/soulgo/training_records/compare/v1.1.7...v1.1.8

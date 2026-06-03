@@ -229,3 +229,14 @@ Telegram Sync 重构的重点不是新增识别能力，而是把已有能力组
 3. 统一 replay 的复用逻辑
 
 这样可以在不改业务口径的前提下，显著提升维护性和可恢复性。
+
+---
+
+## 9. 当前已落地项
+
+- `buildTelegramSyncReport()` 已输出任务审计字段：`taskId`、`sourceType`、`sourceId`、`retryCount`、`messageIds`、`updateIds`。
+- 报告层已输出统一状态字段：`taskStatus` 与 `retryState`，用于串联 queued、processing、ready、stored、skipped、deferred、partialFailure、resolved、failed 等状态。
+- 报告层已输出 `failureDisposition`，用于区分 `auto_retry`、`manual_intervention`、`skip`。
+- partial failure 会保留 `sourceImageCount`、`recognizedImageCount`、`failedImageCount`、`recognitionErrors`，通知文本继续表达 `x/N`、失败 messageId 和是否进入重试队列。
+- 首次图片处理与 pending recognition replay 已共用 `buildImageProcessingBatch()`，确保识别、分析、`pendingReplay` 标记、失败元数据和 runtime env 传递走同一核心逻辑。
+- 未授权跳过的命令批次也会保留原始 `messages`，报告中可继续输出 `sourceId`、`messageIds`、`updateIds`，避免审计信息退化到仅有 batchId。

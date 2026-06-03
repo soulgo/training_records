@@ -72,6 +72,33 @@ test('syncTrainingCore reports skipped when every phase is skipped or unchanged'
   assert.equal(result.status, 'unchanged');
 });
 
+test('syncTrainingCore can run a single requested phase', async () => {
+  const calls = [];
+
+  const result = await syncTrainingCore({
+    phase: 'archive',
+    backfillTrainingCoreFromArchive: async () => {
+      calls.push('archive');
+      return { status: 'unchanged', daysBackfilled: 0 };
+    },
+    reconcileTrainingMarkdownToCore: async () => {
+      calls.push('markdown');
+      return { status: 'stored', days: 2 };
+    },
+    backfillThoughtsToCore: async () => {
+      calls.push('thoughts');
+      return { status: 'stored', importedCount: 1 };
+    },
+    stdout: { write() {} },
+  });
+
+  assert.deepEqual(calls, ['archive']);
+  assert.deepEqual(result, {
+    status: 'unchanged',
+    archive: { status: 'unchanged', daysBackfilled: 0 },
+  });
+});
+
 test('syncTrainingCore reuses one client for archive and markdown phases', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'sync-training-core-shared-client-'));
   await mkdir(path.join(tempRoot, 'source', '_posts'), { recursive: true });

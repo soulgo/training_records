@@ -246,6 +246,7 @@ export async function runTelegramSync(options = {}) {
     appendPendingRecognitionBatch,
     markPendingRecognitionResolved,
     now,
+    env,
   });
   changed ||= replayRecognitionResults.changed;
   replayStoredImageAny ||= replayRecognitionResults.replayStoredImageAny;
@@ -267,49 +268,25 @@ export async function runTelegramSync(options = {}) {
         batchId: batch.batchId,
         status: 'ignored',
         reason: 'unauthorized chat',
+        messages: batch.messages,
         updateIds: batch.messages.map((message) => message.updateId),
       });
       continue;
     }
 
-    let recognitions = [];
-    let recognitionErrors = [];
-    if (batch.kind === 'image') {
-      try {
-        const recognitionOutput = normalizeRecognitionOutput(await recognizeBatchRunner(batch, env));
-        recognitions = recognitionOutput.recognitions;
-        recognitionErrors = recognitionOutput.recognitionErrors;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        recognitionErrors = batch.messages.map((message) => ({
-          messageId: message.messageId,
-          error: errorMessage,
-          failureCategory: classifyFailureCategory(errorMessage, { phase: 'ai_recognition' }),
-        }));
-        process.stderr.write(
-          `[telegram-sync] image recognition failed for ${batch.batchId}: ${errorMessage}\n`,
-        );
-      }
-    }
-    const analyzed = analyzeTelegramBatch(batch, recognitions, {
-      minConfidence: 0.75,
+    const persistedBatch = await buildImageProcessingBatch({
+      batch,
+      recognizeBatchRunner,
+      env,
+      logPrefix: 'image recognition failed',
     });
-    const persistedBatch = {
-      ...analyzed,
-      kind: batch.kind ?? analyzed.kind ?? 'image',
-      updateIds: batch.messages.map((message) => message.updateId),
-      messages: batch.messages,
-      recognitions,
-      recognitionErrors,
-    };
-    attachFailureMetadata(persistedBatch);
     await queueRecognitionFailureIfNeeded({
       batch: persistedBatch,
       appendPendingRecognitionBatch,
       now,
     });
 
-    if (analyzed.status !== 'ready') {
+    if (persistedBatch.status !== 'ready') {
       batchResults.push(persistedBatch);
       continue;
     }
@@ -398,14 +375,14 @@ export async function runTelegramSync(options = {}) {
         env: options.env ?? process.env,
       });
 
-      changed ||= analyzed.status === 'ready' && persistResult.status === 'stored';
+      changed ||= persistedBatch.status === 'ready' && persistResult.status === 'stored';
       batchResults.push({
         ...persistedBatch,
         persistenceStatus: persistResult.status,
       });
       await markPendingRecognitionResolved({ batchId: persistedBatch.batchId });
     } catch (error) {
-      if (analyzed.status === 'ready') {
+      if (persistedBatch.status === 'ready') {
         const applied = applyTelegramSyncToMarkdown(await getFallbackMarkdown(), persistedBatch);
         fallbackMarkdown = applied.markdown;
         changed ||= applied.changed;
@@ -516,30 +493,42 @@ export function buildTelegramSyncReport(result) {
     updatesFetched: result.updatesFetched,
     lastProcessedUpdateId: result.lastProcessedUpdateId,
     readyBatches: result.readyBatches,
-    batches: (result.batchResults ?? []).map((batch) => ({
-      kind: batch.kind ?? 'image',
-      batchId: batch.batchId,
-      status: batch.status,
-      partialFailure: batch.partialFailure ?? false,
-      archivedDate: batch.archivedDate ?? null,
-      postPath: batch.postPath ?? null,
-      thoughtWriteStatus: batch.thoughtWriteStatus ?? null,
-      persistenceStatus: batch.persistenceStatus ?? null,
-      persistenceError: batch.persistenceError ?? null,
-      failureCategory: batch.failureCategory ?? null,
-      failureReason: batch.failureReason ?? null,
-      recognitionPendingStatus: batch.recognitionPendingStatus ?? null,
-      recognitionPendingError: batch.recognitionPendingError ?? null,
-      pendingReplay: batch.pendingReplay ?? false,
-      sourceImageCount: batch.sourceImageCount ?? 0,
-      recognizedImageCount: batch.recognizedImageCount ?? 0,
-      failedImageCount: batch.failedImageCount ?? 0,
-      recognitionErrors: batch.recognitionErrors ?? [],
-      warnings: batch.warnings ?? [],
-      issues: batch.issues ?? [],
-      reason: batch.reason ?? null,
-      dateSources: batch.dateSources ?? [],
-    })),
+    batches: (result.batchResults ?? []).map((batch) => {
+      const taskAudit = buildSyncTaskAuditFields(batch);
+      return {
+        kind: batch.kind ?? 'image',
+        batchId: batch.batchId,
+        taskId: taskAudit.taskId,
+        sourceType: taskAudit.sourceType,
+        sourceId: taskAudit.sourceId,
+        taskStatus: taskAudit.taskStatus,
+        retryState: taskAudit.retryState,
+        retryCount: taskAudit.retryCount,
+        messageIds: taskAudit.messageIds,
+        updateIds: taskAudit.updateIds,
+        status: batch.status,
+        partialFailure: batch.partialFailure ?? false,
+        archivedDate: batch.archivedDate ?? null,
+        postPath: batch.postPath ?? null,
+        thoughtWriteStatus: batch.thoughtWriteStatus ?? null,
+        persistenceStatus: batch.persistenceStatus ?? null,
+        persistenceError: batch.persistenceError ?? null,
+        failureCategory: batch.failureCategory ?? null,
+        failureReason: batch.failureReason ?? null,
+        failureDisposition: normalizeFailureDisposition(batch),
+        recognitionPendingStatus: batch.recognitionPendingStatus ?? null,
+        recognitionPendingError: batch.recognitionPendingError ?? null,
+        pendingReplay: batch.pendingReplay ?? false,
+        sourceImageCount: batch.sourceImageCount ?? 0,
+        recognizedImageCount: batch.recognizedImageCount ?? 0,
+        failedImageCount: batch.failedImageCount ?? 0,
+        recognitionErrors: batch.recognitionErrors ?? [],
+        warnings: batch.warnings ?? [],
+        issues: batch.issues ?? [],
+        reason: batch.reason ?? null,
+        dateSources: batch.dateSources ?? [],
+      };
+    }),
   };
 
   for (const [index, batch] of (result.batchResults ?? []).entries()) {
@@ -560,6 +549,128 @@ export function buildTelegramSyncReport(result) {
   }
 
   return normalized;
+}
+
+function buildSyncTaskAuditFields(batch) {
+  const kind = batch.kind ?? 'image';
+  const batchId = String(batch.batchId ?? 'unknown');
+  const messages = Array.isArray(batch.messages) ? batch.messages : [];
+  const messageIds = messages
+    .map((message) => message?.messageId)
+    .filter((messageId) => messageId !== null && messageId !== undefined);
+  const updateIds = messages
+    .map((message) => message?.updateId)
+    .filter((updateId) => updateId !== null && updateId !== undefined);
+
+  return {
+    taskId: `telegram:${kind}:${batchId}`,
+    sourceType: normalizeSyncTaskSourceType(batch),
+    sourceId: buildSyncTaskSourceId({ batchId, messages }),
+    taskStatus: normalizeSyncTaskStatus(batch),
+    retryState: normalizeSyncRetryState(batch),
+    retryCount: normalizeSyncRetryCount(batch),
+    messageIds,
+    updateIds,
+  };
+}
+
+function normalizeSyncTaskSourceType(batch) {
+  if (batch.pendingReplay === true) {
+    return 'pending_replay';
+  }
+  return 'telegram_update';
+}
+
+function buildSyncTaskSourceId({ batchId, messages }) {
+  const firstMessage = messages.find(Boolean);
+  const chatId = firstMessage?.chatId;
+  const mediaGroupId = firstMessage?.mediaGroupId;
+  if (chatId !== null && chatId !== undefined && mediaGroupId) {
+    return `telegram:chat:${chatId}:media_group:${mediaGroupId}`;
+  }
+  if (chatId !== null && chatId !== undefined && firstMessage?.messageId !== null && firstMessage?.messageId !== undefined) {
+    return `telegram:chat:${chatId}:message:${firstMessage.messageId}`;
+  }
+  return `telegram:batch:${batchId}`;
+}
+
+function normalizeSyncTaskStatus(batch) {
+  if (batch.partialFailure === true) {
+    return 'partialFailure';
+  }
+  if (batch.recognitionPendingStatus === 'queued') {
+    return 'deferred';
+  }
+  if (batch.recognitionPendingStatus === 'resolved') {
+    return 'resolved';
+  }
+  if (batch.persistenceStatus === 'stored' || batch.persistenceStatus === 'unchanged') {
+    return 'stored';
+  }
+  if (batch.persistenceStatus === 'fallback_markdown' || batch.persistenceStatus === 'pending_replay') {
+    return 'deferred';
+  }
+  if (batch.status === 'ready') {
+    return 'ready';
+  }
+  if (batch.status === 'skipped') {
+    return 'skipped';
+  }
+  if (batch.status === 'ignored') {
+    return 'skipped';
+  }
+  if (batch.status === 'failed') {
+    return 'failed';
+  }
+  return batch.status ?? 'queued';
+}
+
+function normalizeSyncRetryState(batch) {
+  if (batch.recognitionPendingStatus === 'queued') {
+    return 'queued';
+  }
+  if (batch.recognitionPendingStatus === 'resolved') {
+    return 'resolved';
+  }
+  if (batch.persistenceStatus === 'fallback_markdown' || batch.persistenceStatus === 'pending_replay') {
+    return 'pending_replay';
+  }
+  if (batch.pendingReplay === true) {
+    return batch.persistenceStatus === 'stored' || batch.persistenceStatus === 'unchanged' ? 'resolved' : 'replaying';
+  }
+  return 'none';
+}
+
+function normalizeSyncRetryCount(batch) {
+  if (Number.isFinite(batch.retryCount) && batch.retryCount >= 0) {
+    return Math.floor(batch.retryCount);
+  }
+  return batch.pendingReplay === true ? 1 : 0;
+}
+
+function normalizeFailureDisposition(batch) {
+  if (batch.recognitionPendingStatus === 'queued') {
+    return 'auto_retry';
+  }
+  if (batch.persistenceStatus === 'fallback_markdown' || batch.persistenceStatus === 'pending_replay') {
+    return 'auto_retry';
+  }
+  if (batch.failureCategory === 'ai_service' || batch.failureCategory === 'telegram_api') {
+    return 'auto_retry';
+  }
+  if (batch.failureCategory === 'database' || batch.failureCategory === 'github_action') {
+    return 'auto_retry';
+  }
+  if (batch.failureCategory === 'user_input') {
+    return 'manual_intervention';
+  }
+  if (batch.status === 'skipped' || batch.status === 'ignored') {
+    return 'skip';
+  }
+  if (batch.status === 'failed') {
+    return 'manual_intervention';
+  }
+  return 'none';
 }
 
 export async function loadRecognitionSystemPrompt(env = process.env) {
@@ -1165,6 +1276,49 @@ function shouldRetryRecognitionInline(error) {
   );
 }
 
+async function buildImageProcessingBatch({
+  batch,
+  recognizeBatchRunner,
+  env,
+  pendingReplay = false,
+  logPrefix,
+}) {
+  let recognitions = [];
+  let recognitionErrors = [];
+  const messages = batch.messages ?? [];
+
+  if ((batch.kind ?? 'image') === 'image') {
+    try {
+      const recognitionOutput = normalizeRecognitionOutput(await recognizeBatchRunner(batch, env));
+      recognitions = recognitionOutput.recognitions;
+      recognitionErrors = recognitionOutput.recognitionErrors;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      recognitionErrors = messages.map((message) => ({
+        messageId: message.messageId,
+        error: errorMessage,
+        failureCategory: classifyFailureCategory(errorMessage, { phase: 'ai_recognition' }),
+      }));
+      process.stderr.write(`[telegram-sync] ${logPrefix} for ${batch.batchId}: ${errorMessage}\n`);
+    }
+  }
+
+  const analyzed = analyzeTelegramBatch(batch, recognitions, {
+    minConfidence: 0.75,
+  });
+  const persistedBatch = {
+    ...analyzed,
+    kind: batch.kind ?? analyzed.kind ?? 'image',
+    updateIds: messages.map((message) => message.updateId).filter(Boolean),
+    messages,
+    recognitions,
+    recognitionErrors,
+    pendingReplay,
+  };
+  attachFailureMetadata(persistedBatch);
+  return persistedBatch;
+}
+
 async function replayPendingRecognitionBatches({
   entries,
   recognizeBatchRunner,
@@ -1172,6 +1326,7 @@ async function replayPendingRecognitionBatches({
   appendPendingRecognitionBatch,
   markPendingRecognitionResolved,
   now,
+  env,
 }) {
   const batchResults = [];
   let changed = false;
@@ -1183,37 +1338,13 @@ async function replayPendingRecognitionBatches({
       continue;
     }
 
-    let recognitions = [];
-    let recognitionErrors = [];
-    try {
-      const recognitionOutput = normalizeRecognitionOutput(await recognizeBatchRunner(batch, {}));
-      recognitions = recognitionOutput.recognitions;
-      recognitionErrors = recognitionOutput.recognitionErrors;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      recognitionErrors = (batch.messages ?? []).map((message) => ({
-        messageId: message.messageId,
-        error: errorMessage,
-        failureCategory: classifyFailureCategory(errorMessage, { phase: 'ai_recognition' }),
-      }));
-      process.stderr.write(
-        `[telegram-sync] pending image recognition failed for ${batch.batchId}: ${errorMessage}\n`,
-      );
-    }
-
-    const analyzed = analyzeTelegramBatch(batch, recognitions, {
-      minConfidence: 0.75,
-    });
-    const persistedBatch = {
-      ...analyzed,
-      kind: batch.kind ?? analyzed.kind ?? 'image',
-      updateIds: batch.messages?.map((message) => message.updateId).filter(Boolean) ?? [],
-      messages: batch.messages ?? [],
-      recognitions,
-      recognitionErrors,
+    const persistedBatch = await buildImageProcessingBatch({
+      batch,
+      recognizeBatchRunner,
+      env,
       pendingReplay: true,
-    };
-    attachFailureMetadata(persistedBatch);
+      logPrefix: 'pending image recognition failed',
+    });
 
     if (persistedBatch.status !== 'ready') {
       await queueRecognitionFailureIfNeeded({

@@ -282,3 +282,29 @@ re_v8 的核心不是推倒重来，而是：
 
 - `部署与同步优化_v8/deploy_and_build.md`
 - `部署与同步优化_v8/telegram_sync_refactor.md`
+
+---
+
+## 9. 本轮已落地入口
+
+- 部署与构建：详见 `deploy_and_build.md`，当前已落地 `site-build` 公共 action、`sync_db_mode` 数据同步门禁、快测试/完整测试分层。
+- Telegram Sync：详见 `telegram_sync_refactor.md`，当前报告已输出 `taskStatus`、`retryState`、`failureDisposition`、`taskId`、`sourceType`、`sourceId`、`retryCount`、`messageIds`、`updateIds`。
+- 维护脚本：详见 `maintenance_scripts.md`，当前已提供 `maintenance:inspect`、`maintenance:sync`、`maintenance:migrate` 三类入口；旧 `backfill/reconcile/import/export` npm scripts 已转发到 `tools/training-maintenance.mjs`，迁移操作要求使用 `--dry-run` 或 `--confirm`。
+
+---
+
+## 10. 文档索引与替代关系
+
+本目录作为第八轮部署与同步优化的当前事实源：
+
+- `re_optimization_v8.md`：总览、优先级、文档索引与历史替代关系。
+- `deploy_and_build.md`：部署、构建、缓存、测试分层与已落地 workflow 控制。
+- `telegram_sync_refactor.md`：Telegram Sync 任务状态、失败语义、replay 复用和通知审计。
+- `maintenance_scripts.md`：维护脚本统一入口、只读/写入边界、迁移确认规则。
+- `checklist.md`：逐项落地状态、验证证据和仍需真实 Actions 观察的项目。
+
+旧版本文档保留为历史参考，不再作为当前实施入口：
+
+- `docs/优化重构/deploy_build_v7/deploy_build_optimization_v7.md`：部署构建方向已由本目录的 `deploy_and_build.md` 接续。
+- `docs/优化重构/telegram_sync_v6/telegram_sync_image_optimization.md`：Telegram 图片识别和补偿方向已由本目录的 `telegram_sync_refactor.md` 接续。
+- `docs/优化重构/re_v5/`：早期数据库事实源、检查清单和总览作为历史参考；当前状态以本目录总览与 `checklist.md` 为准。
