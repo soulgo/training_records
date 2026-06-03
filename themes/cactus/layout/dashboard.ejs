@@ -45,16 +45,16 @@ function formatDailyRange(pageIndex, pageSize, total) {
           <p>核心训练与身体指标总览</p>
         </div>
         <div class="overview-card__meta">
-          <% overviewMeta.forEach((item) => { %>
-            <div class="overview-card__meta-item">
+          <% overviewMeta.forEach((item, index) => { %>
+            <div class="overview-card__meta-item <%= index === 0 ? 'overview-card__meta-item--highlight' : '' %>">
               <span><%= item.label %></span>
               <strong><%= item.value %></strong>
             </div>
           <% }); %>
         </div>
         <div class="overview-card__stats">
-          <% overviewStats.forEach((item) => { %>
-            <div class="overview-card__stat">
+          <% overviewStats.forEach((item, index) => { %>
+            <div class="overview-card__stat <%= index === 0 ? 'overview-card__stat--highlight' : '' %>">
               <span><%= item.label %></span>
               <strong><%= item.value %></strong>
               <small><%= item.hint %></small>
@@ -64,8 +64,8 @@ function formatDailyRange(pageIndex, pageSize, total) {
       </article>
 
       <section class="hero-metrics">
-        <% primaryMetrics.forEach((metric) => { %>
-          <article class="hero-card">
+        <% primaryMetrics.forEach((metric, index) => { %>
+          <article class="hero-card <%= index === 0 ? 'hero-card--highlight' : '' %>">
             <span class="hero-label"><%= metric.title %></span>
             <%- metric.valueHtml %>
             <div class="hero-card__meta"><%- metric.metaHtml %></div>
@@ -84,8 +84,8 @@ function formatDailyRange(pageIndex, pageSize, total) {
         </div>
       </div>
       <div class="metric-grid__cards">
-        <% secondaryMetrics.forEach((metric) => { %>
-          <article class="metric-card">
+        <% secondaryMetrics.forEach((metric, index) => { %>
+          <article class="metric-card <%= index === 0 ? 'metric-card--highlight' : '' %>">
             <span class="metric-title"><%= metric.title %></span>
             <%- metric.valueHtml %>
             <div class="metric-card__meta"><%- metric.metaHtml %></div>
