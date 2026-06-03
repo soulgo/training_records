@@ -193,6 +193,7 @@ export async function runTelegramSync(options = {}) {
   const previousLastProcessedUpdateId = await readLastProcessedUpdateIdForRun({
     readLastProcessedUpdateId,
     dispatchUpdates,
+    allowFallback: Boolean(dispatchUpdates) || env.githubEventName === 'repository_dispatch',
   });
   const pendingBatches = await readPendingFallbackBatches(pendingQueuePath);
   let replayStoredAny = false;
@@ -238,7 +239,10 @@ export async function runTelegramSync(options = {}) {
   let fallbackMarkdown = null;
   let fallbackMarkdownLoaded = false;
 
-  const pendingRecognitionEntries = await readPendingRecognitionBatches();
+  const pendingRecognitionEntries = await readPendingRecognitionBatchesForRun({
+    readPendingRecognitionBatches,
+    allowFallback: Boolean(dispatchUpdates) || env.githubEventName === 'repository_dispatch',
+  });
   const replayRecognitionResults = await replayPendingRecognitionBatches({
     entries: pendingRecognitionEntries,
     recognizeBatchRunner,
@@ -1031,11 +1035,12 @@ function toPublicThoughtImagePath(targetPath, activeRootDir) {
 async function readLastProcessedUpdateIdForRun({
   readLastProcessedUpdateId,
   dispatchUpdates,
+  allowFallback = false,
 }) {
   try {
     return await readLastProcessedUpdateId();
   } catch (error) {
-    if (!dispatchUpdates) {
+    if (!allowFallback) {
       throw error;
     }
     const message = error instanceof Error ? error.message : String(error);
@@ -1588,6 +1593,24 @@ function normalizeInlineImageContentType(file) {
   }
 
   return null;
+}
+
+async function readPendingRecognitionBatchesForRun({
+  readPendingRecognitionBatches,
+  allowFallback = false,
+}) {
+  try {
+    return await readPendingRecognitionBatches();
+  } catch (error) {
+    if (!allowFallback) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(
+      `[telegram-sync] could not read pending recognition batches: ${message}; continuing without replay queue\n`,
+    );
+    return [];
+  }
 }
 
 async function readMarkdownOrDefault(recordPath) {
