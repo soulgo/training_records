@@ -147,6 +147,16 @@ export async function persistTrainingArchive(options) {
           updatedAtIso,
         });
       }
+
+      for (const sleep of day.sleep ?? []) {
+        await upsertTrainingSleep({
+          client,
+          sourceHash,
+          archivedDate: day.date,
+          sleep,
+          updatedAtIso,
+        });
+      }
     }
 
     await client.query(
@@ -461,6 +471,78 @@ async function upsertTrainingMeal({ client, sourceHash, archivedDate, meal, upda
       meal.calories ?? null,
       meal.recommendedMin ?? null,
       meal.recommendedMax ?? null,
+      updatedAtIso,
+    ],
+  );
+}
+
+async function upsertTrainingSleep({ client, sourceHash, archivedDate, sleep, updatedAtIso }) {
+  const sleepHash = createHash('md5')
+    .update(
+      [
+        archivedDate,
+        sleep.sleepType ?? '',
+        sleep.sleepStartTime ?? '',
+        sleep.sleepEndTime ?? '',
+        sleep.totalSleepMinutes ?? '',
+      ].join('|'),
+      'utf8',
+    )
+    .digest('hex');
+
+  await client.query(
+    `
+      insert into archive.training_sleep (
+        sleep_hash,
+        archived_date,
+        source_hash,
+        sleep_type,
+        bedtime,
+        wake_time,
+        night_sleep_minutes,
+        total_sleep_minutes,
+        nap_minutes,
+        deep_sleep_minutes,
+        light_sleep_minutes,
+        rem_sleep_minutes,
+        awake_minutes,
+        sleep_stage_text,
+        sleep_stage_detail,
+        updated_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      on conflict (sleep_hash) do update set
+        source_hash = excluded.source_hash,
+        sleep_type = excluded.sleep_type,
+        bedtime = excluded.bedtime,
+        wake_time = excluded.wake_time,
+        night_sleep_minutes = excluded.night_sleep_minutes,
+        total_sleep_minutes = excluded.total_sleep_minutes,
+        nap_minutes = excluded.nap_minutes,
+        deep_sleep_minutes = excluded.deep_sleep_minutes,
+        light_sleep_minutes = excluded.light_sleep_minutes,
+        rem_sleep_minutes = excluded.rem_sleep_minutes,
+        awake_minutes = excluded.awake_minutes,
+        sleep_stage_text = excluded.sleep_stage_text,
+        sleep_stage_detail = excluded.sleep_stage_detail,
+        updated_at = excluded.updated_at
+    `,
+    [
+      sleepHash,
+      archivedDate,
+      sourceHash,
+      sleep.sleepType ?? '夜间睡眠',
+      sleep.sleepStartTime ?? null,
+      sleep.sleepEndTime ?? null,
+      sleep.nightSleepMinutes ?? null,
+      sleep.totalSleepMinutes ?? null,
+      sleep.napMinutes ?? null,
+      sleep.deepSleepMinutes ?? null,
+      sleep.lightSleepMinutes ?? null,
+      sleep.remSleepMinutes ?? null,
+      sleep.awakeMinutes ?? null,
+      sleep.sleepStageText ?? null,
+      sleep.sleepStageDetail ? JSON.stringify(sleep.sleepStageDetail) : null,
       updatedAtIso,
     ],
   );

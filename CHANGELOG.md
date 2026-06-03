@@ -15,20 +15,15 @@
 
 ### Added
 
-- 新增 `deploy-cloudflare-pages-dev.yml`，将 `dev` 分支构建产物发布到 Cloudflare Pages 预览环境，默认地址为 `https://training-records-dev.pages.dev`。
 - 新增睡眠截图支持：Telegram 图片识别、训练解析和数据库归档现在可记录睡眠时长、入睡/起床时间与睡眠阶段摘要。
 
 ### Changed
 
-- Dev 环境文档改为包含 Cloudflare Pages 在线预览流程，保留本地 `npm run server` 作为快速调试入口。
-- 将 Dev 环境配置手册提升到 `docs/dev_env/`，仅保留实施步骤文档，删除优化方案目录下的旧 plan 文档。
 - 训练快照与 Telegram 同步链路开始汇总睡眠数据，便于首页与分析模块读取恢复相关指标。
+- `package.json` 版本号更新为 `1.2.3`。
 
 ### Fixed
 
-- 修复 Dev Telegram webhook URL 误填 Cloudflare Account ID 导致 `setWebhook` 失败的问题，明确应使用 Workers 子域名。
-- 修复 Dev Telegram Sync 由 `GITHUB_TOKEN` 推送内容后不会触发 Dev Pages 自动部署的问题，现在同步成功后会直接构建并部署 `training-records-dev`。
-- 修复 Dev Telegram Sync 内嵌 Cloudflare Pages 部署误用 Worker API Token 导致认证失败的问题，并让 Telegram 失败回执正确显示 `Deploy dev site to Cloudflare Pages` 阶段。
 - 修复 Telegram 训练同步在第二次更新后只能写入 Markdown、却没有同步触发站点重建与部署的问题；现在数据库回填失败或超时时会降级为 Markdown 重建，并继续发布最新静态站点，避免页面停留在旧数据。
 
 ## [1.2.1] - 2026-06-03
