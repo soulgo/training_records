@@ -105,6 +105,24 @@ const ARCHIVE_TRAINING_DAY_QUERY = `
   from archive.training_day
   order by archived_date asc
 `;
+const ARCHIVE_TRAINING_SLEEP_QUERY = `
+  select
+    archived_date,
+    sleep_type,
+    bedtime,
+    wake_time,
+    night_sleep_minutes,
+    total_sleep_minutes,
+    nap_minutes,
+    deep_sleep_minutes,
+    light_sleep_minutes,
+    rem_sleep_minutes,
+    awake_minutes,
+    sleep_stage_text,
+    sleep_stage_detail
+  from archive.training_sleep
+  order by archived_date asc, updated_at asc
+`;
 const ARCHIVE_TRAINING_MEASUREMENT_QUERY = `
   select
     archived_date,
@@ -280,12 +298,14 @@ export async function readArchiveTrainingSnapshotFromDatabaseClient(client, now)
   const measurementResult = await client.query(ARCHIVE_TRAINING_MEASUREMENT_QUERY);
   const activityResult = await client.query(ARCHIVE_TRAINING_ACTIVITY_QUERY);
   const mealResult = await client.query(ARCHIVE_TRAINING_MEAL_QUERY);
+  const sleepResult = await client.query(ARCHIVE_TRAINING_SLEEP_QUERY);
 
   return buildTrainingSnapshotFromRows({
     dayRows: dayResult.rows,
     measurementRows: measurementResult.rows,
     activityRows: activityResult.rows,
     mealRows: mealResult.rows,
+    sleepRows: sleepResult.rows,
     now,
   });
 }
@@ -302,11 +322,12 @@ async function readArchiveTrainingSnapshotFromDatabaseWithClients({
   try {
     await Promise.all(clients.map((client) => client.connect()));
 
-    const [dayResult, measurementResult, activityResult, mealResult] = await Promise.all([
+    const [dayResult, measurementResult, activityResult, mealResult, sleepResult] = await Promise.all([
       clients[0].query(ARCHIVE_TRAINING_DAY_QUERY),
       clients[1].query(ARCHIVE_TRAINING_MEASUREMENT_QUERY),
       clients[2].query(ARCHIVE_TRAINING_ACTIVITY_QUERY),
       clients[3].query(ARCHIVE_TRAINING_MEAL_QUERY),
+      clients[4].query(ARCHIVE_TRAINING_SLEEP_QUERY),
     ]);
 
     return buildTrainingSnapshotFromRows({
@@ -314,6 +335,7 @@ async function readArchiveTrainingSnapshotFromDatabaseWithClients({
       measurementRows: measurementResult.rows,
       activityRows: activityResult.rows,
       mealRows: mealResult.rows,
+      sleepRows: sleepResult.rows,
       now,
       dateFrom,
       dateTo,
@@ -328,6 +350,7 @@ function buildTrainingSnapshotFromRows({
   measurementRows,
   activityRows,
   mealRows,
+  sleepRows = [],
   bodyFeedbackRows = [],
   now,
   dateFrom,
@@ -337,10 +360,12 @@ function buildTrainingSnapshotFromRows({
   const filteredMeasurementRows = filterRowsByDateWindow(measurementRows, 'archived_date', dateFrom, dateTo);
   const filteredActivityRows = filterRowsByDateWindow(activityRows, 'archived_date', dateFrom, dateTo);
   const filteredMealRows = filterRowsByDateWindow(mealRows, 'archived_date', dateFrom, dateTo);
+  const filteredSleepRows = filterRowsByDateWindow(sleepRows, 'archived_date', dateFrom, dateTo);
   const filteredBodyFeedbackRows = filterFeedbackRowsByDateWindow(bodyFeedbackRows, dateFrom, dateTo);
   const measurementsByDate = groupByDate(filteredMeasurementRows, 'archived_date');
   const activitiesByDate = groupByDate(filteredActivityRows, 'archived_date');
   const mealsByDate = groupByDate(filteredMealRows, 'archived_date');
+  const sleepByDate = groupByDate(filteredSleepRows, 'archived_date');
 
   const daily = filteredDayRows.map((row) => {
     const archivedDate = normalizeDateKey(row.archived_date);
@@ -379,18 +404,10 @@ function buildTrainingSnapshotFromRows({
       recommendedMin: toNullableNumber(meal.recommended_min),
       recommendedMax: toNullableNumber(meal.recommended_max),
     }));
-    const sleep = {
-      records: extractSleepRecords(row),
-      totalSleepMinutes: toNullableNumber(row.sleep_total_minutes),
-      nightSleepMinutes: toNullableNumber(row.night_sleep_minutes),
-      napMinutes: toNullableNumber(row.nap_minutes),
-      sleepStartTime: row.sleep_start_time ?? null,
-      sleepEndTime: row.sleep_end_time ?? null,
-      deepSleepMinutes: toNullableNumber(row.deep_sleep_minutes),
-      lightSleepMinutes: toNullableNumber(row.light_sleep_minutes),
-      remSleepMinutes: toNullableNumber(row.rem_sleep_minutes),
-      awakeMinutes: toNullableNumber(row.awake_minutes),
-    };
+    const sleep = summarizeSleepRecords([
+      ...(sleepByDate.get(archivedDate) ?? []).map(normalizeSleepRow),
+      ...extractSleepRecords(row),
+    ]);
 
     return {
       date: archivedDate,
@@ -474,37 +491,86 @@ function countActivitiesByType(activities) {
 }
 
 function extractSleepRecords(row) {
-  const totalSleepMinutes = toNullableNumber(row.sleep_total_minutes);
-  const nightSleepMinutes = toNullableNumber(row.night_sleep_minutes);
-  const napMinutes = toNullableNumber(row.nap_minutes);
-  const hasAny = [
-    totalSleepMinutes,
-    nightSleepMinutes,
-    napMinutes,
-    row.sleep_start_time,
-    row.sleep_end_time,
-    row.deep_sleep_minutes,
-    row.light_sleep_minutes,
-    row.rem_sleep_minutes,
-    row.awake_minutes,
-  ].some((value) => value !== null && value !== undefined);
-  if (!hasAny) {
-    return [];
+  const sleep = {
+    sleepType: '夜间睡眠',
+    bedtime: row.sleep_start_time ?? null,
+    wakeTime: row.sleep_end_time ?? null,
+    nightSleepMinutes: toNullableNumber(row.night_sleep_minutes),
+    totalSleepMinutes: toNullableNumber(row.sleep_total_minutes),
+    napMinutes: toNullableNumber(row.nap_minutes),
+    deepSleepMinutes: toNullableNumber(row.deep_sleep_minutes),
+    lightSleepMinutes: toNullableNumber(row.light_sleep_minutes),
+    remSleepMinutes: toNullableNumber(row.rem_sleep_minutes),
+    awakeMinutes: toNullableNumber(row.awake_minutes),
+    sleepStageText: null,
+    sleepStageDetail: null,
+  };
+  return hasAnySleepValue(sleep) ? [sleep] : [];
+}
+
+function normalizeSleepRow(row) {
+  return {
+    sleepType: row.sleep_type ?? '夜间睡眠',
+    bedtime: row.bedtime ?? null,
+    wakeTime: row.wake_time ?? null,
+    nightSleepMinutes: toNullableNumber(row.night_sleep_minutes),
+    totalSleepMinutes: toNullableNumber(row.total_sleep_minutes),
+    napMinutes: toNullableNumber(row.nap_minutes),
+    deepSleepMinutes: toNullableNumber(row.deep_sleep_minutes),
+    lightSleepMinutes: toNullableNumber(row.light_sleep_minutes),
+    remSleepMinutes: toNullableNumber(row.rem_sleep_minutes),
+    awakeMinutes: toNullableNumber(row.awake_minutes),
+    sleepStageText: row.sleep_stage_text ?? null,
+    sleepStageDetail: row.sleep_stage_detail ?? null,
+  };
+}
+
+function summarizeSleepRecords(records) {
+  const filtered = (records ?? []).filter(hasAnySleepValue);
+  if (filtered.length === 0) {
+    return {
+      records: [],
+      totalSleepMinutes: null,
+      nightSleepMinutes: null,
+      napMinutes: null,
+      sleepStartTime: null,
+      sleepEndTime: null,
+      deepSleepMinutes: null,
+      lightSleepMinutes: null,
+      remSleepMinutes: null,
+      awakeMinutes: null,
+    };
   }
+
+  const latest = filtered.at(-1);
+  return {
+    records: filtered,
+    totalSleepMinutes: latest.totalSleepMinutes ?? null,
+    nightSleepMinutes: latest.nightSleepMinutes ?? null,
+    napMinutes: latest.napMinutes ?? null,
+    sleepStartTime: latest.bedtime ?? null,
+    sleepEndTime: latest.wakeTime ?? null,
+    deepSleepMinutes: latest.deepSleepMinutes ?? null,
+    lightSleepMinutes: latest.lightSleepMinutes ?? null,
+    remSleepMinutes: latest.remSleepMinutes ?? null,
+    awakeMinutes: latest.awakeMinutes ?? null,
+  };
+}
+
+function hasAnySleepValue(sleep) {
   return [
-    {
-      sleepType: '夜间睡眠',
-      sleepStartTime: row.sleep_start_time ?? null,
-      sleepEndTime: row.sleep_end_time ?? null,
-      nightSleepMinutes,
-      totalSleepMinutes,
-      napMinutes,
-      deepSleepMinutes: toNullableNumber(row.deep_sleep_minutes),
-      lightSleepMinutes: toNullableNumber(row.light_sleep_minutes),
-      remSleepMinutes: toNullableNumber(row.rem_sleep_minutes),
-      awakeMinutes: toNullableNumber(row.awake_minutes),
-    },
-  ];
+    sleep?.totalSleepMinutes,
+    sleep?.nightSleepMinutes,
+    sleep?.napMinutes,
+    sleep?.bedtime,
+    sleep?.wakeTime,
+    sleep?.deepSleepMinutes,
+    sleep?.lightSleepMinutes,
+    sleep?.remSleepMinutes,
+    sleep?.awakeMinutes,
+    sleep?.sleepStageText,
+    sleep?.sleepStageDetail,
+  ].some((value) => value !== null && value !== undefined && value !== '');
 }
 
 function filterFeedbackRowsByDateWindow(rows, dateFrom, dateTo) {
