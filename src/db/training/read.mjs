@@ -92,7 +92,16 @@ const ARCHIVE_TRAINING_DAY_QUERY = `
     workout_duration_minutes,
     active_hours,
     cycling_distance_km,
-    intake_calories
+    intake_calories,
+    sleep_total_minutes,
+    night_sleep_minutes,
+    nap_minutes,
+    sleep_start_time,
+    sleep_end_time,
+    deep_sleep_minutes,
+    light_sleep_minutes,
+    rem_sleep_minutes,
+    awake_minutes
   from archive.training_day
   order by archived_date asc
 `;
@@ -370,12 +379,25 @@ function buildTrainingSnapshotFromRows({
       recommendedMin: toNullableNumber(meal.recommended_min),
       recommendedMax: toNullableNumber(meal.recommended_max),
     }));
+    const sleep = {
+      records: extractSleepRecords(row),
+      totalSleepMinutes: toNullableNumber(row.sleep_total_minutes),
+      nightSleepMinutes: toNullableNumber(row.night_sleep_minutes),
+      napMinutes: toNullableNumber(row.nap_minutes),
+      sleepStartTime: row.sleep_start_time ?? null,
+      sleepEndTime: row.sleep_end_time ?? null,
+      deepSleepMinutes: toNullableNumber(row.deep_sleep_minutes),
+      lightSleepMinutes: toNullableNumber(row.light_sleep_minutes),
+      remSleepMinutes: toNullableNumber(row.rem_sleep_minutes),
+      awakeMinutes: toNullableNumber(row.awake_minutes),
+    };
 
     return {
       date: archivedDate,
       measurement: measurements.at(-1) ?? null,
       measurements,
       activities,
+      sleep,
       workoutSummary: {
         totalActivities: Number(row.total_activities ?? activities.length),
         totalDurationSeconds: Number(row.total_duration_seconds ?? 0),
@@ -395,8 +417,8 @@ function buildTrainingSnapshotFromRows({
 
   return {
     ...buildTrainingSnapshotFromDaily(
-    daily,
-    now?.toISOString?.() ?? new Date().toISOString(),
+      daily,
+      now?.toISOString?.() ?? new Date().toISOString(),
     ),
     bodyFeedback: filteredBodyFeedbackRows.map(normalizeBodyFeedbackRow),
   };
@@ -449,6 +471,40 @@ function countActivitiesByType(activities) {
     countsByType[activity.type] = (countsByType[activity.type] ?? 0) + 1;
   }
   return countsByType;
+}
+
+function extractSleepRecords(row) {
+  const totalSleepMinutes = toNullableNumber(row.sleep_total_minutes);
+  const nightSleepMinutes = toNullableNumber(row.night_sleep_minutes);
+  const napMinutes = toNullableNumber(row.nap_minutes);
+  const hasAny = [
+    totalSleepMinutes,
+    nightSleepMinutes,
+    napMinutes,
+    row.sleep_start_time,
+    row.sleep_end_time,
+    row.deep_sleep_minutes,
+    row.light_sleep_minutes,
+    row.rem_sleep_minutes,
+    row.awake_minutes,
+  ].some((value) => value !== null && value !== undefined);
+  if (!hasAny) {
+    return [];
+  }
+  return [
+    {
+      sleepType: '夜间睡眠',
+      sleepStartTime: row.sleep_start_time ?? null,
+      sleepEndTime: row.sleep_end_time ?? null,
+      nightSleepMinutes,
+      totalSleepMinutes,
+      napMinutes,
+      deepSleepMinutes: toNullableNumber(row.deep_sleep_minutes),
+      lightSleepMinutes: toNullableNumber(row.light_sleep_minutes),
+      remSleepMinutes: toNullableNumber(row.rem_sleep_minutes),
+      awakeMinutes: toNullableNumber(row.awake_minutes),
+    },
+  ];
 }
 
 function filterFeedbackRowsByDateWindow(rows, dateFrom, dateTo) {

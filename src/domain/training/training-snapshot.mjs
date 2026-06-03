@@ -72,7 +72,7 @@ async function readTrainingSnapshotFromMarkdown(rootDir, now) {
 }
 
 function isRenderableSnapshot(snapshot) {
-  return (snapshot?.daily?.length ?? 0) > 0 && (snapshot?.latest?.measurement || snapshot?.latest?.daily);
+  return (snapshot?.daily?.length ?? 0) > 0 && Boolean(snapshot?.latest?.measurement);
 }
 
 async function readBodyFeedbackFromMarkdown(rootDir) {
