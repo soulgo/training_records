@@ -27,6 +27,7 @@
 - 修复 Dev Telegram webhook URL 误填 Cloudflare Account ID 导致 `setWebhook` 失败的问题，明确应使用 Workers 子域名。
 - 修复 Dev Telegram Sync 由 `GITHUB_TOKEN` 推送内容后不会触发 Dev Pages 自动部署的问题，现在同步成功后会直接构建并部署 `training-records-dev`。
 - 修复 Dev Telegram Sync 内嵌 Cloudflare Pages 部署误用 Worker API Token 导致认证失败的问题，并让 Telegram 失败回执正确显示 `Deploy dev site to Cloudflare Pages` 阶段。
+- 修复 Telegram 训练同步在第二次更新后只能写入 Markdown、却没有同步触发站点重建与部署的问题；现在数据库回填失败或超时时会降级为 Markdown 重建，并继续发布最新静态站点，避免页面停留在旧数据。
 
 ## [1.2.0] - 2026-06-02
 
