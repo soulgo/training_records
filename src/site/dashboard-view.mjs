@@ -96,6 +96,18 @@ function buildPrimaryMetrics({ latestMeasurement, latestDay, previousDay }) {
       metaHtml: renderMetaLine('饮食摄入', `${formatNumber(latestDay?.nutrition?.totalCalories, 0)} kcal`),
       comparison: buildComparison(latestDay?.workoutSummary?.trainingCalories || 0, previousDay?.workoutSummary?.trainingCalories),
     },
+    {
+      title: '锻炼时长',
+      valueHtml:
+        latestDay?.workoutSummary?.workoutDurationMinutes !== null && latestDay?.workoutSummary?.workoutDurationMinutes !== undefined
+          ? renderNumberValue(formatNumber(latestDay.workoutSummary.workoutDurationMinutes, 0), '分钟')
+          : renderTextValue(formatWorkoutDuration(latestDay), 'metric-value--compact'),
+      metaHtml:
+        latestDay?.workoutSummary?.activeHours !== null && latestDay?.workoutSummary?.activeHours !== undefined
+          ? renderMetaLine('活动小时数', `${formatNumber(latestDay.workoutSummary.activeHours, 0)} 小时`)
+          : renderMetaLine('身体类型', latestMeasurement.bodyType || '—'),
+      comparison: buildComparison(getWorkoutDurationValue(latestDay), getWorkoutDurationValue(previousDay)),
+    },
   ];
 }
 
@@ -129,7 +141,7 @@ function buildChartCards() {
   return [
     { id: 'weight-chart', title: '体重趋势', subtitle: '最近 30 天归档走势', className: 'chart-card chart-card--wide' },
     { id: 'composition-chart', title: '体脂与骨骼肌', subtitle: '观察减脂与保肌变化', className: 'chart-card chart-card--wide' },
-    { id: 'calorie-chart', title: '热量对比', subtitle: '摄入与训练消耗对照', className: 'chart-card chart-card--wide' },
+    { id: 'calorie-chart', title: '热量对比', subtitle: '摄入与训练消耗对照', className: 'chart-card' },
     { id: 'cycling-chart', title: '骑行里程', subtitle: '通勤有氧累积', className: 'chart-card' },
   ];
 }
@@ -286,24 +298,25 @@ function buildComparison(current, previous) {
       direction: 'flat',
       arrow: '→',
       label: '较前一日',
-      shortLabel: '→ 0%',
-      value: '0%',
+      shortLabel: '持平',
+      value: '持平',
       text: '较前一日持平',
-      strength: 0,
+      strength: 18,
       delta,
       ratio,
     };
   }
 
   const isUp = delta > 0;
+  const label = `较前一日${isUp ? '新增' : '下降'}`;
   const value = `${formatNumber(ratio, 2)}%`;
   return {
     direction: isUp ? 'up' : 'down',
     arrow: isUp ? '↑' : '↓',
-    label: '较前一日',
-    shortLabel: `${isUp ? '↑' : '↓'} ${value}`,
+    label,
+    shortLabel: isUp ? '上升' : '回落',
     value,
-    text: `${isUp ? '上升' : '下降'} ${value}`,
+    text: `${label} ${value}`,
     strength: Math.min(100, Math.max(Math.round(ratio * 0.85), 16)),
     delta,
     ratio,
@@ -327,7 +340,14 @@ function renderMetaLine(label, value) {
 }
 
 function renderComparison(comparison, className) {
-  return `<div class="${className} comparison-pill comparison-pill--${escapeHtml(comparison.direction)}"><span class="comparison-pill__arrow">${escapeHtml(comparison.arrow)}</span><span class="comparison-pill__value">${escapeHtml(comparison.value || comparison.shortLabel)}</span></div>`;
+  const valueMarkup = comparison.value
+    ? `<span class="comparison-pill__value">${escapeHtml(comparison.value)}</span>`
+    : '';
+  const strengthMarkup = comparison.strength
+    ? `<span class="comparison-pill__meter"><span class="comparison-pill__meter-fill" style="width:${comparison.strength}%"></span></span>`
+    : `<span class="comparison-pill__meter comparison-pill__meter--empty"></span>`;
+
+  return `<div class="${className} comparison-pill comparison-pill--${escapeHtml(comparison.direction)}"><div class="comparison-pill__summary"><span class="comparison-pill__arrow">${escapeHtml(comparison.arrow)}</span><span>${escapeHtml(comparison.text)}</span><span class="comparison-pill__label" aria-hidden="true">${escapeHtml(comparison.shortLabel)}</span></div>${valueMarkup}${strengthMarkup}</div>`;
 }
 
 function getWorkoutDurationValue(day) {

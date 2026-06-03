@@ -37,48 +37,74 @@ function formatDailyRange(pageIndex, pageSize, total) {
       <p>还没有可展示的数据。先在仓库里补充 `训练记录.md`，然后重新构建站点。</p>
     </div>
   <% } else { %>
-    <section class="dashboard-hero">
-      <div class="dashboard-hero__intro">
-        <div class="dashboard-hero__topline">
-          <div class="dashboard-kicker">健康概览</div>
-          <div class="dashboard-hero__meta dashboard-hero__meta--inline">
-            <% overviewMeta.slice(0, 2).forEach((item) => { %>
-              <div class="dashboard-hero__meta-item dashboard-hero__meta-item--inline">
-                <span><%= item.label %></span>
-                <strong><%= item.value %></strong>
-              </div>
-            <% }); %>
-          </div>
+    <section class="dashboard-overview">
+      <article class="overview-card">
+        <div class="overview-card__header">
+          <span class="dashboard-section__eyebrow">最新体脂归档日</span>
+          <strong><%= latestMeasurement.archivedDate %></strong>
+          <p>核心训练与身体指标总览</p>
         </div>
-        <h1>最近归档的身体变化，一眼看清</h1>
-        <p>体重、体脂率与训练消耗作为首页核心指标，先给出整体状态，再逐层展开趋势与细节。</p>
-      </div>
-
-      <div class="dashboard-hero__metrics">
-        <% primaryMetrics.slice(0, 3).forEach((metric) => { %>
-          <article class="hero-card">
-            <div class="metric-card__head">
-              <span class="hero-label"><%= metric.title %></span>
-              <%- metric.comparisonHtml %>
+        <div class="overview-card__meta">
+          <% overviewMeta.forEach((item) => { %>
+            <div class="overview-card__meta-item">
+              <span><%= item.label %></span>
+              <strong><%= item.value %></strong>
             </div>
+          <% }); %>
+        </div>
+        <div class="overview-card__stats">
+          <% overviewStats.forEach((item) => { %>
+            <div class="overview-card__stat">
+              <span><%= item.label %></span>
+              <strong><%= item.value %></strong>
+              <small><%= item.hint %></small>
+            </div>
+          <% }); %>
+        </div>
+      </article>
+
+      <section class="hero-metrics">
+        <% primaryMetrics.forEach((metric) => { %>
+          <article class="hero-card">
+            <span class="hero-label"><%= metric.title %></span>
             <%- metric.valueHtml %>
             <div class="hero-card__meta"><%- metric.metaHtml %></div>
+            <%- metric.comparisonHtml %>
+          </article>
+        <% }); %>
+        <span class="sr-only">已训练天数</span>
+      </section>
+    </section>
+
+    <section class="metric-grid">
+      <div class="dashboard-section__header">
+        <div>
+          <span class="dashboard-section__eyebrow">健康指标</span>
+          <h2>身体状态</h2>
+        </div>
+      </div>
+      <div class="metric-grid__cards">
+        <% secondaryMetrics.forEach((metric) => { %>
+          <article class="metric-card">
+            <span class="metric-title"><%= metric.title %></span>
+            <%- metric.valueHtml %>
+            <div class="metric-card__meta"><%- metric.metaHtml %></div>
+            <%- metric.comparisonHtml %>
           </article>
         <% }); %>
       </div>
     </section>
 
-    <section class="dashboard-section dashboard-section--charts">
-      <div class="dashboard-section__header dashboard-section__header--charts">
+    <section class="dashboard-charts">
+      <div class="dashboard-section__header">
         <div>
-          <span class="dashboard-section__eyebrow">最近 30 天</span>
-          <h2>趋势变化</h2>
+          <span class="dashboard-section__eyebrow">趋势分析</span>
+          <h2>最近 30 天</h2>
         </div>
-        <p class="dashboard-section__lede">图表放在首页更靠前的位置，优先展示变化方向，而不是只看单日数值。</p>
       </div>
       <div class="chart-grid">
         <% chartCards.forEach((chart) => { %>
-          <article class="chart-card <%= chart.className %>">
+          <article class="<%= chart.className %>">
             <div class="chart-heading">
               <div>
                 <h2><%= chart.title %></h2>
@@ -86,72 +112,6 @@ function formatDailyRange(pageIndex, pageSize, total) {
               </div>
             </div>
             <canvas id="<%= chart.id %>"></canvas>
-          </article>
-        <% }); %>
-      </div>
-    </section>
-
-    <section class="dashboard-strip">
-      <div class="dashboard-strip__item">
-        <span>最近归档</span>
-        <strong><%= latestMeasurement.archivedDate %></strong>
-      </div>
-      <div class="dashboard-strip__item">
-        <span>更新时间</span>
-        <strong><%= latestMeasurement.timeLabel || latestMeasurement.updatedAt || '06:24' %></strong>
-      </div>
-      <div class="dashboard-strip__item dashboard-strip__item--quiet">
-        <span>训练天数</span>
-        <strong><%= trainedDays %> 天</strong>
-      </div>
-      <div class="dashboard-strip__item dashboard-strip__item--quiet">
-        <span>累计归档</span>
-        <strong><%= totalArchivedDays %> 天</strong>
-      </div>
-    </section>
-
-    <section class="dashboard-section">
-      <div class="dashboard-section__header">
-        <div>
-          <span class="dashboard-section__eyebrow">身体状态</span>
-          <h2>基础指标</h2>
-        </div>
-      </div>
-      <div class="metric-grid__cards metric-grid__cards--compact">
-        <% secondaryMetrics.forEach((metric) => { %>
-          <article class="metric-card metric-card--compact">
-            <div class="metric-card__head">
-              <span class="metric-title"><%= metric.title %></span>
-              <%- metric.comparisonHtml %>
-            </div>
-            <%- metric.valueHtml %>
-            <div class="metric-card__meta"><%- metric.metaHtml %></div>
-          </article>
-        <% }); %>
-      </div>
-    </section>
-
-    <section class="dashboard-section">
-      <div class="dashboard-section__header">
-        <div>
-          <span class="dashboard-section__eyebrow">训练表现</span>
-          <h2>动作与消耗</h2>
-        </div>
-      </div>
-      <div class="metric-grid__cards metric-grid__cards--training">
-        <% overviewStats.forEach((item) => { %>
-          <article class="metric-card metric-card--training">
-            <span class="metric-title"><%= item.label %></span>
-            <div class="metric-value metric-value--compact">
-              <span class="metric-value__number"><%= item.value %></span>
-              <% if (item.unit) { %><span class="metric-value__unit"><%= item.unit %></span><% } %>
-            </div>
-            <div class="metric-card__meta">
-              <div class="metric-meta">
-                <span><%= item.hint %></span>
-                <strong><%= item.detail %></strong>
-              </div>
-            </div>
           </article>
         <% }); %>
       </div>
