@@ -223,6 +223,7 @@
       '<li>锻炼时长：<strong>' + escapeHtml(day.workoutDurationLabel) + '</strong></li>' +
       '<li>骑行里程：<strong>' + escapeHtml(day.cyclingDistanceLabel) + '</strong></li>' +
       '<li>饮食热量：<strong>' + escapeHtml(day.nutritionCaloriesLabel) + '</strong></li>' +
+      '<li>睡眠：<strong>' + escapeHtml(day.sleepLabel || '—') + '</strong></li>' +
       '</ul>' +
       tags +
       '</article>';

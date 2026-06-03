@@ -146,6 +146,8 @@ function buildSecondaryMetrics({ latestMeasurement, latestDay, previousDay }) {
 function buildSleepCards({ sleepSummarySource, sleepPreviousSource }) {
   const sleep = sleepSummarySource || {};
   const previousSleep = sleepPreviousSource || {};
+  const stageText = summarizeSleepStageText(sleep.records || []);
+  const previousStageText = summarizeSleepStageText(previousSleep.records || []);
   return [
     {
       title: '总睡眠',
@@ -167,6 +169,22 @@ function buildSleepCards({ sleepSummarySource, sleepPreviousSource }) {
       valueHtml: renderNumberValue(formatNumber(sleep.napMinutes, 0), '分钟'),
       metaHtml: renderMetaLine('入睡 / 醒来', `${sleep.sleepStartTime || '—'} / ${sleep.sleepEndTime || '—'}`),
       comparison: buildComparison(sleep.napMinutes, previousSleep.napMinutes),
+    },
+    {
+      title: '睡眠阶段',
+      valueHtml: renderTextValue(stageText || '无阶段摘要', 'metric-value--compact'),
+      metaHtml: renderMetaLine('上一日摘要', previousStageText || '—'),
+      comparison: {
+        direction: 'neutral',
+        arrow: '·',
+        label: '阶段文本',
+        shortLabel: '摘要',
+        value: '',
+        text: '展示最近睡眠阶段文本',
+        strength: 0,
+        delta: null,
+        ratio: null,
+      },
     },
   ];
 }
@@ -195,6 +213,9 @@ function buildDailyOverviewEntry(day) {
   const workoutDurationLabel = formatWorkoutDuration(day);
   const cyclingDistanceLabel = `${formatNumber(day.workoutSummary.cyclingDistanceKm)} km`;
   const nutritionCaloriesLabel = day.nutrition.totalCalories === null ? '—' : `${formatNumber(day.nutrition.totalCalories, 0)} kcal`;
+  const sleepLabel = day.sleepSummary?.totalSleepMinutes !== null && day.sleepSummary?.totalSleepMinutes !== undefined
+    ? `${formatNumber(day.sleepSummary.totalSleepMinutes, 0)} 分钟`
+    : '—';
   const tags = Object.entries(day.workoutSummary.countsByType || {})
     .filter(([, count]) => count > 0)
     .map(([type, count]) => `${type} × ${count}`);
@@ -210,6 +231,7 @@ function buildDailyOverviewEntry(day) {
     workoutDurationLabel,
     cyclingDistanceLabel,
     nutritionCaloriesLabel,
+    sleepLabel,
     tags,
     cardHtml: `<article class="day-card">
     <div class="day-card__header">
@@ -222,6 +244,7 @@ function buildDailyOverviewEntry(day) {
       <li>锻炼时长：<strong>${escapeHtml(workoutDurationLabel)}</strong></li>
       <li>骑行里程：<strong>${escapeHtml(cyclingDistanceLabel)}</strong></li>
       <li>饮食热量：<strong>${escapeHtml(nutritionCaloriesLabel)}</strong></li>
+      <li>睡眠：<strong>${escapeHtml(sleepLabel)}</strong></li>
     </ul>
     ${tagsHtml}
   </article>`,
@@ -304,6 +327,14 @@ function normalizeDayDate(day) {
 
 function buildDailyOverviewHint() {
   return '顶部主卡按最新体脂归档日展示，最近活动以下方日期卡片为准';
+}
+
+function summarizeSleepStageText(records) {
+  const lastWithStage = [...(records || [])].reverse().find((record) => record?.sleepStageText || record?.sleepStageDetail);
+  if (!lastWithStage) {
+    return '';
+  }
+  return [lastWithStage.sleepStageText, lastWithStage.sleepStageDetail].filter(Boolean).join(' / ');
 }
 
 function buildComparison(current, previous) {
