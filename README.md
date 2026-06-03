@@ -126,6 +126,7 @@ npm run server
 | `AI_BASE_URL` | Chat Completions base URL |
 | `AI_MODEL` | AI 模型名 |
 | `AI_CONCURRENCY` | 图片识别并发数，默认 3 |
+| `TRAINING_DB_TIMEOUT_MS` | 训练数据库连接超时时间，默认 5000ms；数据库偶发抖动时可适当调大 |
 | `TRAINING_ANALYSIS_GOAL` | `/分析` 长期训练目标覆盖值 |
 | `TELEGRAM_WEBHOOK_URL` | Telegram webhook 目标地址 |
 | `TELEGRAM_SECRET_TOKEN` | Telegram webhook secret header 校验值 |
