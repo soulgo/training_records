@@ -18,6 +18,13 @@ const overviewStats = dashboardView.overviewStats || [];
 const overviewMeta = dashboardView.overviewMeta || [];
 const primaryMetrics = dashboardView.primaryMetrics || [];
 const secondaryMetrics = dashboardView.secondaryMetrics || [];
+const sleepSummary = latestDay?.sleepSummary || {};
+const sleepCards = dashboardView.sleepCards || [{
+  title: '睡眠核心数据',
+  valueHtml: `<div class="metric-value metric-value--composite"><span class="metric-value__pair"><span class="metric-value__number">${sleepSummary.totalSleepMinutes ?? '—'}</span><span class="metric-value__unit">分钟</span></span><span class="metric-value__separator">/</span><span class="metric-value__pair"><span class="metric-value__number">${sleepSummary.nightSleepMinutes ?? '—'}</span><span class="metric-value__unit">夜间</span></span></div>`,
+  metaHtml: `<div class="metric-meta"><span>午睡</span><strong>${sleepSummary.napMinutes ?? '—'} 分钟</strong></div>`,
+  comparisonHtml: `<div class="metric-card__comparison comparison-pill comparison-pill--neutral"><div class="comparison-pill__summary"><span class="comparison-pill__arrow">☾</span><span>睡眠明细汇总</span><span class="comparison-pill__label" aria-hidden="true">恢复</span></div><span class="comparison-pill__value">${sleepSummary.deepSleepMinutes ?? '—'} / ${sleepSummary.remSleepMinutes ?? '—'}</span><span class="comparison-pill__meter"><span class="comparison-pill__meter-fill" style="width:${Math.max(18, Math.min(92, Number(sleepSummary.totalSleepMinutes || 0) / 6 || 18))}%"></span></span></div>`,
+}];
 const chartCards = dashboardView.chartCards || [];
 function formatDailyRange(pageIndex, pageSize, total) {
   if (!total) {
@@ -86,6 +93,25 @@ function formatDailyRange(pageIndex, pageSize, total) {
       <div class="metric-grid__cards">
         <% secondaryMetrics.forEach((metric, index) => { %>
           <article class="metric-card <%= index === 0 ? 'metric-card--highlight' : '' %>">
+            <span class="metric-title"><%= metric.title %></span>
+            <%- metric.valueHtml %>
+            <div class="metric-card__meta"><%- metric.metaHtml %></div>
+            <%- metric.comparisonHtml %>
+          </article>
+        <% }); %>
+      </div>
+    </section>
+
+    <section class="metric-grid metric-grid--sleep">
+      <div class="dashboard-section__header">
+        <div>
+          <span class="dashboard-section__eyebrow">恢复指标</span>
+          <h2>睡眠数据</h2>
+        </div>
+      </div>
+      <div class="metric-grid__cards">
+        <% sleepCards.forEach((metric, index) => { %>
+          <article class="metric-card metric-card--sleep <%= index === 0 ? 'metric-card--highlight' : '' %>">
             <span class="metric-title"><%= metric.title %></span>
             <%- metric.valueHtml %>
             <div class="metric-card__meta"><%- metric.metaHtml %></div>

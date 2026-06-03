@@ -67,6 +67,17 @@ test('dashboard view model keeps the stable rendering contract for overview card
         workoutDurationMinutes: 45,
         cyclingDistanceKm: 3.2,
         totalCalories: 1560,
+        sleepSummary: {
+          totalSleepMinutes: 420,
+          nightSleepMinutes: 390,
+          napMinutes: 30,
+          deepSleepMinutes: 110,
+          lightSleepMinutes: 240,
+          remSleepMinutes: 70,
+          awakeMinutes: 20,
+          sleepStartTime: '23:15',
+          sleepEndTime: '06:25',
+        },
         countsByType: { 力量训练: 1 },
       }),
     },
@@ -94,6 +105,17 @@ test('dashboard view model keeps the stable rendering contract for overview card
         workoutDurationMinutes: 45,
         cyclingDistanceKm: 3.2,
         totalCalories: 1560,
+        sleepSummary: {
+          totalSleepMinutes: 420,
+          nightSleepMinutes: 390,
+          napMinutes: 30,
+          deepSleepMinutes: 110,
+          lightSleepMinutes: 240,
+          remSleepMinutes: 70,
+          awakeMinutes: 20,
+          sleepStartTime: '23:15',
+          sleepEndTime: '06:25',
+        },
         countsByType: { 力量训练: 1 },
       }),
     ],
@@ -130,6 +152,7 @@ test('dashboard view model keeps the stable rendering contract for overview card
       'primaryMetrics',
       'recentDays',
       'secondaryMetrics',
+      'sleepCards',
       'totalArchivedDays',
       'trainedDays',
     ].sort(),
@@ -202,6 +225,11 @@ test('dashboard view model keeps the stable rendering contract for overview card
   assert.match(view.recentDays[0].cardHtml, /力量训练 × 1/);
   assert.match(view.primaryMetrics[0].comparisonHtml, /hero-card__comparison/);
   assert.match(view.secondaryMetrics[0].comparisonHtml, /metric-card__comparison/);
+  assert.match(view.sleepCards[0].comparisonHtml, /metric-card__comparison/);
+  assert.deepEqual(
+    view.sleepCards.map((card) => card.title),
+    ['总睡眠', '深睡 / 浅睡', '午睡'],
+  );
   assert.deepEqual(
     view.chartPayload.charts.weightKg.map((point) => point.date),
     ['2026-04-13', '2026-05-12'],
@@ -237,6 +265,17 @@ function buildDay(date, overrides = null) {
         cyclingDistanceKm: overrides.cyclingDistanceKm ?? 0,
         countsByType: overrides.countsByType ?? {},
       },
+      sleepSummary: overrides.sleepSummary ?? {
+        totalSleepMinutes: null,
+        nightSleepMinutes: null,
+        napMinutes: null,
+        deepSleepMinutes: null,
+        lightSleepMinutes: null,
+        remSleepMinutes: null,
+        awakeMinutes: null,
+        sleepStartTime: null,
+        sleepEndTime: null,
+      },
       nutrition: {
         meals: [],
         totalCalories: overrides.totalCalories ?? null,
@@ -258,6 +297,17 @@ function buildDay(date, overrides = null) {
       activeHours: null,
       cyclingDistanceKm: 0,
       countsByType: {},
+    },
+    sleepSummary: {
+      totalSleepMinutes: null,
+      nightSleepMinutes: null,
+      napMinutes: null,
+      deepSleepMinutes: null,
+      lightSleepMinutes: null,
+      remSleepMinutes: null,
+      awakeMinutes: null,
+      sleepStartTime: null,
+      sleepEndTime: null,
     },
     nutrition: {
       meals: [],

@@ -16,6 +16,8 @@ export function buildDashboardViewModel(snapshot) {
   const latestDashboardDate = findLatestDashboardDate({ latestMeasurement, latestDay, daily: dailyEntries });
   const chartWindowDays = 30;
   const dailyCardLimit = 4;
+  const sleepSummarySource = latestDay?.sleepSummary || previousDay?.sleepSummary || null;
+  const sleepPreviousSource = previousDay?.sleepSummary || null;
   const chartStartDate = latestDashboardDate ? addDays(latestDashboardDate, -(chartWindowDays - 1)) : null;
   const dailyOverviewEntries = [...dailyEntries].reverse().map((day) => buildDailyOverviewEntry(day));
   const recentDays = dailyOverviewEntries.slice(0, dailyCardLimit);
@@ -45,6 +47,10 @@ export function buildDashboardViewModel(snapshot) {
     ),
     secondaryMetrics: withComparisonHtml(
       buildSecondaryMetrics({ latestMeasurement, latestDay, previousDay }),
+      'metric-card__comparison',
+    ),
+    sleepCards: withComparisonHtml(
+      buildSleepCards({ sleepSummarySource, sleepPreviousSource }),
       'metric-card__comparison',
     ),
     chartCards: buildChartCards(),
@@ -133,6 +139,34 @@ function buildSecondaryMetrics({ latestMeasurement, latestDay, previousDay }) {
       valueHtml: renderNumberValue(formatNumber(latestDay?.workoutSummary?.cyclingDistanceKm || 0), 'km'),
       metaHtml: renderMetaLine('当日活动', `${formatNumber(latestDay?.workoutSummary?.totalActivities || 0, 0)} 次`),
       comparison: buildComparison(latestDay?.workoutSummary?.cyclingDistanceKm || 0, previousDay?.workoutSummary?.cyclingDistanceKm),
+    },
+  ];
+}
+
+function buildSleepCards({ sleepSummarySource, sleepPreviousSource }) {
+  const sleep = sleepSummarySource || {};
+  const previousSleep = sleepPreviousSource || {};
+  return [
+    {
+      title: '总睡眠',
+      valueHtml: renderNumberValue(formatNumber(sleep.totalSleepMinutes, 0), '分钟'),
+      metaHtml: renderMetaLine('夜间睡眠', `${formatNumber(sleep.nightSleepMinutes, 0)} 分钟`),
+      comparison: buildComparison(sleep.totalSleepMinutes, previousSleep.totalSleepMinutes),
+    },
+    {
+      title: '深睡 / 浅睡',
+      valueHtml: renderCompositeValue([
+        { value: formatNumber(sleep.deepSleepMinutes, 0), unit: '分钟' },
+        { value: formatNumber(sleep.lightSleepMinutes, 0), unit: '分钟' },
+      ]),
+      metaHtml: renderMetaLine('REM / 清醒', `${formatNumber(sleep.remSleepMinutes, 0)} / ${formatNumber(sleep.awakeMinutes, 0)} 分钟`),
+      comparison: buildComparison(sleep.deepSleepMinutes, previousSleep.deepSleepMinutes),
+    },
+    {
+      title: '午睡',
+      valueHtml: renderNumberValue(formatNumber(sleep.napMinutes, 0), '分钟'),
+      metaHtml: renderMetaLine('入睡 / 醒来', `${sleep.sleepStartTime || '—'} / ${sleep.sleepEndTime || '—'}`),
+      comparison: buildComparison(sleep.napMinutes, previousSleep.napMinutes),
     },
   ];
 }

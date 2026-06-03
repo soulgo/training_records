@@ -155,6 +155,37 @@
   const dailyStatus = document.querySelector('[data-daily-status]');
   const newerButton = document.querySelector('[data-daily-nav="prev"]');
   const olderButton = document.querySelector('[data-daily-nav="next"]');
+  const sleepCards = document.querySelectorAll('.metric-card--sleep');
+
+  function renderSleepProgress(card, ratio) {
+    if (!card) {
+      return;
+    }
+
+    const existing = card.querySelector('.metric-card__progress');
+    if (existing) {
+      existing.remove();
+    }
+
+    const progress = document.createElement('div');
+    progress.className = 'metric-card__progress';
+    progress.innerHTML = '<span class="metric-card__progress-bar"><span class="metric-card__progress-fill" style="width:' + Math.max(8, Math.min(100, ratio)) + '%"></span></span>';
+    card.appendChild(progress);
+  }
+
+  sleepCards.forEach((card) => {
+    const valueNumber = card.querySelector('.metric-value__number');
+    if (!valueNumber) {
+      return;
+    }
+
+    const rawValue = parseFloat(valueNumber.textContent || '0');
+    if (Number.isNaN(rawValue)) {
+      return;
+    }
+
+    renderSleepProgress(card, rawValue);
+  });
 
   function renderDailyRange(pageIndex, pageSize, total) {
     if (!total) {
