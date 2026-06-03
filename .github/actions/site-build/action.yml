@@ -7,7 +7,7 @@ inputs:
     required: false
     default: 'true'
   sync_db_mode:
-    description: Database sync strategy: auto, always, or never
+    description: 'Database sync strategy: auto, always, or never'
     required: false
     default: 'auto'
   run_tests:
