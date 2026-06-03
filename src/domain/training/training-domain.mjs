@@ -312,7 +312,7 @@ export function buildTrainingSnapshotFromDaily(daily, generatedAt = new Date().t
       .map((entry) => ({ date: entry.date, value: entry.workoutSummary.cyclingDistanceKm })),
     sleepMinutes: daily
       .filter((entry) => entry.sleepSummary?.totalSleepMinutes !== null)
-      .map((entry) => ({ date: entry.date, value: entry.sleepSummary.totalSleepMinutes })),
+      .map((entry) => ({ date: entry.date, value: entry.sleepSummary?.totalSleepMinutes ?? null })),
   };
 
   return {
