@@ -104,7 +104,6 @@ export async function persistNormalizedBatch(options) {
       const mergedDay = mergeBatchIntoDay(existingDay, batch);
       await replaceCoreDay(client, mergedDay, batch.batchId, processedAt);
       await replaceCoreSleepRecords(client, mergedDay, batch.batchId, processedAt);
-      await replaceArchiveSleepRecords(client, mergedDay, batch.batchId, processedAt);
     }
 
     await client.query('COMMIT');
@@ -638,6 +637,19 @@ async function readCoreDay(client, archivedDate) {
         active_hours,
         cycling_distance_km,
         intake_calories,
+        sleep_total_minutes,
+        night_sleep_minutes,
+        nap_minutes,
+        sleep_start_time,
+        sleep_end_time,
+        deep_sleep_minutes,
+        light_sleep_minutes,
+        rem_sleep_minutes,
+        awake_minutes,
+        sleep_score,
+        deep_sleep_ratio_pct,
+        light_sleep_ratio_pct,
+        rem_sleep_ratio_pct,
         nutrition_details_json
       from core.training_day
       where archived_date = $1
@@ -743,6 +755,39 @@ async function readCoreDay(client, archivedDate) {
     [archivedDate],
   );
 
+  const dayRow = dayResult.rows[0];
+  const sleepRecords = [
+    ...sleepResult.rows.map((sleep) => ({
+      sleepType: sleep.sleep_type ?? '夜间睡眠',
+      bedtime: sleep.bedtime ?? null,
+      wakeTime: sleep.wake_time ?? null,
+      nightSleepMinutes: sleep.night_sleep_minutes ?? null,
+      totalSleepMinutes: sleep.total_sleep_minutes ?? null,
+      napMinutes: sleep.nap_minutes ?? null,
+      deepSleepMinutes: sleep.deep_sleep_minutes ?? null,
+      lightSleepMinutes: sleep.light_sleep_minutes ?? null,
+      remSleepMinutes: sleep.rem_sleep_minutes ?? null,
+      awakeMinutes: sleep.awake_minutes ?? null,
+      sleepStageText: sleep.sleep_stage_text ?? null,
+      sleepStageDetail: sleep.sleep_stage_detail ?? null,
+      sleepScore: sleep.sleep_score ?? null,
+      sleepScorePercentile: sleep.sleep_score_percentile ?? null,
+      deepSleepRatioPct: sleep.deep_sleep_ratio_pct ?? null,
+      lightSleepRatioPct: sleep.light_sleep_ratio_pct ?? null,
+      remSleepRatioPct: sleep.rem_sleep_ratio_pct ?? null,
+      deepSleepContinuityScore: sleep.deep_sleep_continuity_score ?? null,
+      wakeCount: sleep.wake_count ?? null,
+      breathingQualityScore: sleep.breathing_quality_score ?? null,
+      averageHeartRateBpm: sleep.average_heart_rate_bpm ?? null,
+      hrvMs: sleep.hrv_ms ?? null,
+      averageSpo2Pct: sleep.average_spo2_pct ?? null,
+      averageRespiratoryRate: sleep.average_respiratory_rate ?? null,
+      analysisText: sleep.analysis_text ?? null,
+      suggestionText: sleep.suggestion_text ?? null,
+    })),
+    extractCoreDaySleepRecord(dayRow),
+  ].filter(Boolean);
+
   return buildTrainingDay({
     date: archivedDate,
     measurements: measurementResult.rows.map((measurement) => ({
@@ -781,45 +826,36 @@ async function readCoreDay(client, archivedDate) {
         recommendedMin: meal.recommended_min ?? null,
         recommendedMax: meal.recommended_max ?? null,
       })),
-      totalCalories: dayResult.rows[0].intake_calories ?? null,
-      details: Array.isArray(dayResult.rows[0].nutrition_details_json) ? dayResult.rows[0].nutrition_details_json : [],
+      totalCalories: dayRow.intake_calories ?? null,
+      details: Array.isArray(dayRow.nutrition_details_json) ? dayRow.nutrition_details_json : [],
     },
-    sleep: {
-      records: sleepResult.rows.map((sleep) => ({
-        sleepType: sleep.sleep_type ?? '夜间睡眠',
-        bedtime: sleep.bedtime ?? null,
-        wakeTime: sleep.wake_time ?? null,
-        nightSleepMinutes: sleep.night_sleep_minutes ?? null,
-        totalSleepMinutes: sleep.total_sleep_minutes ?? null,
-        napMinutes: sleep.nap_minutes ?? null,
-        deepSleepMinutes: sleep.deep_sleep_minutes ?? null,
-        lightSleepMinutes: sleep.light_sleep_minutes ?? null,
-        remSleepMinutes: sleep.rem_sleep_minutes ?? null,
-        awakeMinutes: sleep.awake_minutes ?? null,
-        sleepStageText: sleep.sleep_stage_text ?? null,
-        sleepStageDetail: sleep.sleep_stage_detail ?? null,
-        sleepScore: sleep.sleep_score ?? null,
-        sleepScorePercentile: sleep.sleep_score_percentile ?? null,
-        deepSleepRatioPct: sleep.deep_sleep_ratio_pct ?? null,
-        lightSleepRatioPct: sleep.light_sleep_ratio_pct ?? null,
-        remSleepRatioPct: sleep.rem_sleep_ratio_pct ?? null,
-        deepSleepContinuityScore: sleep.deep_sleep_continuity_score ?? null,
-        wakeCount: sleep.wake_count ?? null,
-        breathingQualityScore: sleep.breathing_quality_score ?? null,
-        averageHeartRateBpm: sleep.average_heart_rate_bpm ?? null,
-        hrvMs: sleep.hrv_ms ?? null,
-        averageSpo2Pct: sleep.average_spo2_pct ?? null,
-        averageRespiratoryRate: sleep.average_respiratory_rate ?? null,
-        analysisText: sleep.analysis_text ?? null,
-        suggestionText: sleep.suggestion_text ?? null,
-      })),
-    },
+    sleep: { records: sleepRecords },
     workoutDailySummary: {
-      activityCaloriesKcal: dayResult.rows[0].training_calories,
-      workoutDurationMinutes: dayResult.rows[0].workout_duration_minutes,
-      activeHours: dayResult.rows[0].active_hours,
+      activityCaloriesKcal: dayRow.training_calories,
+      workoutDurationMinutes: dayRow.workout_duration_minutes,
+      activeHours: dayRow.active_hours,
     },
   });
+}
+
+function extractCoreDaySleepRecord(row) {
+  const sleep = {
+    totalSleepMinutes: normalizeNumber(row.sleep_total_minutes, null),
+    nightSleepMinutes: normalizeNumber(row.night_sleep_minutes, null),
+    napMinutes: normalizeNumber(row.nap_minutes, null),
+    sleepStartTime: row.sleep_start_time ?? null,
+    sleepEndTime: row.sleep_end_time ?? null,
+    deepSleepMinutes: normalizeNumber(row.deep_sleep_minutes, null),
+    lightSleepMinutes: normalizeNumber(row.light_sleep_minutes, null),
+    remSleepMinutes: normalizeNumber(row.rem_sleep_minutes, null),
+    awakeMinutes: normalizeNumber(row.awake_minutes, null),
+    sleepScore: normalizeNumber(row.sleep_score, null),
+    deepSleepRatioPct: normalizeNumber(row.deep_sleep_ratio_pct, null),
+    lightSleepRatioPct: normalizeNumber(row.light_sleep_ratio_pct, null),
+    remSleepRatioPct: normalizeNumber(row.rem_sleep_ratio_pct, null),
+  };
+  const hasValue = Object.values(sleep).some((value) => value !== null && value !== undefined && value !== '');
+  return hasValue ? sleep : null;
 }
 
 function mergeBatchIntoDay(existingDay, batch) {

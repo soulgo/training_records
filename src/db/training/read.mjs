@@ -330,18 +330,17 @@ export async function readTrainingSnapshotFromDatabaseClient(client, now) {
 }
 
 async function readTrainingSnapshotFromDatabaseWithClients({ createClient, config, now, dateFrom, dateTo }) {
-  const clients = Array.from({ length: 6 }, () => createClient(config));
+  const clients = Array.from({ length: 5 }, () => createClient(config));
 
   try {
     await Promise.all(clients.map((client) => client.connect()));
 
-    const [dayResult, measurementResult, activityResult, mealResult, sleepRows, bodyFeedbackResult] = await Promise.all([
+    const [dayResult, measurementResult, activityResult, mealResult, bodyFeedbackResult] = await Promise.all([
       clients[0].query(TRAINING_DAY_QUERY),
       clients[1].query(TRAINING_MEASUREMENT_QUERY),
       clients[2].query(TRAINING_ACTIVITY_QUERY),
       clients[3].query(TRAINING_MEAL_QUERY),
-      readOptionalSleepRows(clients[4], TRAINING_SLEEP_QUERY),
-      clients[5].query(BODY_FEEDBACK_QUERY),
+      clients[4].query(BODY_FEEDBACK_QUERY),
     ]);
 
     return buildTrainingSnapshotFromRows({
@@ -349,7 +348,7 @@ async function readTrainingSnapshotFromDatabaseWithClients({ createClient, confi
       measurementRows: measurementResult.rows,
       activityRows: activityResult.rows,
       mealRows: mealResult.rows,
-      sleepRows,
+      sleepRows: [],
       bodyFeedbackRows: bodyFeedbackResult.rows,
       now,
       dateFrom,
