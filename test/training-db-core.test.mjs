@@ -373,7 +373,7 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls.at(-1)[0], 'end');
 });
 
-test('persistNormalizedBatch writes sleep SQL with aligned unnest parameters', async () => {
+test('persistNormalizedBatch writes sleep metrics to core tables without touching archive sleep', async () => {
   const calls = [];
   const fakeClient = {
     async connect() {
@@ -441,26 +441,25 @@ test('persistNormalizedBatch writes sleep SQL with aligned unnest parameters', a
     processedAt: new Date('2026-06-04T00:00:00.000Z'),
   });
 
-  const coreSleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
-  const archiveSleepInsert = calls.find(([sql]) => /insert into archive\.training_sleep/i.test(sql));
   const trainingDayInsert = calls.find(([sql]) => /insert into core\.training_day/i.test(sql));
+  const coreSleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
 
-  assert.ok(coreSleepInsert);
-  assert.ok(archiveSleepInsert);
   assert.ok(trainingDayInsert);
+  assert.ok(coreSleepInsert);
+  assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), false);
   assertSequentialUnnestParameters(coreSleepInsert[0], 31);
-  assertSequentialUnnestParameters(archiveSleepInsert[0], 30);
   assert.equal(coreSleepInsert[1].length, 31);
-  assert.equal(archiveSleepInsert[1].length, 30);
   assert.deepEqual(trainingDayInsert[1][13], ['23:26']);
   assert.deepEqual(trainingDayInsert[1][14], ['06:19']);
+  assert.deepEqual(trainingDayInsert[1][19], [81]);
+  assert.deepEqual(trainingDayInsert[1][20], [35]);
+  assert.deepEqual(trainingDayInsert[1][21], [47]);
+  assert.deepEqual(trainingDayInsert[1][22], [18]);
   assert.deepEqual(coreSleepInsert[1][16], [81]);
   assert.deepEqual(coreSleepInsert[1][22], [1]);
-  assert.deepEqual(archiveSleepInsert[1][15], [81]);
-  assert.deepEqual(archiveSleepInsert[1][21], [1]);
 });
 
-test('persistNormalizedBatch preserves existing sleep health fields when another payload updates the same day', async () => {
+test('persistNormalizedBatch preserves existing core day sleep metrics when another payload updates the same day', async () => {
   const calls = [];
   const fakeClient = {
     async connect() {
@@ -483,6 +482,19 @@ test('persistNormalizedBatch preserves existing sleep health fields when another
               active_hours: null,
               cycling_distance_km: 0,
               intake_calories: null,
+              sleep_total_minutes: 411,
+              night_sleep_minutes: 411,
+              nap_minutes: null,
+              sleep_start_time: '23:26',
+              sleep_end_time: '06:19',
+              deep_sleep_minutes: 145,
+              light_sleep_minutes: 195,
+              rem_sleep_minutes: 71,
+              awake_minutes: null,
+              sleep_score: 81,
+              deep_sleep_ratio_pct: 35,
+              light_sleep_ratio_pct: 47,
+              rem_sleep_ratio_pct: 18,
               nutrition_details_json: [],
             },
           ],
@@ -496,41 +508,6 @@ test('persistNormalizedBatch preserves existing sleep health fields when another
       }
       if (/from core\.meal/i.test(sql)) {
         return { rows: [] };
-      }
-      if (/from core\.sleep/i.test(sql)) {
-        return {
-          rows: [
-            {
-              archived_date: '2026-06-03',
-              sleep_type: '夜间睡眠',
-              bedtime: '23:26',
-              wake_time: '06:19',
-              night_sleep_minutes: 411,
-              total_sleep_minutes: 411,
-              nap_minutes: null,
-              deep_sleep_minutes: 145,
-              light_sleep_minutes: 195,
-              rem_sleep_minutes: 71,
-              awake_minutes: null,
-              sleep_stage_text: '深睡2小时25分钟；浅睡3小时15分钟；快速眼动1小时11分钟',
-              sleep_stage_detail: ['深睡 2小时25分钟', '浅睡 3小时15分钟', '快速眼动 1小时11分钟'],
-              sleep_score: 81,
-              sleep_score_percentile: 77,
-              deep_sleep_ratio_pct: 35,
-              light_sleep_ratio_pct: 47,
-              rem_sleep_ratio_pct: 18,
-              deep_sleep_continuity_score: 85,
-              wake_count: 1,
-              breathing_quality_score: 98,
-              average_heart_rate_bpm: 68,
-              hrv_ms: 34,
-              average_spo2_pct: 97,
-              average_respiratory_rate: 14,
-              analysis_text: '睡眠质量良好。',
-              suggestion_text: '建议睡觉时关灯。',
-            },
-          ],
-        };
       }
       return { rows: [] };
     },
@@ -566,14 +543,14 @@ test('persistNormalizedBatch preserves existing sleep health fields when another
     processedAt: new Date('2026-06-04T00:00:00.000Z'),
   });
 
-  const coreSleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
+  const trainingDayInsert = calls.find(([sql]) => /insert into core\.training_day/i.test(sql));
 
-  assert.ok(coreSleepInsert);
-  assert.deepEqual(coreSleepInsert[1][16], [81]);
-  assert.deepEqual(coreSleepInsert[1][18], [35]);
-  assert.deepEqual(coreSleepInsert[1][22], [1]);
-  assert.deepEqual(coreSleepInsert[1][24], [68]);
-  assert.deepEqual(coreSleepInsert[1][29], ['建议睡觉时关灯。']);
+  assert.ok(trainingDayInsert);
+  assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), false);
+  assert.deepEqual(trainingDayInsert[1][10], [411]);
+  assert.deepEqual(trainingDayInsert[1][13], ['23:26']);
+  assert.deepEqual(trainingDayInsert[1][19], [81]);
+  assert.deepEqual(trainingDayInsert[1][20], [35]);
 });
 
 test('pending recognition store reads, queues, and resolves database rows', async () => {
