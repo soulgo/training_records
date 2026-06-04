@@ -53,6 +53,51 @@ test('dashboard view falls back to the latest valid daily date when latest dates
   assert.equal(view.chartPayload.charts.weightKg.length, 2);
 });
 
+test('dashboard sleep cards use the latest day that has sleep data', () => {
+  const view = buildDashboardViewModel({
+    generatedAt: '2026-06-04T00:00:00.000Z',
+    latest: {
+      measurement: { archivedDate: '2026-06-04', weightKg: 72.1 },
+      daily: buildDay('2026-06-04', {
+        measurement: { archivedDate: '2026-06-04', weightKg: 72.1 },
+        trainingCalories: 240,
+      }),
+    },
+    daily: [
+      buildDay('2026-06-03', {
+        sleepSummary: {
+          totalSleepMinutes: 411,
+          nightSleepMinutes: 411,
+          napMinutes: null,
+          deepSleepMinutes: 145,
+          lightSleepMinutes: 195,
+          remSleepMinutes: 71,
+          awakeMinutes: null,
+          sleepStartTime: '23:26',
+          sleepEndTime: '06:19',
+          sleepScore: 81,
+          deepSleepRatioPct: 35,
+          lightSleepRatioPct: 47,
+          remSleepRatioPct: 18,
+        },
+      }),
+      buildDay('2026-06-04', {
+        measurement: { archivedDate: '2026-06-04', weightKg: 72.1 },
+        trainingCalories: 240,
+      }),
+    ],
+    charts: {
+      weightKg: [{ date: '2026-06-04', value: 72.1 }],
+    },
+  });
+
+  assert.match(view.sleepCards[0].valueHtml, /411/);
+  assert.match(view.sleepCards[1].valueHtml, /145/);
+  assert.match(view.sleepCards[1].valueHtml, /195/);
+  assert.match(view.sleepCards[2].valueHtml, /35/);
+  assert.match(view.sleepCards[2].valueHtml, /47/);
+});
+
 test('dashboard view model keeps the stable rendering contract for overview cards and charts', () => {
   const view = buildDashboardViewModel({
     generatedAt: '2026-05-13T00:00:00.000Z',

@@ -16,8 +16,9 @@ export function buildDashboardViewModel(snapshot) {
   const latestDashboardDate = findLatestDashboardDate({ latestMeasurement, latestDay, daily: dailyEntries });
   const chartWindowDays = 30;
   const dailyCardLimit = 4;
-  const sleepSummarySource = latestDay?.sleepSummary || previousDay?.sleepSummary || null;
-  const sleepPreviousSource = previousDay?.sleepSummary || null;
+  const sleepDays = dailyEntries.filter((day) => hasSleepSummary(day?.sleepSummary));
+  const sleepSummarySource = sleepDays.at(-1)?.sleepSummary ?? null;
+  const sleepPreviousSource = sleepDays.at(-2)?.sleepSummary ?? null;
   const chartStartDate = latestDashboardDate ? addDays(latestDashboardDate, -(chartWindowDays - 1)) : null;
   const dailyOverviewEntries = [...dailyEntries].reverse().map((day) => buildDailyOverviewEntry(day));
   const recentDays = dailyOverviewEntries.slice(0, dailyCardLimit);
@@ -146,8 +147,8 @@ function buildSecondaryMetrics({ latestMeasurement, latestDay, previousDay }) {
 function buildSleepCards({ sleepSummarySource, sleepPreviousSource }) {
   const sleep = sleepSummarySource || {};
   const previousSleep = sleepPreviousSource || {};
-  const deepRatio = buildSleepRatioValue(sleep.deepSleepMinutes, sleep.totalSleepMinutes);
-  const lightRatio = buildSleepRatioValue(sleep.lightSleepMinutes, sleep.totalSleepMinutes);
+  const deepRatio = sleep.deepSleepRatioPct ?? buildSleepRatioValue(sleep.deepSleepMinutes, sleep.totalSleepMinutes);
+  const lightRatio = sleep.lightSleepRatioPct ?? buildSleepRatioValue(sleep.lightSleepMinutes, sleep.totalSleepMinutes);
 
   return [
     {
@@ -175,6 +176,17 @@ function buildSleepCards({ sleepSummarySource, sleepPreviousSource }) {
       comparison: buildSleepRatioComparison(sleep, previousSleep),
     },
   ];
+}
+
+function hasSleepSummary(sleep) {
+  return Boolean(sleep && [
+    sleep.totalSleepMinutes,
+    sleep.nightSleepMinutes,
+    sleep.deepSleepMinutes,
+    sleep.lightSleepMinutes,
+    sleep.remSleepMinutes,
+    sleep.sleepScore,
+  ].some((value) => value !== null && value !== undefined));
 }
 
 function buildSleepRatioValue(partMinutes, totalMinutes) {

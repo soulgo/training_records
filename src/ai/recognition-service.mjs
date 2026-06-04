@@ -452,8 +452,37 @@ function normalizeRecognitionSleep(sleep) {
     return sleep;
   }
 
+  const nullableFields = [
+    'sleepType',
+    'bedtime',
+    'wakeTime',
+    'nightSleepMinutes',
+    'totalSleepMinutes',
+    'napMinutes',
+    'deepSleepMinutes',
+    'lightSleepMinutes',
+    'remSleepMinutes',
+    'awakeMinutes',
+    'sleepStageText',
+    'sleepScore',
+    'sleepScorePercentile',
+    'deepSleepRatioPct',
+    'lightSleepRatioPct',
+    'remSleepRatioPct',
+    'deepSleepContinuityScore',
+    'wakeCount',
+    'breathingQualityScore',
+    'averageHeartRateBpm',
+    'hrvMs',
+    'averageSpo2Pct',
+    'averageRespiratoryRate',
+    'analysisText',
+    'suggestionText',
+  ];
+  const normalized = Object.fromEntries(nullableFields.map((field) => [field, sleep[field] ?? null]));
+
   return {
-    ...sleep,
+    ...normalized,
     sleepStageDetail: normalizeRecognitionDetails(sleep.sleepStageDetail),
   };
 }

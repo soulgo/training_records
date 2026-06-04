@@ -2,7 +2,7 @@
   "_description": "Image recognition prompt rules. Edit here, then run `node tools/prompt-generator.mjs` to regenerate prompts/telegram-training-image-recognition.md.",
 
   "metadata": {
-    "version": "2026-06-01",
+    "version": "2026-06-04",
     "schemaName": "telegram_training_image",
     "schemaVersion": "v1"
   },
@@ -116,8 +116,12 @@
       "`nightSleepMinutes` 写夜间睡眠时长，`totalSleepMinutes` 写总睡眠时长；如果截图只给了一个总值，就不要臆造另一个。",
       "`deepSleepMinutes`、`lightSleepMinutes`、`remSleepMinutes`、`awakeMinutes` 按截图填写，无法可靠识别就填 `null`。",
       "`sleepStageText` 写睡眠阶段原始文本；`sleepStageDetail` 只写画面明确可见的阶段或时间占比列表，没有则填 `null`。",
-      "如果截图出现多个睡眠日期、跨天睡眠或日期信息不一致，`detectedDate` 填 `null`，`warnings` 说明日期冲突或跨天归属不确定。",
-      "睡眠截图的日期优先取截图画面内明确可见的日期；若只有月日，可结合 Telegram 消息年份补全。"
+      "睡眠截图必须输出 `records.sleep` schema 中的全部字段；画面不可见的字段必须填 `null`，不得省略字段。",
+      "夜间睡眠按入睡日期归档：例如截图显示 `6/3 入睡23:26`、`6/4 醒来06:19`，`detectedDate` 必须是入睡日 `2026-06-03`。",
+      "如果睡眠跨天但画面明确显示入睡月日和醒来月日，这不是日期冲突；使用入睡月日结合 Telegram 消息年份补全年份。",
+      "如果只有页面顶部醒来日期，但时间轴明确显示前一天入睡日期，优先使用时间轴的入睡日期。",
+      "提取睡眠健康指标：`sleepScore`、`sleepScorePercentile`、`deepSleepRatioPct`、`lightSleepRatioPct`、`remSleepRatioPct`、`deepSleepContinuityScore`、`wakeCount`、`breathingQualityScore`、`averageHeartRateBpm`、`hrvMs`、`averageSpo2Pct`、`averageRespiratoryRate`。",
+      "截图底部的睡眠解读写入 `analysisText`，建议内容写入 `suggestionText`；没有则填 `null`。"
     ]
   }
 }

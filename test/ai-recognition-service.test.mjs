@@ -91,6 +91,79 @@ test('recognizeTelegramImageMessage skips cache when disabled and keeps runtime 
   assert.equal(result.imageType, 'workout');
 });
 
+test('recognizeTelegramImageMessage normalizes incomplete Huawei sleep payloads before schema validation', async () => {
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      env: { model: 'gpt-test' },
+      async requestChatCompletion() {
+        return {
+          ok: true,
+          async json() {
+            return {
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      imageType: 'sleep',
+                      detectedDate: '2026-06-04',
+                      dateEvidence: 'image header: 2026-06-04',
+                      confidence: 0.98,
+                      warnings: [],
+                      records: {
+                        sleep: {
+                          bedtime: '6/3 23:26',
+                          totalSleepMinutes: 411,
+                          deepSleepMinutes: 145,
+                          lightSleepMinutes: 195,
+                          remSleepMinutes: 71,
+                          sleepScore: 81,
+                          sleepScorePercentile: 77,
+                          deepSleepRatioPct: 35,
+                          lightSleepRatioPct: 47,
+                          remSleepRatioPct: 18,
+                          deepSleepContinuityScore: 85,
+                          wakeCount: 1,
+                          breathingQualityScore: 98,
+                          averageHeartRateBpm: 68,
+                          hrvMs: 34,
+                          averageSpo2Pct: 97,
+                          averageRespiratoryRate: 14,
+                          analysisText: '睡眠质量良好。',
+                          suggestionText: '建议睡觉时关灯。',
+                        },
+                      },
+                    }),
+                  },
+                },
+              ],
+            };
+          },
+        };
+      },
+    },
+    message: {
+      messageId: 80,
+      caption: '',
+      text: '',
+      photos: [{ fileUniqueId: 'sleep-file-1' }],
+    },
+    imageUrl: 'https://example.com/sleep.jpg',
+    systemPrompt: 'system prompt',
+    promptMetadata,
+    env: {
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
+    },
+  });
+
+  assert.equal(result.imageType, 'sleep');
+  assert.equal(result.records.sleep.wakeTime, null);
+  assert.equal(result.records.sleep.nightSleepMinutes, null);
+  assert.equal(result.records.sleep.sleepScore, 81);
+  assert.equal(result.records.sleep.averageHeartRateBpm, 68);
+  assert.deepEqual(result.records.sleep.sleepStageDetail, []);
+});
+
 test('recognizeTelegramImageMessage hits cache when versioned metadata matches', async () => {
   let requestCount = 0;
   const cached = {

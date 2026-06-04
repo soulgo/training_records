@@ -175,6 +175,81 @@ test('uses meal calories as nutrition total when recognition omits totalCalories
   assert.equal(analyzed.nutrition.totalCalories, 938);
 });
 
+test('sleep screenshots are archived by bedtime date and keep Huawei sleep health metrics', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const [batch] = lib.groupTelegramUpdates([
+    {
+      update_id: 161,
+      message: {
+        message_id: 61,
+        date: Math.floor(new Date('2026-06-04T01:30:00Z').getTime() / 1000),
+        chat: { id: 42 },
+        photo: [{ file_id: 'sleep-file', file_unique_id: 'sleep-uniq' }],
+      },
+    },
+  ]);
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 61,
+      imageType: 'sleep',
+      detectedDate: '2026-06-04',
+      dateEvidence: 'image header: 6月4日 周四, timeline shows 6/3 入睡23:26',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: null,
+        sleep: {
+          sleepType: '夜间睡眠',
+          bedtime: '6/3 23:26',
+          wakeTime: '6/4 06:19',
+          nightSleepMinutes: 411,
+          totalSleepMinutes: 411,
+          napMinutes: null,
+          deepSleepMinutes: 145,
+          lightSleepMinutes: 195,
+          remSleepMinutes: 71,
+          awakeMinutes: null,
+          sleepStageText: '深睡2小时25分钟；浅睡3小时15分钟；快速眼动1小时11分钟',
+          sleepStageDetail: ['深睡 2小时25分钟', '浅睡 3小时15分钟', '快速眼动 1小时11分钟'],
+          sleepScore: 81,
+          sleepScorePercentile: 77,
+          deepSleepRatioPct: 35,
+          lightSleepRatioPct: 47,
+          remSleepRatioPct: 18,
+          deepSleepContinuityScore: 85,
+          wakeCount: 1,
+          breathingQualityScore: 98,
+          averageHeartRateBpm: 68,
+          hrvMs: 34,
+          averageSpo2Pct: 97,
+          averageRespiratoryRate: 14,
+          analysisText: '睡眠质量良好。睡眠时长6小时51分钟，在正常范围内。',
+          suggestionText: '建议睡觉时关灯，并选择遮光效果好的窗帘。',
+        },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-06-03');
+  assert.equal(analyzed.sleep.totalSleepMinutes, 411);
+  assert.equal(analyzed.sleep.sleepStartTime, '23:26');
+  assert.equal(analyzed.sleep.sleepEndTime, '06:19');
+  assert.equal(analyzed.sleep.sleepScore, 81);
+  assert.equal(analyzed.sleep.deepSleepRatioPct, 35);
+  assert.equal(analyzed.sleep.records[0].averageHeartRateBpm, 68);
+  assert.equal(analyzed.sleep.records[0].analysisText, '睡眠质量良好。睡眠时长6小时51分钟，在正常范围内。');
+});
+
 test('groups /thought and /随想 messages into thought batches and ignores normal text', async () => {
   const lib = await importTelegramSyncLib();
 

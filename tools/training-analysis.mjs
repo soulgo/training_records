@@ -136,6 +136,7 @@ export function buildTrainingAnalysisSummary(snapshot, now = new Date()) {
         .filter(([, count]) => Number(count) > 0)
         .map(([type, count]) => `${type}x${count}`),
       intakeCalories: toNumberOrNull(day.nutrition?.totalCalories),
+      sleepSummary: summarizeSleepForAnalysis(day.sleepSummary),
       workoutDetails: summarizeLatestActivityDetails(day.activities ?? []),
       bodyFeedback: bodyFeedback.byDate[day.date] ?? [],
       hasStrengthTraining: hasStrengthTraining(day),
@@ -143,6 +144,34 @@ export function buildTrainingAnalysisSummary(snapshot, now = new Date()) {
       hasHighIntensity: hasHighIntensityTraining(day),
       nutritionComplete: hasNutritionRecord(day),
     })),
+  };
+}
+
+function summarizeSleepForAnalysis(sleep) {
+  if (!sleep || sleep.totalSleepMinutes === null || sleep.totalSleepMinutes === undefined) {
+    return null;
+  }
+  return {
+    totalSleepMinutes: toNumberOrNull(sleep.totalSleepMinutes),
+    nightSleepMinutes: toNumberOrNull(sleep.nightSleepMinutes),
+    sleepStartTime: sleep.sleepStartTime ?? null,
+    sleepEndTime: sleep.sleepEndTime ?? null,
+    deepSleepMinutes: toNumberOrNull(sleep.deepSleepMinutes),
+    lightSleepMinutes: toNumberOrNull(sleep.lightSleepMinutes),
+    remSleepMinutes: toNumberOrNull(sleep.remSleepMinutes),
+    deepSleepRatioPct: toNumberOrNull(sleep.deepSleepRatioPct),
+    lightSleepRatioPct: toNumberOrNull(sleep.lightSleepRatioPct),
+    remSleepRatioPct: toNumberOrNull(sleep.remSleepRatioPct),
+    sleepScore: toNumberOrNull(sleep.sleepScore),
+    deepSleepContinuityScore: toNumberOrNull(sleep.deepSleepContinuityScore),
+    wakeCount: toNumberOrNull(sleep.wakeCount),
+    breathingQualityScore: toNumberOrNull(sleep.breathingQualityScore),
+    averageHeartRateBpm: toNumberOrNull(sleep.averageHeartRateBpm),
+    hrvMs: toNumberOrNull(sleep.hrvMs),
+    averageSpo2Pct: toNumberOrNull(sleep.averageSpo2Pct),
+    averageRespiratoryRate: toNumberOrNull(sleep.averageRespiratoryRate),
+    analysisText: sleep.analysisText ?? null,
+    suggestionText: sleep.suggestionText ?? null,
   };
 }
 

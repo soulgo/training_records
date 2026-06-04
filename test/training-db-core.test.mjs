@@ -156,6 +156,41 @@ test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before gr
           ],
         };
       }
+      if (/from core\.sleep/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: new Date('2026-05-22T00:00:00.000Z'),
+              sleep_type: '夜间睡眠',
+              bedtime: '23:26',
+              wake_time: '06:19',
+              night_sleep_minutes: 411,
+              total_sleep_minutes: 411,
+              nap_minutes: null,
+              deep_sleep_minutes: 145,
+              light_sleep_minutes: 195,
+              rem_sleep_minutes: 71,
+              awake_minutes: null,
+              sleep_stage_text: '深睡2小时25分钟；浅睡3小时15分钟；快速眼动1小时11分钟',
+              sleep_stage_detail: ['深睡 2小时25分钟', '浅睡 3小时15分钟', '快速眼动 1小时11分钟'],
+              sleep_score: 81,
+              sleep_score_percentile: 77,
+              deep_sleep_ratio_pct: 35,
+              light_sleep_ratio_pct: 47,
+              rem_sleep_ratio_pct: 18,
+              deep_sleep_continuity_score: 85,
+              wake_count: 1,
+              breathing_quality_score: 98,
+              average_heart_rate_bpm: 68,
+              hrv_ms: 34,
+              average_spo2_pct: 97,
+              average_respiratory_rate: 14,
+              analysis_text: '睡眠质量良好。',
+              suggestion_text: '建议睡觉时关灯。',
+            },
+          ],
+        };
+      }
       if (/from core\.thought/i.test(sql)) {
         return {
           rows: [
@@ -184,6 +219,9 @@ test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before gr
   assert.equal(day.activities.length, 1);
   assert.equal(day.nutrition.meals.length, 1);
   assert.equal(day.measurement.weightKg, 73.7);
+  assert.equal(day.sleepSummary.totalSleepMinutes, 411);
+  assert.equal(day.sleepSummary.sleepScore, 81);
+  assert.equal(day.sleep[0].averageHeartRateBpm, 68);
   assert.equal(snapshot.bodyFeedback.length, 1);
   assert.equal(snapshot.bodyFeedback[0].date, '2026-05-22');
   assert.equal(snapshot.bodyFeedback[0].body, '训练后右膝外侧酸胀');
@@ -333,6 +371,209 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.ok(calls.some(([sql]) => /insert into core\.meal/i.test(sql)));
   assert.equal(calls.at(-2)[0], 'COMMIT');
   assert.equal(calls.at(-1)[0], 'end');
+});
+
+test('persistNormalizedBatch writes sleep SQL with aligned unnest parameters', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'single-sleep-sql',
+      archivedDate: '2026-06-03',
+      measurement: null,
+      activities: [],
+      workoutDailySummary: {},
+      nutrition: { meals: [], totalCalories: null, details: [] },
+      sleep: {
+        records: [
+          {
+            sleepType: '夜间睡眠',
+            bedtime: '23:26',
+            wakeTime: '06:19',
+            nightSleepMinutes: 411,
+            totalSleepMinutes: 411,
+            deepSleepMinutes: 145,
+            lightSleepMinutes: 195,
+            remSleepMinutes: 71,
+            sleepScore: 81,
+            sleepScorePercentile: 77,
+            deepSleepRatioPct: 35,
+            lightSleepRatioPct: 47,
+            remSleepRatioPct: 18,
+            deepSleepContinuityScore: 85,
+            wakeCount: 1,
+            breathingQualityScore: 98,
+            averageHeartRateBpm: 68,
+            hrvMs: 34,
+            averageSpo2Pct: 97,
+            averageRespiratoryRate: 14,
+            analysisText: '睡眠质量良好。',
+            suggestionText: '建议睡觉时关灯。',
+          },
+        ],
+      },
+      recognitions: [],
+      messages: [],
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-06-04T00:00:00.000Z'),
+  });
+
+  const coreSleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
+  const archiveSleepInsert = calls.find(([sql]) => /insert into archive\.training_sleep/i.test(sql));
+  const trainingDayInsert = calls.find(([sql]) => /insert into core\.training_day/i.test(sql));
+
+  assert.ok(coreSleepInsert);
+  assert.ok(archiveSleepInsert);
+  assert.ok(trainingDayInsert);
+  assertSequentialUnnestParameters(coreSleepInsert[0], 31);
+  assertSequentialUnnestParameters(archiveSleepInsert[0], 30);
+  assert.equal(coreSleepInsert[1].length, 31);
+  assert.equal(archiveSleepInsert[1].length, 30);
+  assert.deepEqual(trainingDayInsert[1][13], ['23:26']);
+  assert.deepEqual(trainingDayInsert[1][14], ['06:19']);
+  assert.deepEqual(coreSleepInsert[1][16], [81]);
+  assert.deepEqual(coreSleepInsert[1][22], [1]);
+  assert.deepEqual(archiveSleepInsert[1][15], [81]);
+  assert.deepEqual(archiveSleepInsert[1][21], [1]);
+});
+
+test('persistNormalizedBatch preserves existing sleep health fields when another payload updates the same day', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.training_day/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-06-03',
+              total_activities: 0,
+              total_duration_seconds: 0,
+              training_calories: 0,
+              workout_duration_minutes: null,
+              active_hours: null,
+              cycling_distance_km: 0,
+              intake_calories: null,
+              nutrition_details_json: [],
+            },
+          ],
+        };
+      }
+      if (/from core\.measurement/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.activity/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.meal/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.sleep/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-06-03',
+              sleep_type: '夜间睡眠',
+              bedtime: '23:26',
+              wake_time: '06:19',
+              night_sleep_minutes: 411,
+              total_sleep_minutes: 411,
+              nap_minutes: null,
+              deep_sleep_minutes: 145,
+              light_sleep_minutes: 195,
+              rem_sleep_minutes: 71,
+              awake_minutes: null,
+              sleep_stage_text: '深睡2小时25分钟；浅睡3小时15分钟；快速眼动1小时11分钟',
+              sleep_stage_detail: ['深睡 2小时25分钟', '浅睡 3小时15分钟', '快速眼动 1小时11分钟'],
+              sleep_score: 81,
+              sleep_score_percentile: 77,
+              deep_sleep_ratio_pct: 35,
+              light_sleep_ratio_pct: 47,
+              rem_sleep_ratio_pct: 18,
+              deep_sleep_continuity_score: 85,
+              wake_count: 1,
+              breathing_quality_score: 98,
+              average_heart_rate_bpm: 68,
+              hrv_ms: 34,
+              average_spo2_pct: 97,
+              average_respiratory_rate: 14,
+              analysis_text: '睡眠质量良好。',
+              suggestion_text: '建议睡觉时关灯。',
+            },
+          ],
+        };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'single-food-after-sleep',
+      archivedDate: '2026-06-03',
+      measurement: null,
+      activities: [],
+      workoutDailySummary: {},
+      nutrition: {
+        meals: [{ name: '早餐', calories: 500, recommendedMin: 400, recommendedMax: 700 }],
+        totalCalories: 500,
+        details: ['早餐 500 千卡'],
+      },
+      sleep: null,
+      recognitions: [],
+      messages: [],
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-06-04T00:00:00.000Z'),
+  });
+
+  const coreSleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
+
+  assert.ok(coreSleepInsert);
+  assert.deepEqual(coreSleepInsert[1][16], [81]);
+  assert.deepEqual(coreSleepInsert[1][18], [35]);
+  assert.deepEqual(coreSleepInsert[1][22], [1]);
+  assert.deepEqual(coreSleepInsert[1][24], [68]);
+  assert.deepEqual(coreSleepInsert[1][29], ['建议睡觉时关灯。']);
 });
 
 test('pending recognition store reads, queues, and resolves database rows', async () => {
@@ -1316,4 +1557,11 @@ function buildCoreTestDay(date, { calories, activityTime, mealName }) {
       details: [],
     },
   };
+}
+
+function assertSequentialUnnestParameters(sql, expectedCount) {
+  const unnestSql = sql.match(/from unnest\(([\s\S]*?)\)\s*on conflict/i)?.[1] ?? '';
+  const actual = [...unnestSql.matchAll(/\$(\d+)::/g)].map((match) => Number(match[1]));
+  const expected = Array.from({ length: expectedCount }, (_, index) => index + 1);
+  assert.deepEqual(actual, expected);
 }

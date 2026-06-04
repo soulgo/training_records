@@ -875,7 +875,7 @@ function formatTelegramSyncNotification(batch) {
     if (hasPartialRecognitionFailure(batch)) {
       const failedMessages = formatFailedRecognitionMessageIds(batch);
       const reason = summarizePartialFailureReason(batch);
-      const pendingText = batch.recognitionPendingStatus === 'queued' ? '，失败图片已加入重试队列' : '';
+      const pendingText = batch.recognitionPendingStatus === 'queued' ? '，AI 识别失败图片已加入重试队列' : '';
       return [
         `部分解析失败（${countText}），${storageText}${dateText ? ` ${dateText}数据` : ''}${pendingText}`,
         failedMessages ? `失败图片：${failedMessages}` : '',

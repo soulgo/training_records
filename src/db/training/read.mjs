@@ -18,6 +18,19 @@ const TRAINING_DAY_QUERY = `
     active_hours,
     cycling_distance_km,
     intake_calories,
+    sleep_total_minutes,
+    night_sleep_minutes,
+    nap_minutes,
+    sleep_start_time,
+    sleep_end_time,
+    deep_sleep_minutes,
+    light_sleep_minutes,
+    rem_sleep_minutes,
+    awake_minutes,
+    sleep_score,
+    deep_sleep_ratio_pct,
+    light_sleep_ratio_pct,
+    rem_sleep_ratio_pct,
     nutrition_details_json
   from core.training_day
   order by archived_date asc
@@ -68,6 +81,38 @@ const TRAINING_MEAL_QUERY = `
   from core.meal
   order by archived_date asc, meal_name asc
 `;
+const TRAINING_SLEEP_QUERY = `
+  select
+    archived_date,
+    sleep_type,
+    bedtime,
+    wake_time,
+    night_sleep_minutes,
+    total_sleep_minutes,
+    nap_minutes,
+    deep_sleep_minutes,
+    light_sleep_minutes,
+    rem_sleep_minutes,
+    awake_minutes,
+    sleep_stage_text,
+    sleep_stage_detail,
+    sleep_score,
+    sleep_score_percentile,
+    deep_sleep_ratio_pct,
+    light_sleep_ratio_pct,
+    rem_sleep_ratio_pct,
+    deep_sleep_continuity_score,
+    wake_count,
+    breathing_quality_score,
+    average_heart_rate_bpm,
+    hrv_ms,
+    average_spo2_pct,
+    average_respiratory_rate,
+    analysis_text,
+    suggestion_text
+  from core.sleep
+  order by archived_date asc, updated_at asc
+`;
 const BODY_FEEDBACK_QUERY = `
   select
     telegram_message_id,
@@ -101,7 +146,11 @@ const ARCHIVE_TRAINING_DAY_QUERY = `
     deep_sleep_minutes,
     light_sleep_minutes,
     rem_sleep_minutes,
-    awake_minutes
+    awake_minutes,
+    sleep_score,
+    deep_sleep_ratio_pct,
+    light_sleep_ratio_pct,
+    rem_sleep_ratio_pct
   from archive.training_day
   order by archived_date asc
 `;
@@ -119,7 +168,21 @@ const ARCHIVE_TRAINING_SLEEP_QUERY = `
     rem_sleep_minutes,
     awake_minutes,
     sleep_stage_text,
-    sleep_stage_detail
+    sleep_stage_detail,
+    sleep_score,
+    sleep_score_percentile,
+    deep_sleep_ratio_pct,
+    light_sleep_ratio_pct,
+    rem_sleep_ratio_pct,
+    deep_sleep_continuity_score,
+    wake_count,
+    breathing_quality_score,
+    average_heart_rate_bpm,
+    hrv_ms,
+    average_spo2_pct,
+    average_respiratory_rate,
+    analysis_text,
+    suggestion_text
   from archive.training_sleep
   order by archived_date asc, updated_at asc
 `;
@@ -252,6 +315,7 @@ export async function readTrainingSnapshotFromDatabaseClient(client, now) {
   const measurementResult = await client.query(TRAINING_MEASUREMENT_QUERY);
   const activityResult = await client.query(TRAINING_ACTIVITY_QUERY);
   const mealResult = await client.query(TRAINING_MEAL_QUERY);
+  const sleepRows = await readOptionalSleepRows(client, TRAINING_SLEEP_QUERY);
   const bodyFeedbackResult = await client.query(BODY_FEEDBACK_QUERY);
 
   return buildTrainingSnapshotFromRows({
@@ -259,23 +323,25 @@ export async function readTrainingSnapshotFromDatabaseClient(client, now) {
     measurementRows: measurementResult.rows,
     activityRows: activityResult.rows,
     mealRows: mealResult.rows,
+    sleepRows,
     bodyFeedbackRows: bodyFeedbackResult.rows,
     now,
   });
 }
 
 async function readTrainingSnapshotFromDatabaseWithClients({ createClient, config, now, dateFrom, dateTo }) {
-  const clients = Array.from({ length: 5 }, () => createClient(config));
+  const clients = Array.from({ length: 6 }, () => createClient(config));
 
   try {
     await Promise.all(clients.map((client) => client.connect()));
 
-    const [dayResult, measurementResult, activityResult, mealResult, bodyFeedbackResult] = await Promise.all([
+    const [dayResult, measurementResult, activityResult, mealResult, sleepRows, bodyFeedbackResult] = await Promise.all([
       clients[0].query(TRAINING_DAY_QUERY),
       clients[1].query(TRAINING_MEASUREMENT_QUERY),
       clients[2].query(TRAINING_ACTIVITY_QUERY),
       clients[3].query(TRAINING_MEAL_QUERY),
-      clients[4].query(BODY_FEEDBACK_QUERY),
+      readOptionalSleepRows(clients[4], TRAINING_SLEEP_QUERY),
+      clients[5].query(BODY_FEEDBACK_QUERY),
     ]);
 
     return buildTrainingSnapshotFromRows({
@@ -283,6 +349,7 @@ async function readTrainingSnapshotFromDatabaseWithClients({ createClient, confi
       measurementRows: measurementResult.rows,
       activityRows: activityResult.rows,
       mealRows: mealResult.rows,
+      sleepRows,
       bodyFeedbackRows: bodyFeedbackResult.rows,
       now,
       dateFrom,
@@ -379,6 +446,10 @@ function buildTrainingSnapshotFromRows({
         lightSleepMinutes: toNullableNumber(row.light_sleep_minutes),
         remSleepMinutes: toNullableNumber(row.rem_sleep_minutes),
         awakeMinutes: toNullableNumber(row.awake_minutes),
+        sleepScore: toNullableNumber(row.sleep_score),
+        deepSleepRatioPct: toNullableNumber(row.deep_sleep_ratio_pct),
+        lightSleepRatioPct: toNullableNumber(row.light_sleep_ratio_pct),
+        remSleepRatioPct: toNullableNumber(row.rem_sleep_ratio_pct),
       },
     ]),
   );
@@ -431,7 +502,8 @@ function buildTrainingSnapshotFromRows({
       measurement: measurements.at(-1) ?? null,
       measurements,
       activities,
-      sleep,
+      sleep: sleep.records,
+      sleepSummary: sleep,
       workoutSummary: {
         totalActivities: Number(row.total_activities ?? activities.length),
         totalDurationSeconds: Number(row.total_duration_seconds ?? 0),
@@ -456,6 +528,17 @@ function buildTrainingSnapshotFromRows({
     ),
     bodyFeedback: filteredBodyFeedbackRows.map(normalizeBodyFeedbackRow),
   };
+}
+
+async function readOptionalSleepRows(client, query) {
+  try {
+    return (await client.query(query)).rows;
+  } catch (error) {
+    if (/core\.sleep|archive\.training_sleep|sleep_score|sleep_score_percentile|deep_sleep_ratio_pct|analysis_text/i.test(String(error?.message ?? error))) {
+      return [];
+    }
+    throw error;
+  }
 }
 
 function filterRowsByDateWindow(rows, key, dateFrom, dateTo) {
@@ -521,6 +604,10 @@ function extractSleepRecords(row) {
     awakeMinutes: toNullableNumber(row.awake_minutes),
     sleepStageText: null,
     sleepStageDetail: null,
+    sleepScore: toNullableNumber(row.sleep_score),
+    deepSleepRatioPct: toNullableNumber(row.deep_sleep_ratio_pct),
+    lightSleepRatioPct: toNullableNumber(row.light_sleep_ratio_pct),
+    remSleepRatioPct: toNullableNumber(row.rem_sleep_ratio_pct),
   };
   return hasAnySleepValue(sleep) ? [sleep] : [];
 }
@@ -539,6 +626,20 @@ function normalizeSleepRow(row) {
     awakeMinutes: toNullableNumber(row.awake_minutes),
     sleepStageText: row.sleep_stage_text ?? null,
     sleepStageDetail: row.sleep_stage_detail ?? null,
+    sleepScore: toNullableNumber(row.sleep_score),
+    sleepScorePercentile: toNullableNumber(row.sleep_score_percentile),
+    deepSleepRatioPct: toNullableNumber(row.deep_sleep_ratio_pct),
+    lightSleepRatioPct: toNullableNumber(row.light_sleep_ratio_pct),
+    remSleepRatioPct: toNullableNumber(row.rem_sleep_ratio_pct),
+    deepSleepContinuityScore: toNullableNumber(row.deep_sleep_continuity_score),
+    wakeCount: toNullableNumber(row.wake_count),
+    breathingQualityScore: toNullableNumber(row.breathing_quality_score),
+    averageHeartRateBpm: toNullableNumber(row.average_heart_rate_bpm),
+    hrvMs: toNullableNumber(row.hrv_ms),
+    averageSpo2Pct: toNullableNumber(row.average_spo2_pct),
+    averageRespiratoryRate: toNullableNumber(row.average_respiratory_rate),
+    analysisText: row.analysis_text ?? null,
+    suggestionText: row.suggestion_text ?? null,
   };
 }
 
@@ -556,6 +657,20 @@ function summarizeSleepRecords(records) {
       lightSleepMinutes: null,
       remSleepMinutes: null,
       awakeMinutes: null,
+      sleepScore: null,
+      sleepScorePercentile: null,
+      deepSleepRatioPct: null,
+      lightSleepRatioPct: null,
+      remSleepRatioPct: null,
+      deepSleepContinuityScore: null,
+      wakeCount: null,
+      breathingQualityScore: null,
+      averageHeartRateBpm: null,
+      hrvMs: null,
+      averageSpo2Pct: null,
+      averageRespiratoryRate: null,
+      analysisText: null,
+      suggestionText: null,
     };
   }
 
@@ -571,6 +686,20 @@ function summarizeSleepRecords(records) {
     lightSleepMinutes: latest.lightSleepMinutes ?? null,
     remSleepMinutes: latest.remSleepMinutes ?? null,
     awakeMinutes: latest.awakeMinutes ?? null,
+    sleepScore: latest.sleepScore ?? null,
+    sleepScorePercentile: latest.sleepScorePercentile ?? null,
+    deepSleepRatioPct: latest.deepSleepRatioPct ?? null,
+    lightSleepRatioPct: latest.lightSleepRatioPct ?? null,
+    remSleepRatioPct: latest.remSleepRatioPct ?? null,
+    deepSleepContinuityScore: latest.deepSleepContinuityScore ?? null,
+    wakeCount: latest.wakeCount ?? null,
+    breathingQualityScore: latest.breathingQualityScore ?? null,
+    averageHeartRateBpm: latest.averageHeartRateBpm ?? null,
+    hrvMs: latest.hrvMs ?? null,
+    averageSpo2Pct: latest.averageSpo2Pct ?? null,
+    averageRespiratoryRate: latest.averageRespiratoryRate ?? null,
+    analysisText: latest.analysisText ?? null,
+    suggestionText: latest.suggestionText ?? null,
   };
 }
 
@@ -587,6 +716,20 @@ function hasAnySleepValue(sleep) {
     sleep?.awakeMinutes,
     sleep?.sleepStageText,
     sleep?.sleepStageDetail,
+    sleep?.sleepScore,
+    sleep?.sleepScorePercentile,
+    sleep?.deepSleepRatioPct,
+    sleep?.lightSleepRatioPct,
+    sleep?.remSleepRatioPct,
+    sleep?.deepSleepContinuityScore,
+    sleep?.wakeCount,
+    sleep?.breathingQualityScore,
+    sleep?.averageHeartRateBpm,
+    sleep?.hrvMs,
+    sleep?.averageSpo2Pct,
+    sleep?.averageRespiratoryRate,
+    sleep?.analysisText,
+    sleep?.suggestionText,
   ].some((value) => value !== null && value !== undefined && value !== '');
 }
 

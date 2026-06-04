@@ -6,6 +6,7 @@ import {
   splitDateSections,
   splitLevel4Blocks,
   toNullableNumber,
+  normalizeSleepType,
 } from './training-domain.mjs';
 import {
   DEFAULT_THOUGHT_MODULE,
@@ -291,15 +292,18 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       warnings.push(warning);
     }
 
-    if (normalizedDetectedDate) {
-      imageDates.add(normalizedDetectedDate);
+    const archiveDate = recognition.imageType === 'sleep'
+      ? resolveSleepArchiveDate(recognition.records?.sleep, normalizedDetectedDate, message)
+      : normalizedDetectedDate;
+    if (archiveDate) {
+      imageDates.add(archiveDate);
     }
 
     dateSources.push({
       messageId: message.messageId,
-      detectedDate: normalizedDetectedDate ?? null,
+      detectedDate: archiveDate ?? null,
       dateEvidence: recognition.dateEvidence ?? null,
-      source: normalizedDetectedDate ? 'image' : 'no_date',
+      source: archiveDate ? (archiveDate === normalizedDetectedDate ? 'image' : 'sleep_bedtime') : 'no_date',
     });
 
     if (recognition.imageType === 'measurement' && recognition.records?.measurement) {
@@ -335,7 +339,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       }
     }
       if (recognition.imageType === 'sleep' && recognition.records?.sleep) {
-      const sleepRecord = normalizeSleepRecord(recognition.records.sleep, normalizedDetectedDate);
+      const sleepRecord = normalizeSleepRecord(recognition.records.sleep, archiveDate);
       if (sleepRecord) {
         sleepRecords.push(sleepRecord);
       }
@@ -1365,6 +1369,20 @@ function normalizeSleepRecords(records, archivedDate) {
       lightSleepMinutes: null,
       remSleepMinutes: null,
       awakeMinutes: null,
+      sleepScore: null,
+      sleepScorePercentile: null,
+      deepSleepRatioPct: null,
+      lightSleepRatioPct: null,
+      remSleepRatioPct: null,
+      deepSleepContinuityScore: null,
+      wakeCount: null,
+      breathingQualityScore: null,
+      averageHeartRateBpm: null,
+      hrvMs: null,
+      averageSpo2Pct: null,
+      averageRespiratoryRate: null,
+      analysisText: null,
+      suggestionText: null,
     };
   }
 
@@ -1381,6 +1399,20 @@ function normalizeSleepRecords(records, archivedDate) {
     lightSleepMinutes: latest.lightSleepMinutes ?? sum('lightSleepMinutes'),
     remSleepMinutes: latest.remSleepMinutes ?? sum('remSleepMinutes'),
     awakeMinutes: latest.awakeMinutes ?? sum('awakeMinutes'),
+    sleepScore: latest.sleepScore ?? null,
+    sleepScorePercentile: latest.sleepScorePercentile ?? null,
+    deepSleepRatioPct: latest.deepSleepRatioPct ?? null,
+    lightSleepRatioPct: latest.lightSleepRatioPct ?? null,
+    remSleepRatioPct: latest.remSleepRatioPct ?? null,
+    deepSleepContinuityScore: latest.deepSleepContinuityScore ?? null,
+    wakeCount: latest.wakeCount ?? null,
+    breathingQualityScore: latest.breathingQualityScore ?? null,
+    averageHeartRateBpm: latest.averageHeartRateBpm ?? null,
+    hrvMs: latest.hrvMs ?? null,
+    averageSpo2Pct: latest.averageSpo2Pct ?? null,
+    averageRespiratoryRate: latest.averageRespiratoryRate ?? null,
+    analysisText: latest.analysisText ?? null,
+    suggestionText: latest.suggestionText ?? null,
   };
 }
 function normalizeSleepRecord(record, archivedDate) {
@@ -1400,6 +1432,20 @@ function normalizeSleepRecord(record, archivedDate) {
     record.awakeMinutes,
     record.sleepStageText,
     record.sleepStageDetail,
+    record.sleepScore,
+    record.sleepScorePercentile,
+    record.deepSleepRatioPct,
+    record.lightSleepRatioPct,
+    record.remSleepRatioPct,
+    record.deepSleepContinuityScore,
+    record.wakeCount,
+    record.breathingQualityScore,
+    record.averageHeartRateBpm,
+    record.hrvMs,
+    record.averageSpo2Pct,
+    record.averageRespiratoryRate,
+    record.analysisText,
+    record.suggestionText,
   ].some((value) => value !== null && value !== undefined && value !== '');
 
   if (!hasValues) {
@@ -1408,8 +1454,8 @@ function normalizeSleepRecord(record, archivedDate) {
 
   return {
     sleepType: normalizeSleepType(record.sleepType ?? '夜间睡眠'),
-    bedtime: record.bedtime ?? null,
-    wakeTime: record.wakeTime ?? null,
+    bedtime: normalizeClockTime(record.bedtime),
+    wakeTime: normalizeClockTime(record.wakeTime),
     nightSleepMinutes: record.nightSleepMinutes ?? null,
     totalSleepMinutes: record.totalSleepMinutes ?? null,
     napMinutes: record.napMinutes ?? null,
@@ -1419,8 +1465,51 @@ function normalizeSleepRecord(record, archivedDate) {
     awakeMinutes: record.awakeMinutes ?? null,
     sleepStageText: record.sleepStageText ?? null,
     sleepStageDetail: Array.isArray(record.sleepStageDetail) ? record.sleepStageDetail : null,
+    sleepScore: record.sleepScore ?? null,
+    sleepScorePercentile: record.sleepScorePercentile ?? null,
+    deepSleepRatioPct: record.deepSleepRatioPct ?? null,
+    lightSleepRatioPct: record.lightSleepRatioPct ?? null,
+    remSleepRatioPct: record.remSleepRatioPct ?? null,
+    deepSleepContinuityScore: record.deepSleepContinuityScore ?? null,
+    wakeCount: record.wakeCount ?? null,
+    breathingQualityScore: record.breathingQualityScore ?? null,
+    averageHeartRateBpm: record.averageHeartRateBpm ?? null,
+    hrvMs: record.hrvMs ?? null,
+    averageSpo2Pct: record.averageSpo2Pct ?? null,
+    averageRespiratoryRate: record.averageRespiratoryRate ?? null,
+    analysisText: record.analysisText ?? null,
+    suggestionText: record.suggestionText ?? null,
     archivedDate,
   };
+}
+
+function resolveSleepArchiveDate(sleep, detectedDate, message) {
+  const messageYear = dateFromUnix(message?.dateUnix).year;
+  const bedtimeDate = extractDateFromText(sleep?.bedtime, {
+    allowMonthDay: true,
+    messageYear,
+  });
+  if (bedtimeDate) {
+    return bedtimeDate;
+  }
+  const slashMonthDay = String(sleep?.bedtime ?? '').match(/(\d{1,2})\/(\d{1,2})/);
+  return slashMonthDay && Number.isInteger(messageYear)
+    ? normalizeDateParts({
+        year: messageYear,
+        month: Number(slashMonthDay[1]),
+        day: Number(slashMonthDay[2]),
+        messageYear,
+      })
+    : detectedDate;
+}
+
+function normalizeClockTime(value) {
+  if (!value) {
+    return null;
+  }
+  return String(value).match(/(?:^|\s)(\d{1,2}):(\d{2})(?:\s|$)/)?.slice(1).map((part, index) =>
+    index === 0 ? String(Number(part)).padStart(2, '0') : part
+  ).join(':') ?? String(value);
 }
 
 function renderNutritionBlock(batchResult) {
@@ -1481,6 +1570,18 @@ function renderSleepBlock(batchResult) {
       appendMetric(lines, '浅睡', record.lightSleepMinutes, '分钟');
       appendMetric(lines, '快动眼睡眠', record.remSleepMinutes, '分钟');
       appendMetric(lines, '清醒', record.awakeMinutes, '分钟');
+      appendMetric(lines, '睡眠评分', record.sleepScore, '分');
+      appendMetric(lines, '超过用户', record.sleepScorePercentile, '%');
+      appendMetric(lines, '深睡比例', record.deepSleepRatioPct, '%');
+      appendMetric(lines, '浅睡比例', record.lightSleepRatioPct, '%');
+      appendMetric(lines, '快速眼动比例', record.remSleepRatioPct, '%');
+      appendMetric(lines, '深睡连续性', record.deepSleepContinuityScore, '分');
+      appendMetric(lines, '清醒次数', record.wakeCount, '次');
+      appendMetric(lines, '呼吸质量', record.breathingQualityScore, '分');
+      appendMetric(lines, '平均心率', record.averageHeartRateBpm, '次/分钟');
+      appendMetric(lines, '平均心率变异性', record.hrvMs, '毫秒');
+      appendMetric(lines, '平均血氧饱和度', record.averageSpo2Pct, '%');
+      appendMetric(lines, '平均呼吸率', record.averageRespiratoryRate, '次/分钟');
       if (record.sleepStageText) {
         lines.push(`- 睡眠阶段：${record.sleepStageText}`);
       }
@@ -1489,6 +1590,12 @@ function renderSleepBlock(batchResult) {
         for (const detail of record.sleepStageDetail) {
           lines.push(`  - ${detail}`);
         }
+      }
+      if (record.analysisText) {
+        lines.push(`- 睡眠解读：${record.analysisText}`);
+      }
+      if (record.suggestionText) {
+        lines.push(`- 睡眠建议：${record.suggestionText}`);
       }
     }
   }
