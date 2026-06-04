@@ -84,6 +84,31 @@ CREATE TABLE "core"."measurement" (
 ;
 
 -- ----------------------------
+-- Table structure for sleep
+-- ----------------------------
+DROP TABLE IF EXISTS "core"."sleep";
+CREATE TABLE "core"."sleep" (
+  "sleep_key" text COLLATE "pg_catalog"."default" NOT NULL,
+  "archived_date" date NOT NULL,
+  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL,
+  "source_batch_id" text COLLATE "pg_catalog"."default",
+  "sleep_type" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT '夜间睡眠'::text,
+  "bedtime" text COLLATE "pg_catalog"."default",
+  "wake_time" text COLLATE "pg_catalog"."default",
+  "night_sleep_minutes" int4,
+  "total_sleep_minutes" int4,
+  "nap_minutes" int4,
+  "deep_sleep_minutes" int4,
+  "light_sleep_minutes" int4,
+  "rem_sleep_minutes" int4,
+  "awake_minutes" int4,
+  "sleep_stage_text" text COLLATE "pg_catalog"."default",
+  "sleep_stage_detail" text COLLATE "pg_catalog"."default",
+  "updated_at" timestamptz(6) NOT NULL
+)
+;
+
+-- ----------------------------
 -- Table structure for thought
 -- ----------------------------
 DROP TABLE IF EXISTS "core"."thought";
@@ -168,6 +193,18 @@ CREATE INDEX "idx_core_measurement_archived_date" ON "core"."measurement" USING 
 ALTER TABLE "core"."measurement" ADD CONSTRAINT "measurement_pkey" PRIMARY KEY ("measurement_key");
 
 -- ----------------------------
+-- Indexes structure for table sleep
+-- ----------------------------
+CREATE INDEX "idx_core_sleep_archived_date" ON "core"."sleep" USING btree (
+  "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
+);
+
+-- ----------------------------
+-- Primary Key structure for table sleep
+-- ----------------------------
+ALTER TABLE "core"."sleep" ADD CONSTRAINT "sleep_pkey" PRIMARY KEY ("sleep_key");
+
+-- ----------------------------
 -- Indexes structure for table thought
 -- ----------------------------
 CREATE INDEX "idx_core_thought_module_updated_at" ON "core"."thought" USING btree (
@@ -202,3 +239,8 @@ ALTER TABLE "core"."meal" ADD CONSTRAINT "meal_archived_date_fkey" FOREIGN KEY (
 -- Foreign Keys structure for table measurement
 -- ----------------------------
 ALTER TABLE "core"."measurement" ADD CONSTRAINT "measurement_archived_date_fkey" FOREIGN KEY ("archived_date") REFERENCES "core"."training_day" ("archived_date") ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- ----------------------------
+-- Foreign Keys structure for table sleep
+-- ----------------------------
+ALTER TABLE "core"."sleep" ADD CONSTRAINT "sleep_archived_date_fkey" FOREIGN KEY ("archived_date") REFERENCES "core"."training_day" ("archived_date") ON DELETE CASCADE ON UPDATE NO ACTION;

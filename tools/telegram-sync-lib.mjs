@@ -1232,6 +1232,9 @@ function mergeDateSection(body, batchResult) {
   if (batchResult.nutrition?.meals?.length || batchResult.nutrition?.totalCalories !== null) {
     nextBody = upsertBlock(nextBody, /#### .*饮食截图记录(?:\n|$)/, renderNutritionBlock(batchResult));
   }
+  if (batchResult.sleep && (batchResult.sleep.records?.length || batchResult.sleep.totalSleepMinutes !== null)) {
+    nextBody = upsertBlock(nextBody, /#### .*睡眠截图记录(?:\n|$)/, renderSleepBlock(batchResult));
+  }
 
   return nextBody;
 }

@@ -193,6 +193,38 @@ export async function backfillCoreFromLatestArchiveSnapshot(options = {}) {
   }
 }
 
+export async function backfillCoreSleepFromIngestBatches(options = {}) {
+  const config = resolveTrainingCoreConfig(options.env);
+  if (!config.enabled || !config.url) {
+    return {
+      status: 'skipped',
+      reason: !config.enabled ? 'disabled' : 'missing_url',
+      batchesBackfilled: 0,
+      daysBackfilled: [],
+    };
+  }
+
+  const createClient =
+    options.createClient ??
+    ((dbConfig) =>
+      new Client({
+        connectionString: dbConfig.url,
+        connectionTimeoutMillis: dbConfig.timeoutMs,
+        application_name: dbConfig.appName,
+      }));
+  const client = createClient(config);
+
+  try {
+    await client.connect();
+    return await backfillCoreSleepFromIngestBatchesClient(client, {
+      processedAt: options.processedAt,
+      sourceChannel: options.sourceChannel ?? 'ingest_sleep_backfill',
+    });
+  } finally {
+    await client.end();
+  }
+}
+
 export async function importTrainingMarkdownToDatabase(options) {
   const snapshot = parseTrainingRecord(options.markdown);
   return persistTrainingSnapshotToCore({
@@ -203,6 +235,77 @@ export async function importTrainingMarkdownToDatabase(options) {
     sourceChannel: 'markdown_import',
     skipIfUnchanged: options.skipIfUnchanged ?? true,
   });
+}
+
+export async function backfillCoreSleepFromIngestBatchesClient(client, options = {}) {
+  const processedAt = options.processedAt ?? new Date();
+  const candidateResult = await client.query(`
+    select
+      b.batch_id,
+      b.batch_payload_json
+    from ingest.telegram_batch b
+    where b.status = 'ready'
+      and b.archived_date is not null
+      and b.batch_payload_json->'sleep' is not null
+      and not exists (
+        select 1
+        from core.sleep s
+        where s.archived_date = b.archived_date
+      )
+    order by b.processed_at asc, b.batch_id asc
+  `);
+  const candidates = candidateResult.rows
+    .map((row) => ({
+      batchId: row.batch_id,
+      batch: row.batch_payload_json,
+    }))
+    .filter(({ batch }) =>
+      batch?.status === 'ready' &&
+      batch?.archivedDate &&
+      hasSleepPayload(batch.sleep),
+    );
+
+  if (candidates.length === 0) {
+    return {
+      status: 'unchanged',
+      batchesBackfilled: 0,
+      daysBackfilled: [],
+    };
+  }
+
+  const daysBackfilled = new Set();
+  let transactionStarted = false;
+  try {
+    await client.query('BEGIN');
+    transactionStarted = true;
+    for (const { batchId, batch } of candidates) {
+      const existingDay = await readCoreDay(client, batch.archivedDate);
+      const mergedDay = mergeBatchIntoDay(existingDay, batch);
+      await replaceCoreDay(
+        client,
+        mergedDay,
+        batch.batchId ?? batchId,
+        processedAt,
+        options.sourceChannel ?? 'ingest_sleep_backfill',
+      );
+      daysBackfilled.add(batch.archivedDate);
+    }
+    await client.query('COMMIT');
+    transactionStarted = false;
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {}
+    }
+    throw error;
+  }
+
+  return {
+    status: 'stored',
+    batchesBackfilled: candidates.length,
+    daysBackfilled: [...daysBackfilled].sort(),
+  };
 }
 
 export async function backfillCoreFromLatestArchiveSnapshotClient(client, options = {}) {
@@ -703,6 +806,28 @@ async function readCoreDay(client, archivedDate) {
     `,
     [archivedDate],
   );
+  const sleepResult = await client.query(
+    `
+      select
+        archived_date,
+        sleep_type,
+        bedtime,
+        wake_time,
+        night_sleep_minutes,
+        total_sleep_minutes,
+        nap_minutes,
+        deep_sleep_minutes,
+        light_sleep_minutes,
+        rem_sleep_minutes,
+        awake_minutes,
+        sleep_stage_text,
+        sleep_stage_detail
+      from core.sleep
+      where archived_date = $1
+      order by bedtime asc nulls last
+    `,
+    [archivedDate],
+  );
   const dayRow = dayResult.rows[0];
 
   return buildTrainingDay({
@@ -746,7 +871,22 @@ async function readCoreDay(client, archivedDate) {
       totalCalories: dayRow.intake_calories ?? null,
       details: Array.isArray(dayRow.nutrition_details_json) ? dayRow.nutrition_details_json : [],
     },
-    sleep: emptySleep(),
+    sleep: {
+      records: sleepResult.rows.map((sleep) => ({
+        sleepType: sleep.sleep_type ?? '夜间睡眠',
+        bedtime: sleep.bedtime ?? null,
+        wakeTime: sleep.wake_time ?? null,
+        nightSleepMinutes: sleep.night_sleep_minutes ?? null,
+        totalSleepMinutes: sleep.total_sleep_minutes ?? null,
+        napMinutes: sleep.nap_minutes ?? null,
+        deepSleepMinutes: sleep.deep_sleep_minutes ?? null,
+        lightSleepMinutes: sleep.light_sleep_minutes ?? null,
+        remSleepMinutes: sleep.rem_sleep_minutes ?? null,
+        awakeMinutes: sleep.awake_minutes ?? null,
+        sleepStageText: sleep.sleep_stage_text ?? null,
+        sleepStageDetail: sleep.sleep_stage_detail ?? null,
+      })),
+    },
     workoutDailySummary: {
       activityCaloriesKcal: dayRow.training_calories,
       workoutDurationMinutes: dayRow.workout_duration_minutes,
@@ -878,6 +1018,7 @@ async function writeCoreDays(client, days, options) {
   await client.query(`delete from core.measurement where archived_date = any($1::date[])`, [dates]);
   await client.query(`delete from core.activity where archived_date = any($1::date[])`, [dates]);
   await client.query(`delete from core.meal where archived_date = any($1::date[])`, [dates]);
+  await client.query(`delete from core.sleep where archived_date = any($1::date[])`, [dates]);
 
   const processedAtIso = (options.processedAt ?? new Date()).toISOString();
   const dayRows = normalizedDays.map((day) => ({
@@ -957,6 +1098,7 @@ async function writeCoreDays(client, days, options) {
   await insertCoreMeasurements(client, normalizedDays, options, processedAtIso);
   await insertCoreActivities(client, normalizedDays, options, processedAtIso);
   await insertCoreMeals(client, normalizedDays, options, processedAtIso);
+  await insertCoreSleep(client, normalizedDays, options, processedAtIso);
 }
 
 function existingSleepPayload(existing) {
@@ -1264,6 +1406,121 @@ async function insertCoreMeals(client, days, options, processedAtIso) {
   );
 }
 
+async function insertCoreSleep(client, days, options, processedAtIso) {
+  const rows = days.flatMap((day) =>
+    (day.sleep ?? []).map((sleep) => {
+      const bedtime = sleep.bedtime ?? sleep.sleepStartTime ?? null;
+      const wakeTime = sleep.wakeTime ?? sleep.sleepEndTime ?? null;
+      const sleepType = sleep.sleepType ?? '夜间睡眠';
+      return {
+        sleepKey: createHash('md5')
+          .update([day.date, sleepType, bedtime ?? '', wakeTime ?? '', sleep.totalSleepMinutes ?? ''].join('|'))
+          .digest('hex'),
+        archivedDate: day.date,
+        sourceChannel: options.sourceChannel ?? 'telegram',
+        sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
+        sleepType,
+        bedtime,
+        wakeTime,
+        nightSleepMinutes: sleep.nightSleepMinutes ?? null,
+        totalSleepMinutes: sleep.totalSleepMinutes ?? null,
+        napMinutes: sleep.napMinutes ?? null,
+        deepSleepMinutes: sleep.deepSleepMinutes ?? null,
+        lightSleepMinutes: sleep.lightSleepMinutes ?? null,
+        remSleepMinutes: sleep.remSleepMinutes ?? null,
+        awakeMinutes: sleep.awakeMinutes ?? null,
+        sleepStageText: sleep.sleepStageText ?? null,
+        sleepStageDetail: Array.isArray(sleep.sleepStageDetail)
+          ? JSON.stringify(sleep.sleepStageDetail)
+          : sleep.sleepStageDetail ?? null,
+        updatedAt: processedAtIso,
+      };
+    }),
+  );
+  if (rows.length === 0) {
+    return;
+  }
+
+  await client.query(
+    `
+      insert into core.sleep (
+        sleep_key,
+        archived_date,
+        source_channel,
+        source_batch_id,
+        sleep_type,
+        bedtime,
+        wake_time,
+        night_sleep_minutes,
+        total_sleep_minutes,
+        nap_minutes,
+        deep_sleep_minutes,
+        light_sleep_minutes,
+        rem_sleep_minutes,
+        awake_minutes,
+        sleep_stage_text,
+        sleep_stage_detail,
+        updated_at
+      )
+      select *
+      from unnest(
+        $1::text[],
+        $2::date[],
+        $3::text[],
+        $4::text[],
+        $5::text[],
+        $6::text[],
+        $7::text[],
+        $8::integer[],
+        $9::integer[],
+        $10::integer[],
+        $11::integer[],
+        $12::integer[],
+        $13::integer[],
+        $14::integer[],
+        $15::text[],
+        $16::text[],
+        $17::timestamptz[]
+      )
+      on conflict (sleep_key) do update set
+        source_channel = excluded.source_channel,
+        source_batch_id = excluded.source_batch_id,
+        sleep_type = excluded.sleep_type,
+        bedtime = excluded.bedtime,
+        wake_time = excluded.wake_time,
+        night_sleep_minutes = excluded.night_sleep_minutes,
+        total_sleep_minutes = excluded.total_sleep_minutes,
+        nap_minutes = excluded.nap_minutes,
+        deep_sleep_minutes = excluded.deep_sleep_minutes,
+        light_sleep_minutes = excluded.light_sleep_minutes,
+        rem_sleep_minutes = excluded.rem_sleep_minutes,
+        awake_minutes = excluded.awake_minutes,
+        sleep_stage_text = excluded.sleep_stage_text,
+        sleep_stage_detail = excluded.sleep_stage_detail,
+        updated_at = excluded.updated_at
+    `,
+    [
+      rows.map((row) => row.sleepKey),
+      rows.map((row) => row.archivedDate),
+      rows.map((row) => row.sourceChannel),
+      rows.map((row) => row.sourceBatchId),
+      rows.map((row) => row.sleepType),
+      rows.map((row) => row.bedtime),
+      rows.map((row) => row.wakeTime),
+      rows.map((row) => row.nightSleepMinutes),
+      rows.map((row) => row.totalSleepMinutes),
+      rows.map((row) => row.napMinutes),
+      rows.map((row) => row.deepSleepMinutes),
+      rows.map((row) => row.lightSleepMinutes),
+      rows.map((row) => row.remSleepMinutes),
+      rows.map((row) => row.awakeMinutes),
+      rows.map((row) => row.sleepStageText),
+      rows.map((row) => row.sleepStageDetail),
+      rows.map((row) => row.updatedAt),
+    ],
+  );
+}
+
 function normalizeBatchActivity(activity) {
   const detail = activity.detail?.trim() ?? '';
   const durationText = activity.durationText ?? detail.match(/\d+分\d+秒|\d{2}:\d{2}:\d{2}/)?.[0] ?? null;
@@ -1364,6 +1621,28 @@ async function readCoreDays(client, dates) {
     `,
     [normalizedDates],
   );
+  const sleepResult = await client.query(
+    `
+      select
+        archived_date,
+        sleep_type,
+        bedtime,
+        wake_time,
+        night_sleep_minutes,
+        total_sleep_minutes,
+        nap_minutes,
+        deep_sleep_minutes,
+        light_sleep_minutes,
+        rem_sleep_minutes,
+        awake_minutes,
+        sleep_stage_text,
+        sleep_stage_detail
+      from core.sleep
+      where archived_date = any($1::date[])
+      order by archived_date asc, bedtime asc nulls last
+    `,
+    [normalizedDates],
+  );
   const snapshot = await readTrainingSnapshotFromDatabaseClient(
     {
       async query(sql) {
@@ -1378,6 +1657,9 @@ async function readCoreDays(client, dates) {
         }
         if (/from core\.meal/i.test(sql)) {
           return mealResult;
+        }
+        if (/from core\.sleep/i.test(sql)) {
+          return sleepResult;
         }
         if (/from core\.thought/i.test(sql)) {
           return { rows: [] };

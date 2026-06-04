@@ -68,6 +68,24 @@ const TRAINING_MEAL_QUERY = `
   from core.meal
   order by archived_date asc, meal_name asc
 `;
+const TRAINING_SLEEP_QUERY = `
+  select
+    archived_date,
+    sleep_type,
+    bedtime,
+    wake_time,
+    night_sleep_minutes,
+    total_sleep_minutes,
+    nap_minutes,
+    deep_sleep_minutes,
+    light_sleep_minutes,
+    rem_sleep_minutes,
+    awake_minutes,
+    sleep_stage_text,
+    sleep_stage_detail
+  from core.sleep
+  order by archived_date asc, bedtime asc nulls last
+`;
 const BODY_FEEDBACK_QUERY = `
   select
     telegram_message_id,
@@ -141,6 +159,24 @@ const ARCHIVE_TRAINING_MEAL_QUERY = `
     recommended_max
   from archive.training_meal
   order by archived_date asc, meal_name asc
+`;
+const ARCHIVE_TRAINING_SLEEP_QUERY = `
+  select
+    archived_date,
+    sleep_type,
+    bedtime,
+    wake_time,
+    night_sleep_minutes,
+    total_sleep_minutes,
+    nap_minutes,
+    deep_sleep_minutes,
+    light_sleep_minutes,
+    rem_sleep_minutes,
+    awake_minutes,
+    sleep_stage_text,
+    sleep_stage_detail
+  from archive.training_sleep
+  order by archived_date asc, bedtime asc nulls last
 `;
 
 export async function readTrainingSnapshotFromDatabase(options = {}) {
@@ -225,6 +261,7 @@ export async function readTrainingSnapshotFromDatabaseClient(client, now) {
   const measurementResult = await client.query(TRAINING_MEASUREMENT_QUERY);
   const activityResult = await client.query(TRAINING_ACTIVITY_QUERY);
   const mealResult = await client.query(TRAINING_MEAL_QUERY);
+  const sleepResult = await client.query(TRAINING_SLEEP_QUERY);
   const bodyFeedbackResult = await client.query(BODY_FEEDBACK_QUERY);
 
   return buildTrainingSnapshotFromRows({
@@ -232,24 +269,25 @@ export async function readTrainingSnapshotFromDatabaseClient(client, now) {
     measurementRows: measurementResult.rows,
     activityRows: activityResult.rows,
     mealRows: mealResult.rows,
-    sleepRows: [],
+    sleepRows: sleepResult.rows,
     bodyFeedbackRows: bodyFeedbackResult.rows,
     now,
   });
 }
 
 async function readTrainingSnapshotFromDatabaseWithClients({ createClient, config, now, dateFrom, dateTo }) {
-  const clients = Array.from({ length: 5 }, () => createClient(config));
+  const clients = Array.from({ length: 6 }, () => createClient(config));
 
   try {
     await Promise.all(clients.map((client) => client.connect()));
 
-    const [dayResult, measurementResult, activityResult, mealResult, bodyFeedbackResult] = await Promise.all([
+    const [dayResult, measurementResult, activityResult, mealResult, sleepResult, bodyFeedbackResult] = await Promise.all([
       clients[0].query(TRAINING_DAY_QUERY),
       clients[1].query(TRAINING_MEASUREMENT_QUERY),
       clients[2].query(TRAINING_ACTIVITY_QUERY),
       clients[3].query(TRAINING_MEAL_QUERY),
-      clients[4].query(BODY_FEEDBACK_QUERY),
+      clients[4].query(TRAINING_SLEEP_QUERY),
+      clients[5].query(BODY_FEEDBACK_QUERY),
     ]);
 
     return buildTrainingSnapshotFromRows({
@@ -257,7 +295,7 @@ async function readTrainingSnapshotFromDatabaseWithClients({ createClient, confi
       measurementRows: measurementResult.rows,
       activityRows: activityResult.rows,
       mealRows: mealResult.rows,
-      sleepRows: [],
+      sleepRows: sleepResult.rows,
       bodyFeedbackRows: bodyFeedbackResult.rows,
       now,
       dateFrom,
@@ -273,13 +311,14 @@ export async function readArchiveTrainingSnapshotFromDatabaseClient(client, now)
   const measurementResult = await client.query(ARCHIVE_TRAINING_MEASUREMENT_QUERY);
   const activityResult = await client.query(ARCHIVE_TRAINING_ACTIVITY_QUERY);
   const mealResult = await client.query(ARCHIVE_TRAINING_MEAL_QUERY);
+  const sleepResult = await client.query(ARCHIVE_TRAINING_SLEEP_QUERY);
 
   return buildTrainingSnapshotFromRows({
     dayRows: dayResult.rows,
     measurementRows: measurementResult.rows,
     activityRows: activityResult.rows,
     mealRows: mealResult.rows,
-    sleepRows: [],
+    sleepRows: sleepResult.rows,
     now,
   });
 }
@@ -291,16 +330,17 @@ async function readArchiveTrainingSnapshotFromDatabaseWithClients({
   dateFrom,
   dateTo,
 }) {
-  const clients = Array.from({ length: 4 }, () => createClient(config));
+  const clients = Array.from({ length: 5 }, () => createClient(config));
 
   try {
     await Promise.all(clients.map((client) => client.connect()));
 
-    const [dayResult, measurementResult, activityResult, mealResult] = await Promise.all([
+    const [dayResult, measurementResult, activityResult, mealResult, sleepResult] = await Promise.all([
       clients[0].query(ARCHIVE_TRAINING_DAY_QUERY),
       clients[1].query(ARCHIVE_TRAINING_MEASUREMENT_QUERY),
       clients[2].query(ARCHIVE_TRAINING_ACTIVITY_QUERY),
       clients[3].query(ARCHIVE_TRAINING_MEAL_QUERY),
+      clients[4].query(ARCHIVE_TRAINING_SLEEP_QUERY),
     ]);
 
     return buildTrainingSnapshotFromRows({
@@ -308,7 +348,7 @@ async function readArchiveTrainingSnapshotFromDatabaseWithClients({
       measurementRows: measurementResult.rows,
       activityRows: activityResult.rows,
       mealRows: mealResult.rows,
-      sleepRows: [],
+      sleepRows: sleepResult.rows,
       now,
       dateFrom,
       dateTo,

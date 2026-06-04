@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import {
   appendPendingRecognitionBatch,
   backfillCoreFromLatestArchiveSnapshot,
+  backfillCoreSleepFromIngestBatchesClient,
   exportTrainingMarkdown,
   getLastProcessedTelegramUpdateId,
   importTrainingMarkdownToDatabase,
@@ -159,6 +160,9 @@ test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before gr
           ],
         };
       }
+      if (/from core\.sleep/i.test(sql)) {
+        return { rows: [] };
+      }
       if (/from core\.thought/i.test(sql)) {
         return {
           rows: [
@@ -193,7 +197,7 @@ test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before gr
   assert.equal(snapshot.bodyFeedback[0].date, '2026-05-22');
   assert.equal(snapshot.bodyFeedback[0].body, '训练后右膝外侧酸胀');
   assert.equal(snapshot.charts.weightKg[0].date, '2026-05-22');
-  assert.equal(queries.some((sql) => /core\.sleep|sleep_total_minutes|sleep_score/i.test(sql)), false);
+  assert.ok(queries.some((sql) => /from core\.sleep/i.test(sql)));
 });
 
 test('readTrainingSnapshotFromDatabase can limit daily rows by date window', async () => {
@@ -258,7 +262,7 @@ test('readTrainingSnapshotFromDatabase can limit daily rows by date window', asy
               ],
             };
           }
-          if (/from core\.activity/i.test(sql) || /from core\.meal/i.test(sql)) {
+          if (/from core\.activity/i.test(sql) || /from core\.meal/i.test(sql) || /from core\.sleep/i.test(sql)) {
             return { rows: [] };
           }
           if (/from core\.thought/i.test(sql)) {
@@ -296,10 +300,87 @@ test('readTrainingSnapshotFromDatabase can limit daily rows by date window', asy
   assert.equal(snapshot.latest.daily?.date, '2026-05-09');
   assert.equal(snapshot.charts.trainingCalories.length, 1);
   assert.ok(queries.some((sql) => /from core\.training_day/i.test(sql)));
-  assert.equal(queries.some((sql) => /core\.sleep|sleep_total_minutes|sleep_score/i.test(sql)), false);
+  assert.ok(queries.some((sql) => /from core\.sleep/i.test(sql)));
 });
 
-test('readArchiveTrainingSnapshotFromDatabaseClient reads only schema-defined archive columns', async () => {
+test('readTrainingSnapshotFromDatabaseClient includes core sleep rows in sleep summaries', async () => {
+  const queries = [];
+  const client = {
+    async query(sql) {
+      queries.push(sql);
+      if (/from core\.training_day/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-06-04',
+              total_activities: 0,
+              total_duration_seconds: 0,
+              training_calories: 0,
+              workout_duration_minutes: null,
+              active_hours: null,
+              cycling_distance_km: 0,
+              intake_calories: null,
+              nutrition_details_json: [],
+            },
+          ],
+        };
+      }
+      if (/from core\.sleep/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-06-04',
+              sleep_type: '夜间睡眠',
+              bedtime: '23:26',
+              wake_time: '06:19',
+              night_sleep_minutes: 411,
+              total_sleep_minutes: 411,
+              nap_minutes: null,
+              deep_sleep_minutes: 145,
+              light_sleep_minutes: 195,
+              rem_sleep_minutes: 71,
+              awake_minutes: null,
+              sleep_stage_text: '深睡2小时25分钟；浅睡3小时15分钟；快速眼动1小时11分钟',
+              sleep_stage_detail: ['深睡 2小时25分钟', '浅睡 3小时15分钟', '快速眼动 1小时11分钟'],
+              sleep_score: 81,
+              sleep_score_percentile: 77,
+              deep_sleep_ratio_pct: 35,
+              light_sleep_ratio_pct: 47,
+              rem_sleep_ratio_pct: 18,
+              deep_sleep_continuity_score: 85,
+              wake_count: 1,
+              breathing_quality_score: 98,
+              average_heart_rate_bpm: 68,
+              hrv_ms: 34,
+              average_spo2_pct: 97,
+              average_respiratory_rate: 14,
+              analysis_text: '睡眠质量良好。',
+              suggestion_text: '建议睡觉时关灯。',
+            },
+          ],
+        };
+      }
+      if (/from core\.measurement/i.test(sql) || /from core\.activity/i.test(sql) || /from core\.meal/i.test(sql) || /from core\.thought/i.test(sql)) {
+        return { rows: [] };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+  };
+
+  const snapshot = await readTrainingSnapshotFromDatabaseClient(
+    client,
+    new Date('2026-06-05T00:00:00.000Z'),
+  );
+  const day = snapshot.daily.find((entry) => entry.date === '2026-06-04');
+
+  assert.ok(day);
+  assert.ok(queries.some((sql) => /from core\.sleep/i.test(sql)));
+  assert.equal(day.sleep.length, 1);
+  assert.equal(day.sleepSummary.totalSleepMinutes, 411);
+  assert.equal(day.sleepSummary.deepSleepMinutes, 145);
+});
+
+test('readArchiveTrainingSnapshotFromDatabaseClient reads schema-defined archive columns', async () => {
   const queries = [];
   const client = {
     async query(sql) {
@@ -330,6 +411,9 @@ test('readArchiveTrainingSnapshotFromDatabaseClient reads only schema-defined ar
       if (/from archive\.training_meal/i.test(sql)) {
         return { rows: [] };
       }
+      if (/from archive\.training_sleep/i.test(sql)) {
+        return { rows: [] };
+      }
       throw new Error(`Unexpected SQL: ${sql}`);
     },
   };
@@ -342,7 +426,7 @@ test('readArchiveTrainingSnapshotFromDatabaseClient reads only schema-defined ar
   assert.deepEqual(snapshot.daily.map((day) => day.date), ['2026-04-03']);
   assert.equal(snapshot.daily[0].sleep.length, 0);
   assert.equal(snapshot.daily[0].sleepSummary.totalSleepMinutes, null);
-  assert.equal(queries.some((sql) => /archive\.training_sleep|sleep_total_minutes|sleep_score|deep_sleep_ratio_pct/i.test(sql)), false);
+  assert.ok(queries.some((sql) => /from archive\.training_sleep/i.test(sql)));
 });
 
 test('persistNormalizedBatch writes ingest and core records in one transaction', async () => {
@@ -388,7 +472,7 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls.at(-1)[0], 'end');
 });
 
-test('persistNormalizedBatch stores sleep payload without touching removed sleep tables or columns', async () => {
+test('persistNormalizedBatch stores sleep payload in core sleep rows', async () => {
   const calls = [];
   const fakeClient = {
     async connect() {
@@ -457,13 +541,18 @@ test('persistNormalizedBatch stores sleep payload without touching removed sleep
   });
 
   const trainingDayInsert = calls.find(([sql]) => /insert into core\.training_day/i.test(sql));
+  const sleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
   const ingestBatchInsert = calls.find(([sql]) => /insert into ingest\.telegram_batch/i.test(sql));
 
   assert.ok(trainingDayInsert);
+  assert.ok(sleepInsert);
   assert.ok(ingestBatchInsert);
   assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /core\.sleep/i.test(sql)), false);
-  assert.doesNotMatch(trainingDayInsert[0], /sleep_total_minutes|sleep_score|deep_sleep_ratio_pct/i);
+  assert.equal(sleepInsert[1][0][0], createHash('md5').update('2026-06-03|夜间睡眠|23:26|06:19|411').digest('hex'));
+  assert.deepEqual(sleepInsert[1][1], ['2026-06-03']);
+  assert.deepEqual(sleepInsert[1][7], [411]);
+  assert.deepEqual(sleepInsert[1][8], [411]);
+  assert.deepEqual(sleepInsert[1][10], [145]);
   assert.equal(trainingDayInsert[1].length, 12);
   assert.equal(JSON.parse(ingestBatchInsert[1][9]).sleep.records[0].totalSleepMinutes, 411);
 });
@@ -505,6 +594,27 @@ test('persistNormalizedBatch merges an existing core day using only schema-defin
       if (/from core\.meal/i.test(sql)) {
         return { rows: [] };
       }
+      if (/from core\.sleep/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-06-03',
+              sleep_type: '夜间睡眠',
+              bedtime: '23:26',
+              wake_time: '06:19',
+              night_sleep_minutes: 411,
+              total_sleep_minutes: 411,
+              nap_minutes: null,
+              deep_sleep_minutes: 145,
+              light_sleep_minutes: 195,
+              rem_sleep_minutes: 71,
+              awake_minutes: null,
+              sleep_stage_text: null,
+              sleep_stage_detail: null,
+            },
+          ],
+        };
+      }
       return { rows: [] };
     },
     async end() {
@@ -543,9 +653,92 @@ test('persistNormalizedBatch merges an existing core day using only schema-defin
 
   assert.ok(trainingDayInsert);
   assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /core\.sleep/i.test(sql)), false);
-  assert.doesNotMatch(trainingDayInsert[0], /sleep_total_minutes|sleep_score|deep_sleep_ratio_pct/i);
+  assert.ok(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)));
   assert.equal(trainingDayInsert[1].length, 12);
+});
+
+test('backfillCoreSleepFromIngestBatchesClient repairs stored sleep batches missing core sleep rows', async () => {
+  const calls = [];
+  const fakeClient = {
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from ingest\.telegram_batch b/i.test(sql)) {
+        return {
+          rows: [
+            {
+              batch_id: 'single-36',
+              batch_payload_json: {
+                kind: 'image',
+                batchId: 'single-36',
+                status: 'ready',
+                archivedDate: '2026-06-04',
+                measurement: null,
+                activities: [],
+                workoutDailySummary: null,
+                nutrition: { meals: [], totalCalories: null, details: [] },
+                sleep: {
+                  records: [
+                    {
+                      sleepType: '夜间睡眠',
+                      bedtime: '23:26',
+                      wakeTime: '06:19',
+                      nightSleepMinutes: 411,
+                      totalSleepMinutes: 411,
+                      deepSleepMinutes: 145,
+                      lightSleepMinutes: 195,
+                      remSleepMinutes: 71,
+                    },
+                  ],
+                  totalSleepMinutes: 411,
+                  nightSleepMinutes: 411,
+                  sleepStartTime: '23:26',
+                  sleepEndTime: '06:19',
+                  deepSleepMinutes: 145,
+                  lightSleepMinutes: 195,
+                  remSleepMinutes: 71,
+                },
+              },
+            },
+          ],
+        };
+      }
+      if (/from core\.training_day/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-06-04',
+              total_activities: 0,
+              total_duration_seconds: 0,
+              training_calories: 0,
+              workout_duration_minutes: null,
+              active_hours: null,
+              cycling_distance_km: 0,
+              intake_calories: null,
+              nutrition_details_json: [],
+            },
+          ],
+        };
+      }
+      if (/from core\.measurement/i.test(sql) || /from core\.activity/i.test(sql) || /from core\.meal/i.test(sql) || /from core\.sleep/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+  };
+
+  const result = await backfillCoreSleepFromIngestBatchesClient(fakeClient, {
+    processedAt: new Date('2026-06-04T09:00:00.000Z'),
+  });
+  const sleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
+
+  assert.equal(result.status, 'stored');
+  assert.equal(result.batchesBackfilled, 1);
+  assert.deepEqual(result.daysBackfilled, ['2026-06-04']);
+  assert.ok(calls.some(([sql]) => sql === 'BEGIN'));
+  assert.ok(calls.some(([sql]) => sql === 'COMMIT'));
+  assert.ok(sleepInsert);
+  assert.deepEqual(sleepInsert[1][8], [411]);
+  assert.deepEqual(sleepInsert[1][10], [145]);
 });
 
 test('pending recognition store reads, queues, and resolves database rows', async () => {

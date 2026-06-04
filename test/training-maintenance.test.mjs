@@ -78,6 +78,24 @@ test('training maintenance sync can run one legacy database phase through the un
   assert.equal(result.status, 'unchanged');
 });
 
+test('training maintenance sync can run the ingest repair phase directly', async () => {
+  const calls = [];
+  const result = await runTrainingMaintenance({
+    argv: ['sync', '--phase', 'ingest'],
+    syncTrainingCore: async (options) => {
+      calls.push(options);
+      return { status: 'stored', ingest: { status: 'stored', batchesBackfilled: 1 } };
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].phase, 'ingest');
+  assert.equal(result.mode, 'sync');
+  assert.equal(result.phase, 'ingest');
+  assert.equal(result.status, 'stored');
+});
+
 test('training maintenance export delegates markdown export through the unified entrypoint', async () => {
   const calls = [];
   const result = await runTrainingMaintenance({
@@ -131,7 +149,7 @@ test('training maintenance migrate supports dry-run without running sync', async
   assert.equal(result.mode, 'migrate');
   assert.equal(result.status, 'planned');
   assert.equal(result.dryRun, true);
-  assert.deepEqual(result.plan, ['sync committed archive, markdown, and thoughts into core tables']);
+  assert.deepEqual(result.plan, ['sync committed archive, ingest repairs, markdown, and thoughts into core tables']);
 });
 
 test('training maintenance migrate runs only with explicit confirm', async () => {

@@ -5,6 +5,7 @@ import { backfillTrainingCoreFromArchive } from './backfill-training-core-from-a
 import { backfillThoughtsToCore } from './backfill-thoughts-to-core.mjs';
 import { reconcileTrainingMarkdownToCore } from './reconcile-training-markdown-to-core.mjs';
 import {
+  backfillCoreSleepFromIngestBatchesClient,
   backfillCoreFromLatestArchiveSnapshotClient,
   importTrainingMarkdownToDatabase,
   resolveTrainingCoreConfig,
@@ -80,6 +81,7 @@ async function syncTrainingCoreDefault(options, stderr, phase) {
     };
     return buildPhasedResult(phase, {
       archive: { ...skipped, daysBackfilled: 0 },
+      ingest: { ...skipped, batchesBackfilled: 0, daysBackfilled: [] },
       markdown: skipped,
     });
   }
@@ -106,6 +108,18 @@ async function syncTrainingCoreDefault(options, stderr, phase) {
             processedAt,
             sourceChannel: options.sourceChannel,
             batchId: options.batchId,
+          }),
+        {},
+        stderr,
+      );
+    }
+    if (phase === 'all' || phase === 'ingest') {
+      result.ingest = await runPhase(
+        'ingest',
+        () =>
+          backfillCoreSleepFromIngestBatchesClient(client, {
+            processedAt,
+            sourceChannel: options.sourceChannel,
           }),
         {},
         stderr,
@@ -149,6 +163,10 @@ async function syncTrainingCoreDefault(options, stderr, phase) {
         status: 'deferred',
         error: message,
       },
+      ingest: {
+        status: 'deferred',
+        error: message,
+      },
       markdown: {
         status: 'deferred',
         error: message,
@@ -170,6 +188,9 @@ function buildPhasedResult(phase, result) {
   }
   if (phase === 'archive') {
     return { archive: result.archive };
+  }
+  if (phase === 'ingest') {
+    return { ingest: result.ingest };
   }
   if (phase === 'markdown') {
     return { markdown: result.markdown };
@@ -209,7 +230,7 @@ function summarizeStatus(result) {
 
 function normalizeSyncPhase(value) {
   const phase = String(value ?? 'all').trim();
-  return ['all', 'archive', 'markdown', 'thoughts'].includes(phase) ? phase : 'all';
+  return ['all', 'archive', 'ingest', 'markdown', 'thoughts'].includes(phase) ? phase : 'all';
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

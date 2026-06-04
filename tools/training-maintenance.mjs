@@ -7,7 +7,7 @@ import { syncTrainingCore as syncTrainingCoreDefault } from './sync-training-cor
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..');
-const migrationPlan = ['sync committed archive, markdown, and thoughts into core tables'];
+const migrationPlan = ['sync committed archive, ingest repairs, markdown, and thoughts into core tables'];
 
 export async function runTrainingMaintenance(options = {}) {
   const argv = options.argv ?? process.argv.slice(2);
@@ -219,7 +219,7 @@ function resolvePhaseFlag(flags) {
 
 function normalizeSyncPhase(value) {
   const phase = String(value ?? 'all').trim();
-  return ['all', 'archive', 'markdown', 'thoughts'].includes(phase) ? phase : 'all';
+  return ['all', 'archive', 'ingest', 'markdown', 'thoughts'].includes(phase) ? phase : 'all';
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

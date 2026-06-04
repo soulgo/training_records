@@ -1203,6 +1203,73 @@ test('writes measurement workout and nutrition into markdown idempotently', asyn
   assert.equal(day.nutrition.totalCalories, 308);
 });
 
+test('writes sleep into an existing markdown date section', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.applyTelegramSyncToMarkdown, 'applyTelegramSyncToMarkdown export missing');
+
+  const markdown = `
+### 2026-06-04
+
+#### 当日运动截图记录
+
+##### 当日活动总览
+
+- 活动热量：0千卡
+`;
+  const batchResult = {
+    batchId: 'single-sleep-36',
+    archivedDate: '2026-06-04',
+    measurement: null,
+    activities: [],
+    workoutDailySummary: null,
+    nutrition: { meals: [], totalCalories: null, details: [] },
+    sleep: {
+      records: [
+        {
+          sleepType: '夜间睡眠',
+          bedtime: '23:26',
+          wakeTime: '06:19',
+          nightSleepMinutes: 411,
+          totalSleepMinutes: 411,
+          deepSleepMinutes: 145,
+          lightSleepMinutes: 195,
+          remSleepMinutes: 71,
+          sleepScore: 81,
+          sleepScorePercentile: 77,
+        },
+      ],
+      totalSleepMinutes: 411,
+      nightSleepMinutes: 411,
+      napMinutes: null,
+      sleepStartTime: '23:26',
+      sleepEndTime: '06:19',
+      deepSleepMinutes: 145,
+      lightSleepMinutes: 195,
+      remSleepMinutes: 71,
+      awakeMinutes: null,
+      sleepScore: 81,
+      sleepScorePercentile: 77,
+    },
+    fingerprints: {
+      measurement: [],
+      activities: [],
+      workoutDailySummary: [],
+      nutrition: [],
+    },
+  };
+
+  const result = lib.applyTelegramSyncToMarkdown(markdown, batchResult);
+  const parsed = parseTrainingRecord(result.markdown);
+  const day = parsed.daily.find((entry) => entry.date === '2026-06-04');
+
+  assert.equal(result.changed, true);
+  assert.match(result.markdown, /#### 2026-06-04 睡眠截图记录/);
+  assert.ok(day);
+  assert.equal(day.sleepSummary.totalSleepMinutes, 411);
+  assert.equal(day.sleepSummary.deepSleepMinutes, 145);
+});
+
 test('processes only allowed chats and advances state to the highest processed update id', async () => {
   const lib = await importTelegramSyncLib();
 

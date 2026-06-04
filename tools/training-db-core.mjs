@@ -11,6 +11,8 @@ export {
   persistTrainingSnapshotToCoreClient,
   backfillCoreFromLatestArchiveSnapshot,
   backfillCoreFromLatestArchiveSnapshotClient,
+  backfillCoreSleepFromIngestBatches,
+  backfillCoreSleepFromIngestBatchesClient,
   importTrainingMarkdownToDatabase,
 } from './training-db-write.mjs';
 export {
