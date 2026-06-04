@@ -146,8 +146,9 @@ function buildSecondaryMetrics({ latestMeasurement, latestDay, previousDay }) {
 function buildSleepCards({ sleepSummarySource, sleepPreviousSource }) {
   const sleep = sleepSummarySource || {};
   const previousSleep = sleepPreviousSource || {};
-  const stageText = summarizeSleepStageText(sleep.records || []);
-  const previousStageText = summarizeSleepStageText(previousSleep.records || []);
+  const deepRatio = buildSleepRatioValue(sleep.deepSleepMinutes, sleep.totalSleepMinutes);
+  const lightRatio = buildSleepRatioValue(sleep.lightSleepMinutes, sleep.totalSleepMinutes);
+
   return [
     {
       title: '总睡眠',
@@ -165,28 +166,47 @@ function buildSleepCards({ sleepSummarySource, sleepPreviousSource }) {
       comparison: buildComparison(sleep.deepSleepMinutes, previousSleep.deepSleepMinutes),
     },
     {
-      title: '午睡',
-      valueHtml: renderNumberValue(formatNumber(sleep.napMinutes, 0), '分钟'),
-      metaHtml: renderMetaLine('入睡 / 醒来', `${sleep.sleepStartTime || '—'} / ${sleep.sleepEndTime || '—'}`),
-      comparison: buildComparison(sleep.napMinutes, previousSleep.napMinutes),
-    },
-    {
-      title: '睡眠阶段',
-      valueHtml: renderTextValue(stageText || '无阶段摘要', 'metric-value--compact'),
-      metaHtml: renderMetaLine('上一日摘要', previousStageText || '—'),
-      comparison: {
-        direction: 'neutral',
-        arrow: '·',
-        label: '阶段文本',
-        shortLabel: '摘要',
-        value: '',
-        text: '展示最近睡眠阶段文本',
-        strength: 0,
-        delta: null,
-        ratio: null,
-      },
+      title: '深睡 / 浅睡比例',
+      valueHtml: renderCompositeValue([
+        { value: deepRatio, unit: '%' },
+        { value: lightRatio, unit: '%' },
+      ]),
+      metaHtml: renderMetaLine('深睡 / 浅睡比', buildSleepRatioText(sleep.deepSleepMinutes, sleep.lightSleepMinutes)),
+      comparison: buildSleepRatioComparison(sleep, previousSleep),
     },
   ];
+}
+
+function buildSleepRatioValue(partMinutes, totalMinutes) {
+  if (partMinutes === null || partMinutes === undefined || totalMinutes === null || totalMinutes === undefined || totalMinutes === 0) {
+    return '—';
+  }
+  return formatNumber((partMinutes / totalMinutes) * 100, 1);
+}
+
+function buildSleepRatioText(deepSleepMinutes, lightSleepMinutes) {
+  const deep = formatNumber(deepSleepMinutes, 0);
+  const light = formatNumber(lightSleepMinutes, 0);
+  if (deep === '—' && light === '—') {
+    return '—';
+  }
+  return `${deep} / ${light}`;
+}
+
+function buildSleepRatioComparison(sleep, previousSleep) {
+  const currentRatio = toRatioValue(sleep.deepSleepMinutes, sleep.lightSleepMinutes);
+  const previousRatio = toRatioValue(previousSleep.deepSleepMinutes, previousSleep.lightSleepMinutes);
+  return buildComparison(currentRatio, previousRatio);
+}
+
+function toRatioValue(deepSleepMinutes, lightSleepMinutes) {
+  const deep = Number(deepSleepMinutes ?? 0);
+  const light = Number(lightSleepMinutes ?? 0);
+  const total = deep + light;
+  if (!Number.isFinite(total) || total <= 0) {
+    return null;
+  }
+  return (deep / total) * 100;
 }
 
 function buildChartCards() {

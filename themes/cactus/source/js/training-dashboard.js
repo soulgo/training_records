@@ -174,6 +174,15 @@
   }
 
   sleepCards.forEach((card) => {
+    const comparisonText = card.querySelector('.metric-card__comparison');
+    const metaText = card.querySelector('.metric-card__meta');
+    if (comparisonText) {
+      comparisonText.setAttribute('aria-live', 'polite');
+    }
+    if (metaText) {
+      metaText.setAttribute('aria-live', 'polite');
+    }
+
     const valueNumber = card.querySelector('.metric-value__number');
     if (!valueNumber) {
       return;
