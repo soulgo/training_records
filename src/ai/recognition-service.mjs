@@ -414,6 +414,7 @@ function normalizeRecognitionPayload(value) {
       totalCalories: records.totalCalories ?? null,
       details: normalizeRecognitionDetails(records.details),
       dailyWorkoutSummary: records.dailyWorkoutSummary ?? null,
+      sleep: records.sleep ?? null,
     },
   };
 }

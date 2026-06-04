@@ -27,6 +27,7 @@ node tools/prompt-generator.mjs
 - 日期、单位、空值和餐次口径要写成明确规则，避免让模型自由猜。
 - schema 字段名不要在 prompt 里改名；字段结构由 `buildRecognitionSchema()` 约束。
 - 新增识别字段时，需要同步修改 schema、`analyzeTelegramBatch()`、数据库/Markdown 写入逻辑和测试。
+- 如果新增的是睡眠识别字段，还要同步更新 `core.sleep`、`archive.training_sleep` 和 `archive.training_day` 的睡眠汇总列。
 - 不确定日期时宁可让 `detectedDate` 为 `null`，交给现有跳过/回退逻辑处理。
 
 当前日期识别口径：

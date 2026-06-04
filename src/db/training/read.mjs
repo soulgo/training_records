@@ -317,7 +317,7 @@ async function readArchiveTrainingSnapshotFromDatabaseWithClients({
   dateFrom,
   dateTo,
 }) {
-  const clients = Array.from({ length: 4 }, () => createClient(config));
+  const clients = Array.from({ length: 5 }, () => createClient(config));
 
   try {
     await Promise.all(clients.map((client) => client.connect()));
@@ -366,6 +366,22 @@ function buildTrainingSnapshotFromRows({
   const activitiesByDate = groupByDate(filteredActivityRows, 'archived_date');
   const mealsByDate = groupByDate(filteredMealRows, 'archived_date');
   const sleepByDate = groupByDate(filteredSleepRows, 'archived_date');
+  const sleepSummaryByDate = new Map(
+    filteredDayRows.map((row) => [
+      normalizeDateKey(row.archived_date),
+      {
+        sleepTotalMinutes: toNullableNumber(row.sleep_total_minutes),
+        nightSleepMinutes: toNullableNumber(row.night_sleep_minutes),
+        napMinutes: toNullableNumber(row.nap_minutes),
+        sleepStartTime: row.sleep_start_time ?? null,
+        sleepEndTime: row.sleep_end_time ?? null,
+        deepSleepMinutes: toNullableNumber(row.deep_sleep_minutes),
+        lightSleepMinutes: toNullableNumber(row.light_sleep_minutes),
+        remSleepMinutes: toNullableNumber(row.rem_sleep_minutes),
+        awakeMinutes: toNullableNumber(row.awake_minutes),
+      },
+    ]),
+  );
 
   const daily = filteredDayRows.map((row) => {
     const archivedDate = normalizeDateKey(row.archived_date);
@@ -407,6 +423,7 @@ function buildTrainingSnapshotFromRows({
     const sleep = summarizeSleepRecords([
       ...(sleepByDate.get(archivedDate) ?? []).map(normalizeSleepRow),
       ...extractSleepRecords(row),
+      sleepSummaryByDate.get(archivedDate) ?? null,
     ]);
 
     return {

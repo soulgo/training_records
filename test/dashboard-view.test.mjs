@@ -228,7 +228,7 @@ test('dashboard view model keeps the stable rendering contract for overview card
   assert.match(view.sleepCards[0].comparisonHtml, /metric-card__comparison/);
   assert.deepEqual(
     view.sleepCards.map((card) => card.title),
-    ['总睡眠', '深睡 / 浅睡', '午睡'],
+    ['总睡眠', '深睡 / 浅睡', '午睡', '睡眠阶段'],
   );
   assert.deepEqual(
     view.chartPayload.charts.weightKg.map((point) => point.date),

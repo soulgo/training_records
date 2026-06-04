@@ -333,6 +333,11 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
         nutritionTotalCalories = recognition.records.totalCalories;
       }
     }
+    if (recognition.imageType === 'sleep' || recognition.records?.sleep) {
+      warnings.push(
+        '截图内容为睡眠记录，已识别为 sleep；当前同步链路会保留日期与 warning，但尚未写入睡眠明细。',
+      );
+    }
   }
 
   if (imageDates.size > 1) {

@@ -9,7 +9,7 @@ export function buildRecognitionSchema() {
     properties: {
       imageType: {
         type: 'string',
-        enum: ['measurement', 'workout', 'nutrition', 'unknown'],
+        enum: ['measurement', 'workout', 'nutrition', 'sleep', 'unknown'],
       },
       detectedDate: {
         type: ['string', 'null'],
