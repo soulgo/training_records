@@ -414,7 +414,7 @@ function normalizeRecognitionPayload(value) {
       totalCalories: records.totalCalories ?? null,
       details: normalizeRecognitionDetails(records.details),
       dailyWorkoutSummary: records.dailyWorkoutSummary ?? null,
-      sleep: records.sleep ?? null,
+      sleep: normalizeRecognitionSleep(records.sleep ?? null),
     },
   };
 }
@@ -441,6 +441,21 @@ function normalizeRecognitionDetails(details) {
   }
 
   return details;
+}
+
+function normalizeRecognitionSleep(sleep) {
+  if (sleep === null || sleep === undefined) {
+    return null;
+  }
+
+  if (!isPlainObject(sleep)) {
+    return sleep;
+  }
+
+  return {
+    ...sleep,
+    sleepStageDetail: normalizeRecognitionDetails(sleep.sleepStageDetail),
+  };
 }
 
 function isPlainObject(value) {
