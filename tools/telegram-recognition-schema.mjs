@@ -28,7 +28,7 @@ export function buildRecognitionSchema() {
       records: {
         type: 'object',
         additionalProperties: false,
-        required: ['measurement', 'activities', 'meals', 'totalCalories', 'details', 'dailyWorkoutSummary', 'sleep'],
+        required: ['measurement', 'activities', 'meals', 'totalCalories', 'details', 'dailyWorkoutSummary'],
         properties: {
           measurement: {
             type: ['object', 'null'],
