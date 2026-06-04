@@ -114,7 +114,6 @@ export function buildRecognitionSchema() {
             type: ['object', 'null'],
             additionalProperties: false,
             required: [
-              'sleepType',
               'bedtime',
               'wakeTime',
               'nightSleepMinutes',
@@ -128,7 +127,7 @@ export function buildRecognitionSchema() {
               'sleepStageDetail',
             ],
             properties: {
-              sleepType: { type: 'string' },
+              sleepType: { type: ['string', 'null'] },
               bedtime: { type: ['string', 'null'] },
               wakeTime: { type: ['string', 'null'] },
               nightSleepMinutes: { type: ['number', 'null'] },

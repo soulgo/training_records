@@ -220,8 +220,9 @@ function parseNutritionBlock(content) {
 
 function parseSleepBlock(content) {
   const fields = parseBulletFields(content);
+  const sleepType = normalizeSleepType(fields['睡眠类型']);
   const record = {
-    sleepType: normalizeSleepType(fields['睡眠类型']),
+    sleepType,
     sleepStartTime: fields['入睡时间'] ?? fields['开始时间'] ?? null,
     sleepEndTime: fields['起床时间'] ?? fields['结束时间'] ?? null,
     nightSleepMinutes: parseMinutesText(fields['夜间睡眠']) ?? parseMinutesText(fields['睡眠时长']) ?? null,
