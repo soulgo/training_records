@@ -12,6 +12,7 @@ import {
   persistNormalizedBatch,
   persistTrainingSnapshotToCore,
   readPendingRecognitionBatches,
+  readArchiveTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabase,
 } from '../tools/training-db-core.mjs';
@@ -82,8 +83,10 @@ const normalizedBatch = {
 };
 
 test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before grouping rows', async () => {
+  const queries = [];
   const client = {
     async query(sql) {
+      queries.push(sql);
       if (/from core\.training_day/i.test(sql)) {
         return {
           rows: [
@@ -156,41 +159,6 @@ test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before gr
           ],
         };
       }
-      if (/from core\.sleep/i.test(sql)) {
-        return {
-          rows: [
-            {
-              archived_date: new Date('2026-05-22T00:00:00.000Z'),
-              sleep_type: '夜间睡眠',
-              bedtime: '23:26',
-              wake_time: '06:19',
-              night_sleep_minutes: 411,
-              total_sleep_minutes: 411,
-              nap_minutes: null,
-              deep_sleep_minutes: 145,
-              light_sleep_minutes: 195,
-              rem_sleep_minutes: 71,
-              awake_minutes: null,
-              sleep_stage_text: '深睡2小时25分钟；浅睡3小时15分钟；快速眼动1小时11分钟',
-              sleep_stage_detail: ['深睡 2小时25分钟', '浅睡 3小时15分钟', '快速眼动 1小时11分钟'],
-              sleep_score: 81,
-              sleep_score_percentile: 77,
-              deep_sleep_ratio_pct: 35,
-              light_sleep_ratio_pct: 47,
-              rem_sleep_ratio_pct: 18,
-              deep_sleep_continuity_score: 85,
-              wake_count: 1,
-              breathing_quality_score: 98,
-              average_heart_rate_bpm: 68,
-              hrv_ms: 34,
-              average_spo2_pct: 97,
-              average_respiratory_rate: 14,
-              analysis_text: '睡眠质量良好。',
-              suggestion_text: '建议睡觉时关灯。',
-            },
-          ],
-        };
-      }
       if (/from core\.thought/i.test(sql)) {
         return {
           rows: [
@@ -219,13 +187,13 @@ test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before gr
   assert.equal(day.activities.length, 1);
   assert.equal(day.nutrition.meals.length, 1);
   assert.equal(day.measurement.weightKg, 73.7);
-  assert.equal(day.sleepSummary.totalSleepMinutes, 411);
-  assert.equal(day.sleepSummary.sleepScore, 81);
-  assert.equal(day.sleep[0].averageHeartRateBpm, 68);
+  assert.equal(day.sleep.length, 0);
+  assert.equal(day.sleepSummary.totalSleepMinutes, null);
   assert.equal(snapshot.bodyFeedback.length, 1);
   assert.equal(snapshot.bodyFeedback[0].date, '2026-05-22');
   assert.equal(snapshot.bodyFeedback[0].body, '训练后右膝外侧酸胀');
   assert.equal(snapshot.charts.weightKg[0].date, '2026-05-22');
+  assert.equal(queries.some((sql) => /core\.sleep|sleep_total_minutes|sleep_score/i.test(sql)), false);
 });
 
 test('readTrainingSnapshotFromDatabase can limit daily rows by date window', async () => {
@@ -328,6 +296,53 @@ test('readTrainingSnapshotFromDatabase can limit daily rows by date window', asy
   assert.equal(snapshot.latest.daily?.date, '2026-05-09');
   assert.equal(snapshot.charts.trainingCalories.length, 1);
   assert.ok(queries.some((sql) => /from core\.training_day/i.test(sql)));
+  assert.equal(queries.some((sql) => /core\.sleep|sleep_total_minutes|sleep_score/i.test(sql)), false);
+});
+
+test('readArchiveTrainingSnapshotFromDatabaseClient reads only schema-defined archive columns', async () => {
+  const queries = [];
+  const client = {
+    async query(sql) {
+      queries.push(sql);
+      if (/from archive\.training_day/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-04-03',
+              total_activities: 1,
+              total_duration_seconds: 1800,
+              training_calories: 220,
+              workout_duration_minutes: 30,
+              active_hours: 2,
+              cycling_distance_km: 0,
+              intake_calories: 900,
+              nutrition_details_json: [],
+            },
+          ],
+        };
+      }
+      if (/from archive\.training_measurement/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from archive\.training_activity/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from archive\.training_meal/i.test(sql)) {
+        return { rows: [] };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+  };
+
+  const snapshot = await readArchiveTrainingSnapshotFromDatabaseClient(
+    client,
+    new Date('2026-04-04T00:00:00.000Z'),
+  );
+
+  assert.deepEqual(snapshot.daily.map((day) => day.date), ['2026-04-03']);
+  assert.equal(snapshot.daily[0].sleep.length, 0);
+  assert.equal(snapshot.daily[0].sleepSummary.totalSleepMinutes, null);
+  assert.equal(queries.some((sql) => /archive\.training_sleep|sleep_total_minutes|sleep_score|deep_sleep_ratio_pct/i.test(sql)), false);
 });
 
 test('persistNormalizedBatch writes ingest and core records in one transaction', async () => {
@@ -373,7 +388,7 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls.at(-1)[0], 'end');
 });
 
-test('persistNormalizedBatch writes sleep metrics to core tables without touching archive sleep', async () => {
+test('persistNormalizedBatch stores sleep payload without touching removed sleep tables or columns', async () => {
   const calls = [];
   const fakeClient = {
     async connect() {
@@ -442,24 +457,18 @@ test('persistNormalizedBatch writes sleep metrics to core tables without touchin
   });
 
   const trainingDayInsert = calls.find(([sql]) => /insert into core\.training_day/i.test(sql));
-  const coreSleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
+  const ingestBatchInsert = calls.find(([sql]) => /insert into ingest\.telegram_batch/i.test(sql));
 
   assert.ok(trainingDayInsert);
-  assert.ok(coreSleepInsert);
+  assert.ok(ingestBatchInsert);
   assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), false);
-  assertSequentialUnnestParameters(coreSleepInsert[0], 31);
-  assert.equal(coreSleepInsert[1].length, 31);
-  assert.deepEqual(trainingDayInsert[1][13], ['23:26']);
-  assert.deepEqual(trainingDayInsert[1][14], ['06:19']);
-  assert.deepEqual(trainingDayInsert[1][19], [81]);
-  assert.deepEqual(trainingDayInsert[1][20], [35]);
-  assert.deepEqual(trainingDayInsert[1][21], [47]);
-  assert.deepEqual(trainingDayInsert[1][22], [18]);
-  assert.deepEqual(coreSleepInsert[1][16], [81]);
-  assert.deepEqual(coreSleepInsert[1][22], [1]);
+  assert.equal(calls.some(([sql]) => /core\.sleep/i.test(sql)), false);
+  assert.doesNotMatch(trainingDayInsert[0], /sleep_total_minutes|sleep_score|deep_sleep_ratio_pct/i);
+  assert.equal(trainingDayInsert[1].length, 12);
+  assert.equal(JSON.parse(ingestBatchInsert[1][9]).sleep.records[0].totalSleepMinutes, 411);
 });
 
-test('persistNormalizedBatch preserves existing core day sleep metrics when another payload updates the same day', async () => {
+test('persistNormalizedBatch merges an existing core day using only schema-defined columns', async () => {
   const calls = [];
   const fakeClient = {
     async connect() {
@@ -482,19 +491,6 @@ test('persistNormalizedBatch preserves existing core day sleep metrics when anot
               active_hours: null,
               cycling_distance_km: 0,
               intake_calories: null,
-              sleep_total_minutes: 411,
-              night_sleep_minutes: 411,
-              nap_minutes: null,
-              sleep_start_time: '23:26',
-              sleep_end_time: '06:19',
-              deep_sleep_minutes: 145,
-              light_sleep_minutes: 195,
-              rem_sleep_minutes: 71,
-              awake_minutes: null,
-              sleep_score: 81,
-              deep_sleep_ratio_pct: 35,
-              light_sleep_ratio_pct: 47,
-              rem_sleep_ratio_pct: 18,
               nutrition_details_json: [],
             },
           ],
@@ -547,10 +543,9 @@ test('persistNormalizedBatch preserves existing core day sleep metrics when anot
 
   assert.ok(trainingDayInsert);
   assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), false);
-  assert.deepEqual(trainingDayInsert[1][10], [411]);
-  assert.deepEqual(trainingDayInsert[1][13], ['23:26']);
-  assert.deepEqual(trainingDayInsert[1][19], [81]);
-  assert.deepEqual(trainingDayInsert[1][20], [35]);
+  assert.equal(calls.some(([sql]) => /core\.sleep/i.test(sql)), false);
+  assert.doesNotMatch(trainingDayInsert[0], /sleep_total_minutes|sleep_score|deep_sleep_ratio_pct/i);
+  assert.equal(trainingDayInsert[1].length, 12);
 });
 
 test('pending recognition store reads, queues, and resolves database rows', async () => {

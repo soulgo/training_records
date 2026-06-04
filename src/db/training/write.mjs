@@ -8,7 +8,6 @@ import {
   emptySleep,
   normalizeActivityTime,
   normalizeActivityType,
-  normalizeSleepType,
   parseDurationSeconds,
 } from '../../domain/training/training-domain.mjs';
 import { resolveTrainingCoreConfig } from './config.mjs';
@@ -103,7 +102,6 @@ export async function persistNormalizedBatch(options) {
       const existingDay = await readCoreDay(client, batch.archivedDate);
       const mergedDay = mergeBatchIntoDay(existingDay, batch);
       await replaceCoreDay(client, mergedDay, batch.batchId, processedAt);
-      await replaceCoreSleepRecords(client, mergedDay, batch.batchId, processedAt);
     }
 
     await client.query('COMMIT');
@@ -637,19 +635,6 @@ async function readCoreDay(client, archivedDate) {
         active_hours,
         cycling_distance_km,
         intake_calories,
-        sleep_total_minutes,
-        night_sleep_minutes,
-        nap_minutes,
-        sleep_start_time,
-        sleep_end_time,
-        deep_sleep_minutes,
-        light_sleep_minutes,
-        rem_sleep_minutes,
-        awake_minutes,
-        sleep_score,
-        deep_sleep_ratio_pct,
-        light_sleep_ratio_pct,
-        rem_sleep_ratio_pct,
         nutrition_details_json
       from core.training_day
       where archived_date = $1
@@ -718,75 +703,7 @@ async function readCoreDay(client, archivedDate) {
     `,
     [archivedDate],
   );
-  const sleepResult = await client.query(
-    `
-      select
-        archived_date,
-        sleep_type,
-        bedtime,
-        wake_time,
-        night_sleep_minutes,
-        total_sleep_minutes,
-        nap_minutes,
-        deep_sleep_minutes,
-        light_sleep_minutes,
-        rem_sleep_minutes,
-        awake_minutes,
-        sleep_stage_text,
-        sleep_stage_detail,
-        sleep_score,
-        sleep_score_percentile,
-        deep_sleep_ratio_pct,
-        light_sleep_ratio_pct,
-        rem_sleep_ratio_pct,
-        deep_sleep_continuity_score,
-        wake_count,
-        breathing_quality_score,
-        average_heart_rate_bpm,
-        hrv_ms,
-        average_spo2_pct,
-        average_respiratory_rate,
-        analysis_text,
-        suggestion_text
-      from core.sleep
-      where archived_date = $1
-      order by updated_at asc
-    `,
-    [archivedDate],
-  );
-
   const dayRow = dayResult.rows[0];
-  const sleepRecords = [
-    ...sleepResult.rows.map((sleep) => ({
-      sleepType: sleep.sleep_type ?? '夜间睡眠',
-      bedtime: sleep.bedtime ?? null,
-      wakeTime: sleep.wake_time ?? null,
-      nightSleepMinutes: sleep.night_sleep_minutes ?? null,
-      totalSleepMinutes: sleep.total_sleep_minutes ?? null,
-      napMinutes: sleep.nap_minutes ?? null,
-      deepSleepMinutes: sleep.deep_sleep_minutes ?? null,
-      lightSleepMinutes: sleep.light_sleep_minutes ?? null,
-      remSleepMinutes: sleep.rem_sleep_minutes ?? null,
-      awakeMinutes: sleep.awake_minutes ?? null,
-      sleepStageText: sleep.sleep_stage_text ?? null,
-      sleepStageDetail: sleep.sleep_stage_detail ?? null,
-      sleepScore: sleep.sleep_score ?? null,
-      sleepScorePercentile: sleep.sleep_score_percentile ?? null,
-      deepSleepRatioPct: sleep.deep_sleep_ratio_pct ?? null,
-      lightSleepRatioPct: sleep.light_sleep_ratio_pct ?? null,
-      remSleepRatioPct: sleep.rem_sleep_ratio_pct ?? null,
-      deepSleepContinuityScore: sleep.deep_sleep_continuity_score ?? null,
-      wakeCount: sleep.wake_count ?? null,
-      breathingQualityScore: sleep.breathing_quality_score ?? null,
-      averageHeartRateBpm: sleep.average_heart_rate_bpm ?? null,
-      hrvMs: sleep.hrv_ms ?? null,
-      averageSpo2Pct: sleep.average_spo2_pct ?? null,
-      averageRespiratoryRate: sleep.average_respiratory_rate ?? null,
-      analysisText: sleep.analysis_text ?? null,
-      suggestionText: sleep.suggestion_text ?? null,
-    })),
-    extractCoreDaySleepRecord(dayRow),
-  ].filter(Boolean);
 
   return buildTrainingDay({
     date: archivedDate,
@@ -829,33 +746,13 @@ async function readCoreDay(client, archivedDate) {
       totalCalories: dayRow.intake_calories ?? null,
       details: Array.isArray(dayRow.nutrition_details_json) ? dayRow.nutrition_details_json : [],
     },
-    sleep: { records: sleepRecords },
+    sleep: emptySleep(),
     workoutDailySummary: {
       activityCaloriesKcal: dayRow.training_calories,
       workoutDurationMinutes: dayRow.workout_duration_minutes,
       activeHours: dayRow.active_hours,
     },
   });
-}
-
-function extractCoreDaySleepRecord(row) {
-  const sleep = {
-    totalSleepMinutes: normalizeNumber(row.sleep_total_minutes, null),
-    nightSleepMinutes: normalizeNumber(row.night_sleep_minutes, null),
-    napMinutes: normalizeNumber(row.nap_minutes, null),
-    sleepStartTime: row.sleep_start_time ?? null,
-    sleepEndTime: row.sleep_end_time ?? null,
-    deepSleepMinutes: normalizeNumber(row.deep_sleep_minutes, null),
-    lightSleepMinutes: normalizeNumber(row.light_sleep_minutes, null),
-    remSleepMinutes: normalizeNumber(row.rem_sleep_minutes, null),
-    awakeMinutes: normalizeNumber(row.awake_minutes, null),
-    sleepScore: normalizeNumber(row.sleep_score, null),
-    deepSleepRatioPct: normalizeNumber(row.deep_sleep_ratio_pct, null),
-    lightSleepRatioPct: normalizeNumber(row.light_sleep_ratio_pct, null),
-    remSleepRatioPct: normalizeNumber(row.rem_sleep_ratio_pct, null),
-  };
-  const hasValue = Object.values(sleep).some((value) => value !== null && value !== undefined && value !== '');
-  return hasValue ? sleep : null;
 }
 
 function mergeBatchIntoDay(existingDay, batch) {
@@ -978,7 +875,6 @@ async function writeCoreDays(client, days, options) {
   }
 
   const dates = normalizedDays.map((day) => day.date);
-  await client.query(`delete from core.sleep where archived_date = any($1::date[])`, [dates]);
   await client.query(`delete from core.measurement where archived_date = any($1::date[])`, [dates]);
   await client.query(`delete from core.activity where archived_date = any($1::date[])`, [dates]);
   await client.query(`delete from core.meal where archived_date = any($1::date[])`, [dates]);
@@ -995,19 +891,6 @@ async function writeCoreDays(client, days, options) {
     activeHours: day.workoutSummary?.activeHours ?? null,
     cyclingDistanceKm: day.workoutSummary?.cyclingDistanceKm ?? 0,
     intakeCalories: day.nutrition?.totalCalories ?? null,
-    sleepTotalMinutes: day.sleepSummary?.totalSleepMinutes ?? null,
-    nightSleepMinutes: day.sleepSummary?.nightSleepMinutes ?? null,
-    napMinutes: day.sleepSummary?.napMinutes ?? null,
-    sleepStartTime: day.sleepSummary?.sleepStartTime ?? null,
-    sleepEndTime: day.sleepSummary?.sleepEndTime ?? null,
-    deepSleepMinutes: day.sleepSummary?.deepSleepMinutes ?? null,
-    lightSleepMinutes: day.sleepSummary?.lightSleepMinutes ?? null,
-    remSleepMinutes: day.sleepSummary?.remSleepMinutes ?? null,
-    awakeMinutes: day.sleepSummary?.awakeMinutes ?? null,
-    sleepScore: day.sleepSummary?.sleepScore ?? null,
-    deepSleepRatioPct: day.sleepSummary?.deepSleepRatioPct ?? null,
-    lightSleepRatioPct: day.sleepSummary?.lightSleepRatioPct ?? null,
-    remSleepRatioPct: day.sleepSummary?.remSleepRatioPct ?? null,
     nutritionDetailsJson: JSON.stringify(day.nutrition?.details ?? []),
     updatedAt: processedAtIso,
   }));
@@ -1025,19 +908,6 @@ async function writeCoreDays(client, days, options) {
         active_hours,
         cycling_distance_km,
         intake_calories,
-        sleep_total_minutes,
-        night_sleep_minutes,
-        nap_minutes,
-        sleep_start_time,
-        sleep_end_time,
-        deep_sleep_minutes,
-        light_sleep_minutes,
-        rem_sleep_minutes,
-        awake_minutes,
-        sleep_score,
-        deep_sleep_ratio_pct,
-        light_sleep_ratio_pct,
-        rem_sleep_ratio_pct,
         nutrition_details_json,
         updated_at
       )
@@ -1052,21 +922,8 @@ async function writeCoreDays(client, days, options) {
         $8::integer[],
         $9::numeric[],
         $10::integer[],
-        $11::integer[],
-        $12::integer[],
-        $13::integer[],
-        $14::text[],
-        $15::text[],
-        $16::integer[],
-        $17::integer[],
-        $18::integer[],
-        $19::integer[],
-        $20::numeric[],
-        $21::numeric[],
-        $22::numeric[],
-        $23::numeric[],
-        $24::jsonb[],
-        $25::timestamptz[]
+        $11::jsonb[],
+        $12::timestamptz[]
       )
       on conflict (archived_date) do update set
         source_batch_id = excluded.source_batch_id,
@@ -1078,19 +935,6 @@ async function writeCoreDays(client, days, options) {
         active_hours = excluded.active_hours,
         cycling_distance_km = excluded.cycling_distance_km,
         intake_calories = excluded.intake_calories,
-        sleep_total_minutes = excluded.sleep_total_minutes,
-        night_sleep_minutes = excluded.night_sleep_minutes,
-        nap_minutes = excluded.nap_minutes,
-        sleep_start_time = excluded.sleep_start_time,
-        sleep_end_time = excluded.sleep_end_time,
-        deep_sleep_minutes = excluded.deep_sleep_minutes,
-        light_sleep_minutes = excluded.light_sleep_minutes,
-        rem_sleep_minutes = excluded.rem_sleep_minutes,
-        awake_minutes = excluded.awake_minutes,
-        sleep_score = excluded.sleep_score,
-        deep_sleep_ratio_pct = excluded.deep_sleep_ratio_pct,
-        light_sleep_ratio_pct = excluded.light_sleep_ratio_pct,
-        rem_sleep_ratio_pct = excluded.rem_sleep_ratio_pct,
         nutrition_details_json = excluded.nutrition_details_json,
         updated_at = excluded.updated_at
     `,
@@ -1105,19 +949,6 @@ async function writeCoreDays(client, days, options) {
       dayRows.map((row) => row.activeHours),
       dayRows.map((row) => row.cyclingDistanceKm),
       dayRows.map((row) => row.intakeCalories),
-      dayRows.map((row) => row.sleepTotalMinutes),
-      dayRows.map((row) => row.nightSleepMinutes),
-      dayRows.map((row) => row.napMinutes),
-      dayRows.map((row) => row.sleepStartTime),
-      dayRows.map((row) => row.sleepEndTime),
-      dayRows.map((row) => row.deepSleepMinutes),
-      dayRows.map((row) => row.lightSleepMinutes),
-      dayRows.map((row) => row.remSleepMinutes),
-      dayRows.map((row) => row.awakeMinutes),
-      dayRows.map((row) => row.sleepScore),
-      dayRows.map((row) => row.deepSleepRatioPct),
-      dayRows.map((row) => row.lightSleepRatioPct),
-      dayRows.map((row) => row.remSleepRatioPct),
       dayRows.map((row) => row.nutritionDetailsJson),
       dayRows.map((row) => row.updatedAt),
     ],
@@ -1126,347 +957,6 @@ async function writeCoreDays(client, days, options) {
   await insertCoreMeasurements(client, normalizedDays, options, processedAtIso);
   await insertCoreActivities(client, normalizedDays, options, processedAtIso);
   await insertCoreMeals(client, normalizedDays, options, processedAtIso);
-}
-
-async function replaceCoreSleepRecords(client, day, batchId, processedAt) {
-  await client.query(`delete from core.sleep where archived_date = $1`, [day.date]);
-  const sleepRecords = Array.isArray(day.sleep) ? day.sleep : [];
-  const rows = sleepRecords
-    .map((sleep) => normalizeSleepRecord(day.date, sleep))
-    .filter(Boolean);
-
-  if (rows.length === 0) {
-    return;
-  }
-
-  await client.query(
-    `
-      insert into core.sleep (
-        sleep_key,
-        archived_date,
-        source_channel,
-        source_batch_id,
-        sleep_type,
-        bedtime,
-        wake_time,
-        night_sleep_minutes,
-        total_sleep_minutes,
-        nap_minutes,
-        deep_sleep_minutes,
-        light_sleep_minutes,
-        rem_sleep_minutes,
-        awake_minutes,
-        sleep_stage_text,
-        sleep_stage_detail,
-        sleep_score,
-        sleep_score_percentile,
-        deep_sleep_ratio_pct,
-        light_sleep_ratio_pct,
-        rem_sleep_ratio_pct,
-        deep_sleep_continuity_score,
-        wake_count,
-        breathing_quality_score,
-        average_heart_rate_bpm,
-        hrv_ms,
-        average_spo2_pct,
-        average_respiratory_rate,
-        analysis_text,
-        suggestion_text,
-        updated_at
-      )
-      select *
-      from unnest(
-        $1::text[],
-        $2::date[],
-        $3::text[],
-        $4::text[],
-        $5::text[],
-        $6::text[],
-        $7::text[],
-        $8::integer[],
-        $9::integer[],
-        $10::integer[],
-        $11::integer[],
-        $12::integer[],
-        $13::integer[],
-        $14::integer[],
-        $15::text[],
-        $16::text[],
-        $17::numeric[],
-        $18::numeric[],
-        $19::numeric[],
-        $20::numeric[],
-        $21::numeric[],
-        $22::numeric[],
-        $23::integer[],
-        $24::numeric[],
-        $25::numeric[],
-        $26::numeric[],
-        $27::numeric[],
-        $28::numeric[],
-        $29::text[],
-        $30::text[],
-        $31::timestamptz[]
-      )
-      on conflict (sleep_key) do update set
-        source_channel = excluded.source_channel,
-        source_batch_id = excluded.source_batch_id,
-        sleep_type = excluded.sleep_type,
-        bedtime = excluded.bedtime,
-        wake_time = excluded.wake_time,
-        night_sleep_minutes = excluded.night_sleep_minutes,
-        total_sleep_minutes = excluded.total_sleep_minutes,
-        nap_minutes = excluded.nap_minutes,
-        deep_sleep_minutes = excluded.deep_sleep_minutes,
-        light_sleep_minutes = excluded.light_sleep_minutes,
-        rem_sleep_minutes = excluded.rem_sleep_minutes,
-        awake_minutes = excluded.awake_minutes,
-        sleep_stage_text = excluded.sleep_stage_text,
-        sleep_stage_detail = excluded.sleep_stage_detail,
-        sleep_score = excluded.sleep_score,
-        sleep_score_percentile = excluded.sleep_score_percentile,
-        deep_sleep_ratio_pct = excluded.deep_sleep_ratio_pct,
-        light_sleep_ratio_pct = excluded.light_sleep_ratio_pct,
-        rem_sleep_ratio_pct = excluded.rem_sleep_ratio_pct,
-        deep_sleep_continuity_score = excluded.deep_sleep_continuity_score,
-        wake_count = excluded.wake_count,
-        breathing_quality_score = excluded.breathing_quality_score,
-        average_heart_rate_bpm = excluded.average_heart_rate_bpm,
-        hrv_ms = excluded.hrv_ms,
-        average_spo2_pct = excluded.average_spo2_pct,
-        average_respiratory_rate = excluded.average_respiratory_rate,
-        analysis_text = excluded.analysis_text,
-        suggestion_text = excluded.suggestion_text,
-        updated_at = excluded.updated_at
-    `,
-    [
-      rows.map((row) => row.sleepKey),
-      rows.map((row) => row.archivedDate),
-      rows.map((row) => row.sourceChannel),
-      rows.map((row) => row.sourceBatchId),
-      rows.map((row) => row.sleepType),
-      rows.map((row) => row.bedtime),
-      rows.map((row) => row.wakeTime),
-      rows.map((row) => row.nightSleepMinutes),
-      rows.map((row) => row.totalSleepMinutes),
-      rows.map((row) => row.napMinutes),
-      rows.map((row) => row.deepSleepMinutes),
-      rows.map((row) => row.lightSleepMinutes),
-      rows.map((row) => row.remSleepMinutes),
-      rows.map((row) => row.awakeMinutes),
-      rows.map((row) => row.sleepStageText),
-      rows.map((row) => row.sleepStageDetail),
-      rows.map((row) => row.sleepScore),
-      rows.map((row) => row.sleepScorePercentile),
-      rows.map((row) => row.deepSleepRatioPct),
-      rows.map((row) => row.lightSleepRatioPct),
-      rows.map((row) => row.remSleepRatioPct),
-      rows.map((row) => row.deepSleepContinuityScore),
-      rows.map((row) => row.wakeCount),
-      rows.map((row) => row.breathingQualityScore),
-      rows.map((row) => row.averageHeartRateBpm),
-      rows.map((row) => row.hrvMs),
-      rows.map((row) => row.averageSpo2Pct),
-      rows.map((row) => row.averageRespiratoryRate),
-      rows.map((row) => row.analysisText),
-      rows.map((row) => row.suggestionText),
-      rows.map((row) => row.updatedAt),
-    ],
-  );
-}
-
-async function replaceArchiveSleepRecords(client, day, batchId, processedAt) {
-  const sleepRecords = Array.isArray(day.sleep) ? day.sleep : [];
-  const rows = sleepRecords.map((sleep) => normalizeArchiveSleepRecord(day.date, sleep)).filter(Boolean);
-  await client.query(`delete from archive.training_sleep where archived_date = $1`, [day.date]);
-
-  if (rows.length === 0) {
-    return;
-  }
-
-  await client.query(
-    `
-      insert into archive.training_sleep (
-        sleep_hash,
-        archived_date,
-        source_hash,
-        sleep_type,
-        bedtime,
-        wake_time,
-        night_sleep_minutes,
-        total_sleep_minutes,
-        nap_minutes,
-        deep_sleep_minutes,
-        light_sleep_minutes,
-        rem_sleep_minutes,
-        awake_minutes,
-        sleep_stage_text,
-        sleep_stage_detail,
-        sleep_score,
-        sleep_score_percentile,
-        deep_sleep_ratio_pct,
-        light_sleep_ratio_pct,
-        rem_sleep_ratio_pct,
-        deep_sleep_continuity_score,
-        wake_count,
-        breathing_quality_score,
-        average_heart_rate_bpm,
-        hrv_ms,
-        average_spo2_pct,
-        average_respiratory_rate,
-        analysis_text,
-        suggestion_text,
-        updated_at
-      )
-      select *
-      from unnest(
-        $1::text[],
-        $2::date[],
-        $3::text[],
-        $4::text[],
-        $5::text[],
-        $6::text[],
-        $7::integer[],
-        $8::integer[],
-        $9::integer[],
-        $10::integer[],
-        $11::integer[],
-        $12::integer[],
-        $13::integer[],
-        $14::text[],
-        $15::text[],
-        $16::numeric[],
-        $17::numeric[],
-        $18::numeric[],
-        $19::numeric[],
-        $20::numeric[],
-        $21::numeric[],
-        $22::integer[],
-        $23::numeric[],
-        $24::numeric[],
-        $25::numeric[],
-        $26::numeric[],
-        $27::numeric[],
-        $28::text[],
-        $29::text[],
-        $30::timestamptz[]
-      )
-      on conflict (sleep_hash) do update set
-        source_hash = excluded.source_hash,
-        sleep_type = excluded.sleep_type,
-        bedtime = excluded.bedtime,
-        wake_time = excluded.wake_time,
-        night_sleep_minutes = excluded.night_sleep_minutes,
-        total_sleep_minutes = excluded.total_sleep_minutes,
-        nap_minutes = excluded.nap_minutes,
-        deep_sleep_minutes = excluded.deep_sleep_minutes,
-        light_sleep_minutes = excluded.light_sleep_minutes,
-        rem_sleep_minutes = excluded.rem_sleep_minutes,
-        awake_minutes = excluded.awake_minutes,
-        sleep_stage_text = excluded.sleep_stage_text,
-        sleep_stage_detail = excluded.sleep_stage_detail,
-        sleep_score = excluded.sleep_score,
-        sleep_score_percentile = excluded.sleep_score_percentile,
-        deep_sleep_ratio_pct = excluded.deep_sleep_ratio_pct,
-        light_sleep_ratio_pct = excluded.light_sleep_ratio_pct,
-        rem_sleep_ratio_pct = excluded.rem_sleep_ratio_pct,
-        deep_sleep_continuity_score = excluded.deep_sleep_continuity_score,
-        wake_count = excluded.wake_count,
-        breathing_quality_score = excluded.breathing_quality_score,
-        average_heart_rate_bpm = excluded.average_heart_rate_bpm,
-        hrv_ms = excluded.hrv_ms,
-        average_spo2_pct = excluded.average_spo2_pct,
-        average_respiratory_rate = excluded.average_respiratory_rate,
-        analysis_text = excluded.analysis_text,
-        suggestion_text = excluded.suggestion_text,
-        updated_at = excluded.updated_at
-    `,
-    [
-      rows.map((row) => row.sleepHash),
-      rows.map((row) => row.archivedDate),
-      rows.map((row) => row.sourceHash),
-      rows.map((row) => row.sleepType),
-      rows.map((row) => row.bedtime),
-      rows.map((row) => row.wakeTime),
-      rows.map((row) => row.nightSleepMinutes),
-      rows.map((row) => row.totalSleepMinutes),
-      rows.map((row) => row.napMinutes),
-      rows.map((row) => row.deepSleepMinutes),
-      rows.map((row) => row.lightSleepMinutes),
-      rows.map((row) => row.remSleepMinutes),
-      rows.map((row) => row.awakeMinutes),
-      rows.map((row) => row.sleepStageText),
-      rows.map((row) => row.sleepStageDetail),
-      rows.map((row) => row.sleepScore),
-      rows.map((row) => row.sleepScorePercentile),
-      rows.map((row) => row.deepSleepRatioPct),
-      rows.map((row) => row.lightSleepRatioPct),
-      rows.map((row) => row.remSleepRatioPct),
-      rows.map((row) => row.deepSleepContinuityScore),
-      rows.map((row) => row.wakeCount),
-      rows.map((row) => row.breathingQualityScore),
-      rows.map((row) => row.averageHeartRateBpm),
-      rows.map((row) => row.hrvMs),
-      rows.map((row) => row.averageSpo2Pct),
-      rows.map((row) => row.averageRespiratoryRate),
-      rows.map((row) => row.analysisText),
-      rows.map((row) => row.suggestionText),
-      rows.map((row) => row.updatedAt),
-    ],
-  );
-}
-
-function normalizeSleepRecord(archivedDate, sleep) {
-  if (!sleep) {
-    return null;
-  }
-
-  const hasValues = [
-    sleep.totalSleepMinutes,
-    sleep.nightSleepMinutes,
-    sleep.napMinutes,
-    sleep.bedtime,
-    sleep.wakeTime,
-    sleep.deepSleepMinutes,
-    sleep.lightSleepMinutes,
-    sleep.remSleepMinutes,
-    sleep.awakeMinutes,
-    sleep.sleepStageText,
-    sleep.sleepStageDetail,
-    ...SLEEP_HEALTH_FIELDS.map((field) => sleep[field]),
-  ].some((value) => value !== null && value !== undefined && value !== '');
-
-  if (!hasValues) {
-    return null;
-  }
-
-  const sleepType = normalizeSleepType(sleep.sleepType ?? '夜间睡眠');
-  const bedtime = sleep.bedtime ?? null;
-  const wakeTime = sleep.wakeTime ?? null;
-  const sleepKey = createHash('md5')
-    .update([archivedDate, sleepType, bedtime ?? '', wakeTime ?? '', sleep.totalSleepMinutes ?? '', sleep.napMinutes ?? ''].join('|'))
-    .digest('hex');
-
-  return {
-    sleepKey,
-    archivedDate,
-    sourceChannel: 'telegram',
-    sourceBatchId: null,
-    sleepType,
-    bedtime,
-    wakeTime,
-    nightSleepMinutes: sleep.nightSleepMinutes ?? null,
-    totalSleepMinutes: sleep.totalSleepMinutes ?? null,
-    napMinutes: sleep.napMinutes ?? null,
-    deepSleepMinutes: sleep.deepSleepMinutes ?? null,
-    lightSleepMinutes: sleep.lightSleepMinutes ?? null,
-    remSleepMinutes: sleep.remSleepMinutes ?? null,
-    awakeMinutes: sleep.awakeMinutes ?? null,
-    sleepStageText: sleep.sleepStageText ?? null,
-    sleepStageDetail: sleep.sleepStageDetail ?? null,
-    ...pickSleepHealthFields(sleep),
-    updatedAt: new Date().toISOString(),
-  };
 }
 
 function existingSleepPayload(existing) {
@@ -1480,33 +970,6 @@ function existingSleepPayload(existing) {
     };
   }
   return existing.sleepSummary ?? existing.sleep ?? emptySleep();
-}
-
-function normalizeArchiveSleepRecord(archivedDate, sleep) {
-  const normalized = normalizeSleepRecord(archivedDate, sleep);
-  if (!normalized) {
-    return null;
-  }
-
-  return {
-    sleepHash: normalized.sleepKey,
-    archivedDate: normalized.archivedDate,
-    sourceHash: normalized.sleepKey,
-    sleepType: normalized.sleepType,
-    bedtime: normalized.bedtime,
-    wakeTime: normalized.wakeTime,
-    nightSleepMinutes: normalized.nightSleepMinutes,
-    totalSleepMinutes: normalized.totalSleepMinutes,
-    napMinutes: normalized.napMinutes,
-    deepSleepMinutes: normalized.deepSleepMinutes,
-    lightSleepMinutes: normalized.lightSleepMinutes,
-    remSleepMinutes: normalized.remSleepMinutes,
-    awakeMinutes: normalized.awakeMinutes,
-    sleepStageText: normalized.sleepStageText,
-    sleepStageDetail: normalized.sleepStageDetail,
-    ...pickSleepHealthFields(normalized),
-    updatedAt: normalized.updatedAt,
-  };
 }
 
 function pickSleepHealthFields(sleep) {

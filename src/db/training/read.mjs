@@ -18,19 +18,6 @@ const TRAINING_DAY_QUERY = `
     active_hours,
     cycling_distance_km,
     intake_calories,
-    sleep_total_minutes,
-    night_sleep_minutes,
-    nap_minutes,
-    sleep_start_time,
-    sleep_end_time,
-    deep_sleep_minutes,
-    light_sleep_minutes,
-    rem_sleep_minutes,
-    awake_minutes,
-    sleep_score,
-    deep_sleep_ratio_pct,
-    light_sleep_ratio_pct,
-    rem_sleep_ratio_pct,
     nutrition_details_json
   from core.training_day
   order by archived_date asc
@@ -81,38 +68,6 @@ const TRAINING_MEAL_QUERY = `
   from core.meal
   order by archived_date asc, meal_name asc
 `;
-const TRAINING_SLEEP_QUERY = `
-  select
-    archived_date,
-    sleep_type,
-    bedtime,
-    wake_time,
-    night_sleep_minutes,
-    total_sleep_minutes,
-    nap_minutes,
-    deep_sleep_minutes,
-    light_sleep_minutes,
-    rem_sleep_minutes,
-    awake_minutes,
-    sleep_stage_text,
-    sleep_stage_detail,
-    sleep_score,
-    sleep_score_percentile,
-    deep_sleep_ratio_pct,
-    light_sleep_ratio_pct,
-    rem_sleep_ratio_pct,
-    deep_sleep_continuity_score,
-    wake_count,
-    breathing_quality_score,
-    average_heart_rate_bpm,
-    hrv_ms,
-    average_spo2_pct,
-    average_respiratory_rate,
-    analysis_text,
-    suggestion_text
-  from core.sleep
-  order by archived_date asc, updated_at asc
-`;
 const BODY_FEEDBACK_QUERY = `
   select
     telegram_message_id,
@@ -137,54 +92,9 @@ const ARCHIVE_TRAINING_DAY_QUERY = `
     workout_duration_minutes,
     active_hours,
     cycling_distance_km,
-    intake_calories,
-    sleep_total_minutes,
-    night_sleep_minutes,
-    nap_minutes,
-    sleep_start_time,
-    sleep_end_time,
-    deep_sleep_minutes,
-    light_sleep_minutes,
-    rem_sleep_minutes,
-    awake_minutes,
-    sleep_score,
-    deep_sleep_ratio_pct,
-    light_sleep_ratio_pct,
-    rem_sleep_ratio_pct
+    intake_calories
   from archive.training_day
   order by archived_date asc
-`;
-const ARCHIVE_TRAINING_SLEEP_QUERY = `
-  select
-    archived_date,
-    sleep_type,
-    bedtime,
-    wake_time,
-    night_sleep_minutes,
-    total_sleep_minutes,
-    nap_minutes,
-    deep_sleep_minutes,
-    light_sleep_minutes,
-    rem_sleep_minutes,
-    awake_minutes,
-    sleep_stage_text,
-    sleep_stage_detail,
-    sleep_score,
-    sleep_score_percentile,
-    deep_sleep_ratio_pct,
-    light_sleep_ratio_pct,
-    rem_sleep_ratio_pct,
-    deep_sleep_continuity_score,
-    wake_count,
-    breathing_quality_score,
-    average_heart_rate_bpm,
-    hrv_ms,
-    average_spo2_pct,
-    average_respiratory_rate,
-    analysis_text,
-    suggestion_text
-  from archive.training_sleep
-  order by archived_date asc, updated_at asc
 `;
 const ARCHIVE_TRAINING_MEASUREMENT_QUERY = `
   select
@@ -315,7 +225,6 @@ export async function readTrainingSnapshotFromDatabaseClient(client, now) {
   const measurementResult = await client.query(TRAINING_MEASUREMENT_QUERY);
   const activityResult = await client.query(TRAINING_ACTIVITY_QUERY);
   const mealResult = await client.query(TRAINING_MEAL_QUERY);
-  const sleepRows = await readOptionalSleepRows(client, TRAINING_SLEEP_QUERY);
   const bodyFeedbackResult = await client.query(BODY_FEEDBACK_QUERY);
 
   return buildTrainingSnapshotFromRows({
@@ -323,7 +232,7 @@ export async function readTrainingSnapshotFromDatabaseClient(client, now) {
     measurementRows: measurementResult.rows,
     activityRows: activityResult.rows,
     mealRows: mealResult.rows,
-    sleepRows,
+    sleepRows: [],
     bodyFeedbackRows: bodyFeedbackResult.rows,
     now,
   });
@@ -364,14 +273,13 @@ export async function readArchiveTrainingSnapshotFromDatabaseClient(client, now)
   const measurementResult = await client.query(ARCHIVE_TRAINING_MEASUREMENT_QUERY);
   const activityResult = await client.query(ARCHIVE_TRAINING_ACTIVITY_QUERY);
   const mealResult = await client.query(ARCHIVE_TRAINING_MEAL_QUERY);
-  const sleepResult = await client.query(ARCHIVE_TRAINING_SLEEP_QUERY);
 
   return buildTrainingSnapshotFromRows({
     dayRows: dayResult.rows,
     measurementRows: measurementResult.rows,
     activityRows: activityResult.rows,
     mealRows: mealResult.rows,
-    sleepRows: sleepResult.rows,
+    sleepRows: [],
     now,
   });
 }
@@ -383,17 +291,16 @@ async function readArchiveTrainingSnapshotFromDatabaseWithClients({
   dateFrom,
   dateTo,
 }) {
-  const clients = Array.from({ length: 5 }, () => createClient(config));
+  const clients = Array.from({ length: 4 }, () => createClient(config));
 
   try {
     await Promise.all(clients.map((client) => client.connect()));
 
-    const [dayResult, measurementResult, activityResult, mealResult, sleepResult] = await Promise.all([
+    const [dayResult, measurementResult, activityResult, mealResult] = await Promise.all([
       clients[0].query(ARCHIVE_TRAINING_DAY_QUERY),
       clients[1].query(ARCHIVE_TRAINING_MEASUREMENT_QUERY),
       clients[2].query(ARCHIVE_TRAINING_ACTIVITY_QUERY),
       clients[3].query(ARCHIVE_TRAINING_MEAL_QUERY),
-      clients[4].query(ARCHIVE_TRAINING_SLEEP_QUERY),
     ]);
 
     return buildTrainingSnapshotFromRows({
@@ -401,7 +308,7 @@ async function readArchiveTrainingSnapshotFromDatabaseWithClients({
       measurementRows: measurementResult.rows,
       activityRows: activityResult.rows,
       mealRows: mealResult.rows,
-      sleepRows: sleepResult.rows,
+      sleepRows: [],
       now,
       dateFrom,
       dateTo,
@@ -527,17 +434,6 @@ function buildTrainingSnapshotFromRows({
     ),
     bodyFeedback: filteredBodyFeedbackRows.map(normalizeBodyFeedbackRow),
   };
-}
-
-async function readOptionalSleepRows(client, query) {
-  try {
-    return (await client.query(query)).rows;
-  } catch (error) {
-    if (/core\.sleep|archive\.training_sleep|sleep_score|sleep_score_percentile|deep_sleep_ratio_pct|analysis_text/i.test(String(error?.message ?? error))) {
-      return [];
-    }
-    throw error;
-  }
 }
 
 function filterRowsByDateWindow(rows, key, dateFrom, dateTo) {
