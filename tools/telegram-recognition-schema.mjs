@@ -144,7 +144,7 @@ export function buildRecognitionSchema() {
                 items: { type: 'string' },
               },
             },
-          },
+          }
         },
       },
     },

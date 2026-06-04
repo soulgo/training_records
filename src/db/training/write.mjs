@@ -88,6 +88,7 @@ export async function persistNormalizedBatch(options) {
       const mergedDay = mergeBatchIntoDay(existingDay, batch);
       await replaceCoreDay(client, mergedDay, batch.batchId, processedAt);
       await replaceCoreSleepRecords(client, mergedDay, batch.batchId, processedAt);
+      await replaceArchiveSleepRecords(client, mergedDay, batch.batchId, processedAt);
     }
 
     await client.query('COMMIT');
@@ -1071,6 +1072,91 @@ async function replaceCoreSleepRecords(client, day, batchId, processedAt) {
   );
 }
 
+async function replaceArchiveSleepRecords(client, day, batchId, processedAt) {
+  const sleepRecords = Array.isArray(day.sleep) ? day.sleep : [];
+  const rows = sleepRecords.map((sleep) => normalizeArchiveSleepRecord(day.date, sleep)).filter(Boolean);
+  await client.query(`delete from archive.training_sleep where archived_date = $1`, [day.date]);
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  await client.query(
+    `
+      insert into archive.training_sleep (
+        sleep_hash,
+        archived_date,
+        source_hash,
+        sleep_type,
+        bedtime,
+        wake_time,
+        night_sleep_minutes,
+        total_sleep_minutes,
+        nap_minutes,
+        deep_sleep_minutes,
+        light_sleep_minutes,
+        rem_sleep_minutes,
+        awake_minutes,
+        sleep_stage_text,
+        sleep_stage_detail,
+        updated_at
+      )
+      select *
+      from unnest(
+        $1::text[],
+        $2::date[],
+        $3::text[],
+        $4::text[],
+        $5::text[],
+        $6::text[],
+        $7::integer[],
+        $8::integer[],
+        $9::integer[],
+        $10::integer[],
+        $11::integer[],
+        $12::integer[],
+        $13::integer[],
+        $14::text[],
+        $15::text[],
+        $16::timestamptz[]
+      )
+      on conflict (sleep_hash) do update set
+        source_hash = excluded.source_hash,
+        sleep_type = excluded.sleep_type,
+        bedtime = excluded.bedtime,
+        wake_time = excluded.wake_time,
+        night_sleep_minutes = excluded.night_sleep_minutes,
+        total_sleep_minutes = excluded.total_sleep_minutes,
+        nap_minutes = excluded.nap_minutes,
+        deep_sleep_minutes = excluded.deep_sleep_minutes,
+        light_sleep_minutes = excluded.light_sleep_minutes,
+        rem_sleep_minutes = excluded.rem_sleep_minutes,
+        awake_minutes = excluded.awake_minutes,
+        sleep_stage_text = excluded.sleep_stage_text,
+        sleep_stage_detail = excluded.sleep_stage_detail,
+        updated_at = excluded.updated_at
+    `,
+    [
+      rows.map((row) => row.sleepHash),
+      rows.map((row) => row.archivedDate),
+      rows.map((row) => row.sourceHash),
+      rows.map((row) => row.sleepType),
+      rows.map((row) => row.bedtime),
+      rows.map((row) => row.wakeTime),
+      rows.map((row) => row.nightSleepMinutes),
+      rows.map((row) => row.totalSleepMinutes),
+      rows.map((row) => row.napMinutes),
+      rows.map((row) => row.deepSleepMinutes),
+      rows.map((row) => row.lightSleepMinutes),
+      rows.map((row) => row.remSleepMinutes),
+      rows.map((row) => row.awakeMinutes),
+      rows.map((row) => row.sleepStageText),
+      rows.map((row) => row.sleepStageDetail),
+      rows.map((row) => row.updatedAt),
+    ],
+  );
+}
+
 function normalizeSleepRecord(archivedDate, sleep) {
   if (!sleep) {
     return null;
@@ -1119,6 +1205,32 @@ function normalizeSleepRecord(archivedDate, sleep) {
     sleepStageText: sleep.sleepStageText ?? null,
     sleepStageDetail: sleep.sleepStageDetail ?? null,
     updatedAt: new Date().toISOString(),
+  };
+}
+
+function normalizeArchiveSleepRecord(archivedDate, sleep) {
+  const normalized = normalizeSleepRecord(archivedDate, sleep);
+  if (!normalized) {
+    return null;
+  }
+
+  return {
+    sleepHash: normalized.sleepKey,
+    archivedDate: normalized.archivedDate,
+    sourceHash: normalized.sleepKey,
+    sleepType: normalized.sleepType,
+    bedtime: normalized.bedtime,
+    wakeTime: normalized.wakeTime,
+    nightSleepMinutes: normalized.nightSleepMinutes,
+    totalSleepMinutes: normalized.totalSleepMinutes,
+    napMinutes: normalized.napMinutes,
+    deepSleepMinutes: normalized.deepSleepMinutes,
+    lightSleepMinutes: normalized.lightSleepMinutes,
+    remSleepMinutes: normalized.remSleepMinutes,
+    awakeMinutes: normalized.awakeMinutes,
+    sleepStageText: normalized.sleepStageText,
+    sleepStageDetail: normalized.sleepStageDetail,
+    updatedAt: normalized.updatedAt,
   };
 }
 

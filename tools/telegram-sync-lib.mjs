@@ -253,6 +253,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const nutritionMeals = [];
   const nutritionDetails = [];
   let nutritionTotalCalories = null;
+  const sleepRecords = [];
   const dateSources = [];
   const sourceImageCount = batch.messages.length;
   let recognizedImageCount = 0;
@@ -333,10 +334,11 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
         nutritionTotalCalories = recognition.records.totalCalories;
       }
     }
-    if (recognition.imageType === 'sleep' || recognition.records?.sleep) {
-      warnings.push(
-        '截图内容为睡眠记录，已识别为 sleep；当前同步链路会保留日期与 warning，但尚未写入睡眠明细。',
-      );
+      if (recognition.imageType === 'sleep' && recognition.records?.sleep) {
+      const sleepRecord = normalizeSleepRecord(recognition.records.sleep, normalizedDetectedDate);
+      if (sleepRecord) {
+        sleepRecords.push(sleepRecord);
+      }
     }
   }
 
@@ -400,6 +402,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const measurement = normalizeMeasurementForArchive(measurementCandidates.at(-1) ?? null, archivedDate);
   const normalizedActivities = normalizeActivities(activities);
   const normalizedNutrition = normalizeNutrition(nutritionMeals, nutritionTotalCalories, nutritionDetails);
+  const normalizedSleep = normalizeSleepRecords(sleepRecords, archivedDate);
 
   return {
     status: 'ready',
@@ -409,6 +412,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     activities: normalizedActivities,
     workoutDailySummary: normalizeWorkoutDailySummary(workoutDailySummary),
     nutrition: normalizedNutrition,
+    sleep: normalizedSleep,
     warnings,
     issues,
     dateSources,
@@ -1240,6 +1244,9 @@ function renderDateSection(batchResult) {
   if (batchResult.nutrition?.meals?.length || batchResult.nutrition?.totalCalories !== null) {
     parts.push(renderNutritionBlock(batchResult));
   }
+  if (batchResult.sleep && (batchResult.sleep.records?.length || batchResult.sleep.totalSleepMinutes !== null)) {
+    parts.push(renderSleepBlock(batchResult));
+  }
 
   return parts.join('\n\n').trim();
 }
@@ -1341,6 +1348,81 @@ function normalizeWeightValue(value) {
   return Number.isFinite(value) ? roundTo(value, 3) : value;
 }
 
+function normalizeSleepRecords(records, archivedDate) {
+  const normalized = (records ?? [])
+    .map((record) => normalizeSleepRecord(record, archivedDate))
+    .filter(Boolean);
+
+  if (normalized.length === 0) {
+    return {
+      records: [],
+      totalSleepMinutes: null,
+      nightSleepMinutes: null,
+      napMinutes: null,
+      sleepStartTime: null,
+      sleepEndTime: null,
+      deepSleepMinutes: null,
+      lightSleepMinutes: null,
+      remSleepMinutes: null,
+      awakeMinutes: null,
+    };
+  }
+
+  const latest = normalized.at(-1);
+  const sum = (key) => normalized.reduce((total, item) => total + Number(item[key] ?? 0), 0) || null;
+  return {
+    records: normalized,
+    totalSleepMinutes: latest.totalSleepMinutes ?? sum('totalSleepMinutes'),
+    nightSleepMinutes: latest.nightSleepMinutes ?? sum('nightSleepMinutes'),
+    napMinutes: latest.napMinutes ?? sum('napMinutes'),
+    sleepStartTime: latest.bedtime ?? null,
+    sleepEndTime: latest.wakeTime ?? null,
+    deepSleepMinutes: latest.deepSleepMinutes ?? sum('deepSleepMinutes'),
+    lightSleepMinutes: latest.lightSleepMinutes ?? sum('lightSleepMinutes'),
+    remSleepMinutes: latest.remSleepMinutes ?? sum('remSleepMinutes'),
+    awakeMinutes: latest.awakeMinutes ?? sum('awakeMinutes'),
+  };
+}
+function normalizeSleepRecord(record, archivedDate) {
+  if (!record) {
+    return null;
+  }
+
+  const hasValues = [
+    record.totalSleepMinutes,
+    record.nightSleepMinutes,
+    record.napMinutes,
+    record.bedtime,
+    record.wakeTime,
+    record.deepSleepMinutes,
+    record.lightSleepMinutes,
+    record.remSleepMinutes,
+    record.awakeMinutes,
+    record.sleepStageText,
+    record.sleepStageDetail,
+  ].some((value) => value !== null && value !== undefined && value !== '');
+
+  if (!hasValues) {
+    return null;
+  }
+
+  return {
+    sleepType: normalizeSleepType(record.sleepType ?? '夜间睡眠'),
+    bedtime: record.bedtime ?? null,
+    wakeTime: record.wakeTime ?? null,
+    nightSleepMinutes: record.nightSleepMinutes ?? null,
+    totalSleepMinutes: record.totalSleepMinutes ?? null,
+    napMinutes: record.napMinutes ?? null,
+    deepSleepMinutes: record.deepSleepMinutes ?? null,
+    lightSleepMinutes: record.lightSleepMinutes ?? null,
+    remSleepMinutes: record.remSleepMinutes ?? null,
+    awakeMinutes: record.awakeMinutes ?? null,
+    sleepStageText: record.sleepStageText ?? null,
+    sleepStageDetail: Array.isArray(record.sleepStageDetail) ? record.sleepStageDetail : null,
+    archivedDate,
+  };
+}
+
 function renderNutritionBlock(batchResult) {
   const nutrition = batchResult.nutrition;
   const lines = [
@@ -1371,6 +1453,54 @@ function renderNutritionBlock(batchResult) {
     for (const detail of nutrition.details) {
       lines.push(`- ${detail}`);
     }
+  }
+
+  return lines.join('\n');
+}
+
+function renderSleepBlock(batchResult) {
+  const sleep = batchResult.sleep ?? { records: [] };
+  const lines = [
+    `#### ${batchResult.archivedDate} 睡眠截图记录`,
+    '',
+    TELEGRAM_SECTION_TAG,
+  ];
+
+  if (sleep.records?.length) {
+    lines.push('##### 睡眠明细');
+    lines.push('');
+    for (const record of sleep.records) {
+      lines.push(`- 睡眠类型：${record.sleepType ?? '夜间睡眠'}`);
+      if (record.bedtime || record.wakeTime) {
+        lines.push(`- 入睡/起床：${record.bedtime ?? 'null'} → ${record.wakeTime ?? 'null'}`);
+      }
+      appendMetric(lines, '总睡眠', record.totalSleepMinutes, '分钟');
+      appendMetric(lines, '夜间睡眠', record.nightSleepMinutes, '分钟');
+      appendMetric(lines, '午睡', record.napMinutes, '分钟');
+      appendMetric(lines, '深睡', record.deepSleepMinutes, '分钟');
+      appendMetric(lines, '浅睡', record.lightSleepMinutes, '分钟');
+      appendMetric(lines, '快动眼睡眠', record.remSleepMinutes, '分钟');
+      appendMetric(lines, '清醒', record.awakeMinutes, '分钟');
+      if (record.sleepStageText) {
+        lines.push(`- 睡眠阶段：${record.sleepStageText}`);
+      }
+      if (Array.isArray(record.sleepStageDetail) && record.sleepStageDetail.length) {
+        lines.push('- 睡眠阶段明细：');
+        for (const detail of record.sleepStageDetail) {
+          lines.push(`  - ${detail}`);
+        }
+      }
+    }
+  }
+
+  if (!sleep.records?.length) {
+    appendMetric(lines, '总睡眠', sleep.totalSleepMinutes, '分钟');
+    appendMetric(lines, '夜间睡眠', sleep.nightSleepMinutes, '分钟');
+    appendMetric(lines, '午睡', sleep.napMinutes, '分钟');
+    appendMetric(lines, '深睡', sleep.deepSleepMinutes, '分钟');
+    appendMetric(lines, '浅睡', sleep.lightSleepMinutes, '分钟');
+    appendMetric(lines, '快动眼睡眠', sleep.remSleepMinutes, '分钟');
+    appendMetric(lines, '清醒', sleep.awakeMinutes, '分钟');
   }
 
   return lines.join('\n');

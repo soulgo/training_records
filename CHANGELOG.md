@@ -17,6 +17,14 @@
 
 - 新增睡眠截图支持：Telegram 图片识别、训练解析和数据库归档现在可记录睡眠时长、入睡/起床时间与睡眠阶段摘要，并写入 `archive.training_sleep`。
 - 睡眠记录现在会同步落到核心数据库 `core.sleep`，训练看板的主卡、日期卡片和睡眠指标都能直接展示睡眠摘要。
+- 新增睡眠维护文档 `docs/训练系统/Telegram睡眠识别与入库说明.md`，补充识别口径、数据库落表和排障步骤，便于后期维护与查找问题。
+- 新增睡眠校验脚本 `sql/training_records/sleep_validation.sql`，用于快速核对 `core.sleep`、`archive.training_sleep` 和日汇总字段的一致性。
+
+### Changed
+
+- 训练快照与 Telegram 同步链路开始汇总睡眠数据，便于首页与分析模块读取恢复相关指标。
+- 页面生成在数据库快照不完整或不可用时会自动回退到 Markdown，避免站点停留在“等待数据库重放”的空状态。
+- `package.json` 版本号更新为 `1.2.3`。
 
 ### Changed
 
