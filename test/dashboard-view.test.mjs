@@ -98,6 +98,74 @@ test('dashboard sleep cards use the latest day that has sleep data', () => {
   assert.match(view.sleepCards[2].valueHtml, /47/);
 });
 
+test('dashboard sleep cards ignore incomplete latest sleep metrics without duration', () => {
+  const view = buildDashboardViewModel({
+    generatedAt: '2026-06-05T00:00:00.000Z',
+    latest: {
+      measurement: { archivedDate: '2026-06-05', weightKg: 72.1 },
+      daily: buildDay('2026-06-05', {
+        measurement: { archivedDate: '2026-06-05', weightKg: 72.1 },
+        sleepSummary: {
+          totalSleepMinutes: null,
+          nightSleepMinutes: null,
+          napMinutes: null,
+          deepSleepMinutes: 82,
+          lightSleepMinutes: 271,
+          remSleepMinutes: 85,
+          awakeMinutes: 15,
+          sleepScore: 79,
+        },
+      }),
+    },
+    daily: [
+      buildDay('2026-06-03', {
+        sleepSummary: {
+          totalSleepMinutes: 411,
+          nightSleepMinutes: 411,
+          napMinutes: null,
+          deepSleepMinutes: 145,
+          lightSleepMinutes: 115,
+          remSleepMinutes: 111,
+          awakeMinutes: null,
+        },
+      }),
+      buildDay('2026-06-04', {
+        sleepSummary: {
+          totalSleepMinutes: 473,
+          nightSleepMinutes: 473,
+          napMinutes: null,
+          deepSleepMinutes: 60,
+          lightSleepMinutes: 276,
+          remSleepMinutes: 85,
+          awakeMinutes: 52,
+          deepSleepRatioPct: 18,
+          lightSleepRatioPct: 63,
+        },
+      }),
+      buildDay('2026-06-05', {
+        measurement: { archivedDate: '2026-06-05', weightKg: 72.1 },
+        sleepSummary: {
+          totalSleepMinutes: null,
+          nightSleepMinutes: null,
+          napMinutes: null,
+          deepSleepMinutes: 82,
+          lightSleepMinutes: 271,
+          remSleepMinutes: 85,
+          awakeMinutes: 15,
+          sleepScore: 79,
+        },
+      }),
+    ],
+    charts: {},
+  });
+
+  assert.match(view.sleepCards[0].valueHtml, /473/);
+  assert.match(view.sleepCards[1].valueHtml, /60/);
+  assert.match(view.sleepCards[1].valueHtml, /276/);
+  assert.match(view.sleepCards[2].valueHtml, /18/);
+  assert.match(view.sleepCards[2].valueHtml, /63/);
+});
+
 test('dashboard view model keeps the stable rendering contract for overview cards and charts', () => {
   const view = buildDashboardViewModel({
     generatedAt: '2026-05-13T00:00:00.000Z',

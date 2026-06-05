@@ -182,10 +182,7 @@ function hasSleepSummary(sleep) {
   return Boolean(sleep && [
     sleep.totalSleepMinutes,
     sleep.nightSleepMinutes,
-    sleep.deepSleepMinutes,
-    sleep.lightSleepMinutes,
-    sleep.remSleepMinutes,
-    sleep.sleepScore,
+    sleep.napMinutes,
   ].some((value) => value !== null && value !== undefined));
 }
 
