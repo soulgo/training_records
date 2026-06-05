@@ -116,7 +116,7 @@ const TRAINING_SLEEP_QUERY = `
       rem_sleep_minutes,
       awake_minutes,
       sleep_stage_text,
-      sleep_stage_detail,
+      sleep_stage_detail::text as sleep_stage_detail,
       2 as source_priority
     from archive.training_sleep
     where not exists (
