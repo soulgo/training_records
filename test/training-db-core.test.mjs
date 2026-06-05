@@ -834,6 +834,79 @@ test('backfillCoreSleepFromIngestBatchesClient repairs stored sleep batches miss
   assert.deepEqual(sleepInsert[1][10], [145]);
 });
 
+test('backfillCoreSleepFromIngestBatchesClient creates core day from archive-only sleep rows', async () => {
+  const calls = [];
+  const fakeClient = {
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from ingest\.telegram_batch b/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from archive\.training_sleep\s+a/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-06-04',
+              batch_payload_json: {
+                status: 'ready',
+                archivedDate: '2026-06-04',
+                sleep: {
+                  records: [
+                    {
+                      sleepType: '夜间睡眠',
+                      bedtime: '22:06',
+                      wakeTime: '05:59',
+                      nightSleepMinutes: 473,
+                      totalSleepMinutes: 473,
+                      deepSleepMinutes: 62,
+                      lightSleepMinutes: 281,
+                      remSleepMinutes: 85,
+                      awakeMinutes: 45,
+                      deepSleepRatioPct: 18,
+                      lightSleepRatioPct: 63,
+                      remSleepRatioPct: 19,
+                    },
+                  ],
+                  totalSleepMinutes: 473,
+                  nightSleepMinutes: 473,
+                  sleepStartTime: '22:06',
+                  sleepEndTime: '05:59',
+                  deepSleepMinutes: 62,
+                  lightSleepMinutes: 281,
+                  remSleepMinutes: 85,
+                  awakeMinutes: 45,
+                  deepSleepRatioPct: 18,
+                  lightSleepRatioPct: 63,
+                  remSleepRatioPct: 19,
+                },
+              },
+            },
+          ],
+        };
+      }
+      if (/from core\.training_day\s+where archived_date = \$1/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+  };
+
+  const result = await backfillCoreSleepFromIngestBatchesClient(fakeClient, {
+    processedAt: new Date('2026-06-05T09:45:00.000Z'),
+  });
+  const dayInsert = calls.find(([sql]) => /insert into core\.training_day/i.test(sql));
+  const sleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
+
+  assert.equal(result.status, 'stored');
+  assert.deepEqual(result.daysBackfilled, ['2026-06-04']);
+  assert.ok(dayInsert);
+  assert.ok(sleepInsert);
+  assert.deepEqual(dayInsert[1][0], ['2026-06-04']);
+  assert.deepEqual(dayInsert[1][9], [null]);
+  assert.deepEqual(sleepInsert[1][8], [473]);
+  assert.deepEqual(sleepInsert[1][10], [62]);
+});
+
 test('pending recognition store reads, queues, and resolves database rows', async () => {
   const calls = [];
   const fakeClient = {

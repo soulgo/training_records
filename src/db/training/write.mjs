@@ -2215,9 +2215,12 @@ function extractNumber(value, regex) {
 }
 
 function hasNutritionPayload(nutrition) {
+  if (!nutrition) {
+    return false;
+  }
   return (
     (nutrition?.meals?.length ?? 0) > 0 ||
-    nutrition?.totalCalories !== null ||
+    (nutrition.totalCalories !== null && nutrition.totalCalories !== undefined) ||
     (nutrition?.details?.length ?? 0) > 0
   );
 }
