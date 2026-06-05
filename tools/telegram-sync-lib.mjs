@@ -1488,31 +1488,34 @@ function normalizeSleepRecord(record, archivedDate) {
 
 function resolveSleepArchiveDate(sleep, detectedDate, message) {
   const messageYear = dateFromUnix(message?.dateUnix).year;
-  const bedtime = String(sleep?.bedtime ?? '').trim();
+  const wakeTime = String(sleep?.wakeTime ?? '').trim();
 
-  const bedtimeDate = extractDateFromText(bedtime, {
+  const wakeDate = extractDateFromText(wakeTime, {
     allowMonthDay: true,
     messageYear,
   });
-  if (bedtimeDate) {
-    return bedtimeDate;
+  if (wakeDate) {
+    return shiftDateByDays(wakeDate, -1);
   }
 
-  const slashMonthDay = bedtime.match(/(\d{1,2})\/(\d{1,2})/);
+  const slashMonthDay = wakeTime.match(/(\d{1,2})\/(\d{1,2})/);
   if (slashMonthDay && Number.isInteger(messageYear)) {
-    return normalizeDateParts({
-      year: messageYear,
-      month: Number(slashMonthDay[1]),
-      day: Number(slashMonthDay[2]),
-      messageYear,
-    });
+    return shiftDateByDays(
+      normalizeDateParts({
+        year: messageYear,
+        month: Number(slashMonthDay[1]),
+        day: Number(slashMonthDay[2]),
+        messageYear,
+      }),
+      -1,
+    );
   }
 
-  if (detectedDate && /^\d{2}:\d{2}$/.test(bedtime)) {
-    return detectedDate;
+  if (detectedDate) {
+    return shiftDateByDays(detectedDate, -1);
   }
 
-  return detectedDate;
+  return null;
 }
 
 function shiftDateByDays(dateString, offsetDays) {
