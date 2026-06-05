@@ -239,7 +239,7 @@ export async function importTrainingMarkdownToDatabase(options) {
 
 export async function backfillCoreSleepFromIngestBatchesClient(client, options = {}) {
   const processedAt = options.processedAt ?? new Date();
-  const candidateResult = await client.query(`
+  const ingestCandidateResult = await client.query(`
     select
       b.batch_id,
       b.batch_payload_json
@@ -254,16 +254,92 @@ export async function backfillCoreSleepFromIngestBatchesClient(client, options =
       )
     order by b.processed_at asc, b.batch_id asc
   `);
-  const candidates = candidateResult.rows
-    .map((row) => ({
+  const archiveCandidateResult = await client.query(`
+    select
+      a.archived_date,
+      jsonb_build_object(
+        'status', 'ready',
+        'archivedDate', a.archived_date,
+        'sleep', jsonb_build_object(
+          'records', jsonb_agg(
+            jsonb_build_object(
+              'sleepType', coalesce(a.sleep_type, '夜间睡眠'),
+              'bedtime', a.bedtime,
+              'wakeTime', a.wake_time,
+              'nightSleepMinutes', a.night_sleep_minutes,
+              'totalSleepMinutes', a.total_sleep_minutes,
+              'napMinutes', a.nap_minutes,
+              'deepSleepMinutes', a.deep_sleep_minutes,
+              'lightSleepMinutes', a.light_sleep_minutes,
+              'remSleepMinutes', a.rem_sleep_minutes,
+              'awakeMinutes', a.awake_minutes,
+              'sleepStageText', a.sleep_stage_text,
+              'sleepStageDetail', a.sleep_stage_detail,
+              'sleepScore', null,
+              'sleepScorePercentile', null,
+              'deepSleepRatioPct', null,
+              'lightSleepRatioPct', null,
+              'remSleepRatioPct', null,
+              'deepSleepContinuityScore', null,
+              'wakeCount', null,
+              'breathingQualityScore', null,
+              'averageHeartRateBpm', null,
+              'hrvMs', null,
+              'averageSpo2Pct', null,
+              'averageRespiratoryRate', null,
+              'analysisText', null,
+              'suggestionText', null
+            )
+            order by a.bedtime asc nulls last
+          ),
+          'totalSleepMinutes', max(a.total_sleep_minutes),
+          'nightSleepMinutes', max(a.night_sleep_minutes),
+          'napMinutes', max(a.nap_minutes),
+          'sleepStartTime', max(a.bedtime),
+          'sleepEndTime', max(a.wake_time),
+          'deepSleepMinutes', max(a.deep_sleep_minutes),
+          'lightSleepMinutes', max(a.light_sleep_minutes),
+          'remSleepMinutes', max(a.rem_sleep_minutes),
+          'awakeMinutes', max(a.awake_minutes),
+          'sleepScore', null,
+          'sleepScorePercentile', null,
+          'deepSleepRatioPct', null,
+          'lightSleepRatioPct', null,
+          'remSleepRatioPct', null,
+          'deepSleepContinuityScore', null,
+          'wakeCount', null,
+          'breathingQualityScore', null,
+          'averageHeartRateBpm', null,
+          'hrvMs', null,
+          'averageSpo2Pct', null,
+          'averageRespiratoryRate', null,
+          'analysisText', null,
+          'suggestionText', null
+        )
+      ) as batch_payload_json
+    from archive.training_sleep a
+    where not exists (
+      select 1
+      from core.sleep s
+      where s.archived_date = a.archived_date
+    )
+    group by a.archived_date
+    order by a.archived_date asc
+  `);
+  const candidates = [
+    ...ingestCandidateResult.rows.map((row) => ({
       batchId: row.batch_id,
       batch: row.batch_payload_json,
-    }))
-    .filter(({ batch }) =>
-      batch?.status === 'ready' &&
-      batch?.archivedDate &&
-      hasSleepPayload(batch.sleep),
-    );
+    })),
+    ...archiveCandidateResult.rows.map((row) => ({
+      batchId: `archive-sleep-${row.archived_date}`,
+      batch: row.batch_payload_json,
+    })),
+  ].filter(({ batch }) =>
+    batch?.status === 'ready' &&
+    batch?.archivedDate &&
+    hasSleepPayload(batch.sleep),
+  );
 
   if (candidates.length === 0) {
     return {
