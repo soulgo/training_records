@@ -11,6 +11,7 @@ import {
 } from './telegram-sync-lib.mjs';
 import {
   appendPendingRecognitionBatch as appendPendingRecognitionBatchToDatabase,
+  backfillCoreSleepFromIngestBatches as backfillCoreSleepFromIngestBatchesToDatabase,
   exportTrainingMarkdown as exportTrainingMarkdownFromSnapshot,
   getLastProcessedTelegramUpdateId,
   markPendingRecognitionResolved as markPendingRecognitionResolvedInDatabase,
@@ -180,6 +181,13 @@ export async function runTelegramSync(options = {}) {
     source: 'database',
     config: trainingDbConfig,
   });
+  const backfillCoreSleep =
+    options.backfillCoreSleepFromIngestBatches ??
+    ((input) =>
+      backfillCoreSleepFromIngestBatchesToDatabase({
+        ...input,
+        env: options.env ?? process.env,
+      }));
   const notificationStage = resolveTelegramSyncNotificationStage(rawEnv);
   const shouldNotifyImmediately =
     shouldNotifyTelegramSyncResult(rawEnv) && notificationStage !== 'after_action';
@@ -417,6 +425,18 @@ export async function runTelegramSync(options = {}) {
     previousLastProcessedUpdateId,
     updates.reduce((max, update) => Math.max(max, update.update_id ?? 0), 0),
   );
+
+  if (replayStoredImageAny || batchResults.some((batch) => batch.kind === 'image' && batch.status === 'ready')) {
+    try {
+      await backfillCoreSleep({
+        processedAt: now,
+        sourceChannel: 'telegram_sync',
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`[telegram-sync] sleep backfill failed: ${errorMessage}\n`);
+    }
+  }
 
   if (fallbackUsed) {
     await writeFile(recordPath, fallbackMarkdown, 'utf8');
