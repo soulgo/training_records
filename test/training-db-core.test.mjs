@@ -548,11 +548,13 @@ test('persistNormalizedBatch stores sleep payload in core and archive sleep rows
   const trainingDayInsert = calls.find(([sql]) => /insert into core\.training_day/i.test(sql));
   const sleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
   const archiveSleepInsert = calls.find(([sql]) => /insert into archive\.training_sleep/i.test(sql));
+  const archiveSnapshotInsert = calls.find(([sql]) => /insert into archive\.training_parse_snapshot/i.test(sql));
   const ingestBatchInsert = calls.find(([sql]) => /insert into ingest\.telegram_batch/i.test(sql));
 
   assert.ok(trainingDayInsert);
   assert.ok(sleepInsert);
   assert.ok(archiveSleepInsert);
+  assert.ok(archiveSnapshotInsert);
   assert.ok(ingestBatchInsert);
   assert.match(sleepInsert[0], /\$16::jsonb\[\]/i);
   assert.match(archiveSleepInsert[0], /\$15::jsonb\[\]/i);
@@ -568,6 +570,7 @@ test('persistNormalizedBatch stores sleep payload in core and archive sleep rows
   assert.equal(archiveSleepInsert[1][0][0], createHash('md5').update('2026-06-03|夜间睡眠|23:26|06:19|411').digest('hex'));
   assert.deepEqual(archiveSleepInsert[1][1], ['2026-06-03']);
   assert.equal(archiveSleepInsert[1][2][0].length, 64);
+  assert.equal(archiveSleepInsert[1][2][0], archiveSnapshotInsert[1][0]);
   assert.deepEqual(archiveSleepInsert[1][7], [411]);
   assert.deepEqual(archiveSleepInsert[1][9], [145]);
   assert.deepEqual(archiveSleepInsert[1][15], [81]);
@@ -576,6 +579,7 @@ test('persistNormalizedBatch stores sleep payload in core and archive sleep rows
   assert.deepEqual(archiveSleepInsert[1][28], ['建议睡觉时关灯。']);
   assert.equal(trainingDayInsert[1].length, 12);
   assert.equal(JSON.parse(ingestBatchInsert[1][9]).sleep.records[0].totalSleepMinutes, 411);
+  assert.equal(JSON.parse(archiveSnapshotInsert[1][2]).daily[0].sleep[0].totalSleepMinutes, 411);
 });
 
 test('persistNormalizedBatch merges an existing core day using only schema-defined columns', async () => {
@@ -676,6 +680,74 @@ test('persistNormalizedBatch merges an existing core day using only schema-defin
   assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), true);
   assert.ok(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)));
   assert.equal(trainingDayInsert[1].length, 12);
+});
+
+test('backfillCoreSleepFromIngestBatchesClient does not write archive sleep without source hash', async () => {
+  const calls = [];
+  const fakeClient = {
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from ingest\.telegram_batch b/i.test(sql)) {
+        return {
+          rows: [
+            {
+              batch_id: 'single-36',
+              batch_payload_json: {
+                kind: 'image',
+                batchId: 'single-36',
+                status: 'ready',
+                archivedDate: '2026-06-04',
+                measurement: null,
+                activities: [],
+                workoutDailySummary: null,
+                nutrition: { meals: [], totalCalories: null, details: [] },
+                sleep: {
+                  records: [
+                    {
+                      sleepType: '夜间睡眠',
+                      bedtime: '23:26',
+                      wakeTime: '06:19',
+                      totalSleepMinutes: 411,
+                    },
+                  ],
+                  totalSleepMinutes: 411,
+                },
+              },
+            },
+          ],
+        };
+      }
+      if (/from core\.training_day/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-06-04',
+              total_activities: 0,
+              total_duration_seconds: 0,
+              training_calories: 0,
+              workout_duration_minutes: null,
+              active_hours: null,
+              cycling_distance_km: 0,
+              intake_calories: null,
+              nutrition_details_json: [],
+            },
+          ],
+        };
+      }
+      if (/from core\.measurement/i.test(sql) || /from core\.activity/i.test(sql) || /from core\.meal/i.test(sql) || /from core\.sleep/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+  };
+
+  const result = await backfillCoreSleepFromIngestBatchesClient(fakeClient, {
+    processedAt: new Date('2026-06-04T09:00:00.000Z'),
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), true);
+  assert.equal(calls.some(([sql]) => /insert into archive\.training_sleep/i.test(sql)), false);
 });
 
 test('backfillCoreSleepFromIngestBatchesClient repairs stored sleep batches missing core sleep rows', async () => {

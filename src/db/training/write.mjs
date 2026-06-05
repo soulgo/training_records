@@ -364,7 +364,10 @@ export async function backfillCoreSleepFromIngestBatchesClient(client, options =
         mergedDay,
         batch.batchId ?? batchId,
         processedAt,
-        options.sourceChannel ?? 'ingest_sleep_backfill',
+        {
+          sourceChannel: options.sourceChannel ?? 'ingest_sleep_backfill',
+          writeArchiveSleep: false,
+        },
       );
       daysBackfilled.add(batch.archivedDate);
     }
@@ -1113,6 +1116,7 @@ async function replaceCoreDay(
     processedAt,
     sourceChannel: options.sourceChannel ?? 'telegram',
     sourceHash: options.sourceHash ?? null,
+    writeArchiveSleep: options.writeArchiveSleep,
   });
 }
 
@@ -1141,12 +1145,23 @@ async function writeCoreDays(client, days, options) {
   }
 
   const dates = normalizedDays.map((day) => day.date);
+  const processedAtIso = (options.processedAt ?? new Date()).toISOString();
+  const sourceHash = options.writeArchiveSleep === false
+    ? null
+    : options.sourceHash ?? buildArchiveSourceHash(normalizedDays, options);
+  if (sourceHash) {
+    await upsertArchiveParseSnapshot(client, {
+      sourceHash,
+      days: normalizedDays,
+      processedAtIso,
+    });
+  }
+
   await client.query(`delete from core.measurement where archived_date = any($1::date[])`, [dates]);
   await client.query(`delete from core.activity where archived_date = any($1::date[])`, [dates]);
   await client.query(`delete from core.meal where archived_date = any($1::date[])`, [dates]);
   await client.query(`delete from core.sleep where archived_date = any($1::date[])`, [dates]);
 
-  const processedAtIso = (options.processedAt ?? new Date()).toISOString();
   const dayRows = normalizedDays.map((day) => ({
     archivedDate: day.date,
     sourceChannel: options.sourceChannel ?? 'telegram',
@@ -1225,7 +1240,62 @@ async function writeCoreDays(client, days, options) {
   await insertCoreActivities(client, normalizedDays, options, processedAtIso);
   await insertCoreMeals(client, normalizedDays, options, processedAtIso);
   await insertCoreSleep(client, normalizedDays, options, processedAtIso);
-  await insertArchiveSleep(client, normalizedDays, options, processedAtIso);
+  if (sourceHash) {
+    await insertArchiveSleep(client, normalizedDays, { ...options, sourceHash }, processedAtIso);
+  }
+}
+
+async function upsertArchiveParseSnapshot(client, { sourceHash, days, processedAtIso }) {
+  const payload = {
+    generatedAt: processedAtIso,
+    daily: days,
+    latest: { daily: days.at(-1) ?? null },
+  };
+  await client.query(
+    `
+      insert into archive.training_parse_snapshot (
+        source_hash,
+        payload_version,
+        payload_json,
+        daily_count,
+        latest_archived_date,
+        parsed_generated_at,
+        first_seen_at,
+        last_seen_at
+      )
+      values ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)
+      on conflict (source_hash) do update set
+        payload_version = excluded.payload_version,
+        payload_json = excluded.payload_json,
+        daily_count = excluded.daily_count,
+        latest_archived_date = excluded.latest_archived_date,
+        parsed_generated_at = excluded.parsed_generated_at,
+        last_seen_at = excluded.last_seen_at
+    `,
+    [
+      sourceHash,
+      1,
+      JSON.stringify(payload),
+      days.length,
+      days.at(-1)?.date ?? null,
+      processedAtIso,
+      processedAtIso,
+      processedAtIso,
+    ],
+  );
+}
+
+function buildArchiveSourceHash(days, options) {
+  if (!options.batchId) {
+    return null;
+  }
+  return createHash('sha256')
+    .update(JSON.stringify({
+      sourceChannel: options.sourceChannel ?? 'telegram',
+      batchId: options.batchId,
+      days,
+    }), 'utf8')
+    .digest('hex');
 }
 
 function existingSleepPayload(existing) {
