@@ -12,7 +12,7 @@
         <mxCell id="f-md-input" value="手工 Markdown
 训练记录.md" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#000000;strokeWidth=1" vertex="1" parent="f-source"><mxGeometry x="50" y="70" width="220" height="60" as="geometry"/></mxCell>
         <mxCell id="f-tg-photo" value="Telegram 图片消息
-训练/体脂/饮食截图" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#000000;strokeWidth=1" vertex="1" parent="f-source"><mxGeometry x="310" y="70" width="260" height="60" as="geometry"/></mxCell>
+训练/体脂/饮食/睡眠截图" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#000000;strokeWidth=1" vertex="1" parent="f-source"><mxGeometry x="310" y="70" width="260" height="60" as="geometry"/></mxCell>
         <mxCell id="f-tg-text" value="Telegram 文本命令
 /thought /analysis /edit /delete" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#000000;strokeWidth=1" vertex="1" parent="f-source"><mxGeometry x="610" y="70" width="290" height="60" as="geometry"/></mxCell>
         <mxCell id="f-pg-source" value="PostgreSQL core.*

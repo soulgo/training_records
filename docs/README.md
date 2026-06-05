@@ -8,10 +8,13 @@
 2. [系统总览](系统架构/系统总览.md)
 3. [数据流转说明](数据流转/数据流转说明.md)
 4. [训练记录生成与解析](训练系统/训练记录生成与解析.md)
-5. [GitHub 与 Cloudflare 配置](部署维护/GitHub与Cloudflare配置.md)
-6. [日常维护手册](部署维护/日常维护手册.md)
-7. [Dev 环境搭建步骤](dev_env/dev_environment_implementation.md)
-8. [常见问题排查](问题排查/常见问题排查.md)
+5. [Telegram 使用说明](训练系统/Telegram使用说明.md)
+6. [Telegram 睡眠识别与入库说明](训练系统/Telegram睡眠识别与入库说明.md)
+7. [Telegram 图片识别 Prompt 维护](训练系统/Telegram图片识别Prompt维护.md)
+8. [GitHub 与 Cloudflare 配置](部署维护/GitHub与Cloudflare配置.md)
+9. [日常维护手册](部署维护/日常维护手册.md)
+10. [Dev 环境搭建步骤](dev_env/dev_environment_implementation.md)
+11. [常见问题排查](问题排查/常见问题排查.md)
 
 ## 文档目录
 
@@ -32,5 +35,7 @@
 - 当前代码行为以源码、测试和工作流为准。
 - 文档与代码不一致时，以代码为准，并同步修正文档。
 - `训练数据解析.md` 是构建生成的排查输出，不作为长期维护手册。
-- 睡眠数据相关说明优先看 `训练系统/训练记录生成与解析.md` 与数据库 schema。
+- Telegram 发送锻炼、体脂秤、饮食和睡眠图片的稳定链路，优先看 `训练系统/Telegram使用说明.md`、`训练系统/Telegram图片日期归档.md`、`训练系统/Telegram睡眠识别与入库说明.md`。
+- 修改图片识别字段、截图类型或日期口径时，先看 `训练系统/Telegram图片识别Prompt维护.md`，再同步 schema、数据库写入和测试。
+- 睡眠数据相关说明优先看 `训练系统/Telegram睡眠识别与入库说明.md`、`训练系统/训练记录生成与解析.md` 与数据库 schema。
 - `历史归档/` 下文档只保留背景和方案脉络，日常维护优先阅读其它目录。

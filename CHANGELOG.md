@@ -13,12 +13,15 @@
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-06-05
+
 ### Added
 
 - 新增睡眠截图支持：Telegram 图片识别、训练解析和数据库归档现在可记录睡眠时长、入睡/起床时间、睡眠阶段摘要以及睡眠健康指标，并写入 `archive.training_sleep`。
 - 新增睡眠健康指标增量 SQL `sql/training_records/sleep_health_metrics.sql`，并同步补齐 `core.sleep` 与 `archive.training_sleep` 的主 schema 字段。
 - 新增睡眠维护文档 `docs/训练系统/Telegram睡眠识别与入库说明.md`，补充识别字段、归档日期口径、数据库落表和排障步骤，便于后期维护与查找问题。
 - 新增睡眠 Prompt 维护说明 `docs/训练系统/Telegram图片识别Prompt维护.md`，同步记录睡眠截图字段提取范围与日期归档规则，便于后续维护。
+- 系统文档同步补齐 Telegram 锻炼、体脂秤、饮食、睡眠图片解析的使用说明、数据流、接口契约、部署验收和排障路径。
 
 ### Changed
 
@@ -27,7 +30,7 @@
 - Telegram Sync 的 main/dev workflow 现在会识别 DB-only 的 `ready + stored` 训练批次，并在仓库文件无变化时继续构建和发布站点。
 - `训练数据解析.md` 调试输出新增睡眠段落，展示总睡眠、睡眠评分、平均心率、HRV、血氧和呼吸率等排查字段。
 - 页面生成在数据库快照不完整或不可用时会自动回退到 Markdown，避免站点停留在“等待数据库重放”的空状态。
-- `package.json` 版本号更新为 `1.2.3`。
+- `package.json` 版本号更新为 `1.2.2`。
 
 ### Fixed
 
@@ -242,7 +245,8 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/soulgo/training_records/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/soulgo/training_records/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/soulgo/training_records/compare/v1.1.9...v1.2.0
 [1.1.9]: https://github.com/soulgo/training_records/compare/v1.1.8...v1.1.9

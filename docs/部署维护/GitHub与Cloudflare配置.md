@@ -405,7 +405,7 @@ Invoke-RestMethod `
 
 ## 6. 验证方法
 
-1. 给 Bot 发一张新的训练/饮食/体脂截图，应触发 1 次 `Telegram Sync`
+1. 给 Bot 发一张新的锻炼/饮食/体脂秤/睡眠截图，应触发 1 次 `Telegram Sync`
 2. 给 Bot 发 2 张相册截图，应只触发 1 次 `Telegram Sync`
 3. 给 Bot 发一条 `/thought 今天训练后背阔发力更明显` 或 `/随想 今天训练后背阔发力更明显`，应触发 1 次 `Telegram Sync`，并收到“随想写入成功”反馈
 4. 给 Bot 发一条 `/analysis 今天怎么练` 或 `/分析 最近饮食怎么样`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的分析建议
@@ -428,6 +428,7 @@ Invoke-RestMethod `
 - 对 `/thought` 来说，“回退写 Markdown”指的是保留已经生成在 `source/_posts/` 下的随想文件，并把待补偿入库信息写到 `runtime/telegram-sync-pending.ndjson`
 - 随想新增、编辑、删除、移动现在会回发成功反馈；如果数据库失败但 Markdown 已写入，反馈会明确说明“数据库待补偿”
 - 图片识别、随想、`/analysis` 和 `/ai` 的失败反馈会尽量标注 `user_input`、`ai_service`、`telegram_api`、`database`、`github_action` 或 `system_bug`
+- 睡眠截图按醒来日期减一天归档，并写入 `core.sleep`、`core.training_day` 睡眠汇总和 `archive.training_sleep`
 - PostgreSQL 恢复后，后续同步会先重放待补偿批次
 - `deploy-pages.yml` 是否依赖 PostgreSQL，取决于 `TRAINING_SNAPSHOT_SOURCE`
   - `markdown`：页面构建不依赖 PostgreSQL

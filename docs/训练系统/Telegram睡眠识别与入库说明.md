@@ -1,19 +1,21 @@
 # Telegram 睡眠识别与入库说明
 
-本文档用于说明 Telegram 睡眠截图从识别、同步、归档到数据库落表的完整链路，便于后续维护和排查问题。
+本文档说明 Telegram 睡眠截图从 AI 识别、批次归档、Markdown 回退、PostgreSQL 入库到页面读取的完整链路，便于后续维护和排查问题。
 
-## 1. 适用范围
+## 1. 当前能力边界
 
-当前只面向夜间睡眠截图的主流程，重点覆盖以下信息：
+当前睡眠截图作为 Telegram 图片识别的一种 `imageType=sleep` 处理，和锻炼、体脂秤、饮食截图共用同一批次链路。
 
-- 入睡时间
-- 起床时间
-- 总睡眠时长
-- 夜间睡眠时长
-- 深睡、浅睡、REM、清醒时长
-- 睡眠阶段文本与阶段明细
+稳定支持的睡眠字段：
 
-如果截图明显是午睡或小睡，也会被识别为 `sleep`，但默认维护口径仍以夜间睡眠为主。
+- 入睡时间、起床时间。
+- 总睡眠、夜间睡眠、午睡、深睡、浅睡、REM、清醒分钟数。
+- 睡眠阶段文本和可见的阶段明细。
+- 睡眠评分、超过用户百分比、深睡/浅睡/REM 比例、深睡连续性、清醒次数、呼吸质量。
+- 平均心率、HRV、平均血氧、平均呼吸率。
+- 截图中已有的睡眠解读和睡眠建议。
+
+当前主流程以夜间睡眠为主。如果截图明确是午睡或小睡，`sleepType` 可以写 `午睡`；否则默认按 `夜间睡眠` 处理。
 
 ## 2. 识别层口径
 
@@ -22,24 +24,56 @@
 - `prompts/_source/recognition-rules.json`
 - 生成产物 `prompts/telegram-training-image-recognition.md`
 
+schema 事实源是：
+
+- `tools/telegram-recognition-schema.mjs` 的 `buildRecognitionSchema()`
+
 关键约束：
 
-- `imageType` 使用 `sleep`
-- `records.sleep` 才是睡眠字段载体
-- `sleepType` 默认写 `夜间睡眠`
-- `bedtime`、`wakeTime` 只填写截图里可见的真实时间
-- `sleepStageDetail` 只保留画面明确可见的信息，不要补全推断
-- 睡眠截图需要提取的健康指标包括：`sleepScore`、`sleepScorePercentile`、`deepSleepRatioPct`、`lightSleepRatioPct`、`remSleepRatioPct`、`deepSleepContinuityScore`、`wakeCount`、`breathingQualityScore`、`averageHeartRateBpm`、`hrvMs`、`averageSpo2Pct`、`averageRespiratoryRate`
-- `analysisText` 写截图底部的睡眠解读，`suggestionText` 写截图底部的睡眠建议
-- 遇到跨天、多个日期或日期冲突时，宁可让 `detectedDate` 为 `null`
-- 夜间睡眠的归档日期以醒来时间为准：程序侧会把醒来日期减一天后写入睡眠归档日期，不要求 AI 自行换算归档日
-- 只要截图中能明确看出入睡日和醒来日，优先提供真实的入睡时间和醒来时间，不要为了归档日期改写它们
+- `imageType` 使用 `sleep`。
+- `records.sleep` 是睡眠字段唯一载体，不要把睡眠内容写进运动、饮食或体脂字段。
+- `records.sleep` 必须包含 schema 中的全部字段；画面不可见时填 `null`。
+- `bedtime`、`wakeTime` 写截图中真实可见的入睡/起床时间，不要为了归档日期改写。
+- `sleepStageDetail` 只保留画面明确可见的信息，不补全推断。
+- `analysisText` 写截图底部已有的睡眠解读，`suggestionText` 写截图底部已有的睡眠建议，不让模型生成新建议。
+- 遇到跨天、多个日期或日期冲突时，宁可让 `detectedDate` 为 `null`。
 
-## 3. 同步层口径
+## 3. 睡眠归档日期
 
-睡眠批次在 `tools/telegram-sync-lib.mjs` 中会进入 batch 分析，并在满足归档条件后写回训练 Markdown，生成睡眠区块。
+睡眠截图的归档日期和普通训练图不同。
 
-同步链路里，睡眠记录会被汇总为：
+程序侧实现位于 `tools/telegram-sync-lib.mjs` 的 `resolveSleepArchiveDate()`：
+
+1. 优先从 `records.sleep.wakeTime` 提取醒来日期。
+2. 如果 `wakeTime` 中只有 `M/D`，会结合 Telegram 消息年份补全年份。
+3. 如果 `wakeTime` 没有可用日期，再使用截图识别出的 `detectedDate`。
+4. 最终把醒来日期减一天，作为 `archivedDate`。
+5. 如果以上都无法得到可靠日期，睡眠批次会跳过，不凭当前日期猜测。
+
+例子：
+
+| 截图可见信息 | 归档结果 |
+| --- | --- |
+| `wakeTime=2026-06-05 06:40` | `archivedDate=2026-06-04` |
+| `wakeTime=6/5 06:40`，Telegram 消息年份为 2026 | `archivedDate=2026-06-04` |
+| `detectedDate=2026-06-05`，`wakeTime` 无日期 | `archivedDate=2026-06-04` |
+| 只有 `06:40`，无截图日期 | 跳过，避免错归档 |
+
+`dateSources` 中如果看到 `source=sleep_bedtime`，表示睡眠归档日来自睡眠时间语义换算，不是普通图片日期直接归档。
+
+## 4. 同步与回退链路
+
+Telegram 睡眠图进入同一条图片同步链路：
+
+1. `tools/telegram-sync.mjs` 调度同步。
+2. `tools/telegram-sync-lib.mjs` 对 Telegram update 分组，单图和相册都会变成图片 batch。
+3. `src/ai/recognition-service.mjs` 调用 AI provider 识别图片，并通过 schema 校验。
+4. `analyzeTelegramBatch()` 汇总 `records.sleep`，生成 `batchResult.sleep`。
+5. `status=ready` 的批次优先写 PostgreSQL。
+6. 数据库写入失败时，仍会回退写 `训练记录.md`，并进入 pending 队列等待后续重放。
+7. 页面构建读取数据库快照；数据库快照不可用或不完整时，会回退到 Markdown，避免页面长期空白。
+
+睡眠记录在同步结果中会汇总为：
 
 - `sleep.records`
 - `sleep.totalSleepMinutes`
@@ -51,61 +85,127 @@
 - `sleep.lightSleepMinutes`
 - `sleep.remSleepMinutes`
 - `sleep.awakeMinutes`
+- `sleep.sleepScore`
+- `sleep.averageHeartRateBpm`
+- `sleep.hrvMs`
+- `sleep.averageSpo2Pct`
+- `sleep.averageRespiratoryRate`
 
-如果批次没有可靠日期，仍然会跳过入库，以防错归档。
+## 5. 数据库落表
 
-## 4. 数据库落表
+睡眠结果会写入两层表：
 
-睡眠结果会同时写入两层表：
+| 表 | 职责 |
+| --- | --- |
+| `core.sleep` | 页面和分析读取的主睡眠明细 |
+| `core.training_day` | 日级睡眠汇总字段 |
+| `archive.training_sleep` | 构建快照归档中的睡眠明细 |
+| `archive.training_day` | 归档日级睡眠汇总字段 |
 
-- 核心库 `core.sleep`
-- 归档库 `archive.training_sleep`
+主要字段包括：
 
-同时，日汇总也会更新到训练日表中的睡眠字段：
-
-- `sleep_total_minutes`
+- `sleep_type`
+- `bedtime`
+- `wake_time`
 - `night_sleep_minutes`
+- `total_sleep_minutes`
 - `nap_minutes`
-- `sleep_start_time`
-- `sleep_end_time`
 - `deep_sleep_minutes`
 - `light_sleep_minutes`
 - `rem_sleep_minutes`
 - `awake_minutes`
+- `sleep_stage_text`
+- `sleep_stage_detail`
+- `sleep_score`
+- `sleep_score_percentile`
+- `deep_sleep_ratio_pct`
+- `light_sleep_ratio_pct`
+- `rem_sleep_ratio_pct`
+- `deep_sleep_continuity_score`
+- `wake_count`
+- `breathing_quality_score`
+- `average_heart_rate_bpm`
+- `hrv_ms`
+- `average_spo2_pct`
+- `average_respiratory_rate`
+- `analysis_text`
+- `suggestion_text`
 
-### 幂等策略
+幂等策略：
 
-- `core.sleep` 使用 `sleep_key` 去重
-- `archive.training_sleep` 使用 `sleep_hash` 去重
-- 同一天重复同步时，会先清理该日期的旧睡眠记录，再写入最新结果
+- `core.sleep` 使用 `sleep_key` 去重。
+- `archive.training_sleep` 使用 `sleep_hash` 去重。
+- 同一天重复同步时，会先读取已有日期数据，再按本批次包含的模块合并；睡眠字段会随本批次结果更新。
+- archive-only 睡眠记录可通过回填链路补写 `core.sleep`。
 
-## 5. 维护与排查顺序
+## 6. SQL 与迁移
 
-当你遇到“识别到了睡眠图，但页面没有数据”时，建议按这个顺序看：
+新环境优先使用完整初始化脚本：
 
-1. 看 Telegram 批次状态是否是 `ready`
-2. 看 `batchResult.sleep` 是否为空
-3. 看 `archivedDate` 是否可靠
-4. 看 `core.sleep` 是否有对应日期记录
-5. 看 `archive.training_sleep` 是否同步成功
-6. 看 `core.training_day` 的睡眠汇总字段是否更新
-7. 看前端展示是否还在读取旧缓存或旧静态页
+```bash
+psql "$TRAINING_DB_URL" -f sql/pgsql17.sql
+```
 
-## 6. 相关文件
+已有环境如果缺少睡眠健康指标，使用增量脚本：
 
+```bash
+psql "$TRAINING_DB_URL" -f sql/training_records/sleep_health_metrics.sql
+```
+
+历史拆分 schema 文件：
+
+- `sql/training_records/core.sql`
+- `sql/training_records/core_sleep.sql`
+- `sql/training_records/archive.sql`
+- `sql/training_records/sleep_health_metrics.sql`
+
+## 7. 维护与排查顺序
+
+当你遇到“Telegram 已发送睡眠图，但页面没有数据”时，建议按这个顺序查：
+
+1. 看 Telegram 回复或 workflow JSON，确认批次是否 `status=ready`。
+2. 看 `imageType` 是否为 `sleep`，以及 `records.sleep` 是否存在。
+3. 看 `confidence`、`warnings`、`issues` 是否提示低置信、无日期或 schema 错误。
+4. 看 `archivedDate` 是否为空；如果为空，优先检查截图里是否有醒来日期或完整日期范围。
+5. 看 `dateSources` 是否包含 `sleep_bedtime`，确认是否按醒来日期减一天归档。
+6. 查 `core.sleep` 是否有对应 `archived_date`。
+7. 查 `core.training_day` 的睡眠汇总字段是否更新。
+8. 查 `archive.training_sleep` 是否有对应归档记录。
+9. 如果数据库写入失败，看 `runtime/telegram-sync-pending.ndjson` 是否等待重放。
+10. 如果数据库有数据但页面不显示，运行 `npm run build:data`，检查 `训练数据解析.md` 和 `source/_data/dashboardView.json`。
+
+## 8. 相关文件
+
+- `prompts/_source/recognition-rules.json`
+- `prompts/telegram-training-image-recognition.md`
 - `tools/telegram-recognition-schema.mjs`
 - `tools/telegram-sync-lib.mjs`
+- `src/ai/recognition-service.mjs`
 - `src/db/training/write.mjs`
 - `src/db/training/read.mjs`
-- `sql/training_records/sleep.sql`
-- `sql/training_records/sleep_validation.sql`
+- `src/db/training/archive.mjs`
+- `sql/pgsql17.sql`
+- `sql/training_records/sleep_health_metrics.sql`
 - `docs/训练系统/Telegram图片日期归档.md`
 
-## 7. 推荐验证命令
+## 9. 推荐验证命令
+
+只改 prompt 或识别口径：
 
 ```bash
 node tools/prompt-generator.mjs
 node --test test/prompt-generator.test.mjs test/telegram-sync.test.mjs test/telegram-sync-runner.test.mjs
 ```
 
-如果还涉及数据库结构更新，再补充执行相应 SQL 校验脚本。
+涉及数据库写入、读取或回填：
+
+```bash
+node --test test/training-db-core.test.mjs test/training-db-archive.test.mjs test/training-snapshot.test.mjs
+```
+
+阶段性收尾：
+
+```bash
+npm test
+npm run build
+```
