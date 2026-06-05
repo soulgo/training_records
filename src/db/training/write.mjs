@@ -101,7 +101,9 @@ export async function persistNormalizedBatch(options) {
     } else if (batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
       const existingDay = await readCoreDay(client, batch.archivedDate);
       const mergedDay = mergeBatchIntoDay(existingDay, batch);
-      await replaceCoreDay(client, mergedDay, batch.batchId, processedAt);
+      await replaceCoreDay(client, mergedDay, batch.batchId, processedAt, {
+        sourceHash: payloadHash,
+      });
     }
 
     await client.query('COMMIT');
@@ -1076,12 +1078,13 @@ async function replaceCoreDay(
   day,
   batchId,
   processedAt,
-  sourceChannel = 'telegram',
+  options = {},
 ) {
   await writeCoreDays(client, [day], {
     batchId,
     processedAt,
-    sourceChannel,
+    sourceChannel: options.sourceChannel ?? 'telegram',
+    sourceHash: options.sourceHash ?? null,
   });
 }
 
@@ -1194,6 +1197,7 @@ async function writeCoreDays(client, days, options) {
   await insertCoreActivities(client, normalizedDays, options, processedAtIso);
   await insertCoreMeals(client, normalizedDays, options, processedAtIso);
   await insertCoreSleep(client, normalizedDays, options, processedAtIso);
+  await insertArchiveSleep(client, normalizedDays, options, processedAtIso);
 }
 
 function existingSleepPayload(existing) {
@@ -1502,36 +1506,7 @@ async function insertCoreMeals(client, days, options, processedAtIso) {
 }
 
 async function insertCoreSleep(client, days, options, processedAtIso) {
-  const rows = days.flatMap((day) =>
-    (day.sleep ?? []).map((sleep) => {
-      const bedtime = sleep.bedtime ?? sleep.sleepStartTime ?? null;
-      const wakeTime = sleep.wakeTime ?? sleep.sleepEndTime ?? null;
-      const sleepType = sleep.sleepType ?? '夜间睡眠';
-      return {
-        sleepKey: createHash('md5')
-          .update([day.date, sleepType, bedtime ?? '', wakeTime ?? '', sleep.totalSleepMinutes ?? ''].join('|'))
-          .digest('hex'),
-        archivedDate: day.date,
-        sourceChannel: options.sourceChannel ?? 'telegram',
-        sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
-        sleepType,
-        bedtime,
-        wakeTime,
-        nightSleepMinutes: sleep.nightSleepMinutes ?? null,
-        totalSleepMinutes: sleep.totalSleepMinutes ?? null,
-        napMinutes: sleep.napMinutes ?? null,
-        deepSleepMinutes: sleep.deepSleepMinutes ?? null,
-        lightSleepMinutes: sleep.lightSleepMinutes ?? null,
-        remSleepMinutes: sleep.remSleepMinutes ?? null,
-        awakeMinutes: sleep.awakeMinutes ?? null,
-        sleepStageText: sleep.sleepStageText ?? null,
-        sleepStageDetail: Array.isArray(sleep.sleepStageDetail)
-          ? JSON.stringify(sleep.sleepStageDetail)
-          : sleep.sleepStageDetail ?? null,
-        updatedAt: processedAtIso,
-      };
-    }),
-  );
+  const rows = buildSleepRows(days, options, processedAtIso);
   if (rows.length === 0) {
     return;
   }
@@ -1613,6 +1588,128 @@ async function insertCoreSleep(client, days, options, processedAtIso) {
       rows.map((row) => row.sleepStageDetail),
       rows.map((row) => row.updatedAt),
     ],
+  );
+}
+
+async function insertArchiveSleep(client, days, options, processedAtIso) {
+  const rows = buildSleepRows(days, options, processedAtIso).map((row) => ({
+    ...row,
+    sourceHash: options.sourceHash ?? null,
+    sleepHash: createHash('md5')
+      .update([row.archivedDate, row.sleepType, row.bedtime ?? '', row.wakeTime ?? '', row.totalSleepMinutes ?? ''].join('|'))
+      .digest('hex'),
+  }));
+  if (rows.length === 0) {
+    return;
+  }
+
+  await client.query(
+    `
+      insert into archive.training_sleep (
+        sleep_hash,
+        archived_date,
+        source_hash,
+        sleep_type,
+        bedtime,
+        wake_time,
+        night_sleep_minutes,
+        total_sleep_minutes,
+        nap_minutes,
+        deep_sleep_minutes,
+        light_sleep_minutes,
+        rem_sleep_minutes,
+        awake_minutes,
+        sleep_stage_text,
+        sleep_stage_detail,
+        updated_at
+      )
+      select *
+      from unnest(
+        $1::text[],
+        $2::date[],
+        $3::text[],
+        $4::text[],
+        $5::text[],
+        $6::text[],
+        $7::integer[],
+        $8::integer[],
+        $9::integer[],
+        $10::integer[],
+        $11::integer[],
+        $12::integer[],
+        $13::integer[],
+        $14::text[],
+        $15::text[],
+        $16::timestamptz[]
+      )
+      on conflict (sleep_hash) do update set
+        archived_date = excluded.archived_date,
+        source_hash = excluded.source_hash,
+        sleep_type = excluded.sleep_type,
+        bedtime = excluded.bedtime,
+        wake_time = excluded.wake_time,
+        night_sleep_minutes = excluded.night_sleep_minutes,
+        total_sleep_minutes = excluded.total_sleep_minutes,
+        nap_minutes = excluded.nap_minutes,
+        deep_sleep_minutes = excluded.deep_sleep_minutes,
+        light_sleep_minutes = excluded.light_sleep_minutes,
+        rem_sleep_minutes = excluded.rem_sleep_minutes,
+        awake_minutes = excluded.awake_minutes,
+        sleep_stage_text = excluded.sleep_stage_text,
+        sleep_stage_detail = excluded.sleep_stage_detail,
+        updated_at = excluded.updated_at
+    `,
+    [
+      rows.map((row) => row.sleepHash),
+      rows.map((row) => row.archivedDate),
+      rows.map((row) => row.sourceHash),
+      rows.map((row) => row.sleepType),
+      rows.map((row) => row.bedtime),
+      rows.map((row) => row.wakeTime),
+      rows.map((row) => row.nightSleepMinutes),
+      rows.map((row) => row.totalSleepMinutes),
+      rows.map((row) => row.napMinutes),
+      rows.map((row) => row.deepSleepMinutes),
+      rows.map((row) => row.lightSleepMinutes),
+      rows.map((row) => row.remSleepMinutes),
+      rows.map((row) => row.awakeMinutes),
+      rows.map((row) => row.sleepStageText),
+      rows.map((row) => row.sleepStageDetail),
+      rows.map((row) => row.updatedAt),
+    ],
+  );
+}
+
+function buildSleepRows(days, options, processedAtIso) {
+  return days.flatMap((day) =>
+    (day.sleep ?? []).map((sleep) => {
+      const bedtime = sleep.bedtime ?? sleep.sleepStartTime ?? null;
+      const wakeTime = sleep.wakeTime ?? sleep.sleepEndTime ?? null;
+      const sleepType = sleep.sleepType ?? '夜间睡眠';
+      return {
+        sleepKey: createHash('md5')
+          .update([day.date, sleepType, bedtime ?? '', wakeTime ?? '', sleep.totalSleepMinutes ?? ''].join('|'))
+          .digest('hex'),
+        archivedDate: day.date,
+        sourceChannel: options.sourceChannel ?? 'telegram',
+        sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
+        sleepType,
+        bedtime,
+        wakeTime,
+        nightSleepMinutes: sleep.nightSleepMinutes ?? null,
+        totalSleepMinutes: sleep.totalSleepMinutes ?? null,
+        napMinutes: sleep.napMinutes ?? null,
+        deepSleepMinutes: sleep.deepSleepMinutes ?? null,
+        lightSleepMinutes: sleep.lightSleepMinutes ?? null,
+        remSleepMinutes: sleep.remSleepMinutes ?? null,
+        awakeMinutes: sleep.awakeMinutes ?? null,
+        sleepStageText: sleep.sleepStageText ?? null,
+        sleepStageDetail: Array.isArray(sleep.sleepStageDetail)
+          ? JSON.stringify(sleep.sleepStageDetail)
+          : sleep.sleepStageDetail ?? null,
+        updatedAt: processedAtIso,
+      };
+    }),
   );
 }
 
