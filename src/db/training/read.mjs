@@ -83,8 +83,53 @@ const TRAINING_SLEEP_QUERY = `
     awake_minutes,
     sleep_stage_text,
     sleep_stage_detail
-  from core.sleep
-  order by archived_date asc, bedtime asc nulls last
+  from (
+    select
+      archived_date,
+      sleep_type,
+      bedtime,
+      wake_time,
+      night_sleep_minutes,
+      total_sleep_minutes,
+      nap_minutes,
+      deep_sleep_minutes,
+      light_sleep_minutes,
+      rem_sleep_minutes,
+      awake_minutes,
+      sleep_stage_text,
+      sleep_stage_detail,
+      1 as source_priority
+    from core.sleep
+
+    union all
+
+    select
+      archived_date,
+      sleep_type,
+      bedtime,
+      wake_time,
+      night_sleep_minutes,
+      total_sleep_minutes,
+      nap_minutes,
+      deep_sleep_minutes,
+      light_sleep_minutes,
+      rem_sleep_minutes,
+      awake_minutes,
+      sleep_stage_text,
+      sleep_stage_detail,
+      2 as source_priority
+    from archive.training_sleep
+    where not exists (
+      select 1
+      from core.sleep core_sleep
+      where core_sleep.archived_date = archive.training_sleep.archived_date
+        and coalesce(core_sleep.bedtime, '') = coalesce(archive.training_sleep.bedtime, '')
+        and coalesce(core_sleep.wake_time, '') = coalesce(archive.training_sleep.wake_time, '')
+        and coalesce(core_sleep.total_sleep_minutes, -1) = coalesce(archive.training_sleep.total_sleep_minutes, -1)
+        and coalesce(core_sleep.sleep_type, '') = coalesce(archive.training_sleep.sleep_type, '')
+    )
+  ) sleep_rows
+  order by archived_date asc, source_priority asc, bedtime asc nulls last
 `;
 const BODY_FEEDBACK_QUERY = `
   select
