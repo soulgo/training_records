@@ -243,6 +243,11 @@ async function requestRecognition({
           parseStage: 'message_content_json',
         });
       }
+      logRecognitionParseFailure(error, {
+        schemaName,
+        schemaVersion,
+        contentType: payload?.__aiResponseContentType,
+      });
       throw error;
     }
     const schemaError = new AiSchemaError('AI recognition returned invalid schema', {
@@ -254,6 +259,11 @@ async function requestRecognition({
       content,
       contentType: payload?.__aiResponseContentType,
       parseStage: 'message_content_schema',
+    });
+    logRecognitionParseFailure(schemaError, {
+      schemaName,
+      schemaVersion,
+      contentType: payload?.__aiResponseContentType,
     });
     throw schemaError;
   }
@@ -357,12 +367,18 @@ function parseAiJsonContentToValue(content, { schemaName, schemaVersion }) {
     }
   }
 
-  throw new AiSchemaError(`${schemaName} returned invalid JSON`, {
+  const error = new AiSchemaError(`${schemaName} returned invalid JSON`, {
     cause: lastError,
     schemaName,
     schemaVersion,
     path: '$',
   });
+  error.summary = buildSafeAiContentSummary({
+    content: normalizedContent,
+    contentType: null,
+    parseStage: 'json_parse',
+  });
+  throw error;
 }
 
 function collectJsonCandidates(content) {
@@ -388,7 +404,64 @@ function collectJsonCandidates(content) {
     candidates.push(trimmed.slice(jsonStart, jsonEnd + 1).trim());
   }
 
+  candidates.push(...extractBalancedJsonCandidates(trimmed));
+
   return [...new Set(candidates.filter(Boolean))];
+}
+
+function extractBalancedJsonCandidates(content) {
+  const candidates = [];
+  const text = String(content ?? '');
+
+  for (let index = 0; index < text.length; index += 1) {
+    const startChar = text[index];
+    if (startChar !== '{' && startChar !== '[') {
+      continue;
+    }
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let cursor = index; cursor < text.length; cursor += 1) {
+      const char = text[cursor];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (char === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (char === '{' || char === '[') {
+        depth += 1;
+        continue;
+      }
+
+      if (char === '}' || char === ']') {
+        depth -= 1;
+        if (depth === 0) {
+          candidates.push(text.slice(index, cursor + 1).trim());
+          break;
+        }
+      }
+    }
+  }
+
+  return candidates;
 }
 
 function normalizeRecognitionPayload(value) {
@@ -656,6 +729,18 @@ function buildSafeAiContentSummary({ content, contentType, parseStage }) {
     parseStage,
     snippet: summarizeAiContentSnippet(content),
   };
+}
+
+function logRecognitionParseFailure(error, { schemaName, schemaVersion, contentType }) {
+  const summary = error?.summary ?? null;
+  const payload = {
+    schemaName,
+    schemaVersion,
+    contentType: String(contentType ?? '').split(';', 1)[0].trim() || null,
+    message: error instanceof Error ? error.message : String(error),
+    summary,
+  };
+  process.stderr.write(`[telegram-sync] recognition parse failure: ${JSON.stringify(payload)}\n`);
 }
 
 function summarizeAiContentSnippet(content) {

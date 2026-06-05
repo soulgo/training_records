@@ -95,7 +95,64 @@ function collectJsonCandidates(content) {
     candidates.push(trimmed.slice(jsonStart, jsonEnd + 1).trim());
   }
 
+  candidates.push(...extractBalancedJsonCandidates(trimmed));
+
   return [...new Set(candidates.filter(Boolean))];
+}
+
+function extractBalancedJsonCandidates(content) {
+  const candidates = [];
+  const text = String(content ?? '');
+
+  for (let index = 0; index < text.length; index += 1) {
+    const startChar = text[index];
+    if (startChar !== '{' && startChar !== '[') {
+      continue;
+    }
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let cursor = index; cursor < text.length; cursor += 1) {
+      const char = text[cursor];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (char === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (char === '{' || char === '[') {
+        depth += 1;
+        continue;
+      }
+
+      if (char === '}' || char === ']') {
+        depth -= 1;
+        if (depth === 0) {
+          candidates.push(text.slice(index, cursor + 1).trim());
+          break;
+        }
+      }
+    }
+  }
+
+  return candidates;
 }
 
 export function validateAiJsonValue(value, schema, options = {}) {
