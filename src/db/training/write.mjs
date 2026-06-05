@@ -386,14 +386,28 @@ export async function backfillCoreSleepFromIngestBatchesClient(client, options =
 
 export async function backfillCoreFromLatestArchiveSnapshotClient(client, options = {}) {
   const processedAt = options.processedAt ?? new Date();
-  const missingDateResult = await client.query(`
+  const missingTrainingDayResult = await client.query(`
     select a.archived_date
     from archive.training_day a
     left join core.training_day c on c.archived_date = a.archived_date
     where c.archived_date is null
     order by a.archived_date asc
   `);
-  const missingDates = missingDateResult.rows.map((row) => normalizeDateKey(row.archived_date)).filter(Boolean);
+  const missingSleepResult = await client.query(`
+    select a.archived_date
+    from archive.training_sleep a
+    left join core.sleep c on c.archived_date = a.archived_date
+    where c.archived_date is null
+    group by a.archived_date
+    order by a.archived_date asc
+  `);
+
+  const missingDates = [
+    ...missingTrainingDayResult.rows,
+    ...missingSleepResult.rows,
+  ]
+    .map((row) => normalizeDateKey(row.archived_date))
+    .filter(Boolean);
 
   if (missingDates.length === 0) {
     const archiveDayResult = await client.query(`
@@ -401,7 +415,12 @@ export async function backfillCoreFromLatestArchiveSnapshotClient(client, option
       from archive.training_day
       limit 1
     `);
-    if (archiveDayResult.rows.length === 0) {
+    const archiveSleepResult = await client.query(`
+      select archived_date
+      from archive.training_sleep
+      limit 1
+    `);
+    if (archiveDayResult.rows.length === 0 && archiveSleepResult.rows.length === 0) {
       return {
         status: 'skipped',
         reason: 'missing_archive_days',
