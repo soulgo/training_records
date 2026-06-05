@@ -2,7 +2,7 @@
   "_description": "Image recognition prompt rules. Edit here, then run `node tools/prompt-generator.mjs` to regenerate prompts/telegram-training-image-recognition.md.",
 
   "metadata": {
-    "version": "2026-06-04",
+    "version": "2026-06-05",
     "schemaName": "telegram_training_image",
     "schemaVersion": "v1"
   },

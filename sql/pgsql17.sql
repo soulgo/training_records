@@ -121,6 +121,20 @@ create table if not exists archive.training_sleep (
   awake_minutes integer null,
   sleep_stage_text text null,
   sleep_stage_detail text null,
+  sleep_score integer null,
+  sleep_score_percentile integer null,
+  deep_sleep_ratio_pct numeric(10, 2) null,
+  light_sleep_ratio_pct numeric(10, 2) null,
+  rem_sleep_ratio_pct numeric(10, 2) null,
+  deep_sleep_continuity_score integer null,
+  wake_count integer null,
+  breathing_quality_score integer null,
+  average_heart_rate_bpm integer null,
+  hrv_ms integer null,
+  average_spo2_pct numeric(10, 2) null,
+  average_respiratory_rate numeric(10, 2) null,
+  analysis_text text null,
+  suggestion_text text null,
   updated_at timestamptz not null
 );
 
@@ -141,6 +155,20 @@ comment on column archive.training_sleep.rem_sleep_minutes is 'REM 睡眠分钟�
 comment on column archive.training_sleep.awake_minutes is '清醒分钟数';
 comment on column archive.training_sleep.sleep_stage_text is '睡眠阶段文本';
 comment on column archive.training_sleep.sleep_stage_detail is '睡眠阶段详情';
+comment on column archive.training_sleep.sleep_score is '睡眠评分';
+comment on column archive.training_sleep.sleep_score_percentile is '超过用户百分比';
+comment on column archive.training_sleep.deep_sleep_ratio_pct is '深睡比例百分比';
+comment on column archive.training_sleep.light_sleep_ratio_pct is '浅睡比例百分比';
+comment on column archive.training_sleep.rem_sleep_ratio_pct is 'REM 比例百分比';
+comment on column archive.training_sleep.deep_sleep_continuity_score is '深睡连续性评分';
+comment on column archive.training_sleep.wake_count is '清醒次数';
+comment on column archive.training_sleep.breathing_quality_score is '呼吸质量评分';
+comment on column archive.training_sleep.average_heart_rate_bpm is '平均心率，单位次/分钟';
+comment on column archive.training_sleep.hrv_ms is '平均心率变异性，单位毫秒';
+comment on column archive.training_sleep.average_spo2_pct is '平均血氧饱和度百分比';
+comment on column archive.training_sleep.average_respiratory_rate is '平均呼吸率，单位次/分钟';
+comment on column archive.training_sleep.analysis_text is '睡眠解读文本';
+comment on column archive.training_sleep.suggestion_text is '睡眠建议文本';
 comment on column archive.training_sleep.updated_at is '该睡眠记录最近更新时间';
 
 -- 10. 创建结构化活动明细表
@@ -488,6 +516,20 @@ create table if not exists core.sleep (
   awake_minutes integer null,
   sleep_stage_text text null,
   sleep_stage_detail text null,
+  sleep_score integer null,
+  sleep_score_percentile integer null,
+  deep_sleep_ratio_pct numeric(10, 2) null,
+  light_sleep_ratio_pct numeric(10, 2) null,
+  rem_sleep_ratio_pct numeric(10, 2) null,
+  deep_sleep_continuity_score integer null,
+  wake_count integer null,
+  breathing_quality_score integer null,
+  average_heart_rate_bpm integer null,
+  hrv_ms integer null,
+  average_spo2_pct numeric(10, 2) null,
+  average_respiratory_rate numeric(10, 2) null,
+  analysis_text text null,
+  suggestion_text text null,
   updated_at timestamptz not null
 );
 

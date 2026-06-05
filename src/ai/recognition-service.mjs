@@ -242,6 +242,12 @@ async function requestRecognition({
           contentType: payload?.__aiResponseContentType,
           parseStage: 'message_content_json',
         });
+      } else if (!error.summary.contentType && payload?.__aiResponseContentType) {
+        error.summary = {
+          ...error.summary,
+          contentType: String(payload.__aiResponseContentType).split(';', 1)[0].trim() || null,
+          parseStage: 'message_content_json',
+        };
       }
       logRecognitionParseFailure(error, {
         schemaName,

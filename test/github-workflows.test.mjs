@@ -184,11 +184,13 @@ test('telegram-sync workflow uses the shared site build action after pushing rep
   const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
 
   assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
+  assert.match(workflow, /db_content_changed=false/);
+  assert.match(workflow, /db_content_changed=true/);
   assert.match(workflow, /git add 训练记录\.md source\/_posts source\/images/);
   assert.match(workflow, /git commit -m "chore: sync Telegram updates"/);
   assert.match(workflow, /- name: Run tests\s*\n\s*id: test\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.detect\.outputs\.content_changed == 'true'/);
   assert.match(workflow, /run:\s*npm run test:fast/);
-  assert.match(workflow, /- name: Build and deploy site snapshot\s*\n\s*id: site_build\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /- name: Build and deploy site snapshot\s*\n\s*id: site_build\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'false'/);
   assert.match(workflow, /run_tests:\s*'false'/);
@@ -219,6 +221,21 @@ test('telegram-sync workflow keeps change detection and maintenance gating intac
   assert.match(workflow, /- name: Push changes\s*\n\s*id: push\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true'/);
 });
 
+test('telegram-sync workflows rebuild pages after database-only stored training batches', async () => {
+  const prodWorkflow = await readWorkflow('.github/workflows/telegram-sync.yml');
+  const devWorkflow = await readWorkflow('.github/workflows/telegram-sync-dev.yml');
+
+  for (const workflow of [prodWorkflow, devWorkflow]) {
+    assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH/);
+    assert.match(workflow, /db_content_changed=true/);
+    assert.match(workflow, /readyStoredTrainingBatches/);
+    assert.match(
+      workflow,
+      /if: steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/,
+    );
+  }
+});
+
 test('telegram-sync dev workflow only handles dev dispatches and writes dev branch', async () => {
   const workflow = await readWorkflow('.github/workflows/telegram-sync-dev.yml');
 
@@ -236,7 +253,7 @@ test('telegram-sync dev workflow deploys Pages after bot-created changes', async
   const workflow = await readWorkflow('.github/workflows/telegram-sync-dev.yml');
 
   assert.match(workflow, /- name: Build and deploy dev site snapshot\s*\n\s+id: site_build/);
-  assert.match(workflow, /if: steps\.detect\.outputs\.repo_changed == 'true'/);
+  assert.match(workflow, /if: steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/);
   assert.match(workflow, /run_backfill:\s*'true'/);
   assert.match(workflow, /run_tests:\s*'true'/);
   assert.match(workflow, /deploy:\s*'false'/);

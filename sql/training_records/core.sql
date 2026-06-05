@@ -104,6 +104,20 @@ CREATE TABLE "core"."sleep" (
   "awake_minutes" int4,
   "sleep_stage_text" text COLLATE "pg_catalog"."default",
   "sleep_stage_detail" text COLLATE "pg_catalog"."default",
+  "sleep_score" int4,
+  "sleep_score_percentile" int4,
+  "deep_sleep_ratio_pct" numeric(10,2),
+  "light_sleep_ratio_pct" numeric(10,2),
+  "rem_sleep_ratio_pct" numeric(10,2),
+  "deep_sleep_continuity_score" int4,
+  "wake_count" int4,
+  "breathing_quality_score" int4,
+  "average_heart_rate_bpm" int4,
+  "hrv_ms" int4,
+  "average_spo2_pct" numeric(10,2),
+  "average_respiratory_rate" numeric(10,2),
+  "analysis_text" text COLLATE "pg_catalog"."default",
+  "suggestion_text" text COLLATE "pg_catalog"."default",
   "updated_at" timestamptz(6) NOT NULL
 )
 ;

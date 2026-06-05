@@ -259,6 +259,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const sourceImageCount = batch.messages.length;
   let recognizedImageCount = 0;
   const failedMessageIds = [];
+  const dataIssues = [];
 
   for (const message of batch.messages) {
     const recognition = recognitionMap.get(message.messageId);
@@ -295,9 +296,6 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     const archiveDate = recognition.imageType === 'sleep'
       ? resolveSleepArchiveDate(recognition.records?.sleep, normalizedDetectedDate, message)
       : normalizedDetectedDate;
-    if (archiveDate) {
-      imageDates.add(archiveDate);
-    }
 
     dateSources.push({
       messageId: message.messageId,
@@ -305,6 +303,26 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       dateEvidence: recognition.dateEvidence ?? null,
       source: archiveDate ? (archiveDate === normalizedDetectedDate ? 'image' : 'sleep_bedtime') : 'no_date',
     });
+
+    if (recognition.imageType === 'sleep') {
+      const sleepRecord = normalizeSleepRecord(recognition.records?.sleep, archiveDate);
+      if (!sleepRecord) {
+        const issue = `sleep image missing records.sleep for message ${message.messageId}`;
+        issues.push(issue);
+        dataIssues.push(issue);
+        failedMessageIds.push(message.messageId);
+        continue;
+      }
+      if (archiveDate) {
+        imageDates.add(archiveDate);
+      }
+      sleepRecords.push(sleepRecord);
+      continue;
+    }
+
+    if (archiveDate) {
+      imageDates.add(archiveDate);
+    }
 
     if (recognition.imageType === 'measurement' && recognition.records?.measurement) {
       measurementCandidates.push({
@@ -338,12 +356,28 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
         nutritionTotalCalories = recognition.records.totalCalories;
       }
     }
-      if (recognition.imageType === 'sleep' && recognition.records?.sleep) {
-      const sleepRecord = normalizeSleepRecord(recognition.records.sleep, archiveDate);
-      if (sleepRecord) {
-        sleepRecords.push(sleepRecord);
-      }
-    }
+  }
+
+  if (
+    dataIssues.length > 0 &&
+    measurementCandidates.length === 0 &&
+    activities.length === 0 &&
+    !workoutDailySummary &&
+    nutritionMeals.length === 0 &&
+    nutritionTotalCalories === null &&
+    nutritionDetails.length === 0 &&
+    sleepRecords.length === 0
+  ) {
+    return buildSkippedBatchResult(batch, {
+      reason: dataIssues.join('; '),
+      warnings,
+      issues,
+      dateSources,
+      sourceImageCount,
+      recognizedImageCount,
+      failedImageCount: failedMessageIds.length,
+      failureCategory: 'ai_service',
+    });
   }
 
   if (imageDates.size > 1) {
@@ -354,7 +388,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       dateSources,
       sourceImageCount,
       recognizedImageCount,
-      failedImageCount: sourceImageCount - recognizedImageCount,
+      failedImageCount: failedMessageIds.length,
     });
   }
 
@@ -375,7 +409,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       dateSources,
       sourceImageCount,
       recognizedImageCount,
-      failedImageCount: sourceImageCount - recognizedImageCount,
+      failedImageCount: failedMessageIds.length,
     });
   } else {
     archivedDate = resolveDetectedDate(filenameDates);
@@ -399,7 +433,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       dateSources,
       sourceImageCount,
       recognizedImageCount,
-      failedImageCount: sourceImageCount - recognizedImageCount,
+      failedImageCount: failedMessageIds.length,
     });
   }
 
@@ -422,7 +456,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     dateSources,
     sourceImageCount,
     recognizedImageCount,
-    failedImageCount: sourceImageCount - recognizedImageCount,
+    failedImageCount: failedMessageIds.length,
     confidence: calculateBatchConfidence(recognitions),
     fingerprints: buildFingerprints({
       archivedDate,
@@ -890,12 +924,23 @@ function resolveDetectedDate(detectedDates) {
   return null;
 }
 
-function buildSkippedBatchResult(batch, { reason, warnings = [], issues = [], dateSources = [], sourceImageCount = 0, recognizedImageCount = 0, failedImageCount = 0 }) {
+function buildSkippedBatchResult(batch, {
+  reason,
+  warnings = [],
+  issues = [],
+  dateSources = [],
+  sourceImageCount = 0,
+  recognizedImageCount = 0,
+  failedImageCount = 0,
+  failureCategory = null,
+}) {
   return {
     status: 'skipped',
     kind: batch.kind ?? 'image',
     batchId: batch.batchId,
     reason,
+    failureCategory,
+    failureReason: failureCategory ? reason : null,
     warnings,
     issues,
     dateSources,

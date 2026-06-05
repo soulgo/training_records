@@ -16,6 +16,7 @@
 ### Added
 
 - 新增睡眠截图支持：Telegram 图片识别、训练解析和数据库归档现在可记录睡眠时长、入睡/起床时间、睡眠阶段摘要以及睡眠健康指标，并写入 `archive.training_sleep`。
+- 新增睡眠健康指标增量 SQL `sql/training_records/sleep_health_metrics.sql`，并同步补齐 `core.sleep` 与 `archive.training_sleep` 的主 schema 字段。
 - 新增睡眠维护文档 `docs/训练系统/Telegram睡眠识别与入库说明.md`，补充识别字段、归档日期口径、数据库落表和排障步骤，便于后期维护与查找问题。
 - 新增睡眠 Prompt 维护说明 `docs/训练系统/Telegram图片识别Prompt维护.md`，同步记录睡眠截图字段提取范围与日期归档规则，便于后续维护。
 
@@ -23,6 +24,8 @@
 
 - 睡眠图片归档口径改为以醒来时间的前一天为准，避免跨午夜睡眠被记到错误日期。
 - 训练快照与 Telegram 同步链路开始汇总睡眠数据，便于首页与分析模块读取恢复相关指标。
+- Telegram Sync 的 main/dev workflow 现在会识别 DB-only 的 `ready + stored` 训练批次，并在仓库文件无变化时继续构建和发布站点。
+- `训练数据解析.md` 调试输出新增睡眠段落，展示总睡眠、睡眠评分、平均心率、HRV、血氧和呼吸率等排查字段。
 - 页面生成在数据库快照不完整或不可用时会自动回退到 Markdown，避免站点停留在“等待数据库重放”的空状态。
 - `package.json` 版本号更新为 `1.2.3`。
 
@@ -30,6 +33,7 @@
 
 - 修复 Telegram 训练图片识别对上游返回内容的 JSON 容错不足问题：现在会自动提取代码块、`data:` 前缀和夹杂杂质文本中的有效 JSON，减少 `telegram_training_image returned invalid JSON` 导致的识别失败与重试队列堆积。
 - 修复 Telegram 睡眠同步在归档后未自动补写 `core.sleep` 的问题：同步结束后会补跑睡眠回填，避免出现 `archive.training_sleep` 有数据但 `core.sleep` 为空的情况。
+- 修复 Markdown/archive 快照归档旧路径没有写入睡眠健康指标的问题，避免构建归档时丢失睡眠评分、心率、HRV、血氧和建议文本。
 - 修复 Telegram 训练同步在第二次更新后只能写入 Markdown、却没有同步触发站点重建与部署的问题；现在数据库回填失败或超时时会降级为 Markdown 重建，并继续发布最新静态站点，避免页面停留在旧数据。
 - 修正 AI schema 校验回归测试的字段定义与用例，避免把可选的 `records.sleep` 误判为必填字段，确保 schema 验证与实际识别契约保持一致。
 - 修复睡眠图片在归档时因纯时间床头信息被误前移到前一天的问题，并补齐 `core.sleep` 的归档回填范围，避免睡眠数据“已归档但页面不显示”。

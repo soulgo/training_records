@@ -68,6 +68,7 @@ export async function generateRecognitionPrompt() {
     renderSection(recognition.measurement),
     renderSection(recognition.workout),
     renderSection(recognition.nutrition),
+    renderSection(recognition.sleep),
     renderSection(shared.confidenceAndWarnings),
     renderSection(shared.nullConventions),
   ];

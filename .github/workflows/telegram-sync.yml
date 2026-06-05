@@ -73,6 +73,8 @@ jobs:
 
       - name: Detect changes
         id: detect
+        env:
+          TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
         run: |
           if [ -z "$(git status --porcelain -- 训练记录.md source/_posts source/images)" ]; then
             echo "repo_changed=false" >> "$GITHUB_OUTPUT"
@@ -81,6 +83,25 @@ jobs:
             echo "repo_changed=true" >> "$GITHUB_OUTPUT"
             echo "content_changed=true" >> "$GITHUB_OUTPUT"
           fi
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const fs = require('fs');
+          const resultPath = process.env.TELEGRAM_SYNC_RESULT_PATH;
+          let readyStoredTrainingBatches = 0;
+          try {
+            const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+            const batches = result.batchResults ?? result.batches ?? [];
+            readyStoredTrainingBatches = batches.filter((batch) => {
+              const kind = batch.kind ?? 'image';
+              return kind === 'image' && batch.status === 'ready' && batch.persistenceStatus === 'stored';
+            }).length;
+          } catch {}
+          console.log(`readyStoredTrainingBatches=${readyStoredTrainingBatches}`);
+          if (readyStoredTrainingBatches > 0) {
+            console.log('db_content_changed=true');
+          } else {
+            console.log('db_content_changed=false');
+          }
+          NODE
 
       - name: Run tests
         id: test
@@ -110,7 +131,7 @@ jobs:
 
       - name: Build and deploy site snapshot
         id: site_build
-        if: steps.detect.outputs.repo_changed == 'true'
+        if: steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true'
         uses: ./.github/actions/site-build
         with:
           run_backfill: 'false'

@@ -17,7 +17,7 @@ test('generateRecognitionPrompt includes all key constraints', async () => {
   const prompt = await generateRecognitionPrompt();
 
   assert.match(prompt, /^<!-- prompt-metadata /);
-  assert.equal(parsePromptMetadataHeader(prompt).version, '2026-06-04');
+  assert.equal(parsePromptMetadataHeader(prompt).version, '2026-06-05');
   assert.equal(parsePromptMetadataHeader(prompt).schemaName, 'telegram_training_image');
   assert.equal(parsePromptMetadataHeader(prompt).schemaVersion, 'v1');
   assert.match(prompt, /只能输出符合 schema 的 JSON/);
@@ -37,6 +37,10 @@ test('generateRecognitionPrompt includes all key constraints', async () => {
   assert.match(prompt, /records\.dailyWorkoutSummary/);
   assert.match(prompt, /## 饮食 nutrition/);
   assert.match(prompt, /records\.totalCalories/);
+  assert.match(prompt, /## 睡眠 sleep/);
+  assert.match(prompt, /records\.sleep/);
+  assert.match(prompt, /sleepScore/);
+  assert.match(prompt, /醒来时间的前一天归档/);
   assert.match(prompt, /## 置信度和警告/);
   assert.match(prompt, /confidence.*0 到 1/);
   assert.match(prompt, /低于 0\.75.*会被系统跳过/);
@@ -111,8 +115,11 @@ test('generated recognition prompt loads correctly from structured source', asyn
   assert.equal(recognition.measurement.title, '体脂秤 measurement');
   assert.equal(recognition.workout.title, '运动 workout');
   assert.equal(recognition.nutrition.title, '饮食 nutrition');
+  assert.equal(recognition.sleep.title, '睡眠 sleep');
   assert.ok(Array.isArray(recognition.outputType.rules));
   assert.ok(recognition.outputType.rules.length > 0);
+  assert.ok(Array.isArray(recognition.sleep.rules));
+  assert.ok(recognition.sleep.rules.length > 0);
 });
 
 test('generated analysis prompt loads correctly from structured source', async () => {

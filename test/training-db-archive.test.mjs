@@ -8,7 +8,7 @@ import {
   appendTrainingArchiveFailureLog,
   persistTrainingArchive,
 } from '../tools/training-db-archive.mjs';
-import { generateTrainingData } from '../tools/generate-training-data.mjs';
+import { generateTrainingData, renderTrainingDebugMarkdown } from '../tools/generate-training-data.mjs';
 
 const sampleMarkdown = `
 ### 2026-05-11
@@ -214,6 +214,87 @@ test('persistTrainingArchive writes activity and meal rows when parsed data cont
   assert.ok(executedSql.some((sql) => /insert into archive\.training_meal/i.test(sql)));
 });
 
+test('persistTrainingArchive writes sleep health metrics into archive sleep rows', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  await persistTrainingArchive({
+    markdownRaw: sampleMarkdown,
+    parsed: {
+      ...sampleParsed,
+      daily: [
+        {
+          ...sampleParsed.daily[0],
+          sleep: [
+            {
+              sleepType: '夜间睡眠',
+              sleepStartTime: '23:26',
+              sleepEndTime: '06:19',
+              nightSleepMinutes: 411,
+              totalSleepMinutes: 411,
+              napMinutes: null,
+              deepSleepMinutes: 145,
+              lightSleepMinutes: 195,
+              remSleepMinutes: 71,
+              awakeMinutes: 2,
+              sleepStageText: '深睡2小时25分钟；浅睡3小时15分钟',
+              sleepStageDetail: ['深睡 2小时25分钟', '浅睡 3小时15分钟'],
+              sleepScore: 81,
+              sleepScorePercentile: 77,
+              deepSleepRatioPct: 35,
+              lightSleepRatioPct: 47,
+              remSleepRatioPct: 18,
+              deepSleepContinuityScore: 85,
+              wakeCount: 1,
+              breathingQualityScore: 90,
+              averageHeartRateBpm: 68,
+              hrvMs: 55,
+              averageSpo2Pct: 97,
+              averageRespiratoryRate: 16.5,
+              analysisText: '睡眠质量良好。',
+              suggestionText: '建议睡觉时关灯。',
+            },
+          ],
+        },
+      ],
+    },
+    runStartedAt: new Date('2026-05-12T00:00:00.000Z'),
+    runFinishedAt: new Date('2026-05-12T00:00:02.000Z'),
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    runtimeContext: {
+      triggerName: 'local-build-data',
+      runtimeEnv: 'local',
+      actorName: 'tester',
+    },
+    createClient() {
+      return fakeClient;
+    },
+  });
+
+  const sleepInsert = calls.find(([sql]) => /insert into archive\.training_sleep/i.test(sql));
+  assert.ok(sleepInsert);
+  assert.match(sleepInsert[0], /sleep_score/i);
+  assert.match(sleepInsert[0], /average_heart_rate_bpm/i);
+  assert.match(sleepInsert[0], /analysis_text/i);
+  assert.equal(sleepInsert[1][15], 81);
+  assert.equal(sleepInsert[1][16], 77);
+  assert.equal(sleepInsert[1][23], 68);
+  assert.equal(sleepInsert[1][28], '建议睡觉时关灯。');
+});
+
 test('generateTrainingData keeps main outputs when archive sync fails', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-db-archive-'));
   const recordPath = path.join(tempRoot, '训练记录.md');
@@ -295,6 +376,38 @@ test('generateTrainingData can write outputs from the shared snapshot builder', 
   const output = JSON.parse(await readFile(outputPath, 'utf8'));
   assert.equal(output.generatedAt, syntheticSnapshot.generatedAt);
   assert.equal(output.latest.measurement.weightKg, 71.8);
+});
+
+test('renderTrainingDebugMarkdown includes sleep health metrics for troubleshooting', () => {
+  const markdown = renderTrainingDebugMarkdown({
+    ...sampleParsed,
+    daily: [
+      {
+        ...sampleParsed.daily[0],
+        sleepSummary: {
+          totalSleepMinutes: 411,
+          nightSleepMinutes: 411,
+          sleepStartTime: '23:26',
+          sleepEndTime: '06:19',
+          deepSleepMinutes: 145,
+          lightSleepMinutes: 195,
+          remSleepMinutes: 71,
+          awakeMinutes: 2,
+          sleepScore: 81,
+          averageHeartRateBpm: 68,
+          hrvMs: 55,
+          averageSpo2Pct: 97,
+          averageRespiratoryRate: 16.5,
+        },
+      },
+    ],
+  });
+
+  assert.match(markdown, /### 睡眠/);
+  assert.match(markdown, /总睡眠：411 分钟/);
+  assert.match(markdown, /睡眠评分：81 分/);
+  assert.match(markdown, /平均心率：68 次\/分钟/);
+  assert.match(markdown, /HRV：55 毫秒/);
 });
 
 test('generateTrainingData falls back to markdown when database snapshot lacks measurements', async () => {
@@ -435,4 +548,18 @@ test('appendTrainingArchiveFailureLog writes ndjson entries to the configured ru
 test('pgsql init schema lives under sql directory', async () => {
   const initSqlPath = path.resolve(process.cwd(), 'sql', 'pgsql17.sql');
   await access(initSqlPath);
+});
+
+test('sleep health metric columns are present in canonical SQL schema files', async () => {
+  for (const relativePath of [
+    'sql/pgsql17.sql',
+    'sql/training_records/core.sql',
+    'sql/training_records/archive.sql',
+  ]) {
+    const sql = await readFile(path.resolve(process.cwd(), relativePath), 'utf8');
+    assert.match(sql, /sleep_score/i, `${relativePath} should define sleep_score`);
+    assert.match(sql, /average_heart_rate_bpm/i, `${relativePath} should define average_heart_rate_bpm`);
+    assert.match(sql, /analysis_text/i, `${relativePath} should define analysis_text`);
+    assert.match(sql, /suggestion_text/i, `${relativePath} should define suggestion_text`);
+  }
 });

@@ -82,7 +82,21 @@ const TRAINING_SLEEP_QUERY = `
     rem_sleep_minutes,
     awake_minutes,
     sleep_stage_text,
-    sleep_stage_detail
+    sleep_stage_detail,
+    sleep_score,
+    sleep_score_percentile,
+    deep_sleep_ratio_pct,
+    light_sleep_ratio_pct,
+    rem_sleep_ratio_pct,
+    deep_sleep_continuity_score,
+    wake_count,
+    breathing_quality_score,
+    average_heart_rate_bpm,
+    hrv_ms,
+    average_spo2_pct,
+    average_respiratory_rate,
+    analysis_text,
+    suggestion_text
   from (
     select
       archived_date,
@@ -98,6 +112,20 @@ const TRAINING_SLEEP_QUERY = `
       awake_minutes,
       sleep_stage_text,
       sleep_stage_detail,
+      sleep_score,
+      sleep_score_percentile,
+      deep_sleep_ratio_pct,
+      light_sleep_ratio_pct,
+      rem_sleep_ratio_pct,
+      deep_sleep_continuity_score,
+      wake_count,
+      breathing_quality_score,
+      average_heart_rate_bpm,
+      hrv_ms,
+      average_spo2_pct,
+      average_respiratory_rate,
+      analysis_text,
+      suggestion_text,
       1 as source_priority
     from core.sleep
 
@@ -117,6 +145,20 @@ const TRAINING_SLEEP_QUERY = `
       awake_minutes,
       sleep_stage_text,
       sleep_stage_detail::text as sleep_stage_detail,
+      sleep_score,
+      sleep_score_percentile,
+      deep_sleep_ratio_pct,
+      light_sleep_ratio_pct,
+      rem_sleep_ratio_pct,
+      deep_sleep_continuity_score,
+      wake_count,
+      breathing_quality_score,
+      average_heart_rate_bpm,
+      hrv_ms,
+      average_spo2_pct,
+      average_respiratory_rate,
+      analysis_text,
+      suggestion_text,
       2 as source_priority
     from archive.training_sleep
     where not exists (
@@ -219,7 +261,21 @@ const ARCHIVE_TRAINING_SLEEP_QUERY = `
     rem_sleep_minutes,
     awake_minutes,
     sleep_stage_text,
-    sleep_stage_detail
+    sleep_stage_detail,
+    sleep_score,
+    sleep_score_percentile,
+    deep_sleep_ratio_pct,
+    light_sleep_ratio_pct,
+    rem_sleep_ratio_pct,
+    deep_sleep_continuity_score,
+    wake_count,
+    breathing_quality_score,
+    average_heart_rate_bpm,
+    hrv_ms,
+    average_spo2_pct,
+    average_respiratory_rate,
+    analysis_text,
+    suggestion_text
   from archive.training_sleep
   order by archived_date asc, bedtime asc nulls last
 `;

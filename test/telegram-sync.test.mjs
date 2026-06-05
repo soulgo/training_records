@@ -250,6 +250,51 @@ test('sleep screenshots are archived by bedtime date and keep Huawei sleep healt
   assert.equal(analyzed.sleep.records[0].analysisText, '睡眠质量良好。睡眠时长6小时51分钟，在正常范围内。');
 });
 
+test('sleep screenshots without extracted sleep fields are not reported as stored training data', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const [batch] = lib.groupTelegramUpdates([
+    {
+      update_id: 162,
+      message: {
+        message_id: 62,
+        date: Math.floor(new Date('2026-06-04T01:30:00Z').getTime() / 1000),
+        chat: { id: 42 },
+        photo: [{ file_id: 'sleep-file-empty', file_unique_id: 'sleep-uniq-empty' }],
+      },
+    },
+  ]);
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 62,
+      imageType: 'sleep',
+      detectedDate: '2026-06-04',
+      dateEvidence: 'image header: 6月4日 周四',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: null,
+        sleep: null,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.equal(analyzed.failureCategory, 'ai_service');
+  assert.match(analyzed.reason, /sleep image missing records\.sleep/);
+  assert.equal(analyzed.archivedDate, undefined);
+  assert.equal(analyzed.recognizedImageCount, 1);
+  assert.equal(analyzed.failedImageCount, 1);
+});
+
 test('groups /thought and /随想 messages into thought batches and ignores normal text', async () => {
   const lib = await importTelegramSyncLib();
 

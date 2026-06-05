@@ -375,9 +375,13 @@ test('readTrainingSnapshotFromDatabaseClient includes core sleep rows in sleep s
 
   assert.ok(day);
   assert.ok(queries.some((sql) => /from core\.sleep/i.test(sql)));
+  assert.ok(queries.some((sql) => /from core\.sleep/i.test(sql) && /sleep_score/i.test(sql)));
+  assert.ok(queries.some((sql) => /from core\.sleep/i.test(sql) && /average_heart_rate_bpm/i.test(sql)));
   assert.equal(day.sleep.length, 1);
   assert.equal(day.sleepSummary.totalSleepMinutes, 411);
   assert.equal(day.sleepSummary.deepSleepMinutes, 145);
+  assert.equal(day.sleepSummary.sleepScore, 81);
+  assert.equal(day.sleepSummary.averageHeartRateBpm, 68);
 });
 
 test('readArchiveTrainingSnapshotFromDatabaseClient reads schema-defined archive columns', async () => {
@@ -472,7 +476,7 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls.at(-1)[0], 'end');
 });
 
-test('persistNormalizedBatch stores sleep payload in core sleep rows', async () => {
+test('persistNormalizedBatch stores sleep payload in core and archive sleep rows', async () => {
   const calls = [];
   const fakeClient = {
     async connect() {
@@ -542,17 +546,31 @@ test('persistNormalizedBatch stores sleep payload in core sleep rows', async () 
 
   const trainingDayInsert = calls.find(([sql]) => /insert into core\.training_day/i.test(sql));
   const sleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
+  const archiveSleepInsert = calls.find(([sql]) => /insert into archive\.training_sleep/i.test(sql));
   const ingestBatchInsert = calls.find(([sql]) => /insert into ingest\.telegram_batch/i.test(sql));
 
   assert.ok(trainingDayInsert);
   assert.ok(sleepInsert);
+  assert.ok(archiveSleepInsert);
   assert.ok(ingestBatchInsert);
-  assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), false);
   assert.equal(sleepInsert[1][0][0], createHash('md5').update('2026-06-03|夜间睡眠|23:26|06:19|411').digest('hex'));
   assert.deepEqual(sleepInsert[1][1], ['2026-06-03']);
   assert.deepEqual(sleepInsert[1][7], [411]);
   assert.deepEqual(sleepInsert[1][8], [411]);
   assert.deepEqual(sleepInsert[1][10], [145]);
+  assert.deepEqual(sleepInsert[1][16], [81]);
+  assert.deepEqual(sleepInsert[1][17], [77]);
+  assert.deepEqual(sleepInsert[1][24], [68]);
+  assert.deepEqual(sleepInsert[1][29], ['建议睡觉时关灯。']);
+  assert.equal(archiveSleepInsert[1][0][0], createHash('md5').update('2026-06-03|夜间睡眠|23:26|06:19|411').digest('hex'));
+  assert.deepEqual(archiveSleepInsert[1][1], ['2026-06-03']);
+  assert.equal(archiveSleepInsert[1][2][0].length, 64);
+  assert.deepEqual(archiveSleepInsert[1][7], [411]);
+  assert.deepEqual(archiveSleepInsert[1][9], [145]);
+  assert.deepEqual(archiveSleepInsert[1][15], [81]);
+  assert.deepEqual(archiveSleepInsert[1][16], [77]);
+  assert.deepEqual(archiveSleepInsert[1][23], [68]);
+  assert.deepEqual(archiveSleepInsert[1][28], ['建议睡觉时关灯。']);
   assert.equal(trainingDayInsert[1].length, 12);
   assert.equal(JSON.parse(ingestBatchInsert[1][9]).sleep.records[0].totalSleepMinutes, 411);
 });
@@ -652,7 +670,7 @@ test('persistNormalizedBatch merges an existing core day using only schema-defin
   const trainingDayInsert = calls.find(([sql]) => /insert into core\.training_day/i.test(sql));
 
   assert.ok(trainingDayInsert);
-  assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), true);
   assert.ok(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)));
   assert.equal(trainingDayInsert[1].length, 12);
 });
