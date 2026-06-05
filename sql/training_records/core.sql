@@ -12,7 +12,7 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 04/06/2026 16:12:53
+ Date: 05/06/2026 16:20:52
 */
 
 
@@ -104,6 +104,7 @@ CREATE TABLE "core"."sleep" (
   "awake_minutes" int4,
   "sleep_stage_text" text COLLATE "pg_catalog"."default",
   "sleep_stage_detail" text COLLATE "pg_catalog"."default",
+  "updated_at" timestamptz(6) NOT NULL,
   "sleep_score" int4,
   "sleep_score_percentile" int4,
   "deep_sleep_ratio_pct" numeric(10,2),
@@ -117,10 +118,41 @@ CREATE TABLE "core"."sleep" (
   "average_spo2_pct" numeric(10,2),
   "average_respiratory_rate" numeric(10,2),
   "analysis_text" text COLLATE "pg_catalog"."default",
-  "suggestion_text" text COLLATE "pg_catalog"."default",
-  "updated_at" timestamptz(6) NOT NULL
+  "suggestion_text" text COLLATE "pg_catalog"."default"
 )
 ;
+COMMENT ON COLUMN "core"."sleep"."sleep_key" IS '睡眠记录幂等键，按归档日期、睡眠类型、入睡时间、醒来时间和总睡眠分钟数生成';
+COMMENT ON COLUMN "core"."sleep"."archived_date" IS '归档日期，关联 core.training_day.archived_date';
+COMMENT ON COLUMN "core"."sleep"."source_channel" IS '来源通道，例如 telegram、markdown_import、archive_backfill 或 ingest_sleep_backfill';
+COMMENT ON COLUMN "core"."sleep"."source_batch_id" IS '来源批次 ID，用于追踪 Telegram 批次或导入批次';
+COMMENT ON COLUMN "core"."sleep"."sleep_type" IS '睡眠类型，通常为夜间睡眠或午睡';
+COMMENT ON COLUMN "core"."sleep"."bedtime" IS '入睡时间文本，保留截图或识别结果中的原始时分';
+COMMENT ON COLUMN "core"."sleep"."wake_time" IS '醒来时间文本，保留截图或识别结果中的原始时分';
+COMMENT ON COLUMN "core"."sleep"."night_sleep_minutes" IS '夜间睡眠分钟数';
+COMMENT ON COLUMN "core"."sleep"."total_sleep_minutes" IS '总睡眠分钟数，页面睡眠卡片优先使用该字段汇总';
+COMMENT ON COLUMN "core"."sleep"."nap_minutes" IS '午睡分钟数，没有午睡记录时为空';
+COMMENT ON COLUMN "core"."sleep"."deep_sleep_minutes" IS '深睡分钟数';
+COMMENT ON COLUMN "core"."sleep"."light_sleep_minutes" IS '浅睡分钟数';
+COMMENT ON COLUMN "core"."sleep"."rem_sleep_minutes" IS '快速眼动 REM 睡眠分钟数';
+COMMENT ON COLUMN "core"."sleep"."awake_minutes" IS '睡眠期间清醒分钟数';
+COMMENT ON COLUMN "core"."sleep"."sleep_stage_text" IS '睡眠阶段摘要文本，例如深睡、浅睡、REM 的自然语言描述';
+COMMENT ON COLUMN "core"."sleep"."sleep_stage_detail" IS '睡眠阶段详情文本或 JSON 字符串，保留更细粒度的阶段信息';
+COMMENT ON COLUMN "core"."sleep"."updated_at" IS '该睡眠记录最近更新时间';
+COMMENT ON COLUMN "core"."sleep"."sleep_score" IS '睡眠评分，例如华为睡眠卡片中的 81 分';
+COMMENT ON COLUMN "core"."sleep"."sleep_score_percentile" IS '超过用户百分比，只保存数字部分';
+COMMENT ON COLUMN "core"."sleep"."deep_sleep_ratio_pct" IS '深睡比例百分比，只保存数字部分';
+COMMENT ON COLUMN "core"."sleep"."light_sleep_ratio_pct" IS '浅睡比例百分比，只保存数字部分';
+COMMENT ON COLUMN "core"."sleep"."rem_sleep_ratio_pct" IS '快速眼动 REM 比例百分比，只保存数字部分';
+COMMENT ON COLUMN "core"."sleep"."deep_sleep_continuity_score" IS '深睡连续性评分';
+COMMENT ON COLUMN "core"."sleep"."wake_count" IS '清醒次数';
+COMMENT ON COLUMN "core"."sleep"."breathing_quality_score" IS '呼吸质量评分';
+COMMENT ON COLUMN "core"."sleep"."average_heart_rate_bpm" IS '平均心率，单位次/分钟';
+COMMENT ON COLUMN "core"."sleep"."hrv_ms" IS '平均心率变异性 HRV，单位毫秒';
+COMMENT ON COLUMN "core"."sleep"."average_spo2_pct" IS '平均血氧饱和度百分比';
+COMMENT ON COLUMN "core"."sleep"."average_respiratory_rate" IS '平均呼吸率，单位次/分钟';
+COMMENT ON COLUMN "core"."sleep"."analysis_text" IS '截图底部睡眠解读文本';
+COMMENT ON COLUMN "core"."sleep"."suggestion_text" IS '截图底部睡眠建议文本';
+COMMENT ON TABLE "core"."sleep" IS '核心训练睡眠明细表，Telegram 或 Markdown 解析后的每条睡眠记录一行';
 
 -- ----------------------------
 -- Table structure for thought

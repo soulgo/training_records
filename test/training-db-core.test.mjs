@@ -514,6 +514,7 @@ test('persistNormalizedBatch stores sleep payload in core and archive sleep rows
             deepSleepMinutes: 145,
             lightSleepMinutes: 195,
             remSleepMinutes: 71,
+            sleepStageDetail: ['深睡 2小时25分钟', '浅睡 3小时15分钟'],
             sleepScore: 81,
             sleepScorePercentile: 77,
             deepSleepRatioPct: 35,
@@ -553,6 +554,8 @@ test('persistNormalizedBatch stores sleep payload in core and archive sleep rows
   assert.ok(sleepInsert);
   assert.ok(archiveSleepInsert);
   assert.ok(ingestBatchInsert);
+  assert.match(sleepInsert[0], /\$16::jsonb\[\]/i);
+  assert.match(archiveSleepInsert[0], /\$15::jsonb\[\]/i);
   assert.equal(sleepInsert[1][0][0], createHash('md5').update('2026-06-03|夜间睡眠|23:26|06:19|411').digest('hex'));
   assert.deepEqual(sleepInsert[1][1], ['2026-06-03']);
   assert.deepEqual(sleepInsert[1][7], [411]);

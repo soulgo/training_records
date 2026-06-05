@@ -289,6 +289,7 @@ test('persistTrainingArchive writes sleep health metrics into archive sleep rows
   assert.match(sleepInsert[0], /sleep_score/i);
   assert.match(sleepInsert[0], /average_heart_rate_bpm/i);
   assert.match(sleepInsert[0], /analysis_text/i);
+  assert.match(sleepInsert[0], /\$15::jsonb/i);
   assert.equal(sleepInsert[1][15], 81);
   assert.equal(sleepInsert[1][16], 77);
   assert.equal(sleepInsert[1][23], 68);
