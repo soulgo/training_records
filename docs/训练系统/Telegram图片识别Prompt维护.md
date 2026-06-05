@@ -28,6 +28,7 @@ node tools/prompt-generator.mjs
 - schema 字段名不要在 prompt 里改名；字段结构由 `buildRecognitionSchema()` 约束。
 - 新增识别字段时，需要同步修改 schema、`analyzeTelegramBatch()`、数据库/Markdown 写入逻辑和测试。
 - 如果新增的是睡眠识别字段，还要同步更新 `core.sleep`、`archive.training_sleep` 和 `archive.training_day` 的睡眠汇总列。
+- 睡眠截图的时间语义要和程序侧一致：AI 负责提取真实入睡/起床时间，程序负责把醒来时间前一天作为睡眠归档日。
 - 不确定日期时宁可让 `detectedDate` 为 `null`，交给现有跳过/回退逻辑处理。
 
 当前日期识别口径：

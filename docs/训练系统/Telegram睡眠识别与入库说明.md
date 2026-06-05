@@ -29,7 +29,11 @@
 - `sleepType` 默认写 `夜间睡眠`
 - `bedtime`、`wakeTime` 只填写截图里可见的真实时间
 - `sleepStageDetail` 只保留画面明确可见的信息，不要补全推断
+- 睡眠截图需要提取的健康指标包括：`sleepScore`、`sleepScorePercentile`、`deepSleepRatioPct`、`lightSleepRatioPct`、`remSleepRatioPct`、`deepSleepContinuityScore`、`wakeCount`、`breathingQualityScore`、`averageHeartRateBpm`、`hrvMs`、`averageSpo2Pct`、`averageRespiratoryRate`
+- `analysisText` 写截图底部的睡眠解读，`suggestionText` 写截图底部的睡眠建议
 - 遇到跨天、多个日期或日期冲突时，宁可让 `detectedDate` 为 `null`
+- 夜间睡眠的归档日期以醒来时间为准：程序侧会把醒来日期减一天后写入睡眠归档日期，不要求 AI 自行换算归档日
+- 只要截图中能明确看出入睡日和醒来日，优先提供真实的入睡时间和醒来时间，不要为了归档日期改写它们
 
 ## 3. 同步层口径
 
