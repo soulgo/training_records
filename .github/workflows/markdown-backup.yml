@@ -1,0 +1,120 @@
+name: Markdown Backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '37 19 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: markdown-backup-${{ vars.MARKDOWN_BACKUP_BRANCH || 'main' }}
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      MARKDOWN_BACKUP_ENABLED: ${{ vars.MARKDOWN_BACKUP_ENABLED || 'false' }}
+      MARKDOWN_BACKUP_FREQUENCY: ${{ vars.MARKDOWN_BACKUP_FREQUENCY || 'weekly' }}
+      MARKDOWN_BACKUP_BRANCH: ${{ vars.MARKDOWN_BACKUP_BRANCH || 'main' }}
+      MARKDOWN_BACKUP_COMMIT: ${{ vars.MARKDOWN_BACKUP_COMMIT || 'true' }}
+      TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
+      TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
+      TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
+      TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
+      TRAINING_SNAPSHOT_SOURCE: database
+      TRAINING_SNAPSHOT_STRICT_DATABASE: 'true'
+    steps:
+      - name: Decide whether to run
+        id: gate
+        shell: bash
+        run: |
+          enabled="$(printf '%s' "$MARKDOWN_BACKUP_ENABLED" | tr '[:upper:]' '[:lower:]')"
+          frequency="$(printf '%s' "$MARKDOWN_BACKUP_FREQUENCY" | tr '[:upper:]' '[:lower:]')"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run_backup=true" >> "$GITHUB_OUTPUT"
+            echo "reason=manual" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$enabled" != "true" ]; then
+            echo "run_backup=false" >> "$GITHUB_OUTPUT"
+            echo "reason=disabled" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$frequency" = "daily" ]; then
+            echo "run_backup=true" >> "$GITHUB_OUTPUT"
+            echo "reason=daily" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$frequency" = "weekly" ] && [ "$(date -u +%u)" = "1" ]; then
+            echo "run_backup=true" >> "$GITHUB_OUTPUT"
+            echo "reason=weekly" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "run_backup=false" >> "$GITHUB_OUTPUT"
+          echo "reason=frequency_gate" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout backup branch
+        if: steps.gate.outputs.run_backup == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.MARKDOWN_BACKUP_BRANCH }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        if: steps.gate.outputs.run_backup == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.gate.outputs.run_backup == 'true'
+        run: npm ci
+
+      - name: Export markdown from database
+        if: steps.gate.outputs.run_backup == 'true'
+        run: npm run export:markdown
+
+      - name: Detect backup changes
+        if: steps.gate.outputs.run_backup == 'true'
+        id: detect
+        shell: bash
+        run: |
+          if [ -z "$(git status --porcelain -- 训练记录.md source/_posts source/images)" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit markdown backup
+        if: steps.gate.outputs.run_backup == 'true' && steps.detect.outputs.changed == 'true' && env.MARKDOWN_BACKUP_COMMIT == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 训练记录.md source/_posts source/images
+          git commit -m "chore: backup markdown from database"
+          git push origin HEAD:"$MARKDOWN_BACKUP_BRANCH"
+
+      - name: Write backup summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Markdown backup"
+            echo ""
+            echo "- Gate: ${{ steps.gate.outputs.run_backup || 'false' }}"
+            echo "- Reason: ${{ steps.gate.outputs.reason || 'unknown' }}"
+            echo "- Frequency: ${MARKDOWN_BACKUP_FREQUENCY}"
+            echo "- Branch: ${MARKDOWN_BACKUP_BRANCH}"
+            echo "- Commit enabled: ${MARKDOWN_BACKUP_COMMIT}"
+            echo "- Changed: ${{ steps.detect.outputs.changed || 'not_run' }}"
+          } >> "$GITHUB_STEP_SUMMARY"

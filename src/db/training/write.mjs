@@ -21,6 +21,7 @@ import {
   normalizeThoughtModule,
   normalizeThoughtModuleOrNull,
 } from '../../../tools/lib/thought-modules.mjs';
+import { persistTelegramImageBatchIncremental } from './incremental-write.mjs';
 import {
   insertArchiveSleep,
   insertCoreActivities,
@@ -105,6 +106,8 @@ export async function persistNormalizedBatch(options) {
 
     if (isThoughtBatchKind(batch.kind) && batch.status === 'ready') {
       await persistThoughtMirror(client, batch, processedAt);
+    } else if (isTelegramImageBatch(batch) && batch.status === 'ready' && batch.archivedDate) {
+      await persistTelegramImageBatchIncremental(client, batch, processedAt);
     } else if (batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
       const existingDay = await readCoreDay(client, batch.archivedDate);
       const mergedDay = mergeBatchIntoDay(existingDay, batch);
@@ -690,7 +693,7 @@ async function persistThoughtMirror(client, batch, processedAt) {
       chatId: batch.thoughtMove?.telegramChatId,
       sourceBatchId: batch.batchId,
       command: batch.thoughtMove?.command ?? '/移动',
-      body: '',
+      body: null,
       thoughtModule: normalizeThoughtModuleOrNull(batch.thoughtMove?.thoughtModule),
       tags: batch.thoughtMove?.tags ?? null,
       messageDateUnix: batch.thoughtMove?.messageDateUnix ?? null,
@@ -745,14 +748,14 @@ export async function persistThoughtToCore(client, thought) {
         deleted_at,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, coalesce($10::jsonb, '[]'::jsonb), $11, null, $12)
+      values ($1, $2, $3, $4, coalesce($5, ''), coalesce($6, 'workout'), coalesce($7::jsonb, '["训练","随想","Telegram"]'::jsonb), $8, $9, coalesce($10::jsonb, '[]'::jsonb), $11, null, $12)
       on conflict (telegram_message_id) do update set
         telegram_chat_id = coalesce(excluded.telegram_chat_id, core.thought.telegram_chat_id),
         source_batch_id = excluded.source_batch_id,
         command = excluded.command,
-        body = excluded.body,
-        thought_module = coalesce(excluded.thought_module, core.thought.thought_module),
-        tags_json = excluded.tags_json,
+        body = coalesce($5, core.thought.body),
+        thought_module = coalesce($6, core.thought.thought_module),
+        tags_json = coalesce($7::jsonb, core.thought.tags_json),
         message_date_unix = coalesce(excluded.message_date_unix, core.thought.message_date_unix),
         markdown_path = coalesce(excluded.markdown_path, core.thought.markdown_path),
         image_refs_json = case
@@ -768,9 +771,11 @@ export async function persistThoughtToCore(client, thought) {
       normalizeBigIntValue(thought.chatId),
       thought.sourceBatchId ?? null,
       thought.command ?? '/thought',
-      String(thought.body ?? '').trim(),
-      normalizeThoughtModuleOrNull(thought.thoughtModule) ?? 'workout',
-      JSON.stringify(thought.tags ?? getThoughtModuleTags(thought.thoughtModule)),
+      thought.body === null || thought.body === undefined
+        ? null
+        : String(thought.body).trim(),
+      normalizeThoughtModuleOrNull(thought.thoughtModule),
+      thought.tags ? JSON.stringify(thought.tags) : null,
       normalizeBigIntValue(thought.messageDateUnix),
       thought.markdownPath ?? null,
       Array.isArray(thought.imageRefs) ? JSON.stringify(thought.imageRefs) : null,
@@ -811,7 +816,7 @@ async function markThoughtMirrorDeleted(client, thought) {
         telegram_chat_id = coalesce(excluded.telegram_chat_id, core.thought.telegram_chat_id),
         source_batch_id = excluded.source_batch_id,
         command = excluded.command,
-        thought_module = coalesce(excluded.thought_module, core.thought.thought_module),
+        thought_module = coalesce($5, core.thought.thought_module),
         markdown_path = coalesce(excluded.markdown_path, core.thought.markdown_path),
         image_refs_json = excluded.image_refs_json,
         status = excluded.status,

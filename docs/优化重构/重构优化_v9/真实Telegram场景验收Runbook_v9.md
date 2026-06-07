@@ -117,10 +117,10 @@
 
 第一次预期：
 
-- Telegram 回执说明 Markdown 已写入、数据库待补偿。
-- `persistenceStatus` 为 `fallback_markdown` 或 `pending_replay`。
+- Telegram 回执说明已记录、数据库待补偿。
+- `persistenceStatus` 为 `pending_replay`。
 - `failureDisposition` 为 `auto_retry`。
-- `训练记录.md` 目标日期写入本批次内容。
+- `训练记录.md` 不写入本批次内容，等待 DB -> Markdown 备份导出。
 - pending 队列包含该 batch。
 
 恢复后预期：

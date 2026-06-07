@@ -23,8 +23,8 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
     action,
     /key:\s*hexo-\$\{\{\s*runner\.os\s*\}\}-\$\{\{\s*hashFiles\('package-lock\.json', '_config\.yml', 'source\/\*\*', 'themes\/\*\*'\)\s*\}\}/,
   );
-  assert.match(action, /- name: Sync archive and markdown to database/);
-  assert.match(action, /- name: Detect database sync input changes/);
+  assert.match(action, /- name: Sync safe database repairs/);
+  assert.match(action, /- name: Detect safe database sync input changes/);
   assert.match(action, /sync_db_needed=false/);
   assert.match(action, /sync_db_reason=no_data_changes/);
   assert.match(action, /if: \$\{\{ inputs\.run_backfill == 'true' && \(inputs\.sync_db_mode == 'always' \|\| steps\.sync_db_changes\.outputs\.sync_db_needed == 'true'\) \}\}/);
@@ -84,6 +84,7 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
     '.github/workflows/deploy-cloudflare-worker-dev.yml',
     '.github/workflows/deploy-cloudflare-pages-dev.yml',
     '.github/workflows/refresh-telegram-webhook.yml',
+    '.github/workflows/markdown-backup.yml',
     '.github/workflows/ci-tests.yml',
     'package.json',
     'package-lock.json',
@@ -229,12 +230,9 @@ test('telegram-sync workflow keeps change detection and maintenance gating intac
   assert.match(workflow, /content_changed=false/);
   assert.match(
     workflow,
-    /- name: Sync archive and markdown to database\n\s+if: github\.event_name != 'repository_dispatch'\n\s+run:\s*npm run sync:db/,
+    /- name: Sync safe database repairs\n\s+if: github\.event_name != 'repository_dispatch'\n\s+run:\s*npm run sync:db/,
   );
-  assert.match(
-    workflow,
-    /- name: Export markdown from database snapshot\n\s+if: github\.event_name != 'repository_dispatch'/,
-  );
+  assert.doesNotMatch(workflow, /- name: Export markdown from database snapshot/);
   assert.doesNotMatch(workflow, /run:\s*npm run backfill:core/);
   assert.doesNotMatch(workflow, /run:\s*npm run reconcile:markdown/);
   assert.doesNotMatch(workflow, /run:\s*npm run backfill:thoughts/);
@@ -257,6 +255,27 @@ test('telegram-sync workflows keep database-only detection without blocking on p
     assert.match(workflow, /strict_database_snapshot/);
     assert.doesNotMatch(workflow, /steps\.detect\.outputs\.db_content_changed == 'true'[\s\S]*uses:\s*\.\/\.github\/actions\/site-build/);
   }
+});
+
+test('markdown backup workflow exports database snapshots behind GitHub variable gates', async () => {
+  const workflow = await readWorkflow('.github/workflows/markdown-backup.yml');
+
+  assert.match(workflow, /name:\s*Markdown Backup/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /schedule:\s*\n\s*-\s*cron:\s*'37 19 \* \* \*'/);
+  assert.match(workflow, /MARKDOWN_BACKUP_ENABLED:\s*\$\{\{\s*vars\.MARKDOWN_BACKUP_ENABLED \|\| 'false'\s*\}\}/);
+  assert.match(workflow, /MARKDOWN_BACKUP_FREQUENCY:\s*\$\{\{\s*vars\.MARKDOWN_BACKUP_FREQUENCY \|\| 'weekly'\s*\}\}/);
+  assert.match(workflow, /MARKDOWN_BACKUP_BRANCH:\s*\$\{\{\s*vars\.MARKDOWN_BACKUP_BRANCH \|\| 'main'\s*\}\}/);
+  assert.match(workflow, /MARKDOWN_BACKUP_COMMIT:\s*\$\{\{\s*vars\.MARKDOWN_BACKUP_COMMIT \|\| 'true'\s*\}\}/);
+  assert.match(workflow, /TRAINING_SNAPSHOT_SOURCE:\s*database/);
+  assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:\s*'true'/);
+  assert.match(workflow, /if \[ "\$enabled" != "true" \]/);
+  assert.match(workflow, /if \[ "\$frequency" = "daily" \]/);
+  assert.match(workflow, /if \[ "\$frequency" = "weekly" \] && \[ "\$\(date -u \+%u\)" = "1" \]/);
+  assert.match(workflow, /run:\s*npm run export:markdown/);
+  assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
+  assert.match(workflow, /git commit -m "chore: backup markdown from database"/);
+  assert.match(workflow, /git push origin HEAD:"\$MARKDOWN_BACKUP_BRANCH"/);
 });
 
 test('telegram-sync dev workflow only handles dev dispatches and writes dev branch', async () => {

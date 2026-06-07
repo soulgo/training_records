@@ -7,7 +7,6 @@ import {
   parseDurationSeconds,
 } from '../../domain/training/training-domain.mjs';
 import {
-  insertArchiveSleep,
   insertCoreActivities,
   insertCoreMeals,
   insertCoreMeasurements,
@@ -31,7 +30,7 @@ const SLEEP_HEALTH_FIELDS = [
   'suggestionText',
 ];
 
-export async function persistTelegramImageBatchIncremental(client, batch, payloadHash, processedAt) {
+export async function persistTelegramImageBatchIncremental(client, batch, processedAt) {
   const day = buildTelegramImageBatchDay(batch);
   if (!day) {
     return;
@@ -49,10 +48,6 @@ export async function persistTelegramImageBatchIncremental(client, batch, payloa
   await insertCoreActivities(client, [day], options, processedAtIso);
   await insertCoreMeals(client, [day], options, processedAtIso);
   await insertCoreSleep(client, [day], options, processedAtIso);
-
-  if (day.sleep.length > 0) {
-    await insertArchiveSleep(client, [day], { ...options, sourceHash: payloadHash }, processedAtIso);
-  }
 
   await refreshCoreTrainingDaySummary(client, batch, processedAtIso);
 }

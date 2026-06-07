@@ -1,18 +1,18 @@
 # 健身训练记录看板
 
-这是一个用 Markdown、PostgreSQL、Telegram Bot、AI 图片识别、Hexo 和 GitHub Pages 组成的个人训练记录系统。它的核心目标是把训练截图、体脂秤截图、饮食截图、睡眠截图和日常身体反馈归档成统一的 `TrainingSnapshot`，再生成可浏览的静态训练看板。
+这是一个用 PostgreSQL、Telegram Bot、AI 图片识别、Markdown 备份、Hexo 和 GitHub Pages 组成的个人训练记录系统。它的核心目标是把训练截图、体脂秤截图、饮食截图、睡眠截图和日常身体反馈归档成统一的 `TrainingSnapshot`，再生成可浏览的静态训练看板。
 
-系统当前没有独立后台、OCR 服务后台或管理后台。主要维护入口是 `训练记录.md`、Telegram Bot、npm scripts、GitHub Actions 和 `docs/` 文档。
+系统当前没有独立后台、OCR 服务后台或管理后台。主要维护入口是 Telegram Bot、PostgreSQL、npm scripts、GitHub Actions 和 `docs/` 文档；`训练记录.md` 是数据库派生备份。
 
 ## 核心功能
 
-- 从 `训练记录.md` 解析训练、体脂、饮食和睡眠记录。
 - 从 PostgreSQL `core.*` 读取结构化训练数据。
 - 通过 Telegram 发送锻炼、饮食、体脂秤和睡眠截图，并调用 AI 识别归档。
-- Telegram `/随想` / `/thought` 生成站点随想文章，支持编辑、删除、移动和带图。
+- Telegram `/随想` / `/thought` 写入随想和身体反馈，支持编辑、删除、移动和带图。
 - Telegram `/分析` / `/analysis` 基于训练快照生成训练建议，只回发 Telegram，不写入数据。
 - Telegram `/ai` / `/智能助手` 调用 MCP 工具查询历史、同步状态或生成综合回答。
-- PostgreSQL 写入失败时，图片批次回退写 `训练记录.md`，随想批次保留 Markdown 并进入待补偿队列。
+- PostgreSQL 写入失败时，批次进入待补偿队列，数据库恢复后重放。
+- 定时从数据库导出 Markdown 备份。
 - 生成 `source/_data/training.json` 和 `source/_data/dashboardView.json`，由 Hexo 渲染为 GitHub Pages 静态站点。
 
 ## 技术栈
@@ -33,15 +33,15 @@
 
 ```mermaid
 flowchart TD
-  A["训练记录.md"] --> S["TrainingSnapshot"]
   DB["PostgreSQL core.*"] --> S
   TG["Telegram 图片/命令"] --> W["Cloudflare Worker"]
   W --> GH["GitHub repository_dispatch"]
   GH --> SYNC["npm run sync:telegram"]
   SYNC --> AI["AI 图片识别/分析"]
   SYNC --> DB
-  SYNC -. "DB 失败" .-> A
-  SYNC --> P["source/_posts / source/images"]
+  SYNC -. "DB 失败" .-> Q["pending queue"]
+  DB --> BAK["Markdown Backup"]
+  BAK --> A["训练记录.md / source/_posts"]
   S --> DATA["source/_data/training.json + dashboardView.json"]
   DATA --> HEXO["Hexo generate"]
   HEXO --> PAGES["GitHub Pages"]
@@ -71,7 +71,7 @@ flowchart TD
 
 关键目录说明：
 
-- `训练记录.md`：人工可读训练记录，也是数据库失败时训练数据回退写入点。
+- `训练记录.md`：数据库派生的人工可读训练备份。
 - `训练数据解析.md`：`npm run build:data` 生成的解析排查输出，不建议手工维护。
 - `source/`：Hexo 内容源，包含首页、随想页、文章、图片和 CNAME。
 - `source/_data/`：构建生成的 `training.json` 与 `dashboardView.json`。
@@ -109,7 +109,7 @@ npm run build
 npm run server
 ```
 
-默认数据源是 Markdown。未配置 PostgreSQL 时，本地页面仍可从 `训练记录.md` 构建。
+线上推荐数据源是 PostgreSQL。未配置 PostgreSQL 时，本地仍可显式使用 Markdown 兼容构建。
 
 ## 配置方式
 
@@ -117,7 +117,7 @@ npm run server
 
 | 变量 | 作用 |
 | --- | --- |
-| `TRAINING_SNAPSHOT_SOURCE` | 页面和分析数据源，`markdown` 或 `database`，默认 `markdown` |
+| `TRAINING_SNAPSHOT_SOURCE` | 页面和分析数据源，`markdown` 或 `database`，线上推荐 `database` |
 | `TRAINING_SNAPSHOT_STRICT_DATABASE` | 严格数据库快照模式，数据库源失败时不回退 Markdown，默认 `false` |
 | `TRAINING_DB_ENABLED` | 是否启用 PostgreSQL |
 | `TRAINING_DB_URL` | PostgreSQL 连接串 |
@@ -134,6 +134,8 @@ npm run server
 | `TRAINING_ANALYSIS_GOAL` | `/分析` 长期训练目标覆盖值 |
 | `TELEGRAM_WEBHOOK_URL` | Telegram webhook 目标地址 |
 | `TELEGRAM_SECRET_TOKEN` | Telegram webhook secret header 校验值 |
+| `MARKDOWN_BACKUP_ENABLED` | 是否启用 DB -> Markdown 定时备份 |
+| `MARKDOWN_BACKUP_FREQUENCY` | Markdown 备份频率，`weekly` 或 `daily` |
 
 完整配置见 [GitHub与Cloudflare配置](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/部署维护/GitHub与Cloudflare配置.md) 和 [日常维护手册](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/部署维护/日常维护手册.md)。
 
@@ -141,10 +143,10 @@ npm run server
 
 手工维护流程：
 
-1. 编辑 `训练记录.md`。
+1. 优先通过 Telegram 或数据库维护入口写入数据。
 2. 执行 `npm run build:data` 生成快照和解析排查文件。
 3. 执行 `npm run build` 生成静态站点。
-4. 如需同步 PostgreSQL，执行 `npm run import:markdown` 或让 GitHub Actions 执行对账流程。
+4. 只有确认 Markdown 是完整可信快照时，才显式执行 `npm run import:markdown`。
 
 Telegram 自动流程：
 
@@ -152,15 +154,15 @@ Telegram 自动流程：
 2. Worker 校验 secret；帮助消息直接回复，其它消息触发 GitHub `repository_dispatch`。
 3. `telegram-sync.yml` 执行 `npm run sync:telegram`。
 4. 图片批次调用 AI 识别；随想、分析、AI Agent 按命令分支处理。
-5. 图片和随想优先写 PostgreSQL。
-6. PostgreSQL 失败时写 Markdown 或 pending 队列。
+5. 图片、随想和身体反馈写 PostgreSQL。
+6. PostgreSQL 失败时写 pending 队列。
 7. 内容变化后 workflow 只提交文件；站点构建部署由 push 或 DB-only 异步 deploy workflow 完成。
 
 详细规则见 [训练记录生成与解析](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/训练系统/训练记录生成与解析.md)。
 
 ## GitHub Pages 部署
 
-`.github/workflows/deploy-pages.yml` 在 `main` 分支站点相关文件变更或手动触发时运行。它调用 `.github/actions/site-build/action.yml`，完成依赖安装、可选回填/对账、构建和 Pages 部署。
+`.github/workflows/deploy-pages.yml` 在 `main` 分支站点相关文件变更或手动触发时运行。它调用 `.github/actions/site-build/action.yml`，完成依赖安装、安全数据库修复、构建和 Pages 部署，不做 Markdown 回灌数据库。
 
 站点配置在 `_config.yml`，当前 URL 为 `https://soulgo.chat`，`source/CNAME` 也指向 `soulgo.chat`。GitHub Pages 自定义域名、DNS 和 Cloudflare 控制台状态需要在对应平台人工确认。
 
@@ -174,6 +176,7 @@ Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` �
 | `deploy-pages.yml` | 构建并部署 GitHub Pages |
 | `deploy-cloudflare-pages-dev.yml` | 构建 dev 分支并部署 Cloudflare Pages 预览 |
 | `telegram-sync.yml` | 处理 Telegram 同步、提交内容变化，并在 DB-only 入库时异步触发站点部署 |
+| `markdown-backup.yml` | 按 GitHub Variables 控制定时从数据库导出 Markdown 备份 |
 | `deploy-cloudflare-worker.yml` | 部署 Cloudflare Worker，并刷新 Telegram webhook |
 | `refresh-telegram-webhook.yml` | 手动或每 6 小时刷新 Telegram webhook |
 
@@ -181,12 +184,12 @@ Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` �
 
 ## 数据来源说明
 
-系统当前有两层事实源：
+系统当前的事实源和备份层：
 
-- `训练记录.md`：人工可读、人工修订、页面默认数据源和数据库故障回退层。
-- PostgreSQL `core.*`：Telegram 自动同步后的主结构化数据层。
+- PostgreSQL `core.*`：训练、饮食、体脂、睡眠、随想、身体反馈的唯一事实源。
+- `训练记录.md` / `source/_posts`：从数据库导出的 Markdown 备份层。
 
-`TRAINING_SNAPSHOT_SOURCE=markdown` 时，页面从 Markdown 构建；`TRAINING_SNAPSHOT_SOURCE=database` 时，页面从 PostgreSQL 构建。数据库源不可用时，部分构建路径会按现有 fallback 规则回退到 Markdown；DB-only 异步部署会启用 `TRAINING_SNAPSHOT_STRICT_DATABASE=true`，避免读库失败时发布旧 Markdown 页面。
+`TRAINING_SNAPSHOT_SOURCE=database` 时，页面从 PostgreSQL 构建。DB-only 异步部署会启用 `TRAINING_SNAPSHOT_STRICT_DATABASE=true`，避免读库失败时发布旧 Markdown 页面。
 
 ## 常见维护操作
 
@@ -197,10 +200,10 @@ Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` �
 | 生成训练数据 | `npm run build:data` |
 | 构建站点 | `npm run build` |
 | 本地预览 | `npm run server` |
-| 同步 archive/Markdown/随想到数据库 | `npm run sync:db` |
-| Markdown 导入数据库 | `npm run import:markdown` |
-| 数据库导出 Markdown | `npm run export:markdown` |
-| Markdown 与数据库对账 | `npm run reconcile:markdown` |
+| 安全同步 archive/ingest/随想到数据库 | `npm run sync:db` |
+| 显式 Markdown 导入数据库 | `npm run import:markdown` |
+| 数据库导出 Markdown 备份 | `npm run export:markdown` |
+| 显式 Markdown 与数据库对账 | `npm run reconcile:markdown` |
 | 重放/补齐 archive 到 core | `npm run backfill:core` |
 | 随想 Markdown 回填 core | `npm run backfill:thoughts` |
 | 处理 Telegram 同步 | `npm run sync:telegram` |
@@ -222,7 +225,7 @@ Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` �
 ## FAQ
 
 **页面数据来自哪里？**
-由 `TRAINING_SNAPSHOT_SOURCE` 决定。默认从 `训练记录.md` 构建，也可以切到 PostgreSQL `core.*`。
+由 `TRAINING_SNAPSHOT_SOURCE` 决定。线上推荐从 PostgreSQL `core.*` 构建。
 
 **`训练数据解析.md` 可以手工改吗？**
 不建议。它由 `npm run build:data` 生成，用于排查解析结果，下一次构建会覆盖。
@@ -237,7 +240,7 @@ Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` �
 不会。当前 Agent 入口只调用 MCP 查询和分析类工具，不写 Markdown、数据库或 Telegram 以外的状态。
 
 **数据库挂了会丢数据吗？**
-图片批次会回退写 `训练记录.md` 并进入 `runtime/telegram-sync-pending.ndjson`；随想批次会保留已经生成的 Markdown，并进入待补偿队列。数据库恢复后，下次同步会先重放队列。
+批次会进入 pending 队列。数据库恢复后，下次同步会先重放队列；Markdown 备份由数据库恢复后的导出 workflow 生成。
 
 ## 注意事项
 

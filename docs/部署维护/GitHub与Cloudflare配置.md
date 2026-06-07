@@ -329,17 +329,16 @@ npx wrangler deploy
 并且运行时使用 `TELEGRAM_SYNC_TRANSPORT=webhook`：
 
 - `repository_dispatch` 时直接消费 webhook payload
-- `repository_dispatch` 使用快速路径：跳过全量 archive backfill、Markdown reconcile 和额外 export，只处理当前 Telegram payload、pending recognition 和 pending fallback
+- `repository_dispatch` 使用快速路径：跳过全量 archive backfill、Markdown reconcile 和额外 export，只处理当前 Telegram payload、pending recognition 和 pending replay
 - `push` / 手动触发时不会再调用 `getUpdates`
-- `push` / 手动触发仍会执行完整 backfill、reconcile 和 export，用于维护或修复主数据
+- `push` / 手动触发仍只执行安全数据库修复；Markdown reconcile/import/export 均为显式人工维护或备份 workflow
 - 由 `github-actions[bot]` 推送出来的同步提交会跳过二次 `Telegram Sync`
-- 仍然会重放待补偿批次并在需要时刷新 Markdown
-- 正常 `ready + stored` 图片批次不再默认全量导出覆盖 `训练记录.md`；如果需要更新人工账本，只对本批次目标日期做增量合并
-- 当同步提交了新的 `训练记录.md`、`source/_posts` 或 `source/images`，或仅产生 DB-only 训练数据变化时，会在同一个 workflow 里直接构建并部署 GitHub Pages；不能依赖 bot push 再触发独立的 Pages workflow
-- Telegram Sync 已经执行过 `npm ci` 后，调用共享 `site-build` 时传 `install_dependencies: false`，避免重复安装依赖
+- 仍然会重放待补偿批次，但不会即时刷新 Markdown
+- 正常 `ready + stored` 图片批次不写 `训练记录.md`；人工账本由 DB -> Markdown 备份 workflow 导出
+- 当同步产生文件变化或 DB-only 训练数据变化时，会异步 dispatch `deploy-pages.yml` 并启用严格数据库快照模式；站点构建结果到对应 deploy workflow 查看
 - `repository_dispatch` 会写 GitHub Step Summary，按批次输出 `batchId`、`taskStatus`、`persistenceStatus`、`archivedDate`、图片计数、pending 状态、`failureDisposition` 和失败 message ids
 - 成功通知步骤名是 `Notify Telegram sync result`，用于表示同步结果通知，不代表每个业务批次都一定已完整入库
-- `repository_dispatch` 触发的同步如果在依赖安装、同步、测试、提交、rebase、push 或站点构建阶段失败，会运行 `tools/telegram-action-monitor.mjs` 回发 Telegram。回复会包含失败阶段、`github_action` 分类和 GitHub Actions run URL。
+- `repository_dispatch` 触发的同步如果在依赖安装、同步、测试、提交、rebase 或 push 阶段失败，会运行 `tools/telegram-action-monitor.mjs` 回发 Telegram。回复会包含失败阶段、`github_action` 分类和 GitHub Actions run URL。
 
 [`deploy-pages.yml`](../../.github/workflows/deploy-pages.yml) 用于普通人工 push / 手动触发：
 
@@ -422,8 +421,8 @@ Invoke-RestMethod `
 4. 给 Bot 发一条 `/analysis 今天怎么练` 或 `/分析 最近饮食怎么样`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的分析建议
 5. 给 Bot 发一条 `/ai 搜一下右肩疼痛相关记录`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的 Agent 回复
 6. 给 Bot 发一条 `/help` 或 `帮助`，应直接收到命令清单，且不触发 `Telegram Sync`
-7. 直接编辑一条已经归档的 `/thought` / `/随想` 消息，应触发 1 次 `Telegram Sync`，并更新对应 `source/_posts` 里的正文
-8. 回复原随想消息发送 `/随想删`，或单独发送 `/随想删 126`，应触发 1 次 `Telegram Sync`，并删除对应随想文件；带图时还应删除 `source/images/thoughts/` 里的图片
+7. 直接编辑一条已经归档的 `/thought` / `/随想` 消息，应触发 1 次 `Telegram Sync`，并更新 `core.thought`
+8. 回复原随想消息发送 `/随想删`，或单独发送 `/随想删 126`，应触发 1 次 `Telegram Sync`，并在 `core.thought` 中软删除
 9. 在 Cloudflare Worker 请求日志确认收到了 `POST`
 10. 在 GitHub Actions 确认普通同步请求被 `repository_dispatch` 触发
 11. 临时使用无效的 Cloudflare `GITHUB_TOKEN` 验证时，应收到“GitHub Action 未能启动”反馈；恢复 token 后再继续测试
@@ -435,12 +434,12 @@ Invoke-RestMethod `
 - Telegram `/analysis` / `/分析` 不走图片识别、不写数据库、不提交仓库，但会读取现有 `TrainingSnapshot` 并调用 AI 回发建议，所以同样依赖 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 和 `TELEGRAM_BOT_TOKEN`
 - Telegram `/analysis` / `/分析` 默认长期目标是“增肌减腹”；如果配置了 `TRAINING_ANALYSIS_GOAL`，线上回复会优先使用该变量
 - `/analysis` 的数据来源跟随 `TRAINING_SNAPSHOT_SOURCE`；如果配置为 `database`，还需要保证 `TRAINING_DB_ENABLED`、`TRAINING_DB_URL` 和 PostgreSQL `core.*` 数据可用
-- PostgreSQL 失败时，Telegram 同步会回退写 Markdown，并把待补偿批次写到 `runtime/telegram-sync-pending.ndjson`
+- PostgreSQL 失败时，Telegram 同步不会写 Markdown；会把待补偿批次写到 `runtime/telegram-sync-pending.ndjson`
 - PostgreSQL 成功时，Telegram 图片批次只增量写入当前批次和目标日期汇总，不会删除同日其它模块，也不会每次全量覆盖 `训练记录.md`
-- 对 `/thought` 来说，“回退写 Markdown”指的是保留已经生成在 `source/_posts/` 下的随想文件，并把待补偿入库信息写到 `runtime/telegram-sync-pending.ndjson`
-- 随想新增、编辑、删除、移动现在会回发成功反馈；如果数据库失败但 Markdown 已写入，反馈会明确说明“数据库待补偿”
+- 对 `/thought` 来说，正文和模块信息以 `core.thought` 为准；图片只保留 `source/images/thoughts/` artifact，Markdown 文章由备份任务导出
+- 随想新增、编辑、删除、移动现在会回发成功反馈；如果数据库失败，反馈会明确说明“数据库待补偿”
 - 图片识别、随想、`/analysis` 和 `/ai` 的失败反馈会尽量标注 `user_input`、`ai_service`、`telegram_api`、`database`、`github_action` 或 `system_bug`
-- 睡眠截图按醒来日期减一天归档，并写入 `core.sleep`、`core.training_day` 睡眠汇总和 `archive.training_sleep`
+- 睡眠截图按醒来日期减一天归档，并写入 `core.sleep` 和 `core.training_day` 睡眠汇总；`archive.training_sleep` 只作为历史回填/维护兼容层
 - PostgreSQL 恢复后，后续同步会先重放待补偿批次
 - `deploy-pages.yml` 是否依赖 PostgreSQL，取决于 `TRAINING_SNAPSHOT_SOURCE`
   - `markdown`：页面构建不依赖 PostgreSQL

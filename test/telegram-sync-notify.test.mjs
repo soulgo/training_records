@@ -154,7 +154,7 @@ test('telegram sync notifier reports partial failures instead of success for sto
   assert.doesNotMatch(sentMessages[0].text, /解析成功/);
 });
 
-test('telegram sync notifier explains deferred database writes for fallback image batches', async () => {
+test('telegram sync notifier explains deferred database writes for pending replay image batches', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notifier-fallback-'));
   const resultPath = path.join(tempRoot, 'result.json');
   const sentMessages = [];
@@ -169,7 +169,7 @@ test('telegram sync notifier explains deferred database writes for fallback imag
           batchId: 'single-125',
           archivedDate: '2026-05-30',
           messages: [{ chatId: 42, messageId: 125 }],
-          persistenceStatus: 'fallback_markdown',
+          persistenceStatus: 'pending_replay',
           persistenceError: 'database unavailable',
           sourceImageCount: 1,
           recognizedImageCount: 1,

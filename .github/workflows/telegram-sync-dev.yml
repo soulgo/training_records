@@ -141,7 +141,7 @@ jobs:
               .join(', ');
             const images = `${batch.sourceImageCount ?? 0}/${batch.recognizedImageCount ?? 0}/${batch.failedImageCount ?? 0}`;
             const failureDisposition = batch.failureDisposition ??
-              (batch.recognitionPendingStatus === 'queued' || batch.persistenceStatus === 'fallback_markdown' ? 'auto_retry' :
+              (batch.recognitionPendingStatus === 'queued' || batch.persistenceStatus === 'pending_replay' ? 'auto_retry' :
                 (batch.status === 'skipped' || batch.status === 'ignored' ? 'skip' : 'none'));
             console.log(`| ${batch.batchId ?? ''} | ${batch.taskStatus ?? batch.status ?? ''} | ${batch.persistenceStatus ?? ''} | ${batch.archivedDate ?? ''} | ${images} | ${batch.recognitionPendingStatus ?? ''} | ${failureDisposition} | ${failedIds} |`);
           }

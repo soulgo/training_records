@@ -4,6 +4,7 @@ import frontMatter from 'hexo-front-matter';
 import {
   getThoughtModuleTags,
   normalizeThoughtModule,
+  normalizeThoughtModuleOrNull,
 } from './lib/thought-modules.mjs';
 import { readDirRecursive } from './lib/fs-walk.mjs';
 
@@ -41,6 +42,29 @@ export async function writeThoughtPostFile({ batch, thoughtsDir, rootDir, fetchT
     photoPaths,
     thoughtModule: post.thoughtModule,
     tags: post.tags,
+  };
+}
+
+export async function writeThoughtImageArtifacts({ batch, rootDir, fetchTelegramFile, overwrite = false }) {
+  const draft = buildThoughtPost(batch);
+  const artifactMessage = resolveThoughtArtifactMessage(batch);
+  const thoughtModule = resolveThoughtArtifactModule(batch, draft.thoughtModule);
+  const photoPaths = await writeThoughtImageFiles({
+    batch,
+    rootDir,
+    dateParts: draft.dateParts,
+    sourceMessageId: artifactMessage.messageId,
+    fetchTelegramFile,
+    overwrite,
+  });
+
+  return {
+    changed: photoPaths.length > 0,
+    status: photoPaths.length > 0 ? 'images_written' : 'no_images',
+    postPath: null,
+    photoPaths,
+    thoughtModule,
+    tags: thoughtModule ? getThoughtModuleTags(thoughtModule) : null,
   };
 }
 
@@ -436,6 +460,26 @@ function resolveThoughtPostMessage(batch) {
     (batch.messages ?? []).find((message) => message.messageId === sourceMessageId) ??
     batch.messages?.[0] ??
     {}
+  );
+}
+
+function resolveThoughtArtifactMessage(batch) {
+  const baseMessage = resolveThoughtPostMessage(batch);
+  const targetMessageId = batch.thoughtEdit?.targetMessageId ?? batch.thought?.sourceMessageId ?? null;
+  return {
+    ...baseMessage,
+    messageId: targetMessageId ?? baseMessage.messageId,
+  };
+}
+
+function resolveThoughtArtifactModule(batch, fallbackModule) {
+  if (batch.kind === 'thought') {
+    return normalizeThoughtModule(batch.thought?.thoughtModule ?? fallbackModule);
+  }
+  return normalizeThoughtModuleOrNull(
+    batch.thoughtEdit?.thoughtModule ??
+    batch.thoughtDelete?.thoughtModule ??
+    batch.thoughtMove?.thoughtModule,
   );
 }
 

@@ -1,12 +1,8 @@
-import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createAiProvider } from '../src/ai/provider.mjs';
-import {
-  applyTelegramSyncToMarkdown,
-  groupTelegramUpdates,
-} from './telegram-sync-lib.mjs';
+import { groupTelegramUpdates } from './telegram-sync-lib.mjs';
 import {
   appendPendingRecognitionBatch as appendPendingRecognitionBatchToDatabase,
   backfillCoreSleepFromIngestBatches as backfillCoreSleepFromIngestBatchesToDatabase,
@@ -27,16 +23,14 @@ import {
   fetchTelegramFile,
 } from './telegram-transport.mjs';
 import {
-  writeThoughtPostFile,
-  editThoughtPost,
-  deleteThoughtPost,
-  moveThoughtPost,
+  writeThoughtImageArtifacts,
   readExistingThoughtMessageKeys,
 } from './telegram-thoughts.mjs';
 import {
   getThoughtModuleTags,
   isThoughtBatchKind,
   normalizeThoughtModule,
+  normalizeThoughtModuleOrNull,
 } from './lib/thought-modules.mjs';
 import { TELEGRAM_HELP_TEXT } from '../src/telegram/help.mjs';
 import {
@@ -54,10 +48,7 @@ import {
 } from './telegram-sync-status.mjs';
 import {
   appendPendingFallbackBatch,
-  readMarkdownOrDefault,
   readPendingFallbackBatches,
-  rebuildMarkdownFromPersistedBatches,
-  shouldRewriteTrainingMarkdown,
   writePendingFallbackBatches,
 } from './telegram-sync-fallback.mjs';
 import {
@@ -156,7 +147,6 @@ export async function runTelegramSync(options = {}) {
             now,
           })
       : async (input) => ({ status: 'skipped', reason: 'not_configured', batchId: input?.batchId }));
-  const onFallbackMarkdownWritten = options.onFallbackMarkdownWritten ?? null;
   const fetchTelegramFileById =
     options.fetchTelegramFile ??
     ((fileId) =>
@@ -268,9 +258,6 @@ export async function runTelegramSync(options = {}) {
   );
   const batchResults = [];
   let changed = replayStoredAny;
-  let fallbackUsed = false;
-  let fallbackMarkdown = null;
-  let fallbackMarkdownLoaded = false;
 
   const pendingRecognitionEntries = await measureSyncStage(timings, 'readPendingRecognition', () =>
     readPendingRecognitionBatchesForRun({
@@ -292,14 +279,6 @@ export async function runTelegramSync(options = {}) {
   changed ||= replayRecognitionResults.changed;
   replayStoredImageAny ||= replayRecognitionResults.replayStoredImageAny;
   batchResults.push(...replayRecognitionResults.batchResults);
-
-  async function getFallbackMarkdown() {
-    if (!fallbackMarkdownLoaded) {
-      fallbackMarkdown = await readMarkdownOrDefault(recordPath);
-      fallbackMarkdownLoaded = true;
-    }
-    return fallbackMarkdown;
-  }
 
   for (const batch of grouped) {
     const isAllowed = batch.messages.every((message) => env.allowedChatIds.has(message.chatId));
@@ -445,12 +424,6 @@ export async function runTelegramSync(options = {}) {
       );
     } catch (error) {
       if (persistedBatch.status === 'ready') {
-        const applied = await measureSyncStage(timings, 'markdownRewrite', async () =>
-          applyTelegramSyncToMarkdown(await getFallbackMarkdown(), persistedBatch),
-        );
-        fallbackMarkdown = applied.markdown;
-        changed ||= applied.changed;
-        fallbackUsed = true;
         const errorMessage = error instanceof Error ? error.message : String(error);
         await measureSyncStage(timings, 'writePendingFallback', () =>
           appendPendingFallbackBatch(pendingQueuePath, {
@@ -460,11 +433,11 @@ export async function runTelegramSync(options = {}) {
           }),
         );
         process.stderr.write(
-          `[telegram-sync] fallback to markdown for ${persistedBatch.batchId} (${persistedBatch.archivedDate ?? 'unknown date'}): ${errorMessage}\n`,
+          `[telegram-sync] queued database replay for ${persistedBatch.batchId} (${persistedBatch.archivedDate ?? 'unknown date'}): ${errorMessage}\n`,
         );
         batchResults.push({
           ...persistedBatch,
-          persistenceStatus: 'fallback_markdown',
+          persistenceStatus: 'pending_replay',
           persistenceError: errorMessage,
           failureCategory: classifyFailureCategory(errorMessage, { phase: 'database' }),
           failureReason: errorMessage,
@@ -494,29 +467,9 @@ export async function runTelegramSync(options = {}) {
     }
   }
 
-  if (fallbackUsed) {
-    await measureSyncStage(timings, 'markdownRewrite', () =>
-      writeFile(recordPath, fallbackMarkdown, 'utf8'),
-    );
-    onFallbackMarkdownWritten?.(fallbackMarkdown);
-  } else if (changed && shouldRewriteTrainingMarkdown({ replayStoredImageAny, batchResults })) {
-    const readyPersistedBatches = batchResults.filter(
-      (batch) =>
-        isTrainingDataBatchKind(batch.kind) &&
-        batch.status === 'ready' &&
-        batch.persistenceStatus === 'stored',
-    );
-    const currentMarkdown = await getFallbackMarkdown();
-    const markdown = rebuildMarkdownFromPersistedBatches(currentMarkdown, readyPersistedBatches);
-
-    await measureSyncStage(timings, 'markdownRewrite', () =>
-      writeFile(recordPath, markdown, 'utf8'),
-    );
-  }
-
   const result = {
     changed,
-    fallbackUsed,
+    fallbackUsed: false,
     updatesFetched: updates.length,
     lastProcessedUpdateId: nextLastProcessedUpdateId,
     readyBatches: batchResults.filter((batch) => batch.status === 'ready').length,
@@ -671,39 +624,39 @@ function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {
   }
 
   if (batch.kind === 'thought_edit') {
-    const nextModule = normalizeThoughtModule(writeResult.thoughtModule ?? batch.thoughtEdit?.thoughtModule);
+    const nextModule = normalizeThoughtModuleOrNull(writeResult.thoughtModule ?? batch.thoughtEdit?.thoughtModule);
     return {
       ...batch,
       thoughtEdit: {
         ...batch.thoughtEdit,
         thoughtModule: nextModule,
-        tags: writeResult.tags ?? batch.thoughtEdit?.tags ?? getThoughtModuleTags(nextModule),
+        tags: writeResult.tags ?? batch.thoughtEdit?.tags,
         storage,
       },
     };
   }
 
   if (batch.kind === 'thought_delete') {
-    const nextModule = normalizeThoughtModule(writeResult.thoughtModule ?? batch.thoughtDelete?.thoughtModule);
+    const nextModule = normalizeThoughtModuleOrNull(writeResult.thoughtModule ?? batch.thoughtDelete?.thoughtModule);
     return {
       ...batch,
       thoughtDelete: {
         ...batch.thoughtDelete,
         thoughtModule: nextModule,
-        tags: writeResult.tags ?? batch.thoughtDelete?.tags ?? getThoughtModuleTags(nextModule),
+        tags: writeResult.tags ?? batch.thoughtDelete?.tags,
         storage,
       },
     };
   }
 
   if (batch.kind === 'thought_move') {
-    const nextModule = normalizeThoughtModule(writeResult.thoughtModule ?? batch.thoughtMove?.thoughtModule);
+    const nextModule = normalizeThoughtModuleOrNull(writeResult.thoughtModule ?? batch.thoughtMove?.thoughtModule);
     return {
       ...batch,
       thoughtMove: {
         ...batch.thoughtMove,
         thoughtModule: nextModule,
-        tags: writeResult.tags ?? batch.thoughtMove?.tags ?? getThoughtModuleTags(nextModule),
+        tags: writeResult.tags ?? batch.thoughtMove?.tags,
         storage,
       },
     };
@@ -964,39 +917,49 @@ async function writeThoughtArtifact({
   fetchTelegramFile,
 }) {
   if (kind === 'thought') {
-    return writeThoughtPostFile({
+    return writeThoughtImageArtifacts({
       batch,
-      thoughtsDir,
       rootDir: activeRootDir,
       fetchTelegramFile,
     });
   }
 
   if (kind === 'thought_edit') {
-    return editThoughtPost({
-      batch,
-      thoughtsDir,
-      rootDir: activeRootDir,
-      fetchTelegramFile,
-    });
+    if (batch.thoughtEdit?.replacePhotos) {
+      return writeThoughtImageArtifacts({
+        batch,
+        rootDir: activeRootDir,
+        fetchTelegramFile,
+        overwrite: true,
+      });
+    }
+    return buildDatabaseOnlyThoughtWriteResult(batch, kind);
   }
 
-  if (kind === 'thought_delete') {
-    return deleteThoughtPost({
-      batch,
-      thoughtsDir,
-      rootDir: activeRootDir,
-    });
-  }
-
-  if (kind === 'thought_move') {
-    return moveThoughtPost({
-      batch,
-      thoughtsDir,
-    });
+  if (kind === 'thought_delete' || kind === 'thought_move') {
+    return buildDatabaseOnlyThoughtWriteResult(batch, kind);
   }
 
   throw new Error(`Unsupported thought batch kind: ${kind}`);
+}
+
+function buildDatabaseOnlyThoughtWriteResult(batch, kind) {
+  const thought =
+    batch.thought ??
+    batch.thoughtEdit ??
+    batch.thoughtDelete ??
+    batch.thoughtMove ??
+    {};
+  const thoughtModule = normalizeThoughtModuleOrNull(thought.thoughtModule);
+  return {
+    changed: false,
+    status: `${kind}_database_only`,
+    postPath: null,
+    photoPaths: null,
+    deletedPhotoPaths: [],
+    thoughtModule,
+    tags: thoughtModule ? getThoughtModuleTags(thoughtModule) : null,
+  };
 }
 
 if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {
