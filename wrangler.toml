@@ -1,6 +1,7 @@
 name = "telegram-sync-dispatch"
 main = "cloudflare/telegram-sync-dispatch-worker.mjs"
 compatibility_date = "2026-05-14"
+pages_build_output_dir = "public"
 
 
 [[durable_objects.bindings]]

@@ -17,71 +17,13 @@ import {
   readTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabase,
 } from '../tools/training-db-core.mjs';
-
-const normalizedBatch = {
-  batchId: 'album-20260509',
-  status: 'ready',
-  archivedDate: '2026-05-09',
-  measurement: {
-    measuredAt: '2026-05-09 06:42',
-    bodyScore: 74,
-    weightKg: 72.85,
-    bmi: 23.5,
-    bodyFatPct: 22.8,
-    skeletalMuscleKg: 30.45,
-    visceralFatLevel: 8,
-    basalMetabolismKcal: 1587,
-    bodyWaterPct: 49.7,
-    proteinPct: 23.3,
-    boneMassKg: 2.955,
-    fatFreeMassKg: 56.6,
-    bodyAge: 32,
-    bodyType: '肥胖型',
-  },
-  activities: [
-    {
-      time: '19:13',
-      type: '力量训练',
-      detail: '总消耗241千卡，时长00:27:50，平均心率129次/分钟',
-    },
-  ],
-  workoutDailySummary: {
-    activityCaloriesKcal: 643,
-    workoutDurationMinutes: 78,
-    activeHours: 12,
-  },
-  nutrition: {
-    meals: [
-      { name: '晚餐', calories: 1065, recommendedMin: 317, recommendedMax: 740 },
-    ],
-    totalCalories: 1593,
-    details: ['晚餐 1065 千卡（建议范围 317-740 千卡）'],
-  },
-  warnings: [],
-  issues: [],
-  confidence: 0.97,
-  updateIds: [901, 902],
-  recognitions: [
-    {
-      messageId: 71,
-      imageType: 'workout',
-      detectedDate: '2026-05-09',
-      confidence: 0.97,
-    },
-  ],
-  messages: [
-    {
-      updateId: 901,
-      messageId: 71,
-      mediaGroupId: 'album-20260509',
-      caption: '归档到 2026-05-09',
-      text: '',
-      chatId: 42,
-      dateUnix: 1746748800,
-      photos: [{ fileId: 'abc', fileUniqueId: 'u-abc' }],
-    },
-  ],
-};
+import { parseTrainingRecord } from '../src/domain/training/training-parser.mjs';
+import {
+  assertSequentialUnnestParameters,
+  buildCoreTestDay,
+  createIncrementalPersistClient,
+  normalizedBatch,
+} from './helpers/training-db-core-fixtures.mjs';
 
 test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before grouping rows', async () => {
   const queries = [];
@@ -476,6 +418,184 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls.at(-1)[0], 'end');
 });
 
+test('persistNormalizedBatch upserts measurement without deleting other core modules', async () => {
+  const { calls, client } = createIncrementalPersistClient({
+    activitySummary: { total_activities: 1, total_duration_seconds: 600, training_calories: 120, cycling_distance_km: 0 },
+    mealSummary: { intake_calories: 900 },
+    daySummary: {
+      workout_duration_minutes: 10,
+      active_hours: 1,
+      intake_calories: 900,
+      nutrition_details_json: ['existing dinner'],
+    },
+  });
+
+  await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'measurement-only',
+      activities: [],
+      workoutDailySummary: null,
+      nutrition: { meals: [], totalCalories: null, details: [] },
+      sleep: null,
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return client;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  const trainingDayInsert = calls.filter(([sql]) => /insert into core\.training_day/i.test(sql)).at(-1);
+
+  assert.ok(calls.some(([sql]) => /insert into core\.measurement/i.test(sql)));
+  assert.equal(calls.some(([sql]) => /insert into core\.activity/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /insert into core\.meal/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /delete from core\.(activity|meal|sleep)/i.test(sql)), false);
+  assert.equal(trainingDayInsert[1][9], 900);
+  assert.equal(trainingDayInsert[1][10], JSON.stringify(['existing dinner']));
+});
+
+test('persistNormalizedBatch upserts activity without deleting same-day nutrition or sleep', async () => {
+  const { calls, client } = createIncrementalPersistClient({
+    activitySummary: { total_activities: 2, total_duration_seconds: 2270, training_calories: 361, cycling_distance_km: 0 },
+    mealSummary: { intake_calories: 900 },
+    daySummary: {
+      workout_duration_minutes: 10,
+      active_hours: 1,
+      intake_calories: 900,
+      nutrition_details_json: ['existing dinner'],
+    },
+  });
+
+  await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'activity-only',
+      measurement: null,
+      nutrition: { meals: [], totalCalories: null, details: [] },
+      sleep: null,
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return client;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  const trainingDayInsert = calls.filter(([sql]) => /insert into core\.training_day/i.test(sql)).at(-1);
+
+  assert.ok(calls.some(([sql]) => /insert into core\.activity/i.test(sql)));
+  assert.equal(calls.some(([sql]) => /insert into core\.measurement/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /insert into core\.meal/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /delete from core\.(measurement|meal|sleep)/i.test(sql)), false);
+  assert.equal(trainingDayInsert[1][3], 2);
+  assert.equal(trainingDayInsert[1][5], normalizedBatch.workoutDailySummary.activityCaloriesKcal);
+  assert.equal(trainingDayInsert[1][10], JSON.stringify(['existing dinner']));
+});
+
+test('persistNormalizedBatch upserts nutrition details without deleting activity or sleep', async () => {
+  const { calls, client } = createIncrementalPersistClient({
+    activitySummary: { total_activities: 1, total_duration_seconds: 600, training_calories: 120, cycling_distance_km: 0 },
+    mealSummary: { intake_calories: 1400 },
+    daySummary: {
+      workout_duration_minutes: 10,
+      active_hours: 1,
+      intake_calories: 900,
+      nutrition_details_json: ['existing dinner'],
+    },
+  });
+
+  await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'nutrition-only',
+      measurement: null,
+      activities: [],
+      workoutDailySummary: null,
+      sleep: null,
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return client;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  const trainingDayInsert = calls.filter(([sql]) => /insert into core\.training_day/i.test(sql)).at(-1);
+
+  assert.ok(calls.some(([sql]) => /insert into core\.meal/i.test(sql)));
+  assert.equal(calls.some(([sql]) => /insert into core\.activity/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /delete from core\.(activity|sleep)/i.test(sql)), false);
+  assert.equal(trainingDayInsert[1][9], normalizedBatch.nutrition.totalCalories);
+  assert.equal(trainingDayInsert[1][10], JSON.stringify(normalizedBatch.nutrition.details));
+});
+
+test('persistNormalizedBatch upserts sleep without deleting nutrition details', async () => {
+  const { calls, client } = createIncrementalPersistClient({
+    activitySummary: { total_activities: 1, total_duration_seconds: 600, training_calories: 120, cycling_distance_km: 0 },
+    mealSummary: { intake_calories: 900 },
+    daySummary: {
+      workout_duration_minutes: 10,
+      active_hours: 1,
+      intake_calories: 900,
+      nutrition_details_json: ['existing dinner'],
+    },
+  });
+
+  await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'sleep-only',
+      archivedDate: '2026-06-03',
+      measurement: null,
+      activities: [],
+      workoutDailySummary: null,
+      nutrition: { meals: [], totalCalories: null, details: [] },
+      sleep: {
+        records: [
+          {
+            sleepType: '夜间睡眠',
+            bedtime: '23:26',
+            wakeTime: '06:19',
+            nightSleepMinutes: 411,
+            totalSleepMinutes: 411,
+          },
+        ],
+      },
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return client;
+    },
+    processedAt: new Date('2026-06-04T00:00:00.000Z'),
+  });
+
+  const trainingDayInsert = calls.filter(([sql]) => /insert into core\.training_day/i.test(sql)).at(-1);
+
+  assert.ok(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into archive\.training_sleep/i.test(sql)));
+  assert.equal(calls.some(([sql]) => /insert into core\.measurement/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /insert into core\.meal/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal)/i.test(sql)), false);
+  assert.equal(trainingDayInsert[1][10], JSON.stringify(['existing dinner']));
+});
+
 test('persistNormalizedBatch stores sleep payload in core and archive sleep rows', async () => {
   const calls = [];
   const fakeClient = {
@@ -545,7 +665,7 @@ test('persistNormalizedBatch stores sleep payload in core and archive sleep rows
     processedAt: new Date('2026-06-04T00:00:00.000Z'),
   });
 
-  const trainingDayInsert = calls.find(([sql]) => /insert into core\.training_day/i.test(sql));
+  const trainingDayInsert = calls.filter(([sql]) => /insert into core\.training_day/i.test(sql)).at(-1);
   const sleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
   const archiveSleepInsert = calls.find(([sql]) => /insert into archive\.training_sleep/i.test(sql));
   const archiveSnapshotInsert = calls.find(([sql]) => /insert into archive\.training_parse_snapshot/i.test(sql));
@@ -554,7 +674,7 @@ test('persistNormalizedBatch stores sleep payload in core and archive sleep rows
   assert.ok(trainingDayInsert);
   assert.ok(sleepInsert);
   assert.ok(archiveSleepInsert);
-  assert.ok(archiveSnapshotInsert);
+  assert.equal(archiveSnapshotInsert, undefined);
   assert.ok(ingestBatchInsert);
   assert.match(sleepInsert[0], /\$16::jsonb\[\]/i);
   assert.match(archiveSleepInsert[0], /\$15::jsonb\[\]/i);
@@ -570,7 +690,6 @@ test('persistNormalizedBatch stores sleep payload in core and archive sleep rows
   assert.equal(archiveSleepInsert[1][0][0], createHash('md5').update('2026-06-03|夜间睡眠|23:26|06:19|411').digest('hex'));
   assert.deepEqual(archiveSleepInsert[1][1], ['2026-06-03']);
   assert.equal(archiveSleepInsert[1][2][0].length, 64);
-  assert.equal(archiveSleepInsert[1][2][0], archiveSnapshotInsert[1][0]);
   assert.deepEqual(archiveSleepInsert[1][7], [411]);
   assert.deepEqual(archiveSleepInsert[1][9], [145]);
   assert.deepEqual(archiveSleepInsert[1][15], [81]);
@@ -579,7 +698,7 @@ test('persistNormalizedBatch stores sleep payload in core and archive sleep rows
   assert.deepEqual(archiveSleepInsert[1][28], ['建议睡觉时关灯。']);
   assert.equal(trainingDayInsert[1].length, 12);
   assert.equal(JSON.parse(ingestBatchInsert[1][9]).sleep.records[0].totalSleepMinutes, 411);
-  assert.equal(JSON.parse(archiveSnapshotInsert[1][2]).daily[0].sleep[0].totalSleepMinutes, 411);
+  assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal|sleep)/i.test(sql)), false);
 });
 
 test('persistNormalizedBatch merges an existing core day using only schema-defined columns', async () => {
@@ -674,11 +793,12 @@ test('persistNormalizedBatch merges an existing core day using only schema-defin
     processedAt: new Date('2026-06-04T00:00:00.000Z'),
   });
 
-  const trainingDayInsert = calls.find(([sql]) => /insert into core\.training_day/i.test(sql));
+  const trainingDayInsert = calls.filter(([sql]) => /insert into core\.training_day/i.test(sql)).at(-1);
 
   assert.ok(trainingDayInsert);
-  assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), true);
-  assert.ok(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)));
+  assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /delete from core\.sleep/i.test(sql)), false);
   assert.equal(trainingDayInsert[1].length, 12);
 });
 
@@ -1797,6 +1917,39 @@ test('exportTrainingMarkdown renders a readable markdown view from the canonical
           },
         },
         nutrition: normalizedBatch.nutrition,
+        sleep: [
+          {
+            sleepType: '夜间睡眠',
+            bedtime: '23:26',
+            wakeTime: '06:19',
+            nightSleepMinutes: 411,
+            totalSleepMinutes: 411,
+            napMinutes: null,
+            deepSleepMinutes: 145,
+            lightSleepMinutes: 195,
+            remSleepMinutes: 71,
+            awakeMinutes: 12,
+            sleepStageText: '深睡2小时25分钟；浅睡3小时15分钟；快速眼动1小时11分钟',
+            sleepStageDetail: ['深睡 2小时25分钟', '浅睡 3小时15分钟', '快速眼动 1小时11分钟'],
+            sleepScore: 81,
+            sleepScorePercentile: 77,
+            deepSleepRatioPct: 35,
+            lightSleepRatioPct: 47,
+            remSleepRatioPct: 18,
+            deepSleepContinuityScore: 85,
+            wakeCount: 2,
+            breathingQualityScore: 94,
+            averageHeartRateBpm: 68,
+            hrvMs: 42,
+            averageSpo2Pct: 96,
+            averageRespiratoryRate: 15.4,
+            analysisText: '睡眠质量良好。',
+            suggestionText: '建议睡觉时关灯。',
+          },
+        ],
+        sleepSummary: {
+          records: [],
+        },
       },
     ],
     charts: {
@@ -1815,84 +1968,22 @@ test('exportTrainingMarkdown renders a readable markdown view from the canonical
   assert.match(markdown, /#### 当日体脂秤截图记录/);
   assert.match(markdown, /#### 当日运动截图记录/);
   assert.match(markdown, /#### 2026-05-09 饮食截图记录/);
+  assert.match(markdown, /##### 餐次明细/);
+  assert.match(markdown, /#### 2026-05-09 睡眠截图记录/);
+  assert.match(markdown, /- 睡眠评分：81分/);
+  assert.match(markdown, /- 睡眠阶段明细：/);
   assert.match(markdown, /- 19:13 力量训练：总消耗241千卡/);
+
+  const parsed = parseTrainingRecord(markdown);
+  const day = parsed.daily.find((entry) => entry.date === normalizedBatch.archivedDate);
+  assert.ok(day);
+  assert.deepEqual(day.nutrition.details, normalizedBatch.nutrition.details);
+  assert.equal(day.sleepSummary.totalSleepMinutes, 411);
+  assert.equal(day.sleepSummary.sleepScore, 81);
+  assert.equal(day.sleepSummary.averageHeartRateBpm, 68);
+  assert.deepEqual(day.sleep[0].sleepStageDetail, [
+    '深睡 2小时25分钟',
+    '浅睡 3小时15分钟',
+    '快速眼动 1小时11分钟',
+  ]);
 });
-
-function buildCoreTestDay(date, { calories, activityTime, mealName }) {
-  return {
-    date,
-    measurement: {
-      archivedDate: date,
-      measuredAt: `${date} 07:00`,
-      bodyScore: 75,
-      weightKg: 72.5,
-      bmi: 23.4,
-      bodyFatPct: 22.1,
-      skeletalMuscleKg: 30.5,
-      visceralFatLevel: null,
-      basalMetabolismKcal: null,
-      bodyWaterPct: null,
-      proteinPct: null,
-      boneMassKg: null,
-      fatFreeMassKg: null,
-      bodyAge: null,
-      bodyType: null,
-    },
-    measurements: [
-      {
-        archivedDate: date,
-        measuredAt: `${date} 07:00`,
-        bodyScore: 75,
-        weightKg: 72.5,
-        bmi: 23.4,
-        bodyFatPct: 22.1,
-        skeletalMuscleKg: 30.5,
-        visceralFatLevel: null,
-        basalMetabolismKcal: null,
-        bodyWaterPct: null,
-        proteinPct: null,
-        boneMassKg: null,
-        fatFreeMassKg: null,
-        bodyAge: null,
-        bodyType: null,
-      },
-    ],
-    activities: [
-      {
-        time: activityTime,
-        type: '力量训练',
-        rawType: '力量训练',
-        detail: `总消耗${calories}千卡，时长00:32:00`,
-        calories,
-        heartRate: null,
-        distanceKm: null,
-        avgSpeedKmh: null,
-        durationText: '00:32:00',
-        durationSeconds: 1920,
-      },
-    ],
-    workoutSummary: {
-      totalActivities: 1,
-      totalDurationSeconds: 1920,
-      trainingCalories: calories,
-      workoutDurationMinutes: 32,
-      activeHours: 13,
-      cyclingDistanceKm: 0,
-      countsByType: {
-        力量训练: 1,
-      },
-    },
-    nutrition: {
-      meals: [{ name: mealName, calories: 800, recommendedMin: 317, recommendedMax: 740 }],
-      totalCalories: 800,
-      details: [],
-    },
-  };
-}
-
-function assertSequentialUnnestParameters(sql, expectedCount) {
-  const unnestSql = sql.match(/from unnest\(([\s\S]*?)\)\s*on conflict/i)?.[1] ?? '';
-  const actual = [...unnestSql.matchAll(/\$(\d+)::/g)].map((match) => Number(match[1]));
-  const expected = Array.from({ length: expectedCount }, (_, index) => index + 1);
-  assert.deepEqual(actual, expected);
-}

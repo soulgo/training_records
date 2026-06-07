@@ -10,13 +10,14 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
 
   assert.match(action, /name:\s*Shared Site Build/);
   assert.match(action, /using:\s*composite/);
-  for (const inputName of ['run_backfill', 'sync_db_mode', 'run_tests', 'deploy']) {
+  for (const inputName of ['run_backfill', 'sync_db_mode', 'run_tests', 'deploy', 'install_dependencies']) {
     assert.match(action, new RegExp(`${inputName}:([\\s\\S]*?)required:\\s*false`));
   }
   assert.match(action, /actions\/setup-node@v4/);
   assert.match(action, /node-version:\s*22/);
   assert.match(action, /cache:\s*npm/);
   assert.match(action, /actions\/cache@v4/);
+  assert.match(action, /- name: Install dependencies\s*\n\s*if: \$\{\{ inputs\.install_dependencies == 'true' \}\}/);
   assert.match(action, /path:\s*\|\s*\n\s*db\.json/);
   assert.match(
     action,
@@ -195,6 +196,10 @@ test('telegram-sync workflow uses the shared site build action after pushing rep
   assert.match(workflow, /run_backfill:\s*'false'/);
   assert.match(workflow, /run_tests:\s*'false'/);
   assert.match(workflow, /deploy:\s*'true'/);
+  assert.match(workflow, /install_dependencies:\s*'false'/);
+  assert.match(workflow, /- name: Write Telegram sync summary/);
+  assert.match(workflow, /GITHUB_STEP_SUMMARY/);
+  assert.match(workflow, /batchId \| taskStatus \| persistenceStatus \| archivedDate \| images \| pending \| failureDisposition \| failed messageIds/);
   assert.match(workflow, /TELEGRAM_SYNC_NOTIFY_STAGE: after_action/);
   assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH: \$\{\{ runner\.temp \}\}\/telegram-sync-result\.json/);
 });
@@ -229,6 +234,8 @@ test('telegram-sync workflows rebuild pages after database-only stored training 
     assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH/);
     assert.match(workflow, /db_content_changed=true/);
     assert.match(workflow, /readyStoredTrainingBatches/);
+    assert.match(workflow, /install_dependencies:\s*'false'/);
+    assert.match(workflow, /- name: Write Telegram sync summary/);
     assert.match(
       workflow,
       /if: steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/,
@@ -257,10 +264,12 @@ test('telegram-sync dev workflow deploys Pages after bot-created changes', async
   assert.match(workflow, /run_backfill:\s*'true'/);
   assert.match(workflow, /run_tests:\s*'true'/);
   assert.match(workflow, /deploy:\s*'false'/);
+  assert.match(workflow, /install_dependencies:\s*'false'/);
   assert.match(workflow, /- name: Remove production custom domain file/);
   assert.match(workflow, /rm -f public\/CNAME/);
   assert.match(workflow, /- name: Deploy dev site to Cloudflare Pages/);
   assert.match(workflow, /apiToken:\s*\$\{\{\s*secrets\.CLOUDFLARE_PAGES_API_TOKEN\s*\}\}/);
+  assert.match(workflow, /wranglerVersion:\s*'3\.114\.14'/);
   assert.match(
     workflow,
     /command: pages deploy public --project-name \$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\} --branch dev/,
@@ -305,7 +314,7 @@ test('telegram-sync workflow reports repository dispatch failures back to Telegr
   assert.match(workflow, /- name: Notify Telegram sync failure/);
   assert.match(workflow, /if: failure\(\) && github\.event_name == 'repository_dispatch'/);
   assert.match(workflow, /continue-on-error: true/);
-  assert.match(workflow, /- name: Notify Telegram sync success/);
+  assert.match(workflow, /- name: Notify Telegram sync result/);
   assert.match(workflow, /if: success\(\) && github\.event_name == 'repository_dispatch'/);
   assert.match(workflow, /node tools\/telegram-sync-notify\.mjs/);
   assert.match(workflow, /node tools\/telegram-action-monitor\.mjs/);

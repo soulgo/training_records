@@ -137,8 +137,44 @@ jobs:
           run_backfill: 'false'
           run_tests: 'false'
           deploy: 'true'
+          install_dependencies: 'false'
 
-      - name: Notify Telegram sync success
+      - name: Write Telegram sync summary
+        if: always() && github.event_name == 'repository_dispatch'
+        env:
+          TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
+        run: |
+          node <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const fs = require('fs');
+          const resultPath = process.env.TELEGRAM_SYNC_RESULT_PATH;
+          let result = {};
+          try {
+            result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+          } catch {
+            console.log('## Telegram sync result');
+            console.log('');
+            console.log('Result file was not written.');
+            process.exit(0);
+          }
+          const batches = result.batchResults ?? result.batches ?? [];
+          console.log('## Telegram sync result');
+          console.log('');
+          console.log('| batchId | taskStatus | persistenceStatus | archivedDate | images | pending | failureDisposition | failed messageIds |');
+          console.log('| --- | --- | --- | --- | --- | --- | --- | --- |');
+          for (const batch of batches) {
+            const failedIds = (batch.recognitionErrors ?? [])
+              .map((item) => item.messageId ?? item.message_id)
+              .filter((value) => value !== null && value !== undefined)
+              .join(', ');
+            const images = `${batch.sourceImageCount ?? 0}/${batch.recognizedImageCount ?? 0}/${batch.failedImageCount ?? 0}`;
+            const failureDisposition = batch.failureDisposition ??
+              (batch.recognitionPendingStatus === 'queued' || batch.persistenceStatus === 'fallback_markdown' ? 'auto_retry' :
+                (batch.status === 'skipped' || batch.status === 'ignored' ? 'skip' : 'none'));
+            console.log(`| ${batch.batchId ?? ''} | ${batch.taskStatus ?? batch.status ?? ''} | ${batch.persistenceStatus ?? ''} | ${batch.archivedDate ?? ''} | ${images} | ${batch.recognitionPendingStatus ?? ''} | ${failureDisposition} | ${failedIds} |`);
+          }
+          NODE
+
+      - name: Notify Telegram sync result
         if: success() && github.event_name == 'repository_dispatch'
         continue-on-error: true
         env:

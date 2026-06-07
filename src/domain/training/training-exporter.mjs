@@ -55,7 +55,11 @@ export function exportTrainingMarkdown(snapshot) {
       }
     }
 
-    if ((day.nutrition?.meals?.length ?? 0) > 0 || day.nutrition?.totalCalories !== null) {
+    if (
+      (day.nutrition?.meals?.length ?? 0) > 0 ||
+      day.nutrition?.totalCalories !== null ||
+      (day.nutrition?.details?.length ?? 0) > 0
+    ) {
       lines.push(`#### ${day.date} 饮食截图记录`);
       lines.push('');
       lines.push('##### 餐次汇总');
@@ -79,7 +83,99 @@ export function exportTrainingMarkdown(snapshot) {
       }
       lines.push('');
     }
+
+    const sleepRecords = day.sleep?.length ? day.sleep : day.sleepSummary?.records ?? [];
+    if (sleepRecords.length > 0 || hasSleepSummary(day.sleepSummary)) {
+      lines.push(`#### ${day.date} 睡眠截图记录`);
+      lines.push('');
+
+      if (sleepRecords.length > 0) {
+        lines.push('##### 睡眠明细');
+        lines.push('');
+        for (const record of sleepRecords) {
+          lines.push(`- 睡眠类型：${record.sleepType ?? '夜间睡眠'}`);
+          const bedtime = record.bedtime ?? record.sleepStartTime ?? null;
+          const wakeTime = record.wakeTime ?? record.sleepEndTime ?? null;
+          if (bedtime || wakeTime) {
+            lines.push(`- 入睡/起床：${bedtime ?? 'null'} → ${wakeTime ?? 'null'}`);
+          }
+          renderSleepMetrics(lines, record);
+        }
+      } else {
+        renderSleepMetrics(lines, day.sleepSummary);
+      }
+
+      lines.push('');
+    }
   }
 
   return `${lines.join('\n').trim()}\n`;
+}
+
+function renderSleepMetrics(lines, sleep) {
+  appendMetric(lines, '总睡眠', sleep.totalSleepMinutes, '分钟');
+  appendMetric(lines, '夜间睡眠', sleep.nightSleepMinutes, '分钟');
+  appendMetric(lines, '午睡', sleep.napMinutes, '分钟');
+  appendMetric(lines, '深睡', sleep.deepSleepMinutes, '分钟');
+  appendMetric(lines, '浅睡', sleep.lightSleepMinutes, '分钟');
+  appendMetric(lines, '快动眼睡眠', sleep.remSleepMinutes, '分钟');
+  appendMetric(lines, '清醒', sleep.awakeMinutes, '分钟');
+  appendMetric(lines, '睡眠评分', sleep.sleepScore, '分');
+  appendMetric(lines, '超过用户', sleep.sleepScorePercentile, '%');
+  appendMetric(lines, '深睡比例', sleep.deepSleepRatioPct, '%');
+  appendMetric(lines, '浅睡比例', sleep.lightSleepRatioPct, '%');
+  appendMetric(lines, '快速眼动比例', sleep.remSleepRatioPct, '%');
+  appendMetric(lines, '深睡连续性', sleep.deepSleepContinuityScore, '分');
+  appendMetric(lines, '清醒次数', sleep.wakeCount, '次');
+  appendMetric(lines, '呼吸质量', sleep.breathingQualityScore, '分');
+  appendMetric(lines, '平均心率', sleep.averageHeartRateBpm, '次/分钟');
+  appendMetric(lines, '平均心率变异性', sleep.hrvMs, '毫秒');
+  appendMetric(lines, '平均血氧饱和度', sleep.averageSpo2Pct, '%');
+  appendMetric(lines, '平均呼吸率', sleep.averageRespiratoryRate, '次/分钟');
+  if (sleep.sleepStageText) {
+    lines.push(`- 睡眠阶段：${sleep.sleepStageText}`);
+  }
+  if (Array.isArray(sleep.sleepStageDetail) && sleep.sleepStageDetail.length) {
+    lines.push('- 睡眠阶段明细：');
+    for (const detail of sleep.sleepStageDetail) {
+      lines.push(`  - ${detail}`);
+    }
+  }
+  if (sleep.analysisText) {
+    lines.push(`- 睡眠解读：${sleep.analysisText}`);
+  }
+  if (sleep.suggestionText) {
+    lines.push(`- 睡眠建议：${sleep.suggestionText}`);
+  }
+}
+
+function hasSleepSummary(sleep) {
+  if (!sleep) {
+    return false;
+  }
+  return [
+    sleep.totalSleepMinutes,
+    sleep.nightSleepMinutes,
+    sleep.napMinutes,
+    sleep.sleepStartTime,
+    sleep.sleepEndTime,
+    sleep.deepSleepMinutes,
+    sleep.lightSleepMinutes,
+    sleep.remSleepMinutes,
+    sleep.awakeMinutes,
+    sleep.sleepScore,
+    sleep.sleepScorePercentile,
+    sleep.deepSleepRatioPct,
+    sleep.lightSleepRatioPct,
+    sleep.remSleepRatioPct,
+    sleep.deepSleepContinuityScore,
+    sleep.wakeCount,
+    sleep.breathingQualityScore,
+    sleep.averageHeartRateBpm,
+    sleep.hrvMs,
+    sleep.averageSpo2Pct,
+    sleep.averageRespiratoryRate,
+    sleep.analysisText,
+    sleep.suggestionText,
+  ].some((value) => value !== null && value !== undefined && value !== '');
 }

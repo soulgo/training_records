@@ -13,6 +13,7 @@ import {
 } from '../tools/telegram-sync.mjs';
 import { notifyTelegramActionFailure } from '../tools/telegram-action-monitor.mjs';
 import { buildRecognitionCacheKey, isRecognitionCacheEnabled } from '../src/ai/recognition-service.mjs';
+import { emptyTrainingCharts, telegramSyncEnv } from './helpers/telegram-sync-runner-fixtures.mjs';
 
 test('telegram sync entrypoint exits cleanly in webhook mode without queued work', () => {
   const stdout = execFileSync(process.execPath, ['tools/telegram-sync.mjs'], {
@@ -127,22 +128,13 @@ test('recognition cache key changes with prompt schema and model versions', () =
   assert.equal(isRecognitionCacheEnabled({ TELEGRAM_RECOGNITION_CACHE_ENABLED: '' }), false);
 });
 
-test('runTelegramSync persists ready batches to the database and exports derived markdown', async () => {
+test('runTelegramSync persists ready batches to the database and merges markdown incrementally', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-runner-'));
   const persistedBatches = [];
-  const writtenMarkdown = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -179,58 +171,23 @@ test('runTelegramSync persists ready batches to the database and exports derived
       persistedBatches.push(batch);
       return { status: 'stored', archivedDate: batch.archivedDate };
     },
-    buildTrainingSnapshot: async () => ({
-      generatedAt: '2026-05-13T00:00:00.000Z',
-      latest: {
-        measurement: null,
-        daily: { date: '2026-05-09' },
-      },
-      daily: [
-        {
-          date: '2026-05-09',
-          measurement: null,
-          measurements: [],
-          activities: [],
-          workoutSummary: {
-            totalActivities: 0,
-            totalDurationSeconds: 0,
-            trainingCalories: 0,
-            workoutDurationMinutes: null,
-            activeHours: null,
-            cyclingDistanceKm: 0,
-            countsByType: {},
-          },
-          nutrition: {
-            meals: [{ name: '晚餐', calories: 1065, recommendedMin: 317, recommendedMax: 740 }],
-            totalCalories: 1593,
-            details: ['晚餐 1065 千卡'],
-          },
-        },
-      ],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
-    }),
-    exportTrainingMarkdown: (snapshot) => {
-      writtenMarkdown.push(snapshot);
-      return '### 2026-05-09\n';
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for stored image batches');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for stored image batches');
     },
   });
 
   assert.equal(result.changed, true);
   assert.equal(persistedBatches.length, 1);
-  assert.equal(writtenMarkdown.length, 1);
-  assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /2026-05-09/);
+  const markdown = await readFile(path.join(tempRoot, '训练记录.md'), 'utf8');
+  assert.match(markdown, /### 2026-05-09/);
+  assert.match(markdown, /#### 2026-05-09 饮食截图记录/);
+  assert.match(markdown, /晚餐：1065千卡/);
 });
 
-test('runTelegramSync writes the ready batch back into markdown when the rebuilt database snapshot misses the new archived date', async () => {
+test('runTelegramSync writes the ready batch back into markdown without rebuilding a database snapshot', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-stale-db-snapshot-'));
 
   await import('node:fs/promises').then(({ writeFile }) =>
@@ -243,15 +200,7 @@ test('runTelegramSync writes the ready batch back into markdown when the rebuilt
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -288,59 +237,12 @@ test('runTelegramSync writes the ready batch back into markdown when the rebuilt
       },
     ],
     persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
-    buildTrainingSnapshot: async () => ({
-      generatedAt: '2026-05-13T00:00:00.000Z',
-      latest: {
-        measurement: {
-          archivedDate: '2026-05-09',
-          measuredAt: '2026-05-09 06:42',
-          weightKg: 72.85,
-        },
-        daily: { date: '2026-05-09' },
-      },
-      daily: [
-        {
-          date: '2026-05-09',
-          measurement: {
-            archivedDate: '2026-05-09',
-            measuredAt: '2026-05-09 06:42',
-            weightKg: 72.85,
-          },
-          measurements: [
-            {
-              archivedDate: '2026-05-09',
-              measuredAt: '2026-05-09 06:42',
-              weightKg: 72.85,
-            },
-          ],
-          activities: [],
-          workoutSummary: {
-            totalActivities: 0,
-            totalDurationSeconds: 0,
-            trainingCalories: 643,
-            workoutDurationMinutes: 78,
-            activeHours: 12,
-            cyclingDistanceKm: 0,
-            countsByType: {},
-          },
-          nutrition: {
-            meals: [],
-            totalCalories: null,
-            details: [],
-          },
-        },
-      ],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
-    }),
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for stored image batches');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for stored image batches');
+    },
   });
 
   assert.equal(result.changed, true);
@@ -349,7 +251,7 @@ test('runTelegramSync writes the ready batch back into markdown when the rebuilt
   assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /活动热量：402千卡/);
 });
 
-test('runTelegramSync falls back to markdown rebuild when database snapshot lacks measurements after storing a batch', async () => {
+test('runTelegramSync incrementally merges markdown after storing a batch even if database snapshot is unavailable', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-incomplete-db-snapshot-'));
 
   await import('node:fs/promises').then(({ writeFile }) =>
@@ -362,15 +264,7 @@ test('runTelegramSync falls back to markdown rebuild when database snapshot lack
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -404,10 +298,10 @@ test('runTelegramSync falls back to markdown rebuild when database snapshot lack
     ],
     persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
     buildTrainingSnapshot: async () => {
-      throw new Error('database snapshot is empty or missing measurements');
+      throw new Error('buildTrainingSnapshot should not run for stored image batches');
     },
     exportTrainingMarkdown: () => {
-      throw new Error('exportTrainingMarkdown should not run when snapshot rebuild falls back to markdown');
+      throw new Error('exportTrainingMarkdown should not run for stored image batches');
     },
   });
 
@@ -422,15 +316,7 @@ test('runTelegramSync falls back to markdown when database persistence fails', a
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -492,15 +378,7 @@ test('runTelegramSync skips undated batches without persisting fallback or markd
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -603,15 +481,7 @@ test('runTelegramSync skips conflicting-date batches and continues processing re
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -751,16 +621,7 @@ test('runTelegramSync skips conflicting-date batches and continues processing re
           },
         },
       ],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
+      charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-14\n',
   });
@@ -1015,15 +876,7 @@ test('runTelegramSync replays pending fallback batches into the database before 
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
     persistNormalizedBatch: async ({ batch }) => {
@@ -1058,16 +911,7 @@ test('runTelegramSync replays pending fallback batches into the database before 
           },
         },
       ],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
+      charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-08\n',
   });
@@ -1168,16 +1012,7 @@ test('runTelegramSync processes updates from repository dispatch payload without
           },
         },
       ],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
+      charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-09\n',
   });
@@ -1275,16 +1110,7 @@ test('runTelegramSync processes repository dispatch updates when database offset
           },
         },
       ],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
+      charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-09\n',
   });
@@ -1381,16 +1207,7 @@ test('runTelegramSync uses document filename date when recognition has no image 
           },
         },
       ],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
+      charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-12\n',
   });
@@ -1515,15 +1332,7 @@ test('runTelegramSync writes a /thought telegram message into source/_posts and 
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -1581,15 +1390,7 @@ test('runTelegramSync writes a /随想 image caption into source/_posts with dow
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -1679,15 +1480,7 @@ test('runTelegramSync writes a module-scoped /随想 caption into source/_posts 
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -1734,15 +1527,7 @@ test('runTelegramSync writes a body feedback /随想 caption into source/_posts 
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -1786,15 +1571,7 @@ test('runTelegramSync writes a /thought album caption as one thought post with a
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -1864,15 +1641,7 @@ test('runTelegramSync treats an existing thought post as duplicate and does not 
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -1930,15 +1699,7 @@ telegram_chat_id: 42
   const persistedBatches = [];
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -2038,15 +1799,7 @@ tags:
   const persistedBatches = [];
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -2119,15 +1872,7 @@ telegram_chat_id: 42
   const persistedBatches = [];
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -2211,15 +1956,7 @@ photos:
   const persistedBatches = [];
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -2318,15 +2055,7 @@ photos:
   const persistedBatches = [];
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -2401,15 +2130,7 @@ telegram_chat_id: 42
   const persistedBatches = [];
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -2482,15 +2203,7 @@ telegram_chat_id: 42
   const persistedBatches = [];
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -2551,15 +2264,7 @@ telegram_chat_id: 42
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -2602,15 +2307,7 @@ test('runTelegramSync keeps thought posts when database persistence fails and qu
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -2701,15 +2398,7 @@ test('runTelegramSync replays pending thought batches without rewriting training
   const persistedBatchIds = [];
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
     persistNormalizedBatch: async ({ batch }) => {
@@ -2741,15 +2430,7 @@ test('runTelegramSync replies to /analysis without image recognition or file wri
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -2811,15 +2492,7 @@ test('runTelegramSync replies with a short failure message when analysis generat
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -2858,15 +2531,7 @@ test('runTelegramSync ignores unauthorized /analysis commands without generating
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -3002,15 +2667,7 @@ test('runTelegramSync replies to /ai through the telegram ai agent without file 
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -3076,15 +2733,7 @@ test('runTelegramSync ignores unauthorized /ai commands without invoking the age
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -3123,15 +2772,7 @@ test('runTelegramSync replies to help commands without image recognition or pers
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -4332,16 +3973,7 @@ test('runTelegramSync sends Telegram result notification after storing an image 
       generatedAt: '2026-05-22T00:00:00.000Z',
       latest: { measurement: null, daily: { date: '2026-05-22' } },
       daily: [],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
+      charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-22\n',
     sendTelegramMessage: async (message) => {
@@ -4635,15 +4267,7 @@ test('runTelegramSync replays pending recognition batches and marks them resolve
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
     readPendingRecognitionBatches: async () => [
@@ -4721,16 +4345,7 @@ test('runTelegramSync replays pending recognition batches and marks them resolve
           },
         },
       ],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
+      charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-31\n',
   });
@@ -4751,15 +4366,7 @@ test('runTelegramSync uses the normalized runtime env for first-time and replaye
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -4823,16 +4430,7 @@ test('runTelegramSync uses the normalized runtime env for first-time and replaye
       generatedAt: '2026-05-31T00:00:00.000Z',
       latest: { measurement: null, daily: { date: '2026-05-31' } },
       daily: [],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
+      charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-31\n',
   });
@@ -4857,15 +4455,7 @@ test('runTelegramSync keeps pending recognition batches queued when replay still
   const result = await runTelegramSync({
     rootDir: tempRoot,
     now,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
     readPendingRecognitionBatches: async () => [
@@ -4997,16 +4587,7 @@ test('runTelegramSync marks ready image albums with failed photos as partial fai
       generatedAt: '2026-05-31T00:00:00.000Z',
       latest: { measurement: null, daily: { date: '2026-05-31' } },
       daily: [],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
+      charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-31\n',
     sendTelegramMessage: async (message) => {
@@ -5156,16 +4737,7 @@ test('runTelegramSync queues partial failure ready batches for pending recogniti
       generatedAt: '2026-05-31T00:00:00.000Z',
       latest: { measurement: null, daily: { date: '2026-05-31' } },
       daily: [],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
+      charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-31\n',
     sendTelegramMessage: async (message) => {
@@ -5197,15 +4769,7 @@ test('runTelegramSync report includes image counts for pending replay batches', 
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
     readPendingRecognitionBatches: async () => [
@@ -5275,16 +4839,7 @@ test('runTelegramSync report includes image counts for pending replay batches', 
       generatedAt: '2026-05-31T00:00:00.000Z',
       latest: { measurement: null, daily: { date: '2026-05-31' } },
       daily: [],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
+      charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-31\n',
   });

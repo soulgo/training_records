@@ -13,6 +13,28 @@
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-06-07
+
+### Changed
+
+- Telegram 图片正常成功路径改为按本批次增量 upsert `core.measurement`、`core.activity`、`core.meal` 与 `core.sleep`，并刷新目标日期 `core.training_day` 汇总，避免同日补发截图删除其它模块数据。
+- Telegram `ready + stored` 图片批次不再默认用数据库全量快照覆盖 `训练记录.md`，改为仅对目标日期做 Markdown 增量合并；数据库写入失败时仍保留 fallback Markdown 与 pending 队列。
+- `src/db/training/write.mjs` 拆出 Telegram 图片增量写入与 core/archive 子表 upsert 职责，保留原对外入口兼容。
+- `tools/telegram-sync-lib.mjs` 拆出日期归档与 Markdown section 合并渲染职责，`analyzeTelegramBatch()` 与 `applyTelegramSyncToMarkdown()` 等既有入口保持兼容。
+- `tools/telegram-sync.mjs` 拆出图片识别/pending replay、fallback Markdown 队列、通知与结果报告职责，`runTelegramSync()` 与 CLI 行为保持兼容。
+- `src/mcp/tools.mjs` 拆出 MCP tool catalog、训练记录、分析、运行时/config 与通用支撑模块，保留 `listMcpTools()`、`callMcpTool()` 与 `resolveMcpConfig()` 入口兼容。
+- `src/db/training/read.mjs` 拆出 SQL 查询、client 并发读取与 row-to-snapshot 映射职责，保留 core/archive 读库入口兼容。
+- `tools/training-analysis.mjs` 拆出分析意图/时间窗解析、训练摘要构造与 AI 请求/Telegram 分段回复职责，保留 `/分析` 生成链路和导出入口兼容。
+- `test/telegram-sync-runner.test.mjs`、`test/telegram-sync.test.mjs` 与 `test/training-db-core.test.mjs` 抽出共享 fixture/helper，降低大测试文件中的重复样板，保留原测试语义和 targeted 覆盖。
+- 新增 V9 真实 Telegram 场景验收 runbook，明确 dev Bot / dev workflow 上单张 sleep、1-4 张相册、partial failure replay 和数据库 fallback 的人工验收步骤与证据模板。
+- 评估 Telegram `ingest` 审计增强后，继续沿用现有 JSON 审计与 pending/report 字段，本轮不新增强制 SQL。
+- Telegram Sync workflow 新增 GitHub Actions summary，并将成功通知 step 改为中性的 result 命名；shared `site-build` 支持跳过重复 `npm ci`，dev Pages 部署固定 Wrangler 版本并补齐 Pages 输出目录配置。
+- `package.json` 版本号更新为 `1.2.3`。
+
+### Fixed
+
+- 补齐 `exportTrainingMarkdown()` 的睡眠段落与饮食 `##### 餐次明细` 导出，并让 `parseTrainingRecord()` 能读回 sleep health metrics、睡眠阶段明细和 nutrition details，避免全量导出造成可见字段丢失。
+
 ## [1.2.2] - 2026-06-05
 
 ### Added
