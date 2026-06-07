@@ -158,7 +158,7 @@ jobs:
         run: node tools/telegram-sync-notify.mjs
 
       - name: Trigger async dev site deploy
-        if: success() && github.event_name == 'repository_dispatch' && steps.detect.outputs.repo_changed != 'true' && steps.detect.outputs.db_content_changed == 'true'
+        if: success() && github.event_name == 'repository_dispatch' && (steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true')
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}

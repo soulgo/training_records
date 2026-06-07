@@ -430,7 +430,12 @@ export async function runTelegramSync(options = {}) {
         }),
       );
 
+      const storedSleepImageBatch =
+        isTrainingDataBatchKind(persistedBatch.kind) &&
+        persistResult.status === 'stored' &&
+        hasSleepBatchPayload(persistedBatch);
       changed ||= persistedBatch.status === 'ready' && persistResult.status === 'stored';
+      replayStoredImageAny ||= storedSleepImageBatch;
       batchResults.push({
         ...persistedBatch,
         persistenceStatus: persistResult.status,
@@ -610,6 +615,36 @@ function shouldRunSleepBackfill({ rawEnv, replayStoredImageAny }) {
     return false;
   }
   return replayStoredImageAny;
+}
+
+function hasSleepBatchPayload(batch) {
+  const sleep = batch?.sleep;
+  if (!sleep) {
+    return false;
+  }
+
+  if (Array.isArray(sleep.records) && sleep.records.length > 0) {
+    return true;
+  }
+
+  return [
+    sleep.totalSleepMinutes,
+    sleep.nightSleepMinutes,
+    sleep.napMinutes,
+    sleep.bedtime,
+    sleep.wakeTime,
+    sleep.sleepStartTime,
+    sleep.sleepEndTime,
+    sleep.deepSleepMinutes,
+    sleep.lightSleepMinutes,
+    sleep.remSleepMinutes,
+    sleep.awakeMinutes,
+    sleep.sleepStageText,
+    sleep.sleepStageDetail,
+    sleep.sleepScore,
+    sleep.analysisText,
+    sleep.suggestionText,
+  ].some((value) => value !== null && value !== undefined && value !== '' && value !== 0);
 }
 
 function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {

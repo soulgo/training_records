@@ -26,16 +26,17 @@
 - Telegram Sync main/dev workflow 移除同步 action 内联站点构建与 Pages 部署，改为在 commit/push 后立即发送 Telegram “已入库/解析完成”通知，再异步触发独立站点部署 workflow。
 - Telegram Sync 失败监控不再把站点构建或 Pages 部署状态归为同步失败原因；站点部署失败改由独立部署 workflow 暴露，不影响 Telegram 入库回执。
 - Dev 环境文档改为包含 Cloudflare Pages 在线预览流程，保留本地 `npm run server` 作为快速调试入口。
-- Telegram Sync 的仓库文件变化继续通过 push 触发 Pages/Cloudflare Pages 部署；只有 DB-only 入库成功且没有 repo change 时，才额外 dispatch 独立部署 workflow，并启用严格数据库快照模式。
+- Telegram Sync 在 `repository_dispatch` 入库成功后，只要仓库文件或数据库内容发生变化，都会异步 dispatch 独立部署 workflow，并启用严格数据库快照模式。
 - 页面构建读取 PostgreSQL 快照时保留多连接并发读取，遇到连接或查询失败后会重试一次单连接读取，降低构建阶段因连接抖动回退 Markdown 的概率。
 - Telegram Sync workflow 权限收敛为 `contents: write` 与 `actions: write`，不再为同步 workflow 申请 Pages/id-token 权限。
 
 ### Fixed
 
 - 修复 Dev Telegram webhook URL 误填 Cloudflare Account ID 导致 `setWebhook` 失败的问题，明确应使用 Workers 子域名。
-- 修复 Dev Telegram Sync 由 `GITHUB_TOKEN` 推送内容后不会触发 Dev Pages 自动部署的问题：repo 变化交给 push deploy，DB-only 入库通过异步 dispatch 触发 `deploy-cloudflare-pages-dev.yml`。
+- 修复 Dev Telegram Sync 由 `GITHUB_TOKEN` 推送内容后不会触发 Dev Pages 自动部署的问题：repo 或 DB 内容变化都会异步 dispatch `deploy-cloudflare-pages-dev.yml`。
 - 修复 Telegram Sync 在 `repository_dispatch` 下仍等待站点 build/deploy 导致单次图片同步耗时过长的问题；现在 Action 只等待解析与入库，页面展示由独立 deploy workflow 异步完成。
-- 修复 DB-only 入库后页面构建读库失败时可能静默回退并发布旧 Markdown 页面的问题；DB-only 异步部署会启用严格数据库模式，读库失败将直接暴露为部署失败。
+- 修复 Telegram 睡眠图片批次成功识别并存储后未触发 `core.sleep` 回填的问题，避免日志无报错但睡眠表和页面仍没有睡眠数据。
+- 修复 DB-only 入库后页面构建读库失败时可能静默回退并发布旧 Markdown 页面的问题；Telegram Sync 异步部署会启用严格数据库模式，读库失败将直接暴露为部署失败。
 
 ## [1.2.3] - 2026-06-07
 

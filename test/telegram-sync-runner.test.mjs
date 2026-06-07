@@ -297,6 +297,7 @@ test('runTelegramSync persists ready batches to the database and merges markdown
     exportTrainingMarkdown: () => {
       throw new Error('exportTrainingMarkdown should not run for stored image batches');
     },
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
   });
 
   assert.equal(result.changed, true);
@@ -363,6 +364,7 @@ test('runTelegramSync writes the ready batch back into markdown without rebuildi
     exportTrainingMarkdown: () => {
       throw new Error('exportTrainingMarkdown should not run for stored image batches');
     },
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
   });
 
   assert.equal(result.changed, true);
@@ -495,6 +497,7 @@ test('runTelegramSync writes stored sleep image batches back into markdown', asy
     exportTrainingMarkdown: () => {
       throw new Error('exportTrainingMarkdown should not run for stored image batches');
     },
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
   });
 
   const markdown = await readFile(path.join(tempRoot, '训练记录.md'), 'utf8');
@@ -505,9 +508,10 @@ test('runTelegramSync writes stored sleep image batches back into markdown', asy
   assert.match(markdown, /总睡眠：505分钟/);
 });
 
-test('runTelegramSync does not run full sleep backfill for a fresh stored sleep image by default', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-sleep-no-backfill-'));
+test('runTelegramSync runs sleep backfill for a fresh stored sleep image by default', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-sleep-backfill-'));
   await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');
+  const backfillCalls = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -550,8 +554,59 @@ test('runTelegramSync does not run full sleep backfill for a fresh stored sleep 
       },
     ],
     persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    backfillCoreSleepFromIngestBatches: async (input) => {
+      backfillCalls.push(input);
+      return { status: 'synced' };
+    },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(backfillCalls.length, 1);
+  assert.equal(backfillCalls[0].sourceChannel, 'telegram_sync');
+  assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), true);
+});
+
+test('runTelegramSync does not run sleep backfill for a fresh stored non-sleep image by default', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-nutrition-no-sleep-backfill-'));
+  await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 128,
+          date: 1775433600,
+          chat: { id: 42 },
+          caption: '归档到 2026-05-30',
+          photo: [{ file_id: 'file-food', file_unique_id: 'uniq-food' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 128,
+        imageType: 'nutrition',
+        detectedDate: '2026-05-30',
+        dateEvidence: 'image header',
+        confidence: 0.97,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [{ name: '晚餐', calories: 329, recommendedMin: 310, recommendedMax: 723 }],
+          totalCalories: 329,
+          details: ['晚餐 329 千卡'],
+          dailyWorkoutSummary: null,
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
     backfillCoreSleepFromIngestBatches: async () => {
-      throw new Error('sleep backfill should not run for fresh stored sleep images by default');
+      throw new Error('sleep backfill should not run for non-sleep images by default');
     },
   });
 

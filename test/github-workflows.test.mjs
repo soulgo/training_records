@@ -186,7 +186,7 @@ test('deploy-pages workflow still triggers for site-relevant changes', async () 
   }
 });
 
-test('telegram-sync workflow notifies after sync and leaves site deploy to push workflows', async () => {
+test('telegram-sync workflow notifies after sync and dispatches async site deploys', async () => {
   const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
 
   assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
@@ -209,7 +209,7 @@ test('telegram-sync workflow notifies after sync and leaves site deploy to push 
   assert.match(workflow, /TELEGRAM_RECOGNITION_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_MODEL \}\}/);
   assert.match(workflow, /- name: Trigger async site deploy/);
   assert.match(workflow, /actions\/workflows\/deploy-pages\.yml\/dispatches/);
-  assert.match(workflow, /steps\.detect\.outputs\.repo_changed != 'true'/);
+  assert.match(workflow, /steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/);
   assert.match(workflow, /-d '\{"ref":"main","inputs":\{"strict_database_snapshot":"true"\}\}'/);
   assert.ok(
     workflow.indexOf('- name: Notify Telegram sync result') > workflow.indexOf('- name: Push changes'),
@@ -253,7 +253,7 @@ test('telegram-sync workflows keep database-only detection without blocking on p
     assert.match(workflow, /readyStoredTrainingBatches/);
     assert.match(workflow, /- name: Write Telegram sync summary/);
     assert.match(workflow, /- name: Notify Telegram sync result/);
-    assert.match(workflow, /if: success\(\) && github\.event_name == 'repository_dispatch' && steps\.detect\.outputs\.repo_changed != 'true' && steps\.detect\.outputs\.db_content_changed == 'true'/);
+    assert.match(workflow, /if: success\(\) && github\.event_name == 'repository_dispatch' && \(steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'\)/);
     assert.match(workflow, /strict_database_snapshot/);
     assert.doesNotMatch(workflow, /steps\.detect\.outputs\.db_content_changed == 'true'[\s\S]*uses:\s*\.\/\.github\/actions\/site-build/);
   }
