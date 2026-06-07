@@ -247,114 +247,19 @@ npm run telegram:webhook
 
 以下两个文件必须放在 `main` 分支（`repository_dispatch` 只能触发默认分支上的工作流文件）。
 
-### 7.1 创建 `.github/workflows/telegram-sync-dev.yml`
+### 7.1 确认 `.github/workflows/telegram-sync-dev.yml`
 
-```yaml
-name: Telegram Sync (Dev)
+当前仓库已经包含 `.github/workflows/telegram-sync-dev.yml`。如果需要重建或审查 Dev Sync workflow，至少确认这些关键点：
 
-on:
-  workflow_dispatch:
-  repository_dispatch:
-    types:
-      - telegram_update_dev
-
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-
-concurrency:
-  group: telegram-sync-dev
-  cancel-in-progress: false
-
-jobs:
-  sync:
-    if: github.event_name != 'push' || github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    env:
-      TRAINING_DB_ENABLED: 'true'
-      TRAINING_DB_URL: ${{ secrets.DEV_TRAINING_DB_URL }}
-      TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
-      TRAINING_DB_APP_NAME: ${{ vars.DEV_TRAINING_DB_APP_NAME }}
-      TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
-    steps:
-      - name: Checkout dev branch
-        uses: actions/checkout@v4
-        with:
-          ref: dev
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        id: install
-        run: npm ci
-
-      - name: Sync Telegram updates
-        id: sync
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}
-          AI_API_KEY: ${{ secrets.AI_API_KEY }}
-          AI_BASE_URL: ${{ vars.AI_BASE_URL }}
-          AI_MODEL: ${{ vars.AI_MODEL }}
-          AI_CONCURRENCY: ${{ vars.AI_CONCURRENCY }}
-          TRAINING_ANALYSIS_GOAL: ${{ vars.TRAINING_ANALYSIS_GOAL }}
-          TELEGRAM_ALLOWED_CHAT_IDS: ${{ vars.TELEGRAM_ALLOWED_CHAT_IDS }}
-          TELEGRAM_POLL_LIMIT: ${{ vars.TELEGRAM_POLL_LIMIT }}
-          TELEGRAM_SYNC_TRANSPORT: webhook
-          TELEGRAM_SYNC_NOTIFY_STAGE: after_action
-          TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
-        run: npm run sync:telegram
-
-      - name: Detect changes
-        id: detect
-        run: |
-          if [ -z "$(git status --porcelain -- 训练记录.md source/_posts source/images)" ]; then
-            echo "repo_changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "repo_changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Commit sync results
-        id: commit
-        if: steps.detect.outputs.repo_changed == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add 训练记录.md source/_posts source/images
-          git commit -m "chore(dev): sync Telegram updates"
-
-      - name: Push changes
-        id: push
-        if: steps.detect.outputs.repo_changed == 'true'
-        run: git push origin HEAD:dev
-
-      - name: Notify Telegram sync success
-        if: success() && github.event_name == 'repository_dispatch'
-        continue-on-error: true
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_SYNC_NOTIFY: true
-          TELEGRAM_SYNC_NOTIFY_STAGE: after_action
-          TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
-        run: node tools/telegram-sync-notify.mjs
-
-      - name: Notify Telegram sync failure
-        if: failure() && github.event_name == 'repository_dispatch'
-        continue-on-error: true
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}
-          STEP_INSTALL_OUTCOME: ${{ steps.install.outcome }}
-          STEP_SYNC_OUTCOME: ${{ steps.sync.outcome }}
-          STEP_DETECT_OUTCOME: ${{ steps.detect.outcome }}
-          STEP_COMMIT_OUTCOME: ${{ steps.commit.outcome }}
-          STEP_PUSH_OUTCOME: ${{ steps.push.outcome }}
-        run: node tools/telegram-action-monitor.mjs
-```
+- `repository_dispatch.types` 使用 `telegram_update_dev`。
+- checkout 固定 `ref: dev`，自动提交 push 到 `dev`。
+- `TELEGRAM_BOT_TOKEN` 使用 `secrets.DEV_TELEGRAM_BOT_TOKEN`，数据库使用 `secrets.DEV_TRAINING_DB_URL`。
+- `Detect changes` 同时输出文件变化和 DB-only `ready + stored` 图片批次数；即使仓库文件无变化，数据库有新增训练数据也会构建 dev 站点。
+- 调用共享 `site-build` 时传 `install_dependencies: false`，因为前面已经执行过 `npm ci`。
+- dev 站点构建后删除 `public/CNAME`，再用固定 Wrangler 版本 direct upload 到 Cloudflare Pages。
+- `repository_dispatch` 会写 GitHub Step Summary，输出 `batchId`、`taskStatus`、`persistenceStatus`、`archivedDate`、图片计数、pending 状态、`failureDisposition` 和失败 message ids。
+- 成功通知步骤名应为 `Notify Telegram sync result`，不要再使用容易误读的 `Notify Telegram sync success`。
+- 失败通知要包含 `STEP_SITE_BUILD_OUTCOME` 和 `STEP_PAGES_DEPLOY_OUTCOME`，方便区分同步、构建和 dev Pages 发布问题。
 
 ### 7.2 创建 `.github/workflows/deploy-cloudflare-worker-dev.yml`（可选）
 

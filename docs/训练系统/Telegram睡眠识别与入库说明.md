@@ -69,9 +69,10 @@ Telegram 睡眠图进入同一条图片同步链路：
 2. `tools/telegram-sync-lib.mjs` 对 Telegram update 分组，单图和相册都会变成图片 batch。
 3. `src/ai/recognition-service.mjs` 调用 AI provider 识别图片，并通过 schema 校验。
 4. `analyzeTelegramBatch()` 汇总 `records.sleep`，生成 `batchResult.sleep`。
-5. `status=ready` 的批次优先写 PostgreSQL。
-6. 数据库写入失败时，仍会回退写 `训练记录.md`，并进入 pending 队列等待后续重放。
-7. 页面构建读取数据库快照；数据库快照不可用或不完整时，会回退到 Markdown，避免页面长期空白。
+5. `status=ready` 的批次优先写 PostgreSQL；正常成功路径只增量 upsert 当前 sleep 明细并刷新目标 `core.training_day` 睡眠汇总。
+6. 成功路径不会默认全量覆盖整份 `训练记录.md`；需要保持人工账本可见时，只对睡眠归档日做 Markdown 增量合并。
+7. 数据库写入失败时，仍会回退写 `训练记录.md`，并进入 pending 队列等待后续重放。
+8. 页面构建读取数据库快照；数据库快照不可用或不完整时，会回退到 Markdown，避免页面长期空白。
 
 睡眠记录在同步结果中会汇总为：
 
@@ -135,7 +136,8 @@ Telegram 睡眠图进入同一条图片同步链路：
 
 - `core.sleep` 使用 `sleep_key` 去重。
 - `archive.training_sleep` 使用 `sleep_hash` 去重。
-- 同一天重复同步时，会先读取已有日期数据，再按本批次包含的模块合并；睡眠字段会随本批次结果更新。
+- 同一天重复同步时，Telegram 图片路径只 upsert 本批次 sleep row 并刷新目标 `core.training_day`，不会整日删除重建其它模块。
+- Telegram sleep 如需写 archive，只 upsert 本批次 `archive.training_sleep`，不触发整日 archive snapshot 重写。
 - archive-only 睡眠记录可通过回填链路补写 `core.sleep`。
 
 ## 6. SQL 与迁移
@@ -171,8 +173,9 @@ psql "$TRAINING_DB_URL" -f sql/training_records/sleep_health_metrics.sql
 6. 查 `core.sleep` 是否有对应 `archived_date`。
 7. 查 `core.training_day` 的睡眠汇总字段是否更新。
 8. 查 `archive.training_sleep` 是否有对应归档记录。
-9. 如果数据库写入失败，看 `runtime/telegram-sync-pending.ndjson` 是否等待重放。
-10. 如果数据库有数据但页面不显示，运行 `npm run build:data`，检查 `训练数据解析.md` 和 `source/_data/dashboardView.json`。
+9. 看 GitHub Actions summary 的 `taskStatus`、`persistenceStatus`、`failureDisposition` 和 failed message ids，确认是已入库、自动重试还是需要重新发送。
+10. 如果数据库写入失败，看 `runtime/telegram-sync-pending.ndjson` 是否等待重放。
+11. 如果数据库有数据但页面不显示，运行 `npm run build:data`，检查 `训练数据解析.md` 和 `source/_data/dashboardView.json`。
 
 ## 8. 相关文件
 
@@ -180,6 +183,9 @@ psql "$TRAINING_DB_URL" -f sql/training_records/sleep_health_metrics.sql
 - `prompts/telegram-training-image-recognition.md`
 - `tools/telegram-recognition-schema.mjs`
 - `tools/telegram-sync-lib.mjs`
+- `tools/telegram-sync-dates.mjs`
+- `tools/telegram-sync-markdown.mjs`
+- `tools/telegram-sync-status.mjs`
 - `src/ai/recognition-service.mjs`
 - `src/db/training/write.mjs`
 - `src/db/training/read.mjs`

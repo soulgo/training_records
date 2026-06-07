@@ -27,7 +27,7 @@
 
 睡眠截图是例外：睡眠图会优先按 `wakeTime` 或截图日期代表的醒来日期减一天归档，详见本文第 7 节。
 
-对应实现见 `tools/telegram-sync-lib.mjs`。
+对外兼容入口仍在 `tools/telegram-sync-lib.mjs`，日期解析实现主要在 `tools/telegram-sync-dates.mjs`。
 
 ## 2. 图片内日期的来源边界
 
@@ -61,7 +61,7 @@
 - 如果图片本身没有日期，又想依赖文件名日期回退，优先用 `document/文件` 发送。
 - 如果只能用 `photo/照片` 发送，就要尽量保证图片画面里自己能看到日期，或者能看到相册详情页里的文件名日期。
 
-当前程序在“看起来是 `photo` 发送且没有拿到文件名”时，会额外给出 warning，见 `tools/telegram-sync-lib.mjs`。
+当前程序在“看起来是 `photo` 发送且没有拿到文件名”时，会额外给出 warning，见 `tools/telegram-sync-lib.mjs` 和 `tools/telegram-sync-dates.mjs`。
 
 ## 4. 单张图片的处理流程
 
@@ -259,6 +259,7 @@
 
 - `prompts/telegram-training-image-recognition.md`
 - `tools/telegram-sync-lib.mjs`
+- `tools/telegram-sync-dates.mjs`
 - `tools/telegram-sync.mjs`
 - `test/telegram-sync.test.mjs`
 - `test/telegram-sync-runner.test.mjs`
