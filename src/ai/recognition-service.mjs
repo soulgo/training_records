@@ -480,6 +480,8 @@ function normalizeRecognitionPayload(value) {
   const missingMeasurementData = value.imageType === 'measurement' && !isPlainObject(records.measurement);
   return {
     ...value,
+    detectedDate: normalizeNullableString(value.detectedDate),
+    dateEvidence: normalizeNullableString(value.dateEvidence) ?? '',
     confidence: missingMeasurementData
       ? Math.min(Number.isFinite(value.confidence) ? value.confidence : 0, 0.5)
       : value.confidence,
@@ -496,6 +498,18 @@ function normalizeRecognitionPayload(value) {
       sleep: normalizeRecognitionSleep(records.sleep ?? null),
     },
   };
+}
+
+function normalizeNullableString(value) {
+  if (typeof value !== 'string') {
+    return value ?? null;
+  }
+
+  const trimmed = value.trim();
+  if (/^(?:null|undefined|n\/a|na|none|unknown|未知|无)$/i.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
 }
 
 function normalizeRecognitionDetails(details) {
@@ -618,6 +632,7 @@ function buildStrictRecognitionResponseFormat(schemaName) {
 }
 
 function buildRecognitionMessages({ imageUrl, message, systemPrompt }) {
+  const messageDate = formatTelegramMessageDate(message.dateUnix);
   return [
     {
       role: 'system',
@@ -631,6 +646,8 @@ function buildRecognitionMessages({ imageUrl, message, systemPrompt }) {
           text: [
             `caption: ${message.caption || '(empty)'}`,
             `text: ${message.text || '(empty)'}`,
+            `telegramMessageDate: ${messageDate.date ?? '(unknown)'}`,
+            `telegramMessageYear: ${messageDate.year ?? '(unknown)'}`,
             '将图片识别为训练系统可写回的结构化结果。',
             'Return only valid json.',
           ].join('\n'),
@@ -644,6 +661,28 @@ function buildRecognitionMessages({ imageUrl, message, systemPrompt }) {
       ],
     },
   ];
+}
+
+function formatTelegramMessageDate(unixSeconds) {
+  if (!Number.isFinite(unixSeconds)) {
+    return {
+      date: null,
+      year: null,
+    };
+  }
+
+  const date = new Date(unixSeconds * 1000);
+  if (Number.isNaN(date.getTime())) {
+    return {
+      date: null,
+      year: null,
+    };
+  }
+
+  return {
+    date: date.toISOString().slice(0, 10),
+    year: date.getUTCFullYear(),
+  };
 }
 
 function buildStrictJsonRetryMessages(messages, invalidContent) {

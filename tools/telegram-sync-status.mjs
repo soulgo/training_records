@@ -515,6 +515,9 @@ export function classifyFailureCategory(message, options = {}) {
   if (/missing recognition/i.test(text)) {
     return 'user_input';
   }
+  if (/low confidence/i.test(text)) {
+    return 'ai_service';
+  }
   if (/\bAI\b|recognition|analysis|agent|schema|JSON|HTTP\s*(?:4\d\d|5\d\d)|rate|timeout|timed out|empty content|provider/i.test(`${phase} ${text}`)) {
     return 'ai_service';
   }

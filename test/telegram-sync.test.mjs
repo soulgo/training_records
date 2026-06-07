@@ -3368,6 +3368,47 @@ test('single training image with month-day only produces year-completion uncerta
   assert.equal(analyzed.activities.length, 1);
 });
 
+test('low confidence image with visible date reports detected date instead of no reliable date', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-low-confidence-visible-date',
+    messages: [
+      {
+        messageId: 9002,
+        mediaGroupId: null,
+        dateUnix: Date.UTC(2026, 5, 8, 5, 46, 33) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1', source: 'photo' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 9002,
+      imageType: 'workout',
+      detectedDate: '2026-06-06',
+      dateEvidence: 'image shows 6月6日, year from telegram message',
+      confidence: 0.62,
+      warnings: ['date text is small'],
+      records: {
+        activities: [{ time: '18:55', type: '力量训练', detail: '总消耗185千卡' }],
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.equal(analyzed.failureCategory, 'ai_service');
+  assert.match(analyzed.reason, /low confidence/);
+  assert.match(analyzed.reason, /image date detected below confidence threshold: 2026-06-06/);
+  assert.doesNotMatch(analyzed.reason, /no reliable image or filename date/);
+  assert.equal(analyzed.dateSources[0].detectedDate, '2026-06-06');
+  assert.equal(analyzed.dateSources[0].source, 'low_confidence');
+  assert.equal(analyzed.warnings.length, 0);
+});
+
 test('two images with different dates where overview has full date and training has conflicting month-day after year completion causes skip', async () => {
   const lib = await importTelegramSyncLib();
 

@@ -5071,6 +5071,75 @@ test('runTelegramSync sends Telegram result notification when an image batch is 
   assert.match(sentMessages[0].text, /no reliable image or filename date/);
 });
 
+test('runTelegramSync queues low-confidence visible-date images instead of reporting no reliable date', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-low-confidence-date-'));
+  const queued = [];
+  const sentMessages = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_ALLOWED_CHAT_IDS: '42',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 903,
+          date: Math.floor(new Date('2026-06-08T05:46:33Z').getTime() / 1000),
+          chat: { id: 42 },
+          photo: [{ file_id: 'file-a', file_unique_id: 'uniq-a' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => ({
+      recognitions: [
+        {
+          messageId: 903,
+          imageType: 'workout',
+          detectedDate: '2026-06-06',
+          dateEvidence: 'image shows 6月6日, year from telegram message',
+          confidence: 0.62,
+          warnings: ['date text is small'],
+          records: {
+            activities: [{ time: '19:13', type: '力量训练', detail: '总消耗241千卡' }],
+          },
+        },
+      ],
+      recognitionErrors: [],
+    }),
+    appendPendingRecognitionBatch: async (entry) => {
+      queued.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9903 };
+    },
+  });
+
+  const batch = result.batchResults[0];
+  assert.equal(batch.status, 'skipped');
+  assert.equal(batch.failureCategory, 'ai_service');
+  assert.equal(batch.recognitionPendingStatus, 'queued');
+  assert.match(batch.reason, /image date detected below confidence threshold: 2026-06-06/);
+  assert.doesNotMatch(batch.reason, /no reliable image or filename date/);
+  assert.equal(batch.dateSources[0].detectedDate, '2026-06-06');
+  assert.equal(queued.length, 1);
+  assert.equal(sentMessages.length, 1);
+  assert.match(sentMessages[0].text, /AI 识别失败/);
+  assert.match(sentMessages[0].text, /已加入重试队列/);
+  assert.doesNotMatch(sentMessages[0].text, /no reliable image or filename date/);
+});
+
 test('runTelegramSync queues partial failure ready batches for pending recognition', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-partial-failure-pending-'));
   const queued = [];

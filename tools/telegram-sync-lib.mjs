@@ -280,12 +280,15 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       });
       continue;
     }
+    const normalizedDetectedDate = normalizeRecognitionDate(recognition, message);
+    const archiveDate = resolveRecognitionArchiveDate(recognition, normalizedDetectedDate, message);
+
     if ((recognition.confidence ?? 0) < minConfidence) {
       issues.push(`low confidence for message ${message.messageId}`);
       failedMessageIds.push(message.messageId);
       dateSources.push({
         messageId: message.messageId,
-        detectedDate: recognition.detectedDate ?? null,
+        detectedDate: archiveDate ?? null,
         dateEvidence: recognition.dateEvidence ?? null,
         source: 'low_confidence',
       });
@@ -293,15 +296,10 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     }
 
     recognizedImageCount += 1;
-    const normalizedDetectedDate = normalizeRecognitionDate(recognition, message);
 
     for (const warning of recognition.warnings ?? []) {
       warnings.push(warning);
     }
-
-    const archiveDate = recognition.imageType === 'sleep'
-      ? resolveSleepArchiveDate(recognition.records?.sleep, normalizedDetectedDate, message)
-      : normalizedDetectedDate;
 
     dateSources.push({
       messageId: message.messageId,
@@ -425,6 +423,21 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   }
 
   if (!archivedDate) {
+    const lowConfidenceImageDates = dateSources
+      .filter((source) => source.source === 'low_confidence' && source.detectedDate)
+      .map((source) => source.detectedDate);
+    if (lowConfidenceImageDates.length > 0) {
+      return buildSkippedBatchResult(batch, {
+        reason: `${issues.join('; ')}; image date detected below confidence threshold: ${[...new Set(lowConfidenceImageDates)].sort().join(', ')}`,
+        warnings,
+        issues,
+        dateSources,
+        sourceImageCount,
+        recognizedImageCount,
+        failedImageCount: failedMessageIds.length,
+        failureCategory: 'ai_service',
+      });
+    }
     if (filenameDates.size === 0 && batchLikelyLostOriginalFilename(batch)) {
       warnings.push(
         '该 Telegram 图片看起来是以 photo 形式发送，Bot API 通常不会保留原始文件名；若要依赖文件名日期回退，请改为以 document/文件 发送。',
@@ -440,6 +453,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       sourceImageCount,
       recognizedImageCount,
       failedImageCount: failedMessageIds.length,
+      failureCategory: issues.some((issue) => /^low confidence\b/i.test(issue)) ? 'ai_service' : null,
     });
   }
 
@@ -472,6 +486,12 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       nutrition: normalizedNutrition,
     }),
   };
+}
+
+function resolveRecognitionArchiveDate(recognition, normalizedDetectedDate, message) {
+  return recognition.imageType === 'sleep'
+    ? resolveSleepArchiveDate(recognition.records?.sleep, normalizedDetectedDate, message)
+    : normalizedDetectedDate;
 }
 
 export function processTelegramBatch(batch, recognitions, options = {}) {
