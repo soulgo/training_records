@@ -16,18 +16,27 @@
 ### Added
 
 - 新增 `deploy-cloudflare-pages-dev.yml`，将 `dev` 分支构建产物发布到 Cloudflare Pages 预览环境，默认地址为 `https://training-records-dev.pages.dev`。
+- Telegram Sync 报告新增 `timingsMs` 阶段耗时，并在 GitHub Actions Summary 展示 `recognition`、`persist`、`markdownRewrite`、`notify`、`total` 等耗时表，便于直接定位同步慢点。
+- 新增 `TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE=auto|url|inline`，支持先下载 Telegram 图片并以内联 data URL 发送给 AI；GitHub Actions 默认使用 `inline`。
+- 新增 `TELEGRAM_RECOGNITION_MODEL`，可只覆盖 Telegram 图片识别模型，未配置时继续使用 `AI_MODEL`。
+- Deploy Pages 与 Dev Cloudflare Pages workflow 新增 `strict_database_snapshot` 手动输入，并映射为 `TRAINING_SNAPSHOT_STRICT_DATABASE`。
 
 ### Changed
 
 - Dev 环境文档改为包含 Cloudflare Pages 在线预览流程，保留本地 `npm run server` 作为快速调试入口。
 - 将 Dev 环境配置手册提升到 `docs/dev_env/`，仅保留实施步骤文档，删除优化方案目录下的旧 plan 文档。
+- `telegram-sync.yml` 和 `telegram-sync-dev.yml` 不再在 Telegram Sync Action 内构建和部署站点；同步步骤只负责解析、入库、通知和必要的异步 deploy 触发。
+- Telegram Sync 的仓库文件变化继续通过 push 触发 Pages/Cloudflare Pages 部署；只有 DB-only 入库成功且没有 repo change 时，才额外 dispatch 独立部署 workflow，并启用严格数据库快照模式。
+- `sync:telegram` 对已入库图片批次不再等待完整数据库快照导出，改为只按已持久化 batch 对目标日期做必要的 Markdown 增量合并。
+- 页面构建读取 PostgreSQL 快照时保留多连接并发读取，遇到连接或查询失败后会重试一次单连接读取，降低构建阶段因连接抖动回退 Markdown 的概率。
+- Telegram Sync workflow 权限收敛为 `contents: write` 与 `actions: write`，不再为同步 workflow 申请 Pages/id-token 权限。
 
 ### Fixed
 
 - 修复 Dev Telegram webhook URL 误填 Cloudflare Account ID 导致 `setWebhook` 失败的问题，明确应使用 Workers 子域名。
-- 修复 Dev Telegram Sync 由 `GITHUB_TOKEN` 推送内容后不会触发 Dev Pages 自动部署的问题，现在同步成功后会直接构建并部署 `training-records-dev`。
-- 修复 Dev Telegram Sync 内嵌 Cloudflare Pages 部署误用 Worker API Token 导致认证失败的问题，并让 Telegram 失败回执正确显示 `Deploy dev site to Cloudflare Pages` 阶段。
-- 修复 Telegram 训练同步在第二次更新后只能写入 Markdown、却没有同步触发站点重建与部署的问题；现在数据库回填失败或超时时会降级为 Markdown 重建，并继续发布最新静态站点，避免页面停留在旧数据。
+- 修复 Dev Telegram Sync 由 `GITHUB_TOKEN` 推送内容后不会触发 Dev Pages 自动部署的问题：repo 变化交给 push deploy，DB-only 入库通过异步 dispatch 触发 `deploy-cloudflare-pages-dev.yml`。
+- 修复 Telegram Sync 在 `repository_dispatch` 下仍等待站点 build/deploy 导致单次图片同步耗时过长的问题；现在 Action 只等待解析与入库，页面展示由独立 deploy workflow 异步完成。
+- 修复 DB-only 入库后页面构建读库失败时可能静默回退并发布旧 Markdown 页面的问题；DB-only 异步部署会启用严格数据库模式，读库失败将直接暴露为部署失败。
 
 ## [1.2.0] - 2026-06-02
 
