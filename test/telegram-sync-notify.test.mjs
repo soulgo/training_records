@@ -153,3 +153,51 @@ test('telegram sync notifier reports partial failures instead of success for sto
   assert.match(sentMessages[0].text, /invalid JSON/);
   assert.doesNotMatch(sentMessages[0].text, /解析成功/);
 });
+
+test('telegram sync notifier explains deferred database writes for fallback image batches', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notifier-fallback-'));
+  const resultPath = path.join(tempRoot, 'result.json');
+  const sentMessages = [];
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'image',
+          status: 'ready',
+          batchId: 'single-125',
+          archivedDate: '2026-05-30',
+          messages: [{ chatId: 42, messageId: 125 }],
+          persistenceStatus: 'fallback_markdown',
+          persistenceError: 'database unavailable',
+          sourceImageCount: 1,
+          recognizedImageCount: 1,
+          failedImageCount: 0,
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  const result = await notifyTelegramSyncResultFromFile({
+    resultPath,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+      TELEGRAM_SYNC_TRANSPORT: 'webhook',
+    },
+    sendMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9904 };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].replyToMessageId, 125);
+  assert.match(sentMessages[0].text, /图片已识别/);
+  assert.match(sentMessages[0].text, /数据库写入未完成/);
+  assert.match(sentMessages[0].text, /等待数据库重放/);
+  assert.doesNotMatch(sentMessages[0].text, /解析成功/);
+});

@@ -141,6 +141,10 @@ export function createIncrementalPersistClient({
   activitySummary = {},
   mealSummary = {},
   daySummary = {},
+  measurementRows = [],
+  activityRows = [],
+  mealRows = [],
+  sleepRows = [],
 } = {}) {
   const calls = [];
   const client = {
@@ -151,6 +155,37 @@ export function createIncrementalPersistClient({
       calls.push([sql, params]);
       if (/select payload_hash\s+from ingest\.telegram_batch/i.test(sql)) {
         return { rows: [] };
+      }
+      if (
+        /from core\.training_day/i.test(sql) &&
+        /where archived_date = \$1/i.test(sql) &&
+        !/insert into core\.training_day/i.test(sql)
+      ) {
+        return {
+          rows: [{
+            archived_date: params?.[0] ?? normalizedBatch.archivedDate,
+            total_activities: activitySummary.total_activities ?? activityRows.length,
+            total_duration_seconds: activitySummary.total_duration_seconds ?? 0,
+            training_calories: activitySummary.training_calories ?? 0,
+            workout_duration_minutes: daySummary.workout_duration_minutes ?? null,
+            active_hours: daySummary.active_hours ?? null,
+            cycling_distance_km: activitySummary.cycling_distance_km ?? 0,
+            intake_calories: daySummary.intake_calories ?? mealSummary.intake_calories ?? null,
+            nutrition_details_json: daySummary.nutrition_details_json ?? [],
+          }],
+        };
+      }
+      if (/from core\.measurement/i.test(sql) && !/insert into core\.measurement/i.test(sql)) {
+        return { rows: measurementRows };
+      }
+      if (/from core\.activity/i.test(sql) && !/insert into core\.activity/i.test(sql)) {
+        return { rows: activityRows };
+      }
+      if (/from core\.meal/i.test(sql) && !/insert into core\.meal/i.test(sql)) {
+        return { rows: mealRows };
+      }
+      if (/from core\.sleep/i.test(sql) && !/insert into core\.sleep/i.test(sql)) {
+        return { rows: sleepRows };
       }
       if (/count\(\*\)::integer as total_activities/i.test(sql)) {
         return {

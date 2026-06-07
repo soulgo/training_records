@@ -28,7 +28,6 @@ import {
   insertCoreMeasurements,
   insertCoreSleep,
 } from './core-row-writer.mjs';
-import { persistTelegramImageBatchIncremental } from './incremental-write.mjs';
 
 const { Client } = pg;
 const SLEEP_HEALTH_FIELDS = [
@@ -107,15 +106,12 @@ export async function persistNormalizedBatch(options) {
     if (isThoughtBatchKind(batch.kind) && batch.status === 'ready') {
       await persistThoughtMirror(client, batch, processedAt);
     } else if (batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
-      if (isTelegramImageBatch(batch)) {
-        await persistTelegramImageBatchIncremental(client, batch, payloadHash, processedAt);
-      } else {
-        const existingDay = await readCoreDay(client, batch.archivedDate);
-        const mergedDay = mergeBatchIntoDay(existingDay, batch);
-        await replaceCoreDay(client, mergedDay, batch.batchId, processedAt, {
-          sourceHash: payloadHash,
-        });
-      }
+      const existingDay = await readCoreDay(client, batch.archivedDate);
+      const mergedDay = mergeBatchIntoDay(existingDay, batch);
+      await replaceCoreDay(client, mergedDay, batch.batchId, processedAt, {
+        sourceHash: payloadHash,
+        writeArchiveSleep: isTelegramImageBatch(batch) ? false : undefined,
+      });
     }
 
     await client.query('COMMIT');

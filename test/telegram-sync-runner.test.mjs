@@ -310,6 +310,81 @@ test('runTelegramSync incrementally merges markdown after storing a batch even i
   assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /晚餐：329千卡/);
 });
 
+test('runTelegramSync writes stored sleep image batches back into markdown', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-sleep-markdown-'));
+
+  await writeFile(
+    path.join(tempRoot, '训练记录.md'),
+    '# 训练记录\n',
+    'utf8',
+  );
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 125,
+          date: 1775433600,
+          chat: { id: 42 },
+          caption: '归档到 2026-05-30',
+          photo: [{ file_id: 'file-sleep', file_unique_id: 'uniq-sleep' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 125,
+        imageType: 'sleep',
+        detectedDate: '2026-05-30',
+        dateEvidence: 'image header',
+        confidence: 0.97,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [],
+          totalCalories: null,
+          details: [],
+          dailyWorkoutSummary: null,
+          sleep: {
+            records: [
+              {
+                sleepType: '夜间睡眠',
+                bedtime: '22:56',
+                wakeTime: '07:21',
+                totalSleepMinutes: 505,
+                nightSleepMinutes: 505,
+              },
+            ],
+            totalSleepMinutes: 505,
+            nightSleepMinutes: 505,
+            sleepStartTime: '22:56',
+            sleepEndTime: '07:21',
+          },
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for stored image batches');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for stored image batches');
+    },
+  });
+
+  const markdown = await readFile(path.join(tempRoot, '训练记录.md'), 'utf8');
+  assert.equal(result.changed, true);
+  assert.equal(result.fallbackUsed, false);
+  assert.match(markdown, /### 2026-05-29/);
+  assert.match(markdown, /#### 2026-05-29 睡眠截图记录/);
+  assert.match(markdown, /总睡眠：505分钟/);
+});
+
 test('runTelegramSync falls back to markdown when database persistence fails', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-fallback-'));
   const fallbackMarkdown = [];

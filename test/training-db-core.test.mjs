@@ -428,6 +428,34 @@ test('persistNormalizedBatch upserts measurement without deleting other core mod
       intake_calories: 900,
       nutrition_details_json: ['existing dinner'],
     },
+    activityRows: [{
+      archived_date: '2026-05-09',
+      activity_time: '08:00',
+      activity_type: '力量训练',
+      raw_type: '力量训练',
+      detail: '总消耗120千卡，时长00:10:00',
+      calories: 120,
+      heart_rate: null,
+      distance_km: null,
+      avg_speed_kmh: null,
+      duration_text: '00:10:00',
+      duration_seconds: 600,
+    }],
+    mealRows: [{
+      archived_date: '2026-05-09',
+      meal_name: '晚餐',
+      calories: 900,
+      recommended_min: 300,
+      recommended_max: 700,
+    }],
+    sleepRows: [{
+      archived_date: '2026-05-09',
+      sleep_type: '夜间睡眠',
+      bedtime: '23:26',
+      wake_time: '06:19',
+      night_sleep_minutes: 411,
+      total_sleep_minutes: 411,
+    }],
   });
 
   await persistNormalizedBatch({
@@ -452,12 +480,12 @@ test('persistNormalizedBatch upserts measurement without deleting other core mod
   const trainingDayInsert = calls.filter(([sql]) => /insert into core\.training_day/i.test(sql)).at(-1);
 
   assert.ok(calls.some(([sql]) => /insert into core\.measurement/i.test(sql)));
-  assert.equal(calls.some(([sql]) => /insert into core\.activity/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /insert into core\.meal/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /delete from core\.(activity|meal|sleep)/i.test(sql)), false);
-  assert.equal(trainingDayInsert[1][9], 900);
-  assert.equal(trainingDayInsert[1][10], JSON.stringify(['existing dinner']));
+  assert.ok(calls.some(([sql]) => /insert into core\.activity/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into core\.meal/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /delete from core\.(activity|meal|sleep)/i.test(sql)));
+  assert.deepEqual(trainingDayInsert[1][9], [900]);
+  assert.deepEqual(trainingDayInsert[1][10], [JSON.stringify(['existing dinner'])]);
 });
 
 test('persistNormalizedBatch upserts activity without deleting same-day nutrition or sleep', async () => {
@@ -470,6 +498,21 @@ test('persistNormalizedBatch upserts activity without deleting same-day nutritio
       intake_calories: 900,
       nutrition_details_json: ['existing dinner'],
     },
+    mealRows: [{
+      archived_date: '2026-05-09',
+      meal_name: '晚餐',
+      calories: 900,
+      recommended_min: 300,
+      recommended_max: 700,
+    }],
+    sleepRows: [{
+      archived_date: '2026-05-09',
+      sleep_type: '夜间睡眠',
+      bedtime: '23:26',
+      wake_time: '06:19',
+      night_sleep_minutes: 411,
+      total_sleep_minutes: 411,
+    }],
   });
 
   await persistNormalizedBatch({
@@ -494,12 +537,12 @@ test('persistNormalizedBatch upserts activity without deleting same-day nutritio
 
   assert.ok(calls.some(([sql]) => /insert into core\.activity/i.test(sql)));
   assert.equal(calls.some(([sql]) => /insert into core\.measurement/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /insert into core\.meal/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /delete from core\.(measurement|meal|sleep)/i.test(sql)), false);
-  assert.equal(trainingDayInsert[1][3], 2);
-  assert.equal(trainingDayInsert[1][5], normalizedBatch.workoutDailySummary.activityCaloriesKcal);
-  assert.equal(trainingDayInsert[1][10], JSON.stringify(['existing dinner']));
+  assert.ok(calls.some(([sql]) => /insert into core\.meal/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /delete from core\.(measurement|meal|sleep)/i.test(sql)));
+  assert.deepEqual(trainingDayInsert[1][3], [1]);
+  assert.deepEqual(trainingDayInsert[1][5], [normalizedBatch.workoutDailySummary.activityCaloriesKcal]);
+  assert.deepEqual(trainingDayInsert[1][10], [JSON.stringify(['existing dinner'])]);
 });
 
 test('persistNormalizedBatch upserts nutrition details without deleting activity or sleep', async () => {
@@ -512,6 +555,27 @@ test('persistNormalizedBatch upserts nutrition details without deleting activity
       intake_calories: 900,
       nutrition_details_json: ['existing dinner'],
     },
+    activityRows: [{
+      archived_date: '2026-05-09',
+      activity_time: '08:00',
+      activity_type: '力量训练',
+      raw_type: '力量训练',
+      detail: '总消耗120千卡，时长00:10:00',
+      calories: 120,
+      heart_rate: null,
+      distance_km: null,
+      avg_speed_kmh: null,
+      duration_text: '00:10:00',
+      duration_seconds: 600,
+    }],
+    sleepRows: [{
+      archived_date: '2026-05-09',
+      sleep_type: '夜间睡眠',
+      bedtime: '23:26',
+      wake_time: '06:19',
+      night_sleep_minutes: 411,
+      total_sleep_minutes: 411,
+    }],
   });
 
   await persistNormalizedBatch({
@@ -536,11 +600,11 @@ test('persistNormalizedBatch upserts nutrition details without deleting activity
   const trainingDayInsert = calls.filter(([sql]) => /insert into core\.training_day/i.test(sql)).at(-1);
 
   assert.ok(calls.some(([sql]) => /insert into core\.meal/i.test(sql)));
-  assert.equal(calls.some(([sql]) => /insert into core\.activity/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /delete from core\.(activity|sleep)/i.test(sql)), false);
-  assert.equal(trainingDayInsert[1][9], normalizedBatch.nutrition.totalCalories);
-  assert.equal(trainingDayInsert[1][10], JSON.stringify(normalizedBatch.nutrition.details));
+  assert.ok(calls.some(([sql]) => /insert into core\.activity/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /delete from core\.(activity|sleep)/i.test(sql)));
+  assert.deepEqual(trainingDayInsert[1][9], [normalizedBatch.nutrition.totalCalories]);
+  assert.deepEqual(trainingDayInsert[1][10], [JSON.stringify(normalizedBatch.nutrition.details)]);
 });
 
 test('persistNormalizedBatch upserts sleep without deleting nutrition details', async () => {
@@ -553,6 +617,26 @@ test('persistNormalizedBatch upserts sleep without deleting nutrition details', 
       intake_calories: 900,
       nutrition_details_json: ['existing dinner'],
     },
+    activityRows: [{
+      archived_date: '2026-06-03',
+      activity_time: '08:00',
+      activity_type: '力量训练',
+      raw_type: '力量训练',
+      detail: '总消耗120千卡，时长00:10:00',
+      calories: 120,
+      heart_rate: null,
+      distance_km: null,
+      avg_speed_kmh: null,
+      duration_text: '00:10:00',
+      duration_seconds: 600,
+    }],
+    mealRows: [{
+      archived_date: '2026-06-03',
+      meal_name: '晚餐',
+      calories: 900,
+      recommended_min: 300,
+      recommended_max: 700,
+    }],
   });
 
   await persistNormalizedBatch({
@@ -589,14 +673,15 @@ test('persistNormalizedBatch upserts sleep without deleting nutrition details', 
   const trainingDayInsert = calls.filter(([sql]) => /insert into core\.training_day/i.test(sql)).at(-1);
 
   assert.ok(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)));
-  assert.ok(calls.some(([sql]) => /insert into archive\.training_sleep/i.test(sql)));
+  assert.equal(calls.some(([sql]) => /insert into archive\.training_sleep/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /insert into core\.measurement/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /insert into core\.meal/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal)/i.test(sql)), false);
-  assert.equal(trainingDayInsert[1][10], JSON.stringify(['existing dinner']));
+  assert.ok(calls.some(([sql]) => /insert into core\.activity/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into core\.meal/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /delete from core\.(measurement|activity|meal)/i.test(sql)));
+  assert.deepEqual(trainingDayInsert[1][10], [JSON.stringify(['existing dinner'])]);
 });
 
-test('persistNormalizedBatch stores sleep payload in core and archive sleep rows', async () => {
+test('persistNormalizedBatch stores sleep payload in core without writing archive sleep', async () => {
   const calls = [];
   const fakeClient = {
     async connect() {
@@ -673,11 +758,10 @@ test('persistNormalizedBatch stores sleep payload in core and archive sleep rows
 
   assert.ok(trainingDayInsert);
   assert.ok(sleepInsert);
-  assert.ok(archiveSleepInsert);
+  assert.equal(archiveSleepInsert, undefined);
   assert.equal(archiveSnapshotInsert, undefined);
   assert.ok(ingestBatchInsert);
   assert.match(sleepInsert[0], /\$16::jsonb\[\]/i);
-  assert.match(archiveSleepInsert[0], /\$15::jsonb\[\]/i);
   assert.equal(sleepInsert[1][0][0], createHash('md5').update('2026-06-03|夜间睡眠|23:26|06:19|411').digest('hex'));
   assert.deepEqual(sleepInsert[1][1], ['2026-06-03']);
   assert.deepEqual(sleepInsert[1][7], [411]);
@@ -687,18 +771,9 @@ test('persistNormalizedBatch stores sleep payload in core and archive sleep rows
   assert.deepEqual(sleepInsert[1][17], [77]);
   assert.deepEqual(sleepInsert[1][24], [68]);
   assert.deepEqual(sleepInsert[1][29], ['建议睡觉时关灯。']);
-  assert.equal(archiveSleepInsert[1][0][0], createHash('md5').update('2026-06-03|夜间睡眠|23:26|06:19|411').digest('hex'));
-  assert.deepEqual(archiveSleepInsert[1][1], ['2026-06-03']);
-  assert.equal(archiveSleepInsert[1][2][0].length, 64);
-  assert.deepEqual(archiveSleepInsert[1][7], [411]);
-  assert.deepEqual(archiveSleepInsert[1][9], [145]);
-  assert.deepEqual(archiveSleepInsert[1][15], [81]);
-  assert.deepEqual(archiveSleepInsert[1][16], [77]);
-  assert.deepEqual(archiveSleepInsert[1][23], [68]);
-  assert.deepEqual(archiveSleepInsert[1][28], ['建议睡觉时关灯。']);
   assert.equal(trainingDayInsert[1].length, 12);
   assert.equal(JSON.parse(ingestBatchInsert[1][9]).sleep.records[0].totalSleepMinutes, 411);
-  assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal|sleep)/i.test(sql)), false);
+  assert.ok(calls.some(([sql]) => /delete from core\.(measurement|activity|meal|sleep)/i.test(sql)));
 });
 
 test('persistNormalizedBatch merges an existing core day using only schema-defined columns', async () => {
@@ -797,8 +872,8 @@ test('persistNormalizedBatch merges an existing core day using only schema-defin
 
   assert.ok(trainingDayInsert);
   assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /delete from core\.sleep/i.test(sql)), false);
+  assert.ok(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /delete from core\.sleep/i.test(sql)));
   assert.equal(trainingDayInsert[1].length, 12);
 });
 

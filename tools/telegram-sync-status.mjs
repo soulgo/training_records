@@ -374,6 +374,9 @@ function formatTelegramSyncNotification(batch) {
         .filter(Boolean)
         .join('；');
     }
+    if (isDeferredPersistenceStatus(batch.persistenceStatus)) {
+      return `图片已识别（${countText}），数据库写入未完成，${storageText}${dateText ? ` ${dateText}数据` : ''}`;
+    }
     return `解析成功（${countText}），${storageText}${dateText ? ` ${dateText}数据` : ''}`;
   }
 
@@ -409,6 +412,10 @@ function formatPersistenceStatus(status) {
     return '已记录，等待数据库重放';
   }
   return '已处理';
+}
+
+function isDeferredPersistenceStatus(status) {
+  return status === 'fallback_markdown' || status === 'pending_replay';
 }
 
 function formatImageCountText(batch) {
