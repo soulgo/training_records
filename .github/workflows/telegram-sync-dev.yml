@@ -8,8 +8,7 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
+  actions: write
 
 concurrency:
   group: telegram-sync-dev
@@ -102,31 +101,6 @@ jobs:
         if: steps.detect.outputs.repo_changed == 'true'
         run: git push origin HEAD:dev
 
-      - name: Build and deploy dev site snapshot
-        id: site_build
-        if: steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true'
-        uses: ./.github/actions/site-build
-        with:
-          run_backfill: 'true'
-          run_tests: 'true'
-          deploy: 'false'
-          install_dependencies: 'false'
-
-      - name: Remove production custom domain file
-        if: steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true'
-        shell: bash
-        run: rm -f public/CNAME
-
-      - name: Deploy dev site to Cloudflare Pages
-        id: pages_deploy
-        if: steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true'
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: '3.114.14'
-          command: --cwd public pages deploy . --project-name ${{ vars.CLOUDFLARE_PAGES_DEV_PROJECT_NAME || 'training-records-dev' }} --branch dev
-
       - name: Write Telegram sync summary
         if: always() && github.event_name == 'repository_dispatch'
         env:
@@ -145,8 +119,17 @@ jobs:
             process.exit(0);
           }
           const batches = result.batchResults ?? result.batches ?? [];
+          const timings = result.timingsMs ?? {};
           console.log('## Telegram sync result');
           console.log('');
+          if (Object.keys(timings).length > 0) {
+            console.log('| stage | ms |');
+            console.log('| --- | ---: |');
+            for (const [stage, ms] of Object.entries(timings)) {
+              console.log(`| ${stage} | ${ms} |`);
+            }
+            console.log('');
+          }
           console.log('| batchId | taskStatus | persistenceStatus | archivedDate | images | pending | failureDisposition | failed messageIds |');
           console.log('| --- | --- | --- | --- | --- | --- | --- | --- |');
           for (const batch of batches) {
@@ -172,6 +155,20 @@ jobs:
           TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
         run: node tools/telegram-sync-notify.mjs
 
+      - name: Trigger async dev site deploy
+        if: success() && github.event_name != 'push' && (steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true')
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          curl -fsSL \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-cloudflare-pages-dev.yml/dispatches" \
+            -d '{"ref":"dev"}'
+
       - name: Notify Telegram sync failure
         if: failure() && github.event_name == 'repository_dispatch'
         continue-on-error: true
@@ -182,6 +179,4 @@ jobs:
           STEP_DETECT_OUTCOME: ${{ steps.detect.outcome }}
           STEP_COMMIT_OUTCOME: ${{ steps.commit.outcome }}
           STEP_PUSH_OUTCOME: ${{ steps.push.outcome }}
-          STEP_SITE_BUILD_OUTCOME: ${{ steps.site_build.outcome }}
-          STEP_PAGES_DEPLOY_OUTCOME: ${{ steps.pages_deploy.outcome }}
         run: node tools/telegram-action-monitor.mjs

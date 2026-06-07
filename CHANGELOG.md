@@ -13,6 +13,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Telegram 同步报告新增阶段耗时 `timingsMs`，并在 GitHub Actions summary 与日志中输出 `resolveUpdates`、`recognition`、`persist`、`sleepBackfill`、`markdownRewrite`、`notify` 等耗时，便于下次直接定位同步慢点。
+
+### Changed
+
+- Telegram Sync main/dev workflow 移除同步 action 内联站点构建与 Pages 部署，改为在 commit/push 后立即发送 Telegram “已入库/解析完成”通知，再异步触发独立站点部署 workflow。
+- Telegram Sync 失败监控不再把站点构建或 Pages 部署状态归为同步失败原因；站点部署失败改由独立部署 workflow 暴露，不影响 Telegram 入库回执。
+
 ## [1.2.3] - 2026-06-07
 
 ### Changed

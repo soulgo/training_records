@@ -182,7 +182,7 @@ test('deploy-pages workflow still triggers for site-relevant changes', async () 
   }
 });
 
-test('telegram-sync workflow uses the shared site build action after pushing repo changes', async () => {
+test('telegram-sync workflow notifies after sync and leaves site deploy to push workflows', async () => {
   const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
 
   assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
@@ -192,17 +192,26 @@ test('telegram-sync workflow uses the shared site build action after pushing rep
   assert.match(workflow, /git commit -m "chore: sync Telegram updates"/);
   assert.match(workflow, /- name: Run tests\s*\n\s*id: test\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.detect\.outputs\.content_changed == 'true'/);
   assert.match(workflow, /run:\s*npm run test:fast/);
-  assert.match(workflow, /- name: Build and deploy site snapshot\s*\n\s*id: site_build\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/);
-  assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
-  assert.match(workflow, /run_backfill:\s*'false'/);
-  assert.match(workflow, /run_tests:\s*'false'/);
-  assert.match(workflow, /deploy:\s*'true'/);
-  assert.match(workflow, /install_dependencies:\s*'false'/);
+  assert.doesNotMatch(workflow, /- name: Build and deploy site snapshot/);
+  assert.doesNotMatch(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
+  assert.doesNotMatch(workflow, /id:\s*site_build/);
   assert.match(workflow, /- name: Write Telegram sync summary/);
   assert.match(workflow, /GITHUB_STEP_SUMMARY/);
+  assert.match(workflow, /stage \| ms/);
   assert.match(workflow, /batchId \| taskStatus \| persistenceStatus \| archivedDate \| images \| pending \| failureDisposition \| failed messageIds/);
   assert.match(workflow, /TELEGRAM_SYNC_NOTIFY_STAGE: after_action/);
   assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH: \$\{\{ runner\.temp \}\}\/telegram-sync-result\.json/);
+  assert.match(workflow, /- name: Trigger async site deploy/);
+  assert.match(workflow, /actions\/workflows\/deploy-pages\.yml\/dispatches/);
+  assert.match(workflow, /-d '\{"ref":"main"\}'/);
+  assert.ok(
+    workflow.indexOf('- name: Notify Telegram sync result') > workflow.indexOf('- name: Push changes'),
+    'Telegram notification should run after push and before any asynchronous site deployment workflow',
+  );
+  assert.ok(
+    workflow.indexOf('- name: Trigger async site deploy') > workflow.indexOf('- name: Notify Telegram sync result'),
+    'Async deploy should be triggered only after Telegram has been notified',
+  );
 });
 
 test('telegram-sync workflow keeps change detection and maintenance gating intact', async () => {
@@ -227,7 +236,7 @@ test('telegram-sync workflow keeps change detection and maintenance gating intac
   assert.match(workflow, /- name: Push changes\s*\n\s*id: push\s*\n\s*if: steps\.detect\.outputs\.repo_changed == 'true'/);
 });
 
-test('telegram-sync workflows rebuild pages after database-only stored training batches', async () => {
+test('telegram-sync workflows keep database-only detection without blocking on page rebuilds', async () => {
   const prodWorkflow = await readWorkflow('.github/workflows/telegram-sync.yml');
   const devWorkflow = await readWorkflow('.github/workflows/telegram-sync-dev.yml');
 
@@ -235,12 +244,10 @@ test('telegram-sync workflows rebuild pages after database-only stored training 
     assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH/);
     assert.match(workflow, /db_content_changed=true/);
     assert.match(workflow, /readyStoredTrainingBatches/);
-    assert.match(workflow, /install_dependencies:\s*'false'/);
     assert.match(workflow, /- name: Write Telegram sync summary/);
-    assert.match(
-      workflow,
-      /if: steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/,
-    );
+    assert.match(workflow, /- name: Notify Telegram sync result/);
+    assert.match(workflow, /if: success\(\) && github\.event_name != 'push' && \(steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'\)/);
+    assert.doesNotMatch(workflow, /steps\.detect\.outputs\.db_content_changed == 'true'[\s\S]*uses:\s*\.\/\.github\/actions\/site-build/);
   }
 });
 
@@ -257,26 +264,27 @@ test('telegram-sync dev workflow only handles dev dispatches and writes dev bran
   assert.match(workflow, /run:\s*git push origin HEAD:dev/);
 });
 
-test('telegram-sync dev workflow deploys Pages after bot-created changes', async () => {
+test('telegram-sync dev workflow leaves Pages deployment to the dev deploy workflow', async () => {
   const workflow = await readWorkflow('.github/workflows/telegram-sync-dev.yml');
+  const deployWorkflow = await readWorkflow('.github/workflows/deploy-cloudflare-pages-dev.yml');
 
-  assert.match(workflow, /- name: Build and deploy dev site snapshot\s*\n\s+id: site_build/);
-  assert.match(workflow, /if: steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/);
-  assert.match(workflow, /run_backfill:\s*'true'/);
-  assert.match(workflow, /run_tests:\s*'true'/);
-  assert.match(workflow, /deploy:\s*'false'/);
-  assert.match(workflow, /install_dependencies:\s*'false'/);
-  assert.match(workflow, /- name: Remove production custom domain file/);
-  assert.match(workflow, /rm -f public\/CNAME/);
-  assert.match(workflow, /- name: Deploy dev site to Cloudflare Pages/);
-  assert.match(workflow, /apiToken:\s*\$\{\{\s*secrets\.CLOUDFLARE_PAGES_API_TOKEN\s*\}\}/);
-  assert.match(workflow, /wranglerVersion:\s*'3\.114\.14'/);
+  assert.doesNotMatch(workflow, /- name: Build and deploy dev site snapshot/);
+  assert.doesNotMatch(workflow, /- name: Remove production custom domain file/);
+  assert.doesNotMatch(workflow, /- name: Deploy dev site to Cloudflare Pages/);
+  assert.doesNotMatch(workflow, /STEP_PAGES_DEPLOY_OUTCOME/);
+  assert.match(workflow, /- name: Trigger async dev site deploy/);
+  assert.match(workflow, /actions\/workflows\/deploy-cloudflare-pages-dev\.yml\/dispatches/);
+  assert.match(workflow, /-d '\{"ref":"dev"\}'/);
+  assert.match(deployWorkflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
+  assert.match(deployWorkflow, /workflow_dispatch:/);
+  assert.match(deployWorkflow, /- name: Build dev site/);
+  assert.match(deployWorkflow, /- name: Remove production custom domain file/);
+  assert.match(deployWorkflow, /- name: Deploy to Cloudflare Pages/);
   assert.match(
-    workflow,
+    deployWorkflow,
     /command: --cwd public pages deploy \. --project-name \$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\} --branch dev/,
   );
-  assert.doesNotMatch(workflow, /--config wrangler\.pages\.dev\.toml/);
-  assert.match(workflow, /STEP_PAGES_DEPLOY_OUTCOME: \$\{\{ steps\.pages_deploy\.outcome \}\}/);
+  assert.doesNotMatch(deployWorkflow, /--config wrangler\.pages\.dev\.toml/);
 });
 
 test('dev Worker config dispatches to the dev Telegram workflow event', async () => {
@@ -304,7 +312,6 @@ test('telegram-sync workflow reports repository dispatch failures back to Telegr
     ['Commit sync results', 'commit'],
     ['Rebase on latest main', 'rebase'],
     ['Push changes', 'push'],
-    ['Build and deploy site snapshot', 'site_build'],
   ]) {
     assert.match(
       workflow,
@@ -321,7 +328,10 @@ test('telegram-sync workflow reports repository dispatch failures back to Telegr
   assert.match(workflow, /node tools\/telegram-sync-notify\.mjs/);
   assert.match(workflow, /node tools\/telegram-action-monitor\.mjs/);
   assert.match(workflow, /STEP_INSTALL_OUTCOME: \$\{\{ steps\.install\.outcome \}\}/);
-  assert.match(workflow, /STEP_SITE_BUILD_OUTCOME: \$\{\{ steps\.site_build\.outcome \}\}/);
+  assert.match(workflow, /- name: Trigger async site deploy/);
+  assert.match(workflow, /continue-on-error: true/);
+  assert.doesNotMatch(workflow, /STEP_SITE_BUILD_OUTCOME/);
+  assert.doesNotMatch(workflow, /STEP_PAGES_DEPLOY_OUTCOME/);
 }
 );
 

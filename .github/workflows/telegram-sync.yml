@@ -13,8 +13,7 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
+  actions: write
 
 concurrency:
   group: telegram-sync
@@ -129,16 +128,6 @@ jobs:
         if: steps.detect.outputs.repo_changed == 'true'
         run: git push origin HEAD:main
 
-      - name: Build and deploy site snapshot
-        id: site_build
-        if: steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true'
-        uses: ./.github/actions/site-build
-        with:
-          run_backfill: 'false'
-          run_tests: 'false'
-          deploy: 'true'
-          install_dependencies: 'false'
-
       - name: Write Telegram sync summary
         if: always() && github.event_name == 'repository_dispatch'
         env:
@@ -157,8 +146,17 @@ jobs:
             process.exit(0);
           }
           const batches = result.batchResults ?? result.batches ?? [];
+          const timings = result.timingsMs ?? {};
           console.log('## Telegram sync result');
           console.log('');
+          if (Object.keys(timings).length > 0) {
+            console.log('| stage | ms |');
+            console.log('| --- | ---: |');
+            for (const [stage, ms] of Object.entries(timings)) {
+              console.log(`| ${stage} | ${ms} |`);
+            }
+            console.log('');
+          }
           console.log('| batchId | taskStatus | persistenceStatus | archivedDate | images | pending | failureDisposition | failed messageIds |');
           console.log('| --- | --- | --- | --- | --- | --- | --- | --- |');
           for (const batch of batches) {
@@ -184,6 +182,20 @@ jobs:
           TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
         run: node tools/telegram-sync-notify.mjs
 
+      - name: Trigger async site deploy
+        if: success() && github.event_name != 'push' && (steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true')
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          curl -fsSL \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-pages.yml/dispatches" \
+            -d '{"ref":"main"}'
+
       - name: Notify Telegram sync failure
         if: failure() && github.event_name == 'repository_dispatch'
         continue-on-error: true
@@ -196,5 +208,4 @@ jobs:
           STEP_COMMIT_OUTCOME: ${{ steps.commit.outcome }}
           STEP_REBASE_OUTCOME: ${{ steps.rebase.outcome }}
           STEP_PUSH_OUTCOME: ${{ steps.push.outcome }}
-          STEP_SITE_BUILD_OUTCOME: ${{ steps.site_build.outcome }}
         run: node tools/telegram-action-monitor.mjs

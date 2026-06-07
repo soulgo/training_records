@@ -87,6 +87,7 @@ export async function main() {
 }
 
 export async function runTelegramSync(options = {}) {
+  const timings = createSyncTimings();
   const rawEnv = options.env ?? process.env;
   const env = loadRequiredEnv(rawEnv);
   const activeRootDir = options.rootDir ?? rootDir;
@@ -200,73 +201,92 @@ export async function runTelegramSync(options = {}) {
     shouldNotifyTelegramSyncResult(rawEnv) && notificationStage !== 'after_action';
   const resultPath = resolveTelegramSyncResultPath(rawEnv, activeRootDir, options.resultPath);
 
-  const dispatchUpdates = await resolveDispatchTelegramUpdates({
-    repositoryDispatchEvent: options.repositoryDispatchEvent,
-    githubEventName: env.githubEventName,
-    githubEventPath: env.githubEventPath,
-  });
-  const previousLastProcessedUpdateId = await readLastProcessedUpdateIdForRun({
-    readLastProcessedUpdateId,
-    dispatchUpdates,
-    allowFallback: Boolean(dispatchUpdates) || env.githubEventName === 'repository_dispatch',
-  });
-  const pendingBatches = await readPendingFallbackBatches(pendingQueuePath);
+  const dispatchUpdates = await measureSyncStage(timings, 'resolveUpdates', () =>
+    resolveDispatchTelegramUpdates({
+      repositoryDispatchEvent: options.repositoryDispatchEvent,
+      githubEventName: env.githubEventName,
+      githubEventPath: env.githubEventPath,
+    }),
+  );
+  const previousLastProcessedUpdateId = await measureSyncStage(timings, 'readOffset', () =>
+    readLastProcessedUpdateIdForRun({
+      readLastProcessedUpdateId,
+      dispatchUpdates,
+      allowFallback: Boolean(dispatchUpdates) || env.githubEventName === 'repository_dispatch',
+    }),
+  );
+  const pendingBatches = await measureSyncStage(timings, 'readPendingFallback', () =>
+    readPendingFallbackBatches(pendingQueuePath),
+  );
   let replayStoredAny = false;
   let replayStoredImageAny = false;
 
-  for (const pending of pendingBatches) {
-    try {
-      const replayResult = await persistBatch({
-        batch: pending.batch,
-        processedAt: now,
-        env: options.env ?? process.env,
-      });
-      if (replayResult.status === 'stored' || replayResult.status === 'unchanged') {
-        replayStoredAny = replayStoredAny || replayResult.status === 'stored';
-        replayStoredImageAny =
-          replayStoredImageAny ||
-          (isTrainingDataBatchKind(pending.batch?.kind) && replayResult.status === 'stored');
-        pending.replayed = true;
+  await measureSyncStage(timings, 'replayFallbackPersist', async () => {
+    for (const pending of pendingBatches) {
+      try {
+        const replayResult = await persistBatch({
+          batch: pending.batch,
+          processedAt: now,
+          env: options.env ?? process.env,
+        });
+        if (replayResult.status === 'stored' || replayResult.status === 'unchanged') {
+          replayStoredAny = replayStoredAny || replayResult.status === 'stored';
+          replayStoredImageAny =
+            replayStoredImageAny ||
+            (isTrainingDataBatchKind(pending.batch?.kind) && replayResult.status === 'stored');
+          pending.replayed = true;
+        }
+      } catch {
+        pending.replayed = false;
       }
-    } catch {
-      pending.replayed = false;
     }
-  }
+  });
 
-  await writePendingFallbackBatches(
-    pendingQueuePath,
-    pendingBatches.filter((pending) => !pending.replayed),
+  await measureSyncStage(timings, 'writePendingFallback', () =>
+    writePendingFallbackBatches(
+      pendingQueuePath,
+      pendingBatches.filter((pending) => !pending.replayed),
+    ),
   );
 
-  const updates =
+  const updates = await measureSyncStage(timings, 'fetchUpdates', () =>
     dispatchUpdates ??
     (env.syncTransport === 'webhook'
       ? []
-      : await fetchUpdates({
+      : fetchUpdates({
           offset: previousLastProcessedUpdateId + 1,
           limit: env.pollLimit,
-        }));
-  const knownThoughtMessageKeys = await readExistingThoughtMessageKeys(thoughtsDir);
-  const grouped = groupTelegramUpdates(updates, { knownThoughtMessageKeys });
+        })),
+  );
+  const knownThoughtMessageKeys = await measureSyncStage(timings, 'readThoughtKeys', () =>
+    readExistingThoughtMessageKeys(thoughtsDir),
+  );
+  const grouped = measureSyncStageSync(timings, 'groupUpdates', () =>
+    groupTelegramUpdates(updates, { knownThoughtMessageKeys }),
+  );
   const batchResults = [];
   let changed = replayStoredAny;
   let fallbackUsed = false;
   let fallbackMarkdown = null;
   let fallbackMarkdownLoaded = false;
 
-  const pendingRecognitionEntries = await readPendingRecognitionBatchesForRun({
-    readPendingRecognitionBatches,
-    allowFallback: Boolean(dispatchUpdates) || env.githubEventName === 'repository_dispatch',
-  });
-  const replayRecognitionResults = await replayPendingRecognitionBatches({
-    entries: pendingRecognitionEntries,
-    recognizeBatchRunner,
-    persistBatch,
-    appendPendingRecognitionBatch,
-    markPendingRecognitionResolved,
-    now,
-    env,
-  });
+  const pendingRecognitionEntries = await measureSyncStage(timings, 'readPendingRecognition', () =>
+    readPendingRecognitionBatchesForRun({
+      readPendingRecognitionBatches,
+      allowFallback: Boolean(dispatchUpdates) || env.githubEventName === 'repository_dispatch',
+    }),
+  );
+  const replayRecognitionResults = await measureSyncStage(timings, 'replayRecognition', () =>
+    replayPendingRecognitionBatches({
+      entries: pendingRecognitionEntries,
+      recognizeBatchRunner,
+      persistBatch,
+      appendPendingRecognitionBatch,
+      markPendingRecognitionResolved,
+      now,
+      env,
+    }),
+  );
   changed ||= replayRecognitionResults.changed;
   replayStoredImageAny ||= replayRecognitionResults.replayStoredImageAny;
   batchResults.push(...replayRecognitionResults.batchResults);
@@ -293,17 +313,21 @@ export async function runTelegramSync(options = {}) {
       continue;
     }
 
-    const persistedBatch = await buildImageProcessingBatch({
-      batch,
-      recognizeBatchRunner,
-      env,
-      logPrefix: 'image recognition failed',
-    });
-    await queueRecognitionFailureIfNeeded({
-      batch: persistedBatch,
-      appendPendingRecognitionBatch,
-      now,
-    });
+    const persistedBatch = await measureSyncStage(timings, 'recognition', () =>
+      buildImageProcessingBatch({
+        batch,
+        recognizeBatchRunner,
+        env,
+        logPrefix: 'image recognition failed',
+      }),
+    );
+    await measureSyncStage(timings, 'queueRecognition', () =>
+      queueRecognitionFailureIfNeeded({
+        batch: persistedBatch,
+        appendPendingRecognitionBatch,
+        now,
+      }),
+    );
 
     if (persistedBatch.status !== 'ready') {
       batchResults.push(persistedBatch);
@@ -311,10 +335,12 @@ export async function runTelegramSync(options = {}) {
     }
 
     if (persistedBatch.kind === 'help') {
-      const helpResult = await handleHelpBatch({
-        batch: persistedBatch,
-        sendMessage,
-      });
+      const helpResult = await measureSyncStage(timings, 'notify', () =>
+        handleHelpBatch({
+          batch: persistedBatch,
+          sendMessage,
+        }),
+      );
       batchResults.push({
         ...persistedBatch,
         helpReplyStatus: helpResult.status,
@@ -324,11 +350,13 @@ export async function runTelegramSync(options = {}) {
     }
 
     if (persistedBatch.kind === 'analysis') {
-      const analysisResult = await handleAnalysisBatch({
-        batch: persistedBatch,
-        generateAnalysisReply,
-        sendMessage,
-      });
+      const analysisResult = await measureSyncStage(timings, 'analysis', () =>
+        handleAnalysisBatch({
+          batch: persistedBatch,
+          generateAnalysisReply,
+          sendMessage,
+        }),
+      );
       batchResults.push({
         ...persistedBatch,
         analysisReplyStatus: analysisResult.status,
@@ -347,11 +375,13 @@ export async function runTelegramSync(options = {}) {
     }
 
     if (persistedBatch.kind === 'ai_agent') {
-      const aiAgentResult = await handleAiAgentBatch({
-        batch: persistedBatch,
-        runAiAgent,
-        sendMessage,
-      });
+      const aiAgentResult = await measureSyncStage(timings, 'aiAgent', () =>
+        handleAiAgentBatch({
+          batch: persistedBatch,
+          runAiAgent,
+          sendMessage,
+        }),
+      );
       batchResults.push({
         ...persistedBatch,
         aiAgentReplyStatus: aiAgentResult.status,
@@ -370,48 +400,58 @@ export async function runTelegramSync(options = {}) {
     }
 
     if (isThoughtBatchKind(persistedBatch.kind)) {
-      const thoughtResult = await handleThoughtSyncBatch({
-        batch: persistedBatch,
-        kind: persistedBatch.kind,
-        thoughtsDir,
-        activeRootDir,
-        now,
-        env,
-        persistBatch,
-        appendPendingFallbackBatch,
-        pendingQueuePath,
-        fetchTelegramFile: fetchTelegramFileById,
-      });
+      const thoughtResult = await measureSyncStage(timings, 'persist', () =>
+        handleThoughtSyncBatch({
+          batch: persistedBatch,
+          kind: persistedBatch.kind,
+          thoughtsDir,
+          activeRootDir,
+          now,
+          env,
+          persistBatch,
+          appendPendingFallbackBatch,
+          pendingQueuePath,
+          fetchTelegramFile: fetchTelegramFileById,
+        }),
+      );
       changed ||= thoughtResult.changed;
       batchResults.push(thoughtResult.batchResult);
       continue;
     }
 
     try {
-      const persistResult = await persistBatch({
-        batch: persistedBatch,
-        processedAt: now,
-        env: options.env ?? process.env,
-      });
+      const persistResult = await measureSyncStage(timings, 'persist', () =>
+        persistBatch({
+          batch: persistedBatch,
+          processedAt: now,
+          env: options.env ?? process.env,
+        }),
+      );
 
       changed ||= persistedBatch.status === 'ready' && persistResult.status === 'stored';
       batchResults.push({
         ...persistedBatch,
         persistenceStatus: persistResult.status,
       });
-      await markPendingRecognitionResolved({ batchId: persistedBatch.batchId });
+      await measureSyncStage(timings, 'markRecognitionResolved', () =>
+        markPendingRecognitionResolved({ batchId: persistedBatch.batchId }),
+      );
     } catch (error) {
       if (persistedBatch.status === 'ready') {
-        const applied = applyTelegramSyncToMarkdown(await getFallbackMarkdown(), persistedBatch);
+        const applied = await measureSyncStage(timings, 'markdownRewrite', async () =>
+          applyTelegramSyncToMarkdown(await getFallbackMarkdown(), persistedBatch),
+        );
         fallbackMarkdown = applied.markdown;
         changed ||= applied.changed;
         fallbackUsed = true;
         const errorMessage = error instanceof Error ? error.message : String(error);
-        await appendPendingFallbackBatch(pendingQueuePath, {
-          batch: persistedBatch,
-          failedAt: now.toISOString(),
-          error: errorMessage,
-        });
+        await measureSyncStage(timings, 'writePendingFallback', () =>
+          appendPendingFallbackBatch(pendingQueuePath, {
+            batch: persistedBatch,
+            failedAt: now.toISOString(),
+            error: errorMessage,
+          }),
+        );
         process.stderr.write(
           `[telegram-sync] fallback to markdown for ${persistedBatch.batchId} (${persistedBatch.archivedDate ?? 'unknown date'}): ${errorMessage}\n`,
         );
@@ -435,10 +475,12 @@ export async function runTelegramSync(options = {}) {
 
   if (replayStoredImageAny || batchResults.some((batch) => batch.kind === 'image' && batch.status === 'ready')) {
     try {
-      await backfillCoreSleep({
-        processedAt: now,
-        sourceChannel: 'telegram_sync',
-      });
+      await measureSyncStage(timings, 'sleepBackfill', () =>
+        backfillCoreSleep({
+          processedAt: now,
+          sourceChannel: 'telegram_sync',
+        }),
+      );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       process.stderr.write(`[telegram-sync] sleep backfill failed: ${errorMessage}\n`);
@@ -446,7 +488,9 @@ export async function runTelegramSync(options = {}) {
   }
 
   if (fallbackUsed) {
-    await writeFile(recordPath, fallbackMarkdown, 'utf8');
+    await measureSyncStage(timings, 'markdownRewrite', () =>
+      writeFile(recordPath, fallbackMarkdown, 'utf8'),
+    );
     onFallbackMarkdownWritten?.(fallbackMarkdown);
   } else if (changed && shouldRewriteTrainingMarkdown({ replayStoredImageAny, batchResults })) {
     const readyPersistedBatches = batchResults.filter(
@@ -458,7 +502,9 @@ export async function runTelegramSync(options = {}) {
     const currentMarkdown = await getFallbackMarkdown();
     const markdown = rebuildMarkdownFromPersistedBatches(currentMarkdown, readyPersistedBatches);
 
-    await writeFile(recordPath, markdown, 'utf8');
+    await measureSyncStage(timings, 'markdownRewrite', () =>
+      writeFile(recordPath, markdown, 'utf8'),
+    );
   }
 
   const result = {
@@ -468,18 +514,78 @@ export async function runTelegramSync(options = {}) {
     lastProcessedUpdateId: nextLastProcessedUpdateId,
     readyBatches: batchResults.filter((batch) => batch.status === 'ready').length,
     batchResults,
+    timingsMs: timings.timingsMs,
   };
+  finalizeSyncTimings(timings, result);
   await maybePersistTelegramSyncResult(resultPath, result);
 
   if (shouldNotifyImmediately) {
-    await notifyTelegramSyncResult({
-      batchResults,
-      sendMessage,
-      env: rawEnv,
-    });
+    await measureSyncStage(timings, 'notify', () =>
+      notifyTelegramSyncResult({
+        batchResults,
+        sendMessage,
+        env: rawEnv,
+      }),
+    );
+    finalizeSyncTimings(timings, result);
+    await maybePersistTelegramSyncResult(resultPath, result);
   }
 
+  logSyncTimings(result.timingsMs);
+
   return result;
+}
+
+function createSyncTimings() {
+  return {
+    startedAt: nowMs(),
+    timingsMs: {},
+  };
+}
+
+async function measureSyncStage(timings, stage, run) {
+  const startedAt = nowMs();
+  try {
+    return await run();
+  } finally {
+    addTiming(timings, stage, elapsedMs(startedAt));
+  }
+}
+
+function measureSyncStageSync(timings, stage, run) {
+  const startedAt = nowMs();
+  try {
+    return run();
+  } finally {
+    addTiming(timings, stage, elapsedMs(startedAt));
+  }
+}
+
+function addTiming(timings, stage, durationMs) {
+  if (!timings?.timingsMs || !stage) {
+    return;
+  }
+  timings.timingsMs[stage] = Math.round((timings.timingsMs[stage] ?? 0) + durationMs);
+}
+
+function finalizeSyncTimings(timings, result) {
+  timings.timingsMs.total = elapsedMs(timings.startedAt);
+  result.timingsMs = timings.timingsMs;
+}
+
+function elapsedMs(startedAt) {
+  return Math.max(0, Math.round(nowMs() - startedAt));
+}
+
+function nowMs() {
+  return Number(globalThis.performance?.now?.() ?? Date.now());
+}
+
+function logSyncTimings(timingsMs) {
+  if (!timingsMs || Object.keys(timingsMs).length === 0) {
+    return;
+  }
+  process.stderr.write(`[telegram-sync] timings ${JSON.stringify(timingsMs)}\n`);
 }
 
 function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {

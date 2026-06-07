@@ -779,6 +779,45 @@ test('buildTelegramSyncReport exposes fallback and archived date details for log
   });
 });
 
+test('buildTelegramSyncReport includes optional sync stage timings', () => {
+  const report = buildTelegramSyncReport({
+    changed: true,
+    fallbackUsed: false,
+    updatesFetched: 1,
+    lastProcessedUpdateId: 520905500,
+    readyBatches: 1,
+    timingsMs: {
+      resolveUpdates: 1.4,
+      recognition: 1234.6,
+      persist: 22,
+      total: 1300.2,
+      skippedNegative: -1,
+      skippedText: 'slow',
+    },
+    batchResults: [],
+  });
+
+  assert.deepEqual(report.timingsMs, {
+    resolveUpdates: 1,
+    recognition: 1235,
+    persist: 22,
+    total: 1300,
+  });
+});
+
+test('buildTelegramSyncReport omits timings when unavailable for compatibility', () => {
+  const report = buildTelegramSyncReport({
+    changed: false,
+    fallbackUsed: false,
+    updatesFetched: 0,
+    lastProcessedUpdateId: 520905501,
+    readyBatches: 0,
+    batchResults: [],
+  });
+
+  assert.equal(Object.hasOwn(report, 'timingsMs'), false);
+});
+
 test('buildTelegramSyncReport exposes normalized task status and identifiers for audit', () => {
   const report = buildTelegramSyncReport({
     changed: true,
@@ -2689,7 +2728,7 @@ test('telegram action monitor reports the failed workflow stage to the original 
   assert.match(sentMessages[0].text, /https:\/\/github\.com\/soulgo\/training_records\/actions\/runs\/123456/);
 });
 
-test('telegram action monitor reports Cloudflare Pages deploy failures', async () => {
+test('telegram action monitor ignores site deployment stages outside telegram sync', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-action-monitor-pages-'));
   const eventPath = path.join(tempRoot, 'event.json');
   const sentMessages = [];
@@ -2728,9 +2767,8 @@ test('telegram action monitor reports Cloudflare Pages deploy failures', async (
   });
 
   assert.equal(result.notified, true);
-  assert.equal(result.failureStage, 'Deploy dev site to Cloudflare Pages');
-  assert.match(sentMessages[0].text, /GitHub Action 执行失败：Deploy dev site to Cloudflare Pages/);
-  assert.doesNotMatch(sentMessages[0].text, /Unknown workflow stage/);
+  assert.equal(result.failureStage, 'Unknown workflow stage');
+  assert.match(sentMessages[0].text, /GitHub Action 执行失败：Unknown workflow stage/);
 });
 
 test('runTelegramSync replies to /ai through the telegram ai agent without file writes', async () => {

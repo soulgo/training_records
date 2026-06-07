@@ -24,6 +24,7 @@ export function buildTelegramSyncReport(result) {
     updatesFetched: result.updatesFetched,
     lastProcessedUpdateId: result.lastProcessedUpdateId,
     readyBatches: result.readyBatches,
+    ...(isPlainTimingMap(result.timingsMs) ? { timingsMs: normalizeTimings(result.timingsMs) } : {}),
     batches: (result.batchResults ?? []).map((batch) => {
       const taskAudit = buildSyncTaskAuditFields(batch);
       return {
@@ -80,6 +81,18 @@ export function buildTelegramSyncReport(result) {
   }
 
   return normalized;
+}
+
+function isPlainTimingMap(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeTimings(value) {
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, duration]) => Number.isFinite(duration) && duration >= 0)
+      .map(([stage, duration]) => [stage, Math.round(duration)]),
+  );
 }
 
 function buildSyncTaskAuditFields(batch) {
@@ -490,7 +503,7 @@ export function classifyFailureCategory(message, options = {}) {
   const text = String(message ?? '');
   const phase = String(options.phase ?? '');
 
-  if (/github|action|dispatch|rebase|push|checkout|npm ci|site_build|workflow/i.test(`${phase} ${text}`)) {
+  if (/github|action|dispatch|rebase|push|checkout|npm ci|workflow/i.test(`${phase} ${text}`)) {
     return 'github_action';
   }
   if (/getFile|sendMessage|file download|download failed/i.test(text)) {
