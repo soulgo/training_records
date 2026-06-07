@@ -120,7 +120,8 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.match(workflow, /cloudflare\/wrangler-action@v3/);
   assert.match(workflow, /apiToken:\s*\$\{\{\s*secrets\.CLOUDFLARE_PAGES_API_TOKEN\s*\}\}/);
   assert.match(workflow, /accountId:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
-  assert.match(workflow, /--config wrangler\.pages\.dev\.toml pages deploy public/);
+  assert.match(workflow, /--cwd public pages deploy \./);
+  assert.doesNotMatch(workflow, /--config wrangler\.pages\.dev\.toml/);
   assert.match(workflow, /--project-name \$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\}/);
   assert.match(workflow, /--branch dev/);
 });
@@ -272,8 +273,9 @@ test('telegram-sync dev workflow deploys Pages after bot-created changes', async
   assert.match(workflow, /wranglerVersion:\s*'3\.114\.14'/);
   assert.match(
     workflow,
-    /command: --config wrangler\.pages\.dev\.toml pages deploy public --project-name \$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\} --branch dev/,
+    /command: --cwd public pages deploy \. --project-name \$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\} --branch dev/,
   );
+  assert.doesNotMatch(workflow, /--config wrangler\.pages\.dev\.toml/);
   assert.match(workflow, /STEP_PAGES_DEPLOY_OUTCOME: \$\{\{ steps\.pages_deploy\.outcome \}\}/);
 });
 

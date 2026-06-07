@@ -18,12 +18,3 @@ test('wrangler config binds Telegram album Durable Object without storing secret
   assert.doesNotMatch(config, /GITHUB_REPO/);
   assert.doesNotMatch(config, /GITHUB_TOKEN|TELEGRAM_SECRET_TOKEN/);
 });
-
-test('Cloudflare Pages dev config stays separate from Worker config', async () => {
-  const config = await readFile(new URL('wrangler.pages.dev.toml', rootDir), 'utf8');
-
-  assert.match(config, /^pages_build_output_dir\s*=\s*"public"/m);
-  assert.doesNotMatch(config, /^main\s*=/m);
-  assert.doesNotMatch(config, /\[\[durable_objects\.bindings\]\]/);
-  assert.doesNotMatch(config, /\[\[migrations\]\]/);
-});
