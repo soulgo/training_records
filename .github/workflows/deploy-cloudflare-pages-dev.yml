@@ -59,4 +59,4 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '3.114.14'
-          command: pages deploy public --project-name ${{ vars.CLOUDFLARE_PAGES_DEV_PROJECT_NAME || 'training-records-dev' }} --branch dev
+          command: --config wrangler.pages.dev.toml pages deploy public --project-name ${{ vars.CLOUDFLARE_PAGES_DEV_PROJECT_NAME || 'training-records-dev' }} --branch dev

@@ -1,7 +1,6 @@
 name = "telegram-sync-dispatch-dev"
 main = "cloudflare/telegram-sync-dispatch-worker.mjs"
 compatibility_date = "2026-05-14"
-pages_build_output_dir = "public"
 
 [vars]
 GITHUB_DISPATCH_EVENT_TYPE = "telegram_update_dev"
