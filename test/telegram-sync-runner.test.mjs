@@ -7,10 +7,15 @@ import path from 'node:path';
 
 import {
   buildTelegramSyncReport,
+  createRecognitionAiProvider,
   loadRecognitionSystemPrompt,
   runTelegramSync,
   shouldPersistTelegramArtifacts,
 } from '../tools/telegram-sync.mjs';
+import {
+  recognizeBatch,
+  resolveRecognitionImageInputMode,
+} from '../tools/telegram-sync-image-processing.mjs';
 import { notifyTelegramActionFailure } from '../tools/telegram-action-monitor.mjs';
 import { buildRecognitionCacheKey, isRecognitionCacheEnabled } from '../src/ai/recognition-service.mjs';
 import { emptyTrainingCharts, telegramSyncEnv } from './helpers/telegram-sync-runner-fixtures.mjs';
@@ -126,6 +131,121 @@ test('recognition cache key changes with prompt schema and model versions', () =
   assert.equal(buildRecognitionCacheKey({ fileUniqueId: 'uniq-a' }), null);
   assert.equal(isRecognitionCacheEnabled({ TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true' }), true);
   assert.equal(isRecognitionCacheEnabled({ TELEGRAM_RECOGNITION_CACHE_ENABLED: '' }), false);
+});
+
+test('recognition image input mode defaults to auto with inline retry and accepts explicit modes', () => {
+  assert.equal(resolveRecognitionImageInputMode({}), 'auto');
+  assert.equal(resolveRecognitionImageInputMode({ TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: 'inline' }), 'inline');
+  assert.equal(resolveRecognitionImageInputMode({ TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: 'url' }), 'url');
+  assert.equal(resolveRecognitionImageInputMode({ TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: 'AUTO' }), 'auto');
+  assert.equal(resolveRecognitionImageInputMode({ TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: 'invalid' }), 'auto');
+});
+
+test('createRecognitionAiProvider overrides only the image recognition model when configured', () => {
+  const defaultProvider = {
+    name: 'test-provider',
+    env: { model: 'gpt-default' },
+    async requestChatCompletion() {
+      throw new Error('not used');
+    },
+  };
+
+  assert.equal(createRecognitionAiProvider({}, defaultProvider), defaultProvider);
+
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-default',
+      TELEGRAM_RECOGNITION_MODEL: 'gpt-vision-fast',
+    },
+    defaultProvider,
+  );
+
+  assert.notEqual(recognitionProvider, defaultProvider);
+  assert.equal(recognitionProvider.env.model, 'gpt-vision-fast');
+});
+
+test('recognizeBatch sends inline Telegram image data when inline mode is configured', async () => {
+  const requestedImageUrls = [];
+  const downloadedFileIds = [];
+
+  const result = await recognizeBatch(
+    {
+      batchId: 'single-inline',
+      messages: [
+        {
+          messageId: 701,
+          updateId: 901,
+          mediaGroupId: null,
+          caption: '归档到 2026-05-31',
+          text: '',
+          chatId: 42,
+          dateUnix: Math.floor(new Date('2026-05-31T02:30:00Z').getTime() / 1000),
+          photos: [{ fileId: 'file-inline', fileUniqueId: 'uniq-inline', source: 'photo' }],
+        },
+      ],
+    },
+    {
+      botToken: 'token',
+      aiConcurrency: 1,
+    },
+    {
+      rawEnv: {
+        TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: 'inline',
+      },
+      fetchTelegramFileById: async (fileId) => {
+        downloadedFileIds.push(fileId);
+        return {
+          filePath: 'photos/file-inline.jpg',
+          contentType: 'image/jpeg',
+          data: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+        };
+      },
+      aiProvider: {
+        env: { model: 'gpt-vision-fast' },
+        async requestChatCompletion(input) {
+          const imagePart = input.messages?.[1]?.content?.find((part) => part.type === 'image_url');
+          requestedImageUrls.push(imagePart?.image_url?.url ?? '');
+          return {
+            ok: true,
+            async json() {
+              return {
+                choices: [
+                  {
+                    message: {
+                      content: JSON.stringify({
+                        imageType: 'nutrition',
+                        detectedDate: '2026-05-31',
+                        dateEvidence: 'image header',
+                        confidence: 0.98,
+                        warnings: [],
+                        records: {
+                          measurement: null,
+                          activities: [],
+                          meals: [{ name: '晚餐', calories: 868, recommendedMin: 310, recommendedMax: 723 }],
+                          totalCalories: 868,
+                          details: ['晚餐 868 千卡'],
+                          dailyWorkoutSummary: null,
+                        },
+                      }),
+                    },
+                  },
+                ],
+              };
+            },
+          };
+        },
+      },
+    },
+  );
+
+  assert.deepEqual(downloadedFileIds, ['file-inline']);
+  assert.equal(requestedImageUrls.length, 1);
+  assert.match(requestedImageUrls[0], /^data:image\/jpeg;base64,/);
+  assert.equal(result.recognitions.length, 1);
+  assert.equal(result.recognitions[0].model, 'gpt-vision-fast');
+  assert.equal(result.recognitionErrors.length, 0);
 });
 
 test('runTelegramSync persists ready batches to the database and merges markdown incrementally', async () => {
@@ -383,6 +503,120 @@ test('runTelegramSync writes stored sleep image batches back into markdown', asy
   assert.match(markdown, /### 2026-05-29/);
   assert.match(markdown, /#### 2026-05-29 睡眠截图记录/);
   assert.match(markdown, /总睡眠：505分钟/);
+});
+
+test('runTelegramSync does not run full sleep backfill for a fresh stored sleep image by default', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-sleep-no-backfill-'));
+  await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 126,
+          date: 1775433600,
+          chat: { id: 42 },
+          caption: '归档到 2026-05-30',
+          photo: [{ file_id: 'file-sleep', file_unique_id: 'uniq-sleep' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 126,
+        imageType: 'sleep',
+        detectedDate: '2026-05-30',
+        dateEvidence: 'image header',
+        confidence: 0.97,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [],
+          totalCalories: null,
+          details: [],
+          dailyWorkoutSummary: null,
+          sleep: {
+            totalSleepMinutes: 505,
+            nightSleepMinutes: 505,
+            bedtime: '22:56',
+            wakeTime: '07:21',
+          },
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    backfillCoreSleepFromIngestBatches: async () => {
+      throw new Error('sleep backfill should not run for fresh stored sleep images by default');
+    },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), false);
+});
+
+test('runTelegramSync can explicitly run sleep backfill for a fresh stored image', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-sleep-explicit-backfill-'));
+  await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');
+  const backfillCalls = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv({
+      TELEGRAM_SYNC_RUN_SLEEP_BACKFILL: 'true',
+    }),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 127,
+          date: 1775433600,
+          chat: { id: 42 },
+          caption: '归档到 2026-05-30',
+          photo: [{ file_id: 'file-sleep', file_unique_id: 'uniq-sleep' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 127,
+        imageType: 'sleep',
+        detectedDate: '2026-05-30',
+        dateEvidence: 'image header',
+        confidence: 0.97,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [],
+          totalCalories: null,
+          details: [],
+          dailyWorkoutSummary: null,
+          sleep: {
+            totalSleepMinutes: 505,
+            nightSleepMinutes: 505,
+            bedtime: '22:56',
+            wakeTime: '07:21',
+          },
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    backfillCoreSleepFromIngestBatches: async (input) => {
+      backfillCalls.push(input);
+      return { status: 'synced' };
+    },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(backfillCalls.length, 1);
+  assert.equal(backfillCalls[0].sourceChannel, 'telegram_sync');
+  assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), true);
 });
 
 test('runTelegramSync falls back to markdown when database persistence fails', async () => {
@@ -987,6 +1221,7 @@ test('runTelegramSync replays pending fallback batches into the database before 
   );
 
   const persistedBatchIds = [];
+  const backfillCalls = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -1028,10 +1263,16 @@ test('runTelegramSync replays pending fallback batches into the database before 
       charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-08\n',
+    backfillCoreSleepFromIngestBatches: async (input) => {
+      backfillCalls.push(input);
+      return { status: 'synced' };
+    },
   });
 
   assert.equal(result.changed, true);
   assert.deepEqual(persistedBatchIds, ['pending-batch']);
+  assert.equal(backfillCalls.length, 1);
+  assert.equal(backfillCalls[0].sourceChannel, 'telegram_sync');
   assert.equal(
     await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
     '',
@@ -4377,6 +4618,7 @@ test('runTelegramSync replays pending recognition batches and marks them resolve
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-replay-pending-recognition-'));
   const persistedBatches = [];
   const resolved = [];
+  const backfillCalls = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -4433,6 +4675,10 @@ test('runTelegramSync replays pending recognition batches and marks them resolve
       resolved.push(batchId);
       return { status: 'resolved', batchId };
     },
+    backfillCoreSleepFromIngestBatches: async (input) => {
+      backfillCalls.push(input);
+      return { status: 'synced' };
+    },
     buildTrainingSnapshot: async () => ({
       generatedAt: '2026-05-31T00:00:00.000Z',
       latest: { measurement: null, daily: { date: '2026-05-31' } },
@@ -4471,6 +4717,7 @@ test('runTelegramSync replays pending recognition batches and marks them resolve
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].nutrition.totalCalories, 868);
   assert.deepEqual(resolved, ['single-383']);
+  assert.equal(backfillCalls.length, 1);
 });
 
 test('runTelegramSync uses the normalized runtime env for first-time and replayed image recognition', async () => {
@@ -4539,6 +4786,7 @@ test('runTelegramSync uses the normalized runtime env for first-time and replaye
     },
     persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
     markPendingRecognitionResolved: async ({ batchId }) => ({ status: 'resolved', batchId }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
     buildTrainingSnapshot: async () => ({
       generatedAt: '2026-05-31T00:00:00.000Z',
       latest: { measurement: null, daily: { date: '2026-05-31' } },
@@ -4948,6 +5196,7 @@ test('runTelegramSync report includes image counts for pending replay batches', 
       resolved.push(batchId);
       return { status: 'resolved', batchId };
     },
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
     buildTrainingSnapshot: async () => ({
       generatedAt: '2026-05-31T00:00:00.000Z',
       latest: { measurement: null, daily: { date: '2026-05-31' } },

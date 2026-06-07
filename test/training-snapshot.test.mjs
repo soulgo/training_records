@@ -357,6 +357,108 @@ test('buildTrainingSnapshot starts database reads in parallel with independent c
   assert.equal(maxActiveQueries, 6);
 });
 
+test('buildTrainingSnapshot retries database snapshot with one client when parallel reads fail', async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), 'training-snapshot-db-retry-'));
+  await mkdir(path.join(rootDir, 'source', '_data'), { recursive: true });
+  await writeFile(path.join(rootDir, '训练记录.md'), sampleMarkdown, 'utf8');
+
+  const clientEvents = [];
+  let nextClientId = 0;
+
+  function createRetryClient() {
+    const clientId = nextClientId;
+    nextClientId += 1;
+    return {
+      async connect() {
+        clientEvents.push(['connect', clientId]);
+      },
+      async end() {
+        clientEvents.push(['end', clientId]);
+      },
+      async query(sql) {
+        clientEvents.push(['query', clientId, sql]);
+        if (clientId < 6 && /from core\.training_day/i.test(sql)) {
+          throw new Error('timeout expired');
+        }
+        if (/from core\.training_day/i.test(sql)) {
+          return {
+            rows: [
+              {
+                archived_date: '2026-05-09',
+                total_activities: 2,
+                total_duration_seconds: 3112,
+                training_calories: 643,
+                workout_duration_minutes: 78,
+                active_hours: 12,
+                cycling_distance_km: '1.65',
+                intake_calories: 1593,
+              },
+            ],
+          };
+        }
+        if (/from core\.measurement/i.test(sql)) {
+          return {
+            rows: [
+              {
+                archived_date: '2026-05-09',
+                measured_at: '2026-05-09 06:42',
+                body_score: 74,
+                weight_kg: '72.85',
+                bmi: '23.5',
+                body_fat_pct: '22.8',
+                skeletal_muscle_kg: '30.45',
+                visceral_fat_level: '8',
+                basal_metabolism_kcal: 1587,
+                body_water_pct: null,
+                protein_pct: null,
+                bone_mass_kg: null,
+                fat_free_mass_kg: null,
+                body_age: null,
+                body_type: null,
+              },
+            ],
+          };
+        }
+        if (/from core\.activity/i.test(sql)) {
+          return { rows: [] };
+        }
+        if (/from core\.meal/i.test(sql)) {
+          return { rows: [] };
+        }
+        if (/from core\.sleep/i.test(sql)) {
+          return { rows: [] };
+        }
+        if (/from core\.thought/i.test(sql)) {
+          return { rows: [] };
+        }
+        throw new Error(`Unexpected SQL: ${sql}`);
+      },
+    };
+  }
+
+  const snapshot = await buildTrainingSnapshot({
+    source: 'database',
+    rootDir,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return createRetryClient();
+    },
+    now: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  assert.equal(nextClientId, 7);
+  assert.equal(snapshot.latest.measurement?.weightKg, 72.85);
+  assert.deepEqual(snapshot.daily.map((day) => day.date), ['2026-05-09']);
+  assert.equal(snapshot.latest.daily?.nutrition.totalCalories, 1593);
+  assert.equal(
+    clientEvents.filter(([event, clientId]) => event === 'query' && clientId === 6).length,
+    6,
+  );
+});
+
 test('buildTrainingSnapshot throws when database snapshot is empty in database mode', async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'training-snapshot-empty-db-'));
   await mkdir(path.join(rootDir, 'source', '_data'), { recursive: true });

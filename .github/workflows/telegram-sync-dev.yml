@@ -49,6 +49,8 @@ jobs:
           AI_BASE_URL: ${{ vars.AI_BASE_URL }}
           AI_MODEL: ${{ vars.AI_MODEL }}
           AI_CONCURRENCY: ${{ vars.AI_CONCURRENCY }}
+          TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline
+          TELEGRAM_RECOGNITION_MODEL: ${{ vars.TELEGRAM_RECOGNITION_MODEL }}
           TRAINING_ANALYSIS_GOAL: ${{ vars.TRAINING_ANALYSIS_GOAL }}
           TELEGRAM_ALLOWED_CHAT_IDS: ${{ vars.TELEGRAM_ALLOWED_CHAT_IDS }}
           TELEGRAM_POLL_LIMIT: ${{ vars.TELEGRAM_POLL_LIMIT }}
@@ -156,7 +158,7 @@ jobs:
         run: node tools/telegram-sync-notify.mjs
 
       - name: Trigger async dev site deploy
-        if: success() && github.event_name != 'push' && (steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true')
+        if: success() && github.event_name == 'repository_dispatch' && steps.detect.outputs.repo_changed != 'true' && steps.detect.outputs.db_content_changed == 'true'
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -167,7 +169,7 @@ jobs:
             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-cloudflare-pages-dev.yml/dispatches" \
-            -d '{"ref":"dev"}'
+            -d '{"ref":"dev","inputs":{"strict_database_snapshot":"true"}}'
 
       - name: Notify Telegram sync failure
         if: failure() && github.event_name == 'repository_dispatch'

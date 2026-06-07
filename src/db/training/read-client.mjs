@@ -13,7 +13,7 @@ import {
 } from './read-queries.mjs';
 import { buildTrainingSnapshotFromRows } from './read-mapper.mjs';
 
-export async function readTrainingSnapshotFromDatabaseClient(client, now) {
+export async function readTrainingSnapshotFromDatabaseClient(client, now, dateFrom, dateTo) {
   const dayResult = await client.query(TRAINING_DAY_QUERY);
   const measurementResult = await client.query(TRAINING_MEASUREMENT_QUERY);
   const activityResult = await client.query(TRAINING_ACTIVITY_QUERY);
@@ -29,10 +29,35 @@ export async function readTrainingSnapshotFromDatabaseClient(client, now) {
     sleepRows: sleepResult.rows,
     bodyFeedbackRows: bodyFeedbackResult.rows,
     now,
+    dateFrom,
+    dateTo,
   });
 }
 
 export async function readTrainingSnapshotFromDatabaseWithClients({ createClient, config, now, dateFrom, dateTo }) {
+  try {
+    return await readTrainingSnapshotFromDatabaseWithParallelClients({
+      createClient,
+      config,
+      now,
+      dateFrom,
+      dateTo,
+    });
+  } catch (error) {
+    process.stderr.write(
+      `[training-db-read] parallel database snapshot read failed: ${formatErrorMessage(error)}; retrying with one client\n`,
+    );
+    const client = createClient(config);
+    try {
+      await client.connect();
+      return await readTrainingSnapshotFromDatabaseClient(client, now, dateFrom, dateTo);
+    } finally {
+      await client.end?.();
+    }
+  }
+}
+
+async function readTrainingSnapshotFromDatabaseWithParallelClients({ createClient, config, now, dateFrom, dateTo }) {
   const clients = Array.from({ length: 6 }, () => createClient(config));
 
   try {
@@ -61,6 +86,10 @@ export async function readTrainingSnapshotFromDatabaseWithClients({ createClient
   } finally {
     await Promise.allSettled(clients.map((client) => client.end?.()));
   }
+}
+
+function formatErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export async function readArchiveTrainingSnapshotFromDatabaseClient(client, now) {

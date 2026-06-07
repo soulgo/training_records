@@ -97,6 +97,8 @@ export async function runTelegramSync(options = {}) {
   const pendingQueuePath = path.join(runtimeDir, 'telegram-sync-pending.ndjson');
   const now = options.now ?? new Date();
   const aiProvider = options.aiProvider ?? createAiProvider(rawEnv);
+  const recognitionAiProvider =
+    options.recognitionAiProvider ?? createRecognitionAiProvider(rawEnv, aiProvider);
   const readLastProcessedUpdateId =
     options.getLastProcessedUpdateId ??
     (() => getLastProcessedTelegramUpdateId({ env: options.env ?? process.env }));
@@ -110,7 +112,7 @@ export async function runTelegramSync(options = {}) {
       }));
   const recognizeBatchRunner =
     options.recognizeBatch ??
-    ((batch) => recognizeBatch(batch, env, { aiProvider, rawEnv, fetchTelegramFileById }));
+    ((batch) => recognizeBatch(batch, env, { aiProvider: recognitionAiProvider, rawEnv, fetchTelegramFileById }));
   const persistBatch =
     options.persistNormalizedBatch ??
     ((input) =>
@@ -473,7 +475,7 @@ export async function runTelegramSync(options = {}) {
     updates.reduce((max, update) => Math.max(max, update.update_id ?? 0), 0),
   );
 
-  if (replayStoredImageAny || batchResults.some((batch) => batch.kind === 'image' && batch.status === 'ready')) {
+  if (shouldRunSleepBackfill({ rawEnv, replayStoredImageAny })) {
     try {
       await measureSyncStage(timings, 'sleepBackfill', () =>
         backfillCoreSleep({
@@ -586,6 +588,28 @@ function logSyncTimings(timingsMs) {
     return;
   }
   process.stderr.write(`[telegram-sync] timings ${JSON.stringify(timingsMs)}\n`);
+}
+
+export function createRecognitionAiProvider(rawEnv, defaultProvider) {
+  const recognitionModel = String(rawEnv.TELEGRAM_RECOGNITION_MODEL ?? '').trim();
+  if (!recognitionModel) {
+    return defaultProvider;
+  }
+  return createAiProvider({
+    ...rawEnv,
+    AI_MODEL: recognitionModel,
+  });
+}
+
+function shouldRunSleepBackfill({ rawEnv, replayStoredImageAny }) {
+  const flag = String(rawEnv.TELEGRAM_SYNC_RUN_SLEEP_BACKFILL ?? '').trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(flag)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(flag)) {
+    return false;
+  }
+  return replayStoredImageAny;
 }
 
 function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {
