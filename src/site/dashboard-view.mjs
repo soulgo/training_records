@@ -16,6 +16,9 @@ export function buildDashboardViewModel(snapshot) {
   const latestDashboardDate = findLatestDashboardDate({ latestMeasurement, latestDay, daily: dailyEntries });
   const chartWindowDays = 30;
   const dailyCardLimit = 4;
+  const sleepDays = dailyEntries.filter((day) => hasSleepSummary(day?.sleepSummary));
+  const sleepSummarySource = sleepDays.at(-1)?.sleepSummary ?? null;
+  const sleepPreviousSource = sleepDays.at(-2)?.sleepSummary ?? null;
   const chartStartDate = latestDashboardDate ? addDays(latestDashboardDate, -(chartWindowDays - 1)) : null;
   const dailyOverviewEntries = [...dailyEntries].reverse().map((day) => buildDailyOverviewEntry(day));
   const recentDays = dailyOverviewEntries.slice(0, dailyCardLimit);
@@ -45,6 +48,10 @@ export function buildDashboardViewModel(snapshot) {
     ),
     secondaryMetrics: withComparisonHtml(
       buildSecondaryMetrics({ latestMeasurement, latestDay, previousDay }),
+      'metric-card__comparison',
+    ),
+    sleepCards: withComparisonHtml(
+      buildSleepCards({ sleepSummarySource, sleepPreviousSource }),
       'metric-card__comparison',
     ),
     chartCards: buildChartCards(),
@@ -137,6 +144,80 @@ function buildSecondaryMetrics({ latestMeasurement, latestDay, previousDay }) {
   ];
 }
 
+function buildSleepCards({ sleepSummarySource, sleepPreviousSource }) {
+  const sleep = sleepSummarySource || {};
+  const previousSleep = sleepPreviousSource || {};
+  const deepRatio = sleep.deepSleepRatioPct ?? buildSleepRatioValue(sleep.deepSleepMinutes, sleep.totalSleepMinutes);
+  const lightRatio = sleep.lightSleepRatioPct ?? buildSleepRatioValue(sleep.lightSleepMinutes, sleep.totalSleepMinutes);
+
+  return [
+    {
+      title: '总睡眠',
+      valueHtml: renderNumberValue(formatNumber(sleep.totalSleepMinutes, 0), '分钟'),
+      metaHtml: renderMetaLine('夜间睡眠', `${formatNumber(sleep.nightSleepMinutes, 0)} 分钟`),
+      comparison: buildComparison(sleep.totalSleepMinutes, previousSleep.totalSleepMinutes),
+    },
+    {
+      title: '深睡 / 浅睡',
+      valueHtml: renderCompositeValue([
+        { value: formatNumber(sleep.deepSleepMinutes, 0), unit: '分钟' },
+        { value: formatNumber(sleep.lightSleepMinutes, 0), unit: '分钟' },
+      ]),
+      metaHtml: renderMetaLine('REM / 清醒', `${formatNumber(sleep.remSleepMinutes, 0)} / ${formatNumber(sleep.awakeMinutes, 0)} 分钟`),
+      comparison: buildComparison(sleep.deepSleepMinutes, previousSleep.deepSleepMinutes),
+    },
+    {
+      title: '深睡 / 浅睡比例',
+      valueHtml: renderCompositeValue([
+        { value: deepRatio, unit: '%' },
+        { value: lightRatio, unit: '%' },
+      ]),
+      metaHtml: renderMetaLine('深睡 / 浅睡比', buildSleepRatioText(sleep.deepSleepMinutes, sleep.lightSleepMinutes)),
+      comparison: buildSleepRatioComparison(sleep, previousSleep),
+    },
+  ];
+}
+
+function hasSleepSummary(sleep) {
+  return Boolean(sleep && [
+    sleep.totalSleepMinutes,
+    sleep.nightSleepMinutes,
+    sleep.napMinutes,
+  ].some((value) => value !== null && value !== undefined));
+}
+
+function buildSleepRatioValue(partMinutes, totalMinutes) {
+  if (partMinutes === null || partMinutes === undefined || totalMinutes === null || totalMinutes === undefined || totalMinutes === 0) {
+    return '—';
+  }
+  return formatNumber((partMinutes / totalMinutes) * 100, 1);
+}
+
+function buildSleepRatioText(deepSleepMinutes, lightSleepMinutes) {
+  const deep = formatNumber(deepSleepMinutes, 0);
+  const light = formatNumber(lightSleepMinutes, 0);
+  if (deep === '—' && light === '—') {
+    return '—';
+  }
+  return `${deep} / ${light}`;
+}
+
+function buildSleepRatioComparison(sleep, previousSleep) {
+  const currentRatio = toRatioValue(sleep.deepSleepMinutes, sleep.lightSleepMinutes);
+  const previousRatio = toRatioValue(previousSleep.deepSleepMinutes, previousSleep.lightSleepMinutes);
+  return buildComparison(currentRatio, previousRatio);
+}
+
+function toRatioValue(deepSleepMinutes, lightSleepMinutes) {
+  const deep = Number(deepSleepMinutes ?? 0);
+  const light = Number(lightSleepMinutes ?? 0);
+  const total = deep + light;
+  if (!Number.isFinite(total) || total <= 0) {
+    return null;
+  }
+  return (deep / total) * 100;
+}
+
 function buildChartCards() {
   return [
     { id: 'weight-chart', title: '体重趋势', subtitle: '最近 30 天归档走势', className: 'chart-card chart-card--wide' },
@@ -161,6 +242,9 @@ function buildDailyOverviewEntry(day) {
   const workoutDurationLabel = formatWorkoutDuration(day);
   const cyclingDistanceLabel = `${formatNumber(day.workoutSummary.cyclingDistanceKm)} km`;
   const nutritionCaloriesLabel = day.nutrition.totalCalories === null ? '—' : `${formatNumber(day.nutrition.totalCalories, 0)} kcal`;
+  const sleepLabel = day.sleepSummary?.totalSleepMinutes !== null && day.sleepSummary?.totalSleepMinutes !== undefined
+    ? `${formatNumber(day.sleepSummary.totalSleepMinutes, 0)} 分钟`
+    : '—';
   const tags = Object.entries(day.workoutSummary.countsByType || {})
     .filter(([, count]) => count > 0)
     .map(([type, count]) => `${type} × ${count}`);
@@ -176,6 +260,7 @@ function buildDailyOverviewEntry(day) {
     workoutDurationLabel,
     cyclingDistanceLabel,
     nutritionCaloriesLabel,
+    sleepLabel,
     tags,
     cardHtml: `<article class="day-card">
     <div class="day-card__header">
@@ -188,6 +273,7 @@ function buildDailyOverviewEntry(day) {
       <li>锻炼时长：<strong>${escapeHtml(workoutDurationLabel)}</strong></li>
       <li>骑行里程：<strong>${escapeHtml(cyclingDistanceLabel)}</strong></li>
       <li>饮食热量：<strong>${escapeHtml(nutritionCaloriesLabel)}</strong></li>
+      <li>睡眠：<strong>${escapeHtml(sleepLabel)}</strong></li>
     </ul>
     ${tagsHtml}
   </article>`,
@@ -270,6 +356,14 @@ function normalizeDayDate(day) {
 
 function buildDailyOverviewHint() {
   return '顶部主卡按最新体脂归档日展示，最近活动以下方日期卡片为准';
+}
+
+function summarizeSleepStageText(records) {
+  const lastWithStage = [...(records || [])].reverse().find((record) => record?.sleepStageText || record?.sleepStageDetail);
+  if (!lastWithStage) {
+    return '';
+  }
+  return [lastWithStage.sleepStageText, lastWithStage.sleepStageDetail].filter(Boolean).join(' / ');
 }
 
 function buildComparison(current, previous) {

@@ -10,19 +10,24 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
 
   assert.match(action, /name:\s*Shared Site Build/);
   assert.match(action, /using:\s*composite/);
-  for (const inputName of ['run_backfill', 'run_tests', 'deploy']) {
+  for (const inputName of ['run_backfill', 'sync_db_mode', 'run_tests', 'deploy', 'install_dependencies']) {
     assert.match(action, new RegExp(`${inputName}:([\\s\\S]*?)required:\\s*false`));
   }
   assert.match(action, /actions\/setup-node@v4/);
   assert.match(action, /node-version:\s*22/);
   assert.match(action, /cache:\s*npm/);
   assert.match(action, /actions\/cache@v4/);
+  assert.match(action, /- name: Install dependencies\s*\n\s*if: \$\{\{ inputs\.install_dependencies == 'true' \}\}/);
   assert.match(action, /path:\s*\|\s*\n\s*db\.json/);
   assert.match(
     action,
     /key:\s*hexo-\$\{\{\s*runner\.os\s*\}\}-\$\{\{\s*hashFiles\('package-lock\.json', '_config\.yml', 'source\/\*\*', 'themes\/\*\*'\)\s*\}\}/,
   );
   assert.match(action, /- name: Sync archive and markdown to database/);
+  assert.match(action, /- name: Detect database sync input changes/);
+  assert.match(action, /sync_db_needed=false/);
+  assert.match(action, /sync_db_reason=no_data_changes/);
+  assert.match(action, /if: \$\{\{ inputs\.run_backfill == 'true' && \(inputs\.sync_db_mode == 'always' \|\| steps\.sync_db_changes\.outputs\.sync_db_needed == 'true'\) \}\}/);
   assert.match(action, /run:\s*npm run sync:db/);
   assert.doesNotMatch(action, /run:\s*npm run backfill:core/);
   assert.doesNotMatch(action, /run:\s*npm run reconcile:markdown/);
@@ -44,8 +49,11 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /- name: Build and deploy site/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
+  assert.match(workflow, /sync_db_mode:\s*'auto'/);
   assert.match(workflow, /run_tests:\s*'true'/);
   assert.match(workflow, /deploy:\s*'true'/);
+  assert.match(workflow, /strict_database_snapshot:/);
+  assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:/);
 });
 
 test('ci-tests workflow runs npm run test:fast without deploying Pages', async () => {
@@ -53,6 +61,7 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
 
   assert.match(workflow, /name:\s*CI Tests/);
   assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /schedule:\s*\n\s*-\s*cron:\s*'23 18 \* \* \*'/);
   assert.match(workflow, /push:/);
   assert.match(workflow, /pull_request:/);
   for (const expectedPath of [
@@ -88,6 +97,9 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
   assert.match(workflow, /cache:\s*npm/);
   assert.match(workflow, /run:\s*npm ci/);
   assert.match(workflow, /run:\s*npm run test:fast/);
+  assert.match(workflow, /full-test:/);
+  assert.match(workflow, /if: github\.event_name == 'schedule' \|\| github\.event_name == 'workflow_dispatch'/);
+  assert.match(workflow, /run:\s*npm test/);
   assert.doesNotMatch(workflow, /actions\/deploy-pages@v4/);
 });
 
@@ -96,20 +108,24 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
 
   assert.match(workflow, /name:\s*Deploy Cloudflare Pages \(Dev\)/);
   assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /strict_database_snapshot:/);
   assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
   assert.match(workflow, /group:\s*cloudflare-pages-dev/);
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_URL\s*\}\}/);
   assert.match(workflow, /TRAINING_DB_APP_NAME:\s*\$\{\{\s*vars\.DEV_TRAINING_DB_APP_NAME\s*\}\}/);
+  assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:/);
   assert.match(workflow, /ref:\s*dev/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
+  assert.match(workflow, /sync_db_mode:\s*'auto'/);
   assert.match(workflow, /run_tests:\s*'true'/);
   assert.match(workflow, /deploy:\s*'false'/);
   assert.match(workflow, /rm -f public\/CNAME/);
   assert.match(workflow, /cloudflare\/wrangler-action@v3/);
   assert.match(workflow, /apiToken:\s*\$\{\{\s*secrets\.CLOUDFLARE_PAGES_API_TOKEN\s*\}\}/);
   assert.match(workflow, /accountId:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
-  assert.match(workflow, /pages deploy public/);
+  assert.match(workflow, /--cwd public pages deploy \./);
+  assert.doesNotMatch(workflow, /--config wrangler\.pages\.dev\.toml/);
   assert.match(workflow, /--project-name \$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\}/);
   assert.match(workflow, /--branch dev/);
 });
@@ -276,8 +292,9 @@ test('telegram-sync dev workflow leaves Pages deployment to the dev deploy workf
   assert.match(deployWorkflow, /- name: Deploy to Cloudflare Pages/);
   assert.match(
     deployWorkflow,
-    /command: pages deploy public --project-name \$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\} --branch dev/,
+    /command: --cwd public pages deploy \. --project-name \$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\} --branch dev/,
   );
+  assert.doesNotMatch(deployWorkflow, /--config wrangler\.pages\.dev\.toml/);
 });
 
 test('dev Worker config dispatches to the dev Telegram workflow event', async () => {
@@ -291,7 +308,7 @@ test('package fast tests skip the slow thought module page render and exposes sy
   const packageJson = JSON.parse(await readFile(new URL('package.json', rootDir), 'utf8'));
 
   assert.match(packageJson.scripts['test:fast'], /thought module pages/);
-  assert.equal(packageJson.scripts['sync:db'], 'node tools/sync-training-core.mjs');
+  assert.equal(packageJson.scripts['sync:db'], 'node tools/training-maintenance.mjs sync');
 });
 
 test('telegram-sync workflow reports repository dispatch failures back to Telegram', async () => {
@@ -321,7 +338,10 @@ test('telegram-sync workflow reports repository dispatch failures back to Telegr
   assert.match(workflow, /node tools\/telegram-sync-notify\.mjs/);
   assert.match(workflow, /node tools\/telegram-action-monitor\.mjs/);
   assert.match(workflow, /STEP_INSTALL_OUTCOME: \$\{\{ steps\.install\.outcome \}\}/);
+  assert.match(workflow, /- name: Trigger async site deploy/);
+  assert.match(workflow, /continue-on-error: true/);
   assert.doesNotMatch(workflow, /STEP_SITE_BUILD_OUTCOME/);
+  assert.doesNotMatch(workflow, /STEP_PAGES_DEPLOY_OUTCOME/);
 }
 );
 

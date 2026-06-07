@@ -155,6 +155,46 @@
   const dailyStatus = document.querySelector('[data-daily-status]');
   const newerButton = document.querySelector('[data-daily-nav="prev"]');
   const olderButton = document.querySelector('[data-daily-nav="next"]');
+  const sleepCards = document.querySelectorAll('.metric-card--sleep');
+
+  function renderSleepProgress(card, ratio) {
+    if (!card) {
+      return;
+    }
+
+    const existing = card.querySelector('.metric-card__progress');
+    if (existing) {
+      existing.remove();
+    }
+
+    const progress = document.createElement('div');
+    progress.className = 'metric-card__progress';
+    progress.innerHTML = '<span class="metric-card__progress-bar"><span class="metric-card__progress-fill" style="width:' + Math.max(8, Math.min(100, ratio)) + '%"></span></span>';
+    card.appendChild(progress);
+  }
+
+  sleepCards.forEach((card) => {
+    const comparisonText = card.querySelector('.metric-card__comparison');
+    const metaText = card.querySelector('.metric-card__meta');
+    if (comparisonText) {
+      comparisonText.setAttribute('aria-live', 'polite');
+    }
+    if (metaText) {
+      metaText.setAttribute('aria-live', 'polite');
+    }
+
+    const valueNumber = card.querySelector('.metric-value__number');
+    if (!valueNumber) {
+      return;
+    }
+
+    const rawValue = parseFloat(valueNumber.textContent || '0');
+    if (Number.isNaN(rawValue)) {
+      return;
+    }
+
+    renderSleepProgress(card, rawValue);
+  });
 
   function renderDailyRange(pageIndex, pageSize, total) {
     if (!total) {
@@ -192,6 +232,7 @@
       '<li>锻炼时长：<strong>' + escapeHtml(day.workoutDurationLabel) + '</strong></li>' +
       '<li>骑行里程：<strong>' + escapeHtml(day.cyclingDistanceLabel) + '</strong></li>' +
       '<li>饮食热量：<strong>' + escapeHtml(day.nutritionCaloriesLabel) + '</strong></li>' +
+      '<li>睡眠：<strong>' + escapeHtml(day.sleepLabel || '—') + '</strong></li>' +
       '</ul>' +
       tags +
       '</article>';

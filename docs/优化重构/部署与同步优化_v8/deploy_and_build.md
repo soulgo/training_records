@@ -202,3 +202,12 @@
 4. 把 dev/main 的差异压缩到最小
 
 如果只做一件事，建议优先做“数据同步步骤的变化检测 + 快速跳过”，因为这是最容易落地、收益也最直接的点。
+
+---
+
+## 8. 当前已落地项
+
+- `.github/actions/site-build/action.yml` 新增 `sync_db_mode`，支持 `auto`、`always`、`never` 三种数据库同步策略。
+- `sync_db_mode: auto` 会在无训练记录、随想、数据库脚本、SQL、依赖文件等数据相关变更时跳过 `sync:db`。
+- `.github/workflows/deploy-pages.yml` 与 `.github/workflows/deploy-cloudflare-pages-dev.yml` 均显式使用 `sync_db_mode: 'auto'`。
+- `.github/workflows/ci-tests.yml` 保留常规 `test` job 跑 `npm run test:fast`，并新增 `full-test` job，在 `schedule` 或 `workflow_dispatch` 时跑 `npm test`。

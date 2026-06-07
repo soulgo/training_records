@@ -6,12 +6,20 @@ inputs:
     description: Whether to sync committed data back into the database before building
     required: false
     default: 'true'
+  sync_db_mode:
+    description: 'Database sync strategy: auto, always, or never'
+    required: false
+    default: 'auto'
   run_tests:
     description: Whether to run the full test suite before building
     required: false
     default: 'true'
   deploy:
     description: Whether to upload and deploy the generated Pages artifact
+    required: false
+    default: 'true'
+  install_dependencies:
+    description: Whether to run npm ci before building
     required: false
     default: 'true'
 
@@ -32,11 +40,74 @@ runs:
         key: hexo-${{ runner.os }}-${{ hashFiles('package-lock.json', '_config.yml', 'source/**', 'themes/**') }}
 
     - name: Install dependencies
+      if: ${{ inputs.install_dependencies == 'true' }}
       shell: bash
       run: npm ci
 
+    - name: Detect database sync input changes
+      id: sync_db_changes
+      shell: bash
+      env:
+        GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+      run: |
+        mode="${{ inputs.sync_db_mode }}"
+        if [ "${{ inputs.run_backfill }}" != "true" ]; then
+          echo "sync_db_needed=false" >> "$GITHUB_OUTPUT"
+          echo "sync_db_reason=disabled" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if [ "$mode" = "always" ]; then
+          echo "sync_db_needed=true" >> "$GITHUB_OUTPUT"
+          echo "sync_db_reason=forced" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if [ "$mode" = "never" ]; then
+          echo "sync_db_needed=false" >> "$GITHUB_OUTPUT"
+          echo "sync_db_reason=disabled_by_mode" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        base=""
+        if [ "$GITHUB_EVENT_NAME" = "push" ] && [ -n "$GITHUB_EVENT_BEFORE" ] && ! echo "$GITHUB_EVENT_BEFORE" | grep -Eq '^0+$'; then
+          base="$GITHUB_EVENT_BEFORE"
+        elif git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+          base="HEAD^"
+        fi
+
+        if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" >/dev/null 2>&1; then
+          echo "sync_db_needed=true" >> "$GITHUB_OUTPUT"
+          echo "sync_db_reason=unknown_base" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        changed="$(git diff --name-only "$base" HEAD -- \
+          '训练记录.md' \
+          'source/_posts/**' \
+          'source/images/**' \
+          'sql/**' \
+          'src/db/training/**' \
+          'tools/sync-training-core.mjs' \
+          'tools/backfill-training-core-from-archive.mjs' \
+          'tools/backfill-thoughts-to-core.mjs' \
+          'tools/reconcile-training-markdown-to-core.mjs' \
+          'tools/import-training-markdown.mjs' \
+          'tools/export-training-markdown.mjs' \
+          'package.json' \
+          'package-lock.json')"
+
+        if [ -z "$changed" ]; then
+          echo "sync_db_needed=false" >> "$GITHUB_OUTPUT"
+          echo "sync_db_reason=no_data_changes" >> "$GITHUB_OUTPUT"
+        else
+          echo "sync_db_needed=true" >> "$GITHUB_OUTPUT"
+          echo "sync_db_reason=data_changes" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Sync archive and markdown to database
-      if: ${{ inputs.run_backfill == 'true' }}
+      if: ${{ inputs.run_backfill == 'true' && (inputs.sync_db_mode == 'always' || steps.sync_db_changes.outputs.sync_db_needed == 'true') }}
       shell: bash
       run: npm run sync:db
 

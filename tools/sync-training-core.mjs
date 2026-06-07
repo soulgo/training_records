@@ -5,6 +5,7 @@ import { backfillTrainingCoreFromArchive } from './backfill-training-core-from-a
 import { backfillThoughtsToCore } from './backfill-thoughts-to-core.mjs';
 import { reconcileTrainingMarkdownToCore } from './reconcile-training-markdown-to-core.mjs';
 import {
+  backfillCoreSleepFromIngestBatchesClient,
   backfillCoreFromLatestArchiveSnapshotClient,
   importTrainingMarkdownToDatabase,
   resolveTrainingCoreConfig,
@@ -16,12 +17,15 @@ const { Client } = pg;
 export async function syncTrainingCore(options = {}) {
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
+  const phase = normalizeSyncPhase(options.phase);
   const result =
-    options.backfillTrainingCoreFromArchive || options.reconcileTrainingMarkdownToCore
-      ? await syncTrainingCoreWithInjectedPhases(options, stderr)
-      : await syncTrainingCoreDefault(options, stderr);
+    phase === 'thoughts'
+      ? {}
+      : options.backfillTrainingCoreFromArchive || options.reconcileTrainingMarkdownToCore
+        ? await syncTrainingCoreWithInjectedPhases(options, stderr, phase)
+        : await syncTrainingCoreDefault(options, stderr, phase);
 
-  if (!result.thoughts) {
+  if ((phase === 'all' || phase === 'thoughts') && !result.thoughts) {
     result.thoughts = await runPhase(
       'thoughts',
       options.backfillThoughtsToCore ?? backfillThoughtsToCore,
@@ -44,13 +48,13 @@ export async function syncTrainingCore(options = {}) {
   return payload;
 }
 
-async function syncTrainingCoreWithInjectedPhases(options, stderr) {
+async function syncTrainingCoreWithInjectedPhases(options, stderr, phase) {
   const result = {};
   const phases = [
     ['archive', options.backfillTrainingCoreFromArchive ?? backfillTrainingCoreFromArchive],
     ['markdown', options.reconcileTrainingMarkdownToCore ?? reconcileTrainingMarkdownToCore],
   ];
-  for (const [name, run] of phases) {
+  for (const [name, run] of phases.filter(([name]) => phase === 'all' || name === phase)) {
     result[name] = await runPhase(
       name,
       run,
@@ -67,7 +71,7 @@ async function syncTrainingCoreWithInjectedPhases(options, stderr) {
   return result;
 }
 
-async function syncTrainingCoreDefault(options, stderr) {
+async function syncTrainingCoreDefault(options, stderr, phase) {
   const env = options.env ?? process.env;
   const config = resolveTrainingCoreConfig(env);
   if (!config.enabled || !config.url) {
@@ -75,10 +79,11 @@ async function syncTrainingCoreDefault(options, stderr) {
       status: 'skipped',
       reason: !config.enabled ? 'disabled' : 'missing_url',
     };
-    return {
+    return buildPhasedResult(phase, {
       archive: { ...skipped, daysBackfilled: 0 },
+      ingest: { ...skipped, batchesBackfilled: 0, daysBackfilled: [] },
       markdown: skipped,
-    };
+    });
   }
 
   const createClient =
@@ -94,8 +99,9 @@ async function syncTrainingCoreDefault(options, stderr) {
 
   try {
     await client.connect();
-    return {
-      archive: await runPhase(
+    const result = {};
+    if (phase === 'all' || phase === 'archive') {
+      result.archive = await runPhase(
         'archive',
         () =>
           backfillCoreFromLatestArchiveSnapshotClient(client, {
@@ -105,8 +111,22 @@ async function syncTrainingCoreDefault(options, stderr) {
           }),
         {},
         stderr,
-      ),
-      markdown: await runPhase(
+      );
+    }
+    if (phase === 'all' || phase === 'ingest') {
+      result.ingest = await runPhase(
+        'ingest',
+        () =>
+          backfillCoreSleepFromIngestBatchesClient(client, {
+            processedAt,
+            sourceChannel: options.sourceChannel,
+          }),
+        {},
+        stderr,
+      );
+    }
+    if (phase === 'all' || phase === 'markdown') {
+      result.markdown = await runPhase(
         'markdown',
         () =>
           reconcileTrainingMarkdownToCore({
@@ -132,13 +152,18 @@ async function syncTrainingCoreDefault(options, stderr) {
           }),
         {},
         stderr,
-      ),
-    };
+      );
+    }
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     stderr.write(`[sync-training-core] ${message}\n`);
-    return {
+    return buildPhasedResult(phase, {
       archive: {
+        status: 'deferred',
+        error: message,
+      },
+      ingest: {
         status: 'deferred',
         error: message,
       },
@@ -146,7 +171,7 @@ async function syncTrainingCoreDefault(options, stderr) {
         status: 'deferred',
         error: message,
       },
-    };
+    });
   } finally {
     try {
       await client.end();
@@ -155,6 +180,22 @@ async function syncTrainingCoreDefault(options, stderr) {
       stderr.write(`[sync-training-core] ${message}\n`);
     }
   }
+}
+
+function buildPhasedResult(phase, result) {
+  if (phase === 'all') {
+    return result;
+  }
+  if (phase === 'archive') {
+    return { archive: result.archive };
+  }
+  if (phase === 'ingest') {
+    return { ingest: result.ingest };
+  }
+  if (phase === 'markdown') {
+    return { markdown: result.markdown };
+  }
+  return {};
 }
 
 async function runPhase(name, run, options, stderr) {
@@ -185,6 +226,11 @@ function summarizeStatus(result) {
     return 'unchanged';
   }
   return 'skipped';
+}
+
+function normalizeSyncPhase(value) {
+  const phase = String(value ?? 'all').trim();
+  return ['all', 'archive', 'ingest', 'markdown', 'thoughts'].includes(phase) ? phase : 'all';
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

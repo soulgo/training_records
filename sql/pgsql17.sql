@@ -66,6 +66,15 @@ create table if not exists archive.training_day (
   active_hours integer null,
   cycling_distance_km numeric(10, 2) null,
   intake_calories integer null,
+  sleep_total_minutes integer null,
+  night_sleep_minutes integer null,
+  nap_minutes integer null,
+  sleep_start_time text null,
+  sleep_end_time text null,
+  deep_sleep_minutes integer null,
+  light_sleep_minutes integer null,
+  rem_sleep_minutes integer null,
+  awake_minutes integer null,
   measurement_count integer not null default 0,
   meal_count integer not null default 0,
   updated_at timestamptz not null
@@ -82,11 +91,87 @@ comment on column archive.training_day.workout_duration_minutes is '当天锻炼
 comment on column archive.training_day.active_hours is '当天活跃小时数';
 comment on column archive.training_day.cycling_distance_km is '当天骑行总距离，单位公里';
 comment on column archive.training_day.intake_calories is '当天饮食总热量';
+comment on column archive.training_day.sleep_total_minutes is '当天总睡眠分钟数';
+comment on column archive.training_day.night_sleep_minutes is '当天夜间睡眠分钟数';
+comment on column archive.training_day.nap_minutes is '当天午睡分钟数';
+comment on column archive.training_day.sleep_start_time is '当天睡眠开始时间';
+comment on column archive.training_day.sleep_end_time is '当天睡眠结束时间';
+comment on column archive.training_day.deep_sleep_minutes is '当天深睡分钟数';
+comment on column archive.training_day.light_sleep_minutes is '当天浅睡分钟数';
+comment on column archive.training_day.rem_sleep_minutes is '当天 REM 睡眠分钟数';
+comment on column archive.training_day.awake_minutes is '当天清醒分钟数';
 comment on column archive.training_day.measurement_count is '当天体测记录数';
 comment on column archive.training_day.meal_count is '当天饮食条目数';
 comment on column archive.training_day.updated_at is '该日汇总最近更新时间';
 
--- 9. 创建结构化活动明细表
+-- 9. 创建结构化睡眠明细表
+create table if not exists archive.training_sleep (
+  sleep_hash text primary key,
+  archived_date date not null references archive.training_day(archived_date) on delete cascade,
+  source_hash text not null references archive.training_parse_snapshot(source_hash),
+  sleep_type text not null default '夜间睡眠',
+  bedtime text null,
+  wake_time text null,
+  night_sleep_minutes integer null,
+  total_sleep_minutes integer null,
+  nap_minutes integer null,
+  deep_sleep_minutes integer null,
+  light_sleep_minutes integer null,
+  rem_sleep_minutes integer null,
+  awake_minutes integer null,
+  sleep_stage_text text null,
+  sleep_stage_detail text null,
+  sleep_score integer null,
+  sleep_score_percentile integer null,
+  deep_sleep_ratio_pct numeric(10, 2) null,
+  light_sleep_ratio_pct numeric(10, 2) null,
+  rem_sleep_ratio_pct numeric(10, 2) null,
+  deep_sleep_continuity_score integer null,
+  wake_count integer null,
+  breathing_quality_score integer null,
+  average_heart_rate_bpm integer null,
+  hrv_ms integer null,
+  average_spo2_pct numeric(10, 2) null,
+  average_respiratory_rate numeric(10, 2) null,
+  analysis_text text null,
+  suggestion_text text null,
+  updated_at timestamptz not null
+);
+
+comment on table archive.training_sleep is '训练睡眠明细表，一次睡眠记录一行';
+
+comment on column archive.training_sleep.sleep_hash is '睡眠记录幂等哈希';
+comment on column archive.training_sleep.archived_date is '归档日期';
+comment on column archive.training_sleep.source_hash is '来源快照哈希';
+comment on column archive.training_sleep.sleep_type is '睡眠类型，夜间睡眠或午睡';
+comment on column archive.training_sleep.bedtime is '入睡时间文本';
+comment on column archive.training_sleep.wake_time is '起床时间文本';
+comment on column archive.training_sleep.night_sleep_minutes is '夜间睡眠分钟数';
+comment on column archive.training_sleep.total_sleep_minutes is '总睡眠分钟数';
+comment on column archive.training_sleep.nap_minutes is '午睡分钟数';
+comment on column archive.training_sleep.deep_sleep_minutes is '深睡分钟数';
+comment on column archive.training_sleep.light_sleep_minutes is '浅睡分钟数';
+comment on column archive.training_sleep.rem_sleep_minutes is 'REM 睡眠分钟数';
+comment on column archive.training_sleep.awake_minutes is '清醒分钟数';
+comment on column archive.training_sleep.sleep_stage_text is '睡眠阶段文本';
+comment on column archive.training_sleep.sleep_stage_detail is '睡眠阶段详情';
+comment on column archive.training_sleep.sleep_score is '睡眠评分';
+comment on column archive.training_sleep.sleep_score_percentile is '超过用户百分比';
+comment on column archive.training_sleep.deep_sleep_ratio_pct is '深睡比例百分比';
+comment on column archive.training_sleep.light_sleep_ratio_pct is '浅睡比例百分比';
+comment on column archive.training_sleep.rem_sleep_ratio_pct is 'REM 比例百分比';
+comment on column archive.training_sleep.deep_sleep_continuity_score is '深睡连续性评分';
+comment on column archive.training_sleep.wake_count is '清醒次数';
+comment on column archive.training_sleep.breathing_quality_score is '呼吸质量评分';
+comment on column archive.training_sleep.average_heart_rate_bpm is '平均心率，单位次/分钟';
+comment on column archive.training_sleep.hrv_ms is '平均心率变异性，单位毫秒';
+comment on column archive.training_sleep.average_spo2_pct is '平均血氧饱和度百分比';
+comment on column archive.training_sleep.average_respiratory_rate is '平均呼吸率，单位次/分钟';
+comment on column archive.training_sleep.analysis_text is '睡眠解读文本';
+comment on column archive.training_sleep.suggestion_text is '睡眠建议文本';
+comment on column archive.training_sleep.updated_at is '该睡眠记录最近更新时间';
+
+-- 10. 创建结构化活动明细表
 create table if not exists archive.training_activity (
   activity_hash text primary key,
   archived_date date not null references archive.training_day(archived_date) on delete cascade,
@@ -121,7 +206,17 @@ comment on column archive.training_activity.duration_text is '活动时长文本
 comment on column archive.training_activity.duration_seconds is '活动时长秒数';
 comment on column archive.training_activity.updated_at is '该活动最近更新时间';
 
--- 10. 创建结构化体测表
+create index if not exists idx_training_sleep_archived_date
+on archive.training_sleep (archived_date);
+
+comment on index archive.idx_training_sleep_archived_date is '按归档日期查询睡眠明细的索引';
+
+create index if not exists idx_training_sleep_source_hash
+on archive.training_sleep (source_hash);
+
+comment on index archive.idx_training_sleep_source_hash is '按快照哈希查询对应睡眠明细的索引';
+
+-- 11. 创建结构化体测表
 create table if not exists archive.training_measurement (
   measurement_hash text primary key,
   archived_date date not null references archive.training_day(archived_date) on delete cascade,
@@ -164,7 +259,7 @@ comment on column archive.training_measurement.body_type is '身体类型';
 comment on column archive.training_measurement.fat_free_mass_kg is '去脂体重，单位千克';
 comment on column archive.training_measurement.updated_at is '该体测最近更新时间';
 
--- 11. 创建结构化饮食明细表
+-- 12. 创建结构化饮食明细表
 create table if not exists archive.training_meal (
   meal_hash text primary key,
   archived_date date not null references archive.training_day(archived_date) on delete cascade,
@@ -187,7 +282,7 @@ comment on column archive.training_meal.recommended_min is '建议最低热量';
 comment on column archive.training_meal.recommended_max is '建议最高热量';
 comment on column archive.training_meal.updated_at is '该餐最近更新时间';
 
--- 12. 创建每次运行留痕表
+-- 13. 创建每次运行留痕表
 create table if not exists archive.training_parse_run (
   run_id uuid primary key,
   source_hash text not null references archive.training_parse_snapshot(source_hash),
@@ -216,7 +311,7 @@ comment on column archive.training_parse_run.latest_archived_date is '本次运�
 comment on column archive.training_parse_run.main_output_written is '主输出文件training.json和调试Markdown是否已成功写出';
 comment on column archive.training_parse_run.db_sync_status is '数据库归档状态，当前成功写入固定为success，预留后续扩展';
 
--- 13. 创建索引
+-- 14. 创建索引
 create index if not exists idx_training_parse_run_finished_at
 on archive.training_parse_run (run_finished_at desc);
 
@@ -257,7 +352,7 @@ on archive.training_meal (archived_date);
 
 comment on index archive.idx_training_meal_archived_date is '按归档日期查询饮食明细的索引';
 
--- 14. 赋权
+-- 15. 赋权
 grant usage on schema archive to training_writer;
 grant select, insert, update, delete on all tables in schema archive to training_writer;
 grant usage, select on all sequences in schema archive to training_writer;
@@ -268,7 +363,7 @@ grant select, insert, update, delete on tables to training_writer;
 alter default privileges in schema archive
 grant usage, select on sequences to training_writer;
 
--- 15. 创建 ingest schema
+-- 16. 创建 ingest schema
 create schema if not exists ingest authorization training_writer;
 
 comment on schema ingest is 'Telegram 等外部输入的原始接入与识别留痕';
@@ -353,7 +448,7 @@ on ingest.telegram_pending_batch (status, next_retry_at);
 
 create index if not exists idx_ingest_telegram_pending_batch_updated_at
 on ingest.telegram_pending_batch (updated_at desc);
--- 16. 创建 core schema
+-- 17. 创建 core schema
 create schema if not exists core authorization training_writer;
 
 comment on schema core is '训练记录系统业务主数据层';
@@ -369,6 +464,15 @@ create table if not exists core.training_day (
   active_hours integer null,
   cycling_distance_km numeric(10, 2) null,
   intake_calories integer null,
+  sleep_total_minutes integer null,
+  night_sleep_minutes integer null,
+  nap_minutes integer null,
+  sleep_start_time text null,
+  sleep_end_time text null,
+  deep_sleep_minutes integer null,
+  light_sleep_minutes integer null,
+  rem_sleep_minutes integer null,
+  awake_minutes integer null,
   nutrition_details_json jsonb not null default '[]'::jsonb,
   updated_at timestamptz not null
 );
@@ -392,6 +496,40 @@ create table if not exists core.measurement (
   fat_free_mass_kg numeric(10, 3) null,
   body_age integer null,
   body_type text null,
+  updated_at timestamptz not null
+);
+
+create table if not exists core.sleep (
+  sleep_key text primary key,
+  archived_date date not null references core.training_day(archived_date) on delete cascade,
+  source_channel text not null,
+  source_batch_id text null,
+  sleep_type text not null default '夜间睡眠',
+  bedtime text null,
+  wake_time text null,
+  night_sleep_minutes integer null,
+  total_sleep_minutes integer null,
+  nap_minutes integer null,
+  deep_sleep_minutes integer null,
+  light_sleep_minutes integer null,
+  rem_sleep_minutes integer null,
+  awake_minutes integer null,
+  sleep_stage_text text null,
+  sleep_stage_detail text null,
+  sleep_score integer null,
+  sleep_score_percentile integer null,
+  deep_sleep_ratio_pct numeric(10, 2) null,
+  light_sleep_ratio_pct numeric(10, 2) null,
+  rem_sleep_ratio_pct numeric(10, 2) null,
+  deep_sleep_continuity_score integer null,
+  wake_count integer null,
+  breathing_quality_score integer null,
+  average_heart_rate_bpm integer null,
+  hrv_ms integer null,
+  average_spo2_pct numeric(10, 2) null,
+  average_respiratory_rate numeric(10, 2) null,
+  analysis_text text null,
+  suggestion_text text null,
   updated_at timestamptz not null
 );
 
@@ -451,6 +589,9 @@ comment on column core.thought.status is 'active 或 deleted；删除命令使�
 
 create index if not exists idx_core_measurement_archived_date
 on core.measurement (archived_date);
+
+create index if not exists idx_core_sleep_archived_date
+on core.sleep (archived_date);
 
 create index if not exists idx_core_activity_archived_date
 on core.activity (archived_date);

@@ -2,11 +2,14 @@ import {
   buildTrainingDay,
   buildTrainingSnapshotFromDaily,
   emptyNutrition,
+  emptySleep,
   extractSubBlock,
   inferMealSlot,
   normalizeActivityType,
+  normalizeSleepType,
   parseDurationSeconds,
   parseFirstMatch,
+  parseMinutesText,
   parseNumber,
   parseWeightKg,
   roundTo,
@@ -39,12 +42,15 @@ function parseDateSection(date, content) {
 
   const nutritionBlock = blocks.find((block) => block.heading.includes('饮食截图记录'));
   const nutrition = nutritionBlock ? parseNutritionBlock(nutritionBlock.body) : emptyNutrition();
+  const sleepBlock = blocks.find((block) => block.heading.includes('睡眠截图记录') || block.heading.includes('睡眠记录'));
+  const sleep = sleepBlock ? parseSleepBlock(sleepBlock.body) : emptySleep();
 
   return buildTrainingDay({
     date,
     measurements: measurementBlocks,
     activities,
     nutrition,
+    sleep,
     workoutDailySummary,
   });
 }
@@ -163,6 +169,7 @@ function parseActivityLine(line) {
 
 function parseNutritionBlock(content) {
   const summaryBody = extractSubBlock(content, '##### 餐次汇总') ?? '';
+  const detailsBody = extractSubBlock(content, '##### 餐次明细') ?? '';
   const mealsByName = new Map();
   let totalCalories = null;
 
@@ -209,7 +216,136 @@ function parseNutritionBlock(content) {
       .filter(Boolean)
       .map(({ isSummary, ...meal }) => meal),
     totalCalories,
+    details: parseNutritionDetails(detailsBody),
   };
+}
+
+function parseSleepBlock(content) {
+  const detailBody = extractSubBlock(content, '##### 睡眠明细') ?? content;
+  const recordChunks = splitSleepRecordChunks(detailBody);
+  const records = recordChunks.map(parseSleepRecordChunk).filter(hasSleepRecordValue);
+  if (records.length === 0) {
+    return emptySleep();
+  }
+
+  return {
+    records,
+    ...records.at(-1),
+  };
+}
+
+function parseSleepRecordChunk(content) {
+  const fields = parseBulletFields(content);
+  const sleepType = normalizeSleepType(fields['睡眠类型']);
+  const [bedtimeFromPair, wakeTimeFromPair] = parseSleepTimePair(fields['入睡/起床']);
+  const record = {
+    sleepType,
+    bedtime: bedtimeFromPair ?? fields['入睡时间'] ?? fields['开始时间'] ?? null,
+    wakeTime: wakeTimeFromPair ?? fields['起床时间'] ?? fields['结束时间'] ?? null,
+    nightSleepMinutes: parseMinutesText(fields['夜间睡眠']) ?? parseMinutesText(fields['睡眠时长']) ?? null,
+    totalSleepMinutes: parseMinutesText(fields['总睡眠']) ?? parseMinutesText(fields['睡眠总时长']) ?? null,
+    napMinutes: parseMinutesText(fields['午睡']) ?? parseMinutesText(fields['小睡']) ?? null,
+    deepSleepMinutes: parseMinutesText(fields['深睡']) ?? null,
+    lightSleepMinutes: parseMinutesText(fields['浅睡']) ?? null,
+    remSleepMinutes:
+      parseMinutesText(fields['快动眼睡眠']) ??
+      parseMinutesText(fields['快速眼动']) ??
+      parseMinutesText(fields['REM']) ??
+      null,
+    awakeMinutes: parseMinutesText(fields['清醒']) ?? null,
+    sleepStageText: fields['睡眠阶段'] ?? null,
+    sleepStageDetail: parseSleepStageDetail(content),
+    sleepScore: parseNumber(fields['睡眠评分']),
+    sleepScorePercentile: parseNumber(fields['超过用户']),
+    deepSleepRatioPct: parseNumber(fields['深睡比例']),
+    lightSleepRatioPct: parseNumber(fields['浅睡比例']),
+    remSleepRatioPct: parseNumber(fields['快速眼动比例']),
+    deepSleepContinuityScore: parseNumber(fields['深睡连续性']),
+    wakeCount: parseNumber(fields['清醒次数']),
+    breathingQualityScore: parseNumber(fields['呼吸质量']),
+    averageHeartRateBpm: parseNumber(fields['平均心率']),
+    hrvMs: parseNumber(fields['平均心率变异性']),
+    averageSpo2Pct: parseNumber(fields['平均血氧饱和度']),
+    averageRespiratoryRate: parseNumber(fields['平均呼吸率']),
+    analysisText: fields['睡眠解读'] ?? null,
+    suggestionText: fields['睡眠建议'] ?? null,
+  };
+
+  return {
+    ...record,
+    sleepStartTime: record.bedtime,
+    sleepEndTime: record.wakeTime,
+  };
+}
+
+function parseNutritionDetails(content) {
+  return content
+    .split(/\r?\n/)
+    .map((line) => line.trim().match(/^- (.+)$/)?.[1]?.trim())
+    .filter(Boolean);
+}
+
+function splitSleepRecordChunks(content) {
+  const lines = content.split(/\r?\n/);
+  const chunks = [];
+  let current = [];
+
+  for (const line of lines) {
+    if (/^- 睡眠类型：/.test(line.trim()) && current.some((item) => item.trim())) {
+      chunks.push(current.join('\n'));
+      current = [];
+    }
+    current.push(line);
+  }
+
+  if (current.some((item) => item.trim())) {
+    chunks.push(current.join('\n'));
+  }
+
+  return chunks.length ? chunks : [content];
+}
+
+function parseSleepTimePair(value) {
+  if (!value) {
+    return [null, null];
+  }
+  const [start, end] = String(value).split(/\s*(?:→|->|>)\s*/).map((item) => item?.trim()).filter(Boolean);
+  return [start ?? null, end ?? null];
+}
+
+function parseSleepStageDetail(content) {
+  const lines = content.split(/\r?\n/);
+  const details = [];
+  let collecting = false;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (/^- 睡眠阶段明细：\s*$/.test(line.trim())) {
+      collecting = true;
+      continue;
+    }
+    if (collecting) {
+      const nested = line.match(/^\s+- (.+)$/)?.[1]?.trim();
+      if (nested) {
+        details.push(nested);
+        continue;
+      }
+      if (line.trim().startsWith('- ')) {
+        break;
+      }
+    }
+  }
+
+  return details.length ? details : null;
+}
+
+function hasSleepRecordValue(record) {
+  return Object.entries(record).some(([key, value]) => {
+    if (key === 'sleepType') {
+      return false;
+    }
+    return value !== null && value !== undefined && value !== '' && (!Array.isArray(value) || value.length > 0);
+  });
 }
 
 function parseNutritionSummaryLine(line) {

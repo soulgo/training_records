@@ -1,14 +1,14 @@
 # 健身训练记录看板
 
-这是一个用 Markdown、PostgreSQL、Telegram Bot、AI 图片识别、Hexo 和 GitHub Pages 组成的个人训练记录系统。它的核心目标是把训练截图、体脂秤截图、饮食截图和日常身体反馈归档成统一的 `TrainingSnapshot`，再生成可浏览的静态训练看板。
+这是一个用 Markdown、PostgreSQL、Telegram Bot、AI 图片识别、Hexo 和 GitHub Pages 组成的个人训练记录系统。它的核心目标是把训练截图、体脂秤截图、饮食截图、睡眠截图和日常身体反馈归档成统一的 `TrainingSnapshot`，再生成可浏览的静态训练看板。
 
 系统当前没有独立后台、OCR 服务后台或管理后台。主要维护入口是 `训练记录.md`、Telegram Bot、npm scripts、GitHub Actions 和 `docs/` 文档。
 
 ## 核心功能
 
-- 从 `训练记录.md` 解析训练、体脂和饮食记录。
+- 从 `训练记录.md` 解析训练、体脂、饮食和睡眠记录。
 - 从 PostgreSQL `core.*` 读取结构化训练数据。
-- 通过 Telegram 发送训练、饮食、体脂截图，并调用 AI 识别归档。
+- 通过 Telegram 发送锻炼、饮食、体脂秤和睡眠截图，并调用 AI 识别归档。
 - Telegram `/随想` / `/thought` 生成站点随想文章，支持编辑、删除、移动和带图。
 - Telegram `/分析` / `/analysis` 基于训练快照生成训练建议，只回发 Telegram，不写入数据。
 - Telegram `/ai` / `/智能助手` 调用 MCP 工具查询历史、同步状态或生成综合回答。
@@ -125,10 +125,12 @@ npm run server
 | `TELEGRAM_ALLOWED_CHAT_IDS` | 允许处理的 Telegram chat id，逗号分隔 |
 | `TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE` | 图片识别输入模式：`auto`、`url` 或 `inline`；Action 默认 `inline` |
 | `TELEGRAM_RECOGNITION_MODEL` | 可选，仅覆盖 Telegram 图片识别模型 |
+| `TELEGRAM_SYNC_RUN_SLEEP_BACKFILL` | 可选，显式运行睡眠全量补偿；默认仅 pending replay 触发 |
 | `AI_API_KEY` | AI 服务鉴权 |
 | `AI_BASE_URL` | Chat Completions base URL |
 | `AI_MODEL` | AI 模型名 |
 | `AI_CONCURRENCY` | 图片识别并发数，默认 3 |
+| `TRAINING_DB_TIMEOUT_MS` | 训练数据库连接超时时间，默认 5000ms；数据库偶发抖动时可适当调大 |
 | `TRAINING_ANALYSIS_GOAL` | `/分析` 长期训练目标覆盖值 |
 | `TELEGRAM_WEBHOOK_URL` | Telegram webhook 目标地址 |
 | `TELEGRAM_SECRET_TOKEN` | Telegram webhook secret header 校验值 |

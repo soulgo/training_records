@@ -5,6 +5,7 @@ import { parseTrainingRecord } from '../../domain/training/training-parser.mjs';
 import {
   buildTrainingDay,
   emptyNutrition,
+  emptySleep,
   normalizeActivityTime,
   normalizeActivityType,
   parseDurationSeconds,
@@ -20,8 +21,31 @@ import {
   normalizeThoughtModule,
   normalizeThoughtModuleOrNull,
 } from '../../../tools/lib/thought-modules.mjs';
+import {
+  insertArchiveSleep,
+  insertCoreActivities,
+  insertCoreMeals,
+  insertCoreMeasurements,
+  insertCoreSleep,
+} from './core-row-writer.mjs';
 
 const { Client } = pg;
+const SLEEP_HEALTH_FIELDS = [
+  'sleepScore',
+  'sleepScorePercentile',
+  'deepSleepRatioPct',
+  'lightSleepRatioPct',
+  'remSleepRatioPct',
+  'deepSleepContinuityScore',
+  'wakeCount',
+  'breathingQualityScore',
+  'averageHeartRateBpm',
+  'hrvMs',
+  'averageSpo2Pct',
+  'averageRespiratoryRate',
+  'analysisText',
+  'suggestionText',
+];
 
 export async function persistNormalizedBatch(options) {
   const config = resolveTrainingCoreConfig(options.env);
@@ -84,7 +108,10 @@ export async function persistNormalizedBatch(options) {
     } else if (batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
       const existingDay = await readCoreDay(client, batch.archivedDate);
       const mergedDay = mergeBatchIntoDay(existingDay, batch);
-      await replaceCoreDay(client, mergedDay, batch.batchId, processedAt);
+      await replaceCoreDay(client, mergedDay, batch.batchId, processedAt, {
+        sourceHash: payloadHash,
+        writeArchiveSleep: isTelegramImageBatch(batch) ? false : undefined,
+      });
     }
 
     await client.query('COMMIT');
@@ -176,6 +203,38 @@ export async function backfillCoreFromLatestArchiveSnapshot(options = {}) {
   }
 }
 
+export async function backfillCoreSleepFromIngestBatches(options = {}) {
+  const config = resolveTrainingCoreConfig(options.env);
+  if (!config.enabled || !config.url) {
+    return {
+      status: 'skipped',
+      reason: !config.enabled ? 'disabled' : 'missing_url',
+      batchesBackfilled: 0,
+      daysBackfilled: [],
+    };
+  }
+
+  const createClient =
+    options.createClient ??
+    ((dbConfig) =>
+      new Client({
+        connectionString: dbConfig.url,
+        connectionTimeoutMillis: dbConfig.timeoutMs,
+        application_name: dbConfig.appName,
+      }));
+  const client = createClient(config);
+
+  try {
+    await client.connect();
+    return await backfillCoreSleepFromIngestBatchesClient(client, {
+      processedAt: options.processedAt,
+      sourceChannel: options.sourceChannel ?? 'ingest_sleep_backfill',
+    });
+  } finally {
+    await client.end();
+  }
+}
+
 export async function importTrainingMarkdownToDatabase(options) {
   const snapshot = parseTrainingRecord(options.markdown);
   return persistTrainingSnapshotToCore({
@@ -188,16 +247,180 @@ export async function importTrainingMarkdownToDatabase(options) {
   });
 }
 
+export async function backfillCoreSleepFromIngestBatchesClient(client, options = {}) {
+  const processedAt = options.processedAt ?? new Date();
+  const ingestCandidateResult = await client.query(`
+    select
+      b.batch_id,
+      b.batch_payload_json
+    from ingest.telegram_batch b
+    where b.status = 'ready'
+      and b.archived_date is not null
+      and b.batch_payload_json->'sleep' is not null
+      and not exists (
+        select 1
+        from core.sleep s
+        where s.archived_date = b.archived_date
+      )
+    order by b.processed_at asc, b.batch_id asc
+  `);
+  const archiveCandidateResult = await client.query(`
+    select
+      a.archived_date,
+      jsonb_build_object(
+        'status', 'ready',
+        'archivedDate', a.archived_date,
+        'sleep', jsonb_build_object(
+          'records', jsonb_agg(
+            jsonb_build_object(
+              'sleepType', coalesce(a.sleep_type, '夜间睡眠'),
+              'bedtime', a.bedtime,
+              'wakeTime', a.wake_time,
+              'nightSleepMinutes', a.night_sleep_minutes,
+              'totalSleepMinutes', a.total_sleep_minutes,
+              'napMinutes', a.nap_minutes,
+              'deepSleepMinutes', a.deep_sleep_minutes,
+              'lightSleepMinutes', a.light_sleep_minutes,
+              'remSleepMinutes', a.rem_sleep_minutes,
+              'awakeMinutes', a.awake_minutes,
+              'sleepStageText', a.sleep_stage_text,
+              'sleepStageDetail', a.sleep_stage_detail,
+              'sleepScore', a.sleep_score,
+              'sleepScorePercentile', a.sleep_score_percentile,
+              'deepSleepRatioPct', a.deep_sleep_ratio_pct,
+              'lightSleepRatioPct', a.light_sleep_ratio_pct,
+              'remSleepRatioPct', a.rem_sleep_ratio_pct,
+              'deepSleepContinuityScore', a.deep_sleep_continuity_score,
+              'wakeCount', a.wake_count,
+              'breathingQualityScore', a.breathing_quality_score,
+              'averageHeartRateBpm', a.average_heart_rate_bpm,
+              'hrvMs', a.hrv_ms,
+              'averageSpo2Pct', a.average_spo2_pct,
+              'averageRespiratoryRate', a.average_respiratory_rate,
+              'analysisText', a.analysis_text,
+              'suggestionText', a.suggestion_text
+            )
+            order by a.bedtime asc nulls last
+          ),
+          'totalSleepMinutes', max(a.total_sleep_minutes),
+          'nightSleepMinutes', max(a.night_sleep_minutes),
+          'napMinutes', max(a.nap_minutes),
+          'sleepStartTime', max(a.bedtime),
+          'sleepEndTime', max(a.wake_time),
+          'deepSleepMinutes', max(a.deep_sleep_minutes),
+          'lightSleepMinutes', max(a.light_sleep_minutes),
+          'remSleepMinutes', max(a.rem_sleep_minutes),
+          'awakeMinutes', max(a.awake_minutes),
+          'sleepScore', max(a.sleep_score),
+          'sleepScorePercentile', max(a.sleep_score_percentile),
+          'deepSleepRatioPct', max(a.deep_sleep_ratio_pct),
+          'lightSleepRatioPct', max(a.light_sleep_ratio_pct),
+          'remSleepRatioPct', max(a.rem_sleep_ratio_pct),
+          'deepSleepContinuityScore', max(a.deep_sleep_continuity_score),
+          'wakeCount', max(a.wake_count),
+          'breathingQualityScore', max(a.breathing_quality_score),
+          'averageHeartRateBpm', max(a.average_heart_rate_bpm),
+          'hrvMs', max(a.hrv_ms),
+          'averageSpo2Pct', max(a.average_spo2_pct),
+          'averageRespiratoryRate', max(a.average_respiratory_rate),
+          'analysisText', max(a.analysis_text),
+          'suggestionText', max(a.suggestion_text)
+        )
+      ) as batch_payload_json
+    from archive.training_sleep a
+    where not exists (
+      select 1
+      from core.sleep s
+      where s.archived_date = a.archived_date
+    )
+    group by a.archived_date
+    order by a.archived_date asc
+  `);
+  const candidates = [
+    ...ingestCandidateResult.rows.map((row) => ({
+      batchId: row.batch_id,
+      batch: row.batch_payload_json,
+    })),
+    ...archiveCandidateResult.rows.map((row) => ({
+      batchId: `archive-sleep-${row.archived_date}`,
+      batch: row.batch_payload_json,
+    })),
+  ].filter(({ batch }) =>
+    batch?.status === 'ready' &&
+    batch?.archivedDate &&
+    hasSleepPayload(batch.sleep),
+  );
+
+  if (candidates.length === 0) {
+    return {
+      status: 'unchanged',
+      batchesBackfilled: 0,
+      daysBackfilled: [],
+    };
+  }
+
+  const daysBackfilled = new Set();
+  let transactionStarted = false;
+  try {
+    await client.query('BEGIN');
+    transactionStarted = true;
+    for (const { batchId, batch } of candidates) {
+      const existingDay = await readCoreDay(client, batch.archivedDate);
+      const mergedDay = mergeBatchIntoDay(existingDay, batch);
+      await replaceCoreDay(
+        client,
+        mergedDay,
+        batch.batchId ?? batchId,
+        processedAt,
+        {
+          sourceChannel: options.sourceChannel ?? 'ingest_sleep_backfill',
+          writeArchiveSleep: false,
+        },
+      );
+      daysBackfilled.add(batch.archivedDate);
+    }
+    await client.query('COMMIT');
+    transactionStarted = false;
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {}
+    }
+    throw error;
+  }
+
+  return {
+    status: 'stored',
+    batchesBackfilled: candidates.length,
+    daysBackfilled: [...daysBackfilled].sort(),
+  };
+}
+
 export async function backfillCoreFromLatestArchiveSnapshotClient(client, options = {}) {
   const processedAt = options.processedAt ?? new Date();
-  const missingDateResult = await client.query(`
+  const missingTrainingDayResult = await client.query(`
     select a.archived_date
     from archive.training_day a
     left join core.training_day c on c.archived_date = a.archived_date
     where c.archived_date is null
     order by a.archived_date asc
   `);
-  const missingDates = missingDateResult.rows.map((row) => normalizeDateKey(row.archived_date)).filter(Boolean);
+  const missingSleepResult = await client.query(`
+    select a.archived_date
+    from archive.training_sleep a
+    left join core.sleep c on c.archived_date = a.archived_date
+    where c.archived_date is null
+    group by a.archived_date
+    order by a.archived_date asc
+  `);
+
+  const missingDates = [
+    ...missingTrainingDayResult.rows,
+    ...missingSleepResult.rows,
+  ]
+    .map((row) => normalizeDateKey(row.archived_date))
+    .filter(Boolean);
 
   if (missingDates.length === 0) {
     const archiveDayResult = await client.query(`
@@ -205,7 +428,12 @@ export async function backfillCoreFromLatestArchiveSnapshotClient(client, option
       from archive.training_day
       limit 1
     `);
-    if (archiveDayResult.rows.length === 0) {
+    const archiveSleepResult = await client.query(`
+      select archived_date
+      from archive.training_sleep
+      limit 1
+    `);
+    if (archiveDayResult.rows.length === 0 && archiveSleepResult.rows.length === 0) {
       return {
         status: 'skipped',
         reason: 'missing_archive_days',
@@ -624,6 +852,10 @@ async function readCoreDay(client, archivedDate) {
     `,
     [archivedDate],
   );
+  if (!dayResult.rows.length) {
+    return null;
+  }
+
   const measurementResult = await client.query(
     `
       select
@@ -682,52 +914,121 @@ async function readCoreDay(client, archivedDate) {
     `,
     [archivedDate],
   );
-  const bodyFeedbackResult = await client.query(
+  const sleepResult = await client.query(
     `
       select
-        telegram_message_id,
-        telegram_chat_id,
-        body,
-        message_date_unix,
-        markdown_path,
-        updated_at
-      from core.thought
-      where thought_module = 'body_feedback'
-        and status = 'active'
-      order by coalesce(message_date_unix, extract(epoch from updated_at)) asc,
-        telegram_message_id asc
+        archived_date,
+        sleep_type,
+        bedtime,
+        wake_time,
+        night_sleep_minutes,
+        total_sleep_minutes,
+        nap_minutes,
+        deep_sleep_minutes,
+        light_sleep_minutes,
+        rem_sleep_minutes,
+        awake_minutes,
+        sleep_stage_text,
+        sleep_stage_detail,
+        sleep_score,
+        sleep_score_percentile,
+        deep_sleep_ratio_pct,
+        light_sleep_ratio_pct,
+        rem_sleep_ratio_pct,
+        deep_sleep_continuity_score,
+        wake_count,
+        breathing_quality_score,
+        average_heart_rate_bpm,
+        hrv_ms,
+        average_spo2_pct,
+        average_respiratory_rate,
+        analysis_text,
+        suggestion_text
+      from core.sleep
+      where archived_date = $1
+      order by bedtime asc nulls last
     `,
+    [archivedDate],
   );
+  const dayRow = dayResult.rows[0];
 
-  if (!dayResult.rows.length) {
-    return null;
-  }
-
-  const snapshot = await readTrainingSnapshotFromDatabaseClient(
-    {
-      async query(sql) {
-        if (/from core\.training_day/i.test(sql)) {
-          return dayResult;
-        }
-        if (/from core\.measurement/i.test(sql)) {
-          return measurementResult;
-        }
-        if (/from core\.activity/i.test(sql)) {
-          return activityResult;
-        }
-        if (/from core\.meal/i.test(sql)) {
-          return mealResult;
-        }
-        if (/from core\.thought/i.test(sql)) {
-          return bodyFeedbackResult;
-        }
-        throw new Error(`Unexpected SQL: ${sql}`);
-      },
+  return buildTrainingDay({
+    date: archivedDate,
+    measurements: measurementResult.rows.map((measurement) => ({
+      archivedDate,
+      measuredAt: measurement.measured_at,
+      bodyScore: measurement.body_score ?? null,
+      weightKg: measurement.weight_kg ?? null,
+      bmi: measurement.bmi ?? null,
+      bodyFatPct: measurement.body_fat_pct ?? null,
+      skeletalMuscleKg: measurement.skeletal_muscle_kg ?? null,
+      visceralFatLevel: measurement.visceral_fat_level ?? null,
+      basalMetabolismKcal: measurement.basal_metabolism_kcal ?? null,
+      bodyWaterPct: measurement.body_water_pct ?? null,
+      proteinPct: measurement.protein_pct ?? null,
+      boneMassKg: measurement.bone_mass_kg ?? null,
+      fatFreeMassKg: measurement.fat_free_mass_kg ?? null,
+      bodyAge: measurement.body_age ?? null,
+      bodyType: measurement.body_type ?? null,
+    })),
+    activities: activityResult.rows.map((activity) => ({
+      time: activity.activity_time,
+      type: normalizeActivityType(activity.activity_type),
+      rawType: activity.raw_type ?? activity.activity_type,
+      detail: activity.detail,
+      durationText: activity.duration_text,
+      durationSeconds: activity.duration_seconds ?? 0,
+      calories: activity.calories ?? null,
+      heartRate: activity.heart_rate ?? null,
+      distanceKm: activity.distance_km ?? null,
+      avgSpeedKmh: activity.avg_speed_kmh ?? null,
+    })),
+    nutrition: {
+      meals: mealResult.rows.map((meal) => ({
+        name: meal.meal_name,
+        calories: meal.calories ?? null,
+        recommendedMin: meal.recommended_min ?? null,
+        recommendedMax: meal.recommended_max ?? null,
+      })),
+      totalCalories: dayRow.intake_calories ?? null,
+      details: Array.isArray(dayRow.nutrition_details_json) ? dayRow.nutrition_details_json : [],
     },
-    new Date(),
-  );
-
-  return snapshot.daily[0] ?? null;
+    sleep: {
+      records: sleepResult.rows.map((sleep) => ({
+        sleepType: sleep.sleep_type ?? '夜间睡眠',
+        bedtime: sleep.bedtime ?? null,
+        wakeTime: sleep.wake_time ?? null,
+        nightSleepMinutes: sleep.night_sleep_minutes ?? null,
+        totalSleepMinutes: sleep.total_sleep_minutes ?? null,
+        napMinutes: sleep.nap_minutes ?? null,
+        deepSleepMinutes: sleep.deep_sleep_minutes ?? null,
+        lightSleepMinutes: sleep.light_sleep_minutes ?? null,
+        remSleepMinutes: sleep.rem_sleep_minutes ?? null,
+        awakeMinutes: sleep.awake_minutes ?? null,
+        sleepStageText: sleep.sleep_stage_text ?? null,
+        sleepStageDetail: sleep.sleep_stage_detail ?? null,
+        sleepScore: sleep.sleep_score ?? null,
+        sleepScorePercentile: sleep.sleep_score_percentile ?? null,
+        deepSleepRatioPct: sleep.deep_sleep_ratio_pct ?? null,
+        lightSleepRatioPct: sleep.light_sleep_ratio_pct ?? null,
+        remSleepRatioPct: sleep.rem_sleep_ratio_pct ?? null,
+        deepSleepContinuityScore: sleep.deep_sleep_continuity_score ?? null,
+        wakeCount: sleep.wake_count ?? null,
+        breathingQualityScore: sleep.breathing_quality_score ?? null,
+        averageHeartRateBpm: sleep.average_heart_rate_bpm ?? null,
+        hrvMs: sleep.hrv_ms ?? null,
+        averageSpo2Pct: sleep.average_spo2_pct ?? null,
+        averageRespiratoryRate: sleep.average_respiratory_rate ?? null,
+        analysisText: sleep.analysis_text ?? null,
+        suggestionText: sleep.suggestion_text ?? null,
+      })),
+    },
+    workoutDailySummary: {
+      activityCaloriesKcal: dayRow.training_calories,
+      workoutDurationMinutes: dayRow.workout_duration_minutes,
+      activeHours: dayRow.active_hours,
+    },
+  });
 }
 
 function mergeBatchIntoDay(existingDay, batch) {
@@ -761,12 +1062,44 @@ function mergeBatchIntoDay(existingDay, batch) {
         details: batch.nutrition.details ?? [],
       }
     : existing.nutrition ?? emptyNutrition();
+  const nextSleep = hasSleepPayload(batch.sleep)
+    ? {
+        records: batch.sleep.records?.length
+          ? batch.sleep.records
+          : [{
+              sleepType: batch.sleep.sleepType ?? '夜间睡眠',
+              bedtime: batch.sleep.bedtime ?? batch.sleep.sleepStartTime ?? null,
+              wakeTime: batch.sleep.wakeTime ?? batch.sleep.sleepEndTime ?? null,
+              nightSleepMinutes: batch.sleep.nightSleepMinutes ?? null,
+              totalSleepMinutes: batch.sleep.totalSleepMinutes ?? null,
+              napMinutes: batch.sleep.napMinutes ?? null,
+              deepSleepMinutes: batch.sleep.deepSleepMinutes ?? null,
+              lightSleepMinutes: batch.sleep.lightSleepMinutes ?? null,
+              remSleepMinutes: batch.sleep.remSleepMinutes ?? null,
+              awakeMinutes: batch.sleep.awakeMinutes ?? null,
+              sleepStageText: batch.sleep.sleepStageText ?? null,
+              sleepStageDetail: batch.sleep.sleepStageDetail ?? null,
+              ...pickSleepHealthFields(batch.sleep),
+            }],
+        totalSleepMinutes: batch.sleep.totalSleepMinutes ?? null,
+        nightSleepMinutes: batch.sleep.nightSleepMinutes ?? null,
+        napMinutes: batch.sleep.napMinutes ?? null,
+        sleepStartTime: batch.sleep.bedtime ?? batch.sleep.sleepStartTime ?? null,
+        sleepEndTime: batch.sleep.wakeTime ?? batch.sleep.sleepEndTime ?? null,
+        deepSleepMinutes: batch.sleep.deepSleepMinutes ?? null,
+        lightSleepMinutes: batch.sleep.lightSleepMinutes ?? null,
+        remSleepMinutes: batch.sleep.remSleepMinutes ?? null,
+        awakeMinutes: batch.sleep.awakeMinutes ?? null,
+        ...pickSleepHealthFields(batch.sleep),
+      }
+    : existingSleepPayload(existing);
 
   return buildTrainingDay({
     date: batch.archivedDate,
     measurements: nextMeasurements,
     activities: nextActivities,
     nutrition: nextNutrition,
+    sleep: nextSleep,
     workoutDailySummary:
       batch.workoutDailySummary ??
       (existing.workoutSummary
@@ -784,12 +1117,14 @@ async function replaceCoreDay(
   day,
   batchId,
   processedAt,
-  sourceChannel = 'telegram',
+  options = {},
 ) {
   await writeCoreDays(client, [day], {
     batchId,
     processedAt,
-    sourceChannel,
+    sourceChannel: options.sourceChannel ?? 'telegram',
+    sourceHash: options.sourceHash ?? null,
+    writeArchiveSleep: options.writeArchiveSleep,
   });
 }
 
@@ -818,11 +1153,23 @@ async function writeCoreDays(client, days, options) {
   }
 
   const dates = normalizedDays.map((day) => day.date);
+  const processedAtIso = (options.processedAt ?? new Date()).toISOString();
+  const sourceHash = options.writeArchiveSleep === false
+    ? null
+    : options.sourceHash ?? buildArchiveSourceHash(normalizedDays, options);
+  if (sourceHash) {
+    await upsertArchiveParseSnapshot(client, {
+      sourceHash,
+      days: normalizedDays,
+      processedAtIso,
+    });
+  }
+
   await client.query(`delete from core.measurement where archived_date = any($1::date[])`, [dates]);
   await client.query(`delete from core.activity where archived_date = any($1::date[])`, [dates]);
   await client.query(`delete from core.meal where archived_date = any($1::date[])`, [dates]);
+  await client.query(`delete from core.sleep where archived_date = any($1::date[])`, [dates]);
 
-  const processedAtIso = (options.processedAt ?? new Date()).toISOString();
   const dayRows = normalizedDays.map((day) => ({
     archivedDate: day.date,
     sourceChannel: options.sourceChannel ?? 'telegram',
@@ -900,294 +1247,82 @@ async function writeCoreDays(client, days, options) {
   await insertCoreMeasurements(client, normalizedDays, options, processedAtIso);
   await insertCoreActivities(client, normalizedDays, options, processedAtIso);
   await insertCoreMeals(client, normalizedDays, options, processedAtIso);
+  await insertCoreSleep(client, normalizedDays, options, processedAtIso);
+  if (sourceHash) {
+    await insertArchiveSleep(client, normalizedDays, { ...options, sourceHash }, processedAtIso);
+  }
 }
 
-async function insertCoreMeasurements(client, days, options, processedAtIso) {
-  const rows = days
-    .filter((day) => day.measurement)
-    .map((day) => {
-      const measurement = day.measurement;
-      return {
-        measurementKey: createHash('md5')
-          .update([day.date, measurement.measuredAt ?? '', measurement.weightKg ?? ''].join('|'))
-          .digest('hex'),
-        archivedDate: day.date,
-        sourceChannel: options.sourceChannel ?? 'telegram',
-        sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
-        measuredAt: measurement.measuredAt ?? null,
-        bodyScore: measurement.bodyScore ?? null,
-        weightKg: measurement.weightKg ?? null,
-        bmi: measurement.bmi ?? null,
-        bodyFatPct: measurement.bodyFatPct ?? null,
-        skeletalMuscleKg: measurement.skeletalMuscleKg ?? null,
-        visceralFatLevel: measurement.visceralFatLevel ?? null,
-        basalMetabolismKcal: measurement.basalMetabolismKcal ?? null,
-        bodyWaterPct: measurement.bodyWaterPct ?? null,
-        proteinPct: measurement.proteinPct ?? null,
-        boneMassKg: measurement.boneMassKg ?? null,
-        fatFreeMassKg: measurement.fatFreeMassKg ?? null,
-        bodyAge: measurement.bodyAge ?? null,
-        bodyType: measurement.bodyType ?? null,
-        updatedAt: processedAtIso,
-      };
-    });
-  if (rows.length === 0) {
-    return;
-  }
-
+async function upsertArchiveParseSnapshot(client, { sourceHash, days, processedAtIso }) {
+  const payload = {
+    generatedAt: processedAtIso,
+    daily: days,
+    latest: { daily: days.at(-1) ?? null },
+  };
   await client.query(
     `
-      insert into core.measurement (
-        measurement_key,
-        archived_date,
-        source_channel,
-        source_batch_id,
-        measured_at,
-        body_score,
-        weight_kg,
-        bmi,
-        body_fat_pct,
-        skeletal_muscle_kg,
-        visceral_fat_level,
-        basal_metabolism_kcal,
-        body_water_pct,
-        protein_pct,
-        bone_mass_kg,
-        fat_free_mass_kg,
-        body_age,
-        body_type,
-        updated_at
+      insert into archive.training_parse_snapshot (
+        source_hash,
+        payload_version,
+        payload_json,
+        daily_count,
+        latest_archived_date,
+        parsed_generated_at,
+        first_seen_at,
+        last_seen_at
       )
-      select *
-      from unnest(
-        $1::text[],
-        $2::date[],
-        $3::text[],
-        $4::text[],
-        $5::text[],
-        $6::integer[],
-        $7::numeric[],
-        $8::numeric[],
-        $9::numeric[],
-        $10::numeric[],
-        $11::numeric[],
-        $12::integer[],
-        $13::numeric[],
-        $14::numeric[],
-        $15::numeric[],
-        $16::numeric[],
-        $17::integer[],
-        $18::text[],
-        $19::timestamptz[]
-      )
-      on conflict (measurement_key) do update set
-        source_channel = excluded.source_channel,
-        source_batch_id = excluded.source_batch_id,
-        measured_at = excluded.measured_at,
-        body_score = excluded.body_score,
-        weight_kg = excluded.weight_kg,
-        bmi = excluded.bmi,
-        body_fat_pct = excluded.body_fat_pct,
-        skeletal_muscle_kg = excluded.skeletal_muscle_kg,
-        visceral_fat_level = excluded.visceral_fat_level,
-        basal_metabolism_kcal = excluded.basal_metabolism_kcal,
-        body_water_pct = excluded.body_water_pct,
-        protein_pct = excluded.protein_pct,
-        bone_mass_kg = excluded.bone_mass_kg,
-        fat_free_mass_kg = excluded.fat_free_mass_kg,
-        body_age = excluded.body_age,
-        body_type = excluded.body_type,
-        updated_at = excluded.updated_at
+      values ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)
+      on conflict (source_hash) do update set
+        payload_version = excluded.payload_version,
+        payload_json = excluded.payload_json,
+        daily_count = excluded.daily_count,
+        latest_archived_date = excluded.latest_archived_date,
+        parsed_generated_at = excluded.parsed_generated_at,
+        last_seen_at = excluded.last_seen_at
     `,
     [
-      rows.map((row) => row.measurementKey),
-      rows.map((row) => row.archivedDate),
-      rows.map((row) => row.sourceChannel),
-      rows.map((row) => row.sourceBatchId),
-      rows.map((row) => row.measuredAt),
-      rows.map((row) => row.bodyScore),
-      rows.map((row) => row.weightKg),
-      rows.map((row) => row.bmi),
-      rows.map((row) => row.bodyFatPct),
-      rows.map((row) => row.skeletalMuscleKg),
-      rows.map((row) => row.visceralFatLevel),
-      rows.map((row) => row.basalMetabolismKcal),
-      rows.map((row) => row.bodyWaterPct),
-      rows.map((row) => row.proteinPct),
-      rows.map((row) => row.boneMassKg),
-      rows.map((row) => row.fatFreeMassKg),
-      rows.map((row) => row.bodyAge),
-      rows.map((row) => row.bodyType),
-      rows.map((row) => row.updatedAt),
+      sourceHash,
+      1,
+      JSON.stringify(payload),
+      days.length,
+      days.at(-1)?.date ?? null,
+      processedAtIso,
+      processedAtIso,
+      processedAtIso,
     ],
   );
 }
 
-async function insertCoreActivities(client, days, options, processedAtIso) {
-  const rows = days.flatMap((day) =>
-    (day.activities ?? []).map((activity) => ({
-      activityKey: createHash('md5')
-        .update([day.date, activity.time ?? '', activity.type ?? '', activity.detail ?? ''].join('|'))
-        .digest('hex'),
-      archivedDate: day.date,
+function buildArchiveSourceHash(days, options) {
+  if (!options.batchId) {
+    return null;
+  }
+  return createHash('sha256')
+    .update(JSON.stringify({
       sourceChannel: options.sourceChannel ?? 'telegram',
-      sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
-      activityTime: activity.time ?? null,
-      activityType: activity.type ?? '未知活动',
-      rawType: activity.rawType ?? activity.type ?? null,
-      detail: activity.detail ?? null,
-      calories: activity.calories ?? null,
-      heartRate: activity.heartRate ?? null,
-      distanceKm: activity.distanceKm ?? null,
-      avgSpeedKmh: activity.avgSpeedKmh ?? null,
-      durationText: activity.durationText ?? null,
-      durationSeconds: activity.durationSeconds ?? null,
-      updatedAt: processedAtIso,
-    })),
-  );
-  if (rows.length === 0) {
-    return;
-  }
-
-  await client.query(
-    `
-      insert into core.activity (
-        activity_key,
-        archived_date,
-        source_channel,
-        source_batch_id,
-        activity_time,
-        activity_type,
-        raw_type,
-        detail,
-        calories,
-        heart_rate,
-        distance_km,
-        avg_speed_kmh,
-        duration_text,
-        duration_seconds,
-        updated_at
-      )
-      select *
-      from unnest(
-        $1::text[],
-        $2::date[],
-        $3::text[],
-        $4::text[],
-        $5::text[],
-        $6::text[],
-        $7::text[],
-        $8::text[],
-        $9::integer[],
-        $10::integer[],
-        $11::numeric[],
-        $12::numeric[],
-        $13::text[],
-        $14::integer[],
-        $15::timestamptz[]
-      )
-      on conflict (activity_key) do update set
-        source_channel = excluded.source_channel,
-        source_batch_id = excluded.source_batch_id,
-        activity_time = excluded.activity_time,
-        activity_type = excluded.activity_type,
-        raw_type = excluded.raw_type,
-        detail = excluded.detail,
-        calories = excluded.calories,
-        heart_rate = excluded.heart_rate,
-        distance_km = excluded.distance_km,
-        avg_speed_kmh = excluded.avg_speed_kmh,
-        duration_text = excluded.duration_text,
-        duration_seconds = excluded.duration_seconds,
-        updated_at = excluded.updated_at
-    `,
-    [
-      rows.map((row) => row.activityKey),
-      rows.map((row) => row.archivedDate),
-      rows.map((row) => row.sourceChannel),
-      rows.map((row) => row.sourceBatchId),
-      rows.map((row) => row.activityTime),
-      rows.map((row) => row.activityType),
-      rows.map((row) => row.rawType),
-      rows.map((row) => row.detail),
-      rows.map((row) => row.calories),
-      rows.map((row) => row.heartRate),
-      rows.map((row) => row.distanceKm),
-      rows.map((row) => row.avgSpeedKmh),
-      rows.map((row) => row.durationText),
-      rows.map((row) => row.durationSeconds),
-      rows.map((row) => row.updatedAt),
-    ],
-  );
+      batchId: options.batchId,
+      days,
+    }), 'utf8')
+    .digest('hex');
 }
 
-async function insertCoreMeals(client, days, options, processedAtIso) {
-  const rows = days.flatMap((day) =>
-    (day.nutrition?.meals ?? []).map((meal) => ({
-      mealKey: createHash('md5')
-        .update([day.date, meal.name ?? '', meal.calories ?? ''].join('|'))
-        .digest('hex'),
-      archivedDate: day.date,
-      sourceChannel: options.sourceChannel ?? 'telegram',
-      sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
-      mealName: meal.name ?? '未命名餐次',
-      calories: meal.calories ?? null,
-      recommendedMin: meal.recommendedMin ?? null,
-      recommendedMax: meal.recommendedMax ?? null,
-      updatedAt: processedAtIso,
-    })),
-  );
-  if (rows.length === 0) {
-    return;
+function existingSleepPayload(existing) {
+  const records = Array.isArray(existing.sleep)
+    ? existing.sleep
+    : existing.sleep?.records ?? existing.sleepSummary?.records ?? [];
+  if (records.length > 0) {
+    return {
+      ...(existing.sleepSummary ?? emptySleep()),
+      records,
+    };
   }
-
-  await client.query(
-    `
-      insert into core.meal (
-        meal_key,
-        archived_date,
-        source_channel,
-        source_batch_id,
-        meal_name,
-        calories,
-        recommended_min,
-        recommended_max,
-        updated_at
-      )
-      select *
-      from unnest(
-        $1::text[],
-        $2::date[],
-        $3::text[],
-        $4::text[],
-        $5::text[],
-        $6::integer[],
-        $7::integer[],
-        $8::integer[],
-        $9::timestamptz[]
-      )
-      on conflict (meal_key) do update set
-        source_channel = excluded.source_channel,
-        source_batch_id = excluded.source_batch_id,
-        meal_name = excluded.meal_name,
-        calories = excluded.calories,
-        recommended_min = excluded.recommended_min,
-        recommended_max = excluded.recommended_max,
-        updated_at = excluded.updated_at
-    `,
-    [
-      rows.map((row) => row.mealKey),
-      rows.map((row) => row.archivedDate),
-      rows.map((row) => row.sourceChannel),
-      rows.map((row) => row.sourceBatchId),
-      rows.map((row) => row.mealName),
-      rows.map((row) => row.calories),
-      rows.map((row) => row.recommendedMin),
-      rows.map((row) => row.recommendedMax),
-      rows.map((row) => row.updatedAt),
-    ],
-  );
+  return existing.sleepSummary ?? existing.sleep ?? emptySleep();
 }
+
+function pickSleepHealthFields(sleep) {
+  return Object.fromEntries(SLEEP_HEALTH_FIELDS.map((field) => [field, sleep?.[field] ?? null]));
+}
+
 
 function normalizeBatchActivity(activity) {
   const detail = activity.detail?.trim() ?? '';
@@ -1289,6 +1424,42 @@ async function readCoreDays(client, dates) {
     `,
     [normalizedDates],
   );
+  const sleepResult = await client.query(
+    `
+      select
+        archived_date,
+        sleep_type,
+        bedtime,
+        wake_time,
+        night_sleep_minutes,
+        total_sleep_minutes,
+        nap_minutes,
+        deep_sleep_minutes,
+        light_sleep_minutes,
+        rem_sleep_minutes,
+        awake_minutes,
+        sleep_stage_text,
+        sleep_stage_detail,
+        sleep_score,
+        sleep_score_percentile,
+        deep_sleep_ratio_pct,
+        light_sleep_ratio_pct,
+        rem_sleep_ratio_pct,
+        deep_sleep_continuity_score,
+        wake_count,
+        breathing_quality_score,
+        average_heart_rate_bpm,
+        hrv_ms,
+        average_spo2_pct,
+        average_respiratory_rate,
+        analysis_text,
+        suggestion_text
+      from core.sleep
+      where archived_date = any($1::date[])
+      order by archived_date asc, bedtime asc nulls last
+    `,
+    [normalizedDates],
+  );
   const snapshot = await readTrainingSnapshotFromDatabaseClient(
     {
       async query(sql) {
@@ -1303,6 +1474,9 @@ async function readCoreDays(client, dates) {
         }
         if (/from core\.meal/i.test(sql)) {
           return mealResult;
+        }
+        if (/from core\.sleep/i.test(sql)) {
+          return sleepResult;
         }
         if (/from core\.thought/i.test(sql)) {
           return { rows: [] };
@@ -1428,11 +1602,38 @@ function extractNumber(value, regex) {
 }
 
 function hasNutritionPayload(nutrition) {
+  if (!nutrition) {
+    return false;
+  }
   return (
     (nutrition?.meals?.length ?? 0) > 0 ||
-    nutrition?.totalCalories !== null ||
+    (nutrition.totalCalories !== null && nutrition.totalCalories !== undefined) ||
     (nutrition?.details?.length ?? 0) > 0
   );
+}
+
+function hasSleepPayload(sleep) {
+  return Boolean(sleep && [
+    sleep.records?.length,
+    sleep.totalSleepMinutes,
+    sleep.nightSleepMinutes,
+    sleep.napMinutes,
+    sleep.bedtime,
+    sleep.wakeTime,
+    sleep.sleepStartTime,
+    sleep.sleepEndTime,
+    sleep.deepSleepMinutes,
+    sleep.lightSleepMinutes,
+    sleep.remSleepMinutes,
+    sleep.awakeMinutes,
+    sleep.sleepStageText,
+    sleep.sleepStageDetail,
+    ...SLEEP_HEALTH_FIELDS.map((field) => sleep[field]),
+  ].some((value) => value !== null && value !== undefined && value !== '' && value !== 0));
+}
+
+function isTelegramImageBatch(batch) {
+  return (batch?.kind ?? 'image') === 'image';
 }
 
 function normalizePositiveInteger(value) {

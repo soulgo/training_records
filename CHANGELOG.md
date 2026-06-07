@@ -16,18 +16,17 @@
 ### Added
 
 - 新增 `deploy-cloudflare-pages-dev.yml`，将 `dev` 分支构建产物发布到 Cloudflare Pages 预览环境，默认地址为 `https://training-records-dev.pages.dev`。
-- Telegram Sync 报告新增 `timingsMs` 阶段耗时，并在 GitHub Actions Summary 展示 `recognition`、`persist`、`markdownRewrite`、`notify`、`total` 等耗时表，便于直接定位同步慢点。
+- Telegram 同步报告新增阶段耗时 `timingsMs`，并在 GitHub Actions summary 与日志中输出 `resolveUpdates`、`recognition`、`persist`、`sleepBackfill`、`markdownRewrite`、`notify` 等耗时，便于下次直接定位同步慢点。
 - 新增 `TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE=auto|url|inline`，支持先下载 Telegram 图片并以内联 data URL 发送给 AI；GitHub Actions 默认使用 `inline`。
 - 新增 `TELEGRAM_RECOGNITION_MODEL`，可只覆盖 Telegram 图片识别模型，未配置时继续使用 `AI_MODEL`。
 - Deploy Pages 与 Dev Cloudflare Pages workflow 新增 `strict_database_snapshot` 手动输入，并映射为 `TRAINING_SNAPSHOT_STRICT_DATABASE`。
 
 ### Changed
 
+- Telegram Sync main/dev workflow 移除同步 action 内联站点构建与 Pages 部署，改为在 commit/push 后立即发送 Telegram “已入库/解析完成”通知，再异步触发独立站点部署 workflow。
+- Telegram Sync 失败监控不再把站点构建或 Pages 部署状态归为同步失败原因；站点部署失败改由独立部署 workflow 暴露，不影响 Telegram 入库回执。
 - Dev 环境文档改为包含 Cloudflare Pages 在线预览流程，保留本地 `npm run server` 作为快速调试入口。
-- 将 Dev 环境配置手册提升到 `docs/dev_env/`，仅保留实施步骤文档，删除优化方案目录下的旧 plan 文档。
-- `telegram-sync.yml` 和 `telegram-sync-dev.yml` 不再在 Telegram Sync Action 内构建和部署站点；同步步骤只负责解析、入库、通知和必要的异步 deploy 触发。
 - Telegram Sync 的仓库文件变化继续通过 push 触发 Pages/Cloudflare Pages 部署；只有 DB-only 入库成功且没有 repo change 时，才额外 dispatch 独立部署 workflow，并启用严格数据库快照模式。
-- `sync:telegram` 对已入库图片批次不再等待完整数据库快照导出，改为只按已持久化 batch 对目标日期做必要的 Markdown 增量合并。
 - 页面构建读取 PostgreSQL 快照时保留多连接并发读取，遇到连接或查询失败后会重试一次单连接读取，降低构建阶段因连接抖动回退 Markdown 的概率。
 - Telegram Sync workflow 权限收敛为 `contents: write` 与 `actions: write`，不再为同步 workflow 申请 Pages/id-token 权限。
 
@@ -37,6 +36,76 @@
 - 修复 Dev Telegram Sync 由 `GITHUB_TOKEN` 推送内容后不会触发 Dev Pages 自动部署的问题：repo 变化交给 push deploy，DB-only 入库通过异步 dispatch 触发 `deploy-cloudflare-pages-dev.yml`。
 - 修复 Telegram Sync 在 `repository_dispatch` 下仍等待站点 build/deploy 导致单次图片同步耗时过长的问题；现在 Action 只等待解析与入库，页面展示由独立 deploy workflow 异步完成。
 - 修复 DB-only 入库后页面构建读库失败时可能静默回退并发布旧 Markdown 页面的问题；DB-only 异步部署会启用严格数据库模式，读库失败将直接暴露为部署失败。
+
+## [1.2.3] - 2026-06-07
+
+### Changed
+
+- Telegram 图片正常成功路径改为按本批次增量 upsert `core.measurement`、`core.activity`、`core.meal` 与 `core.sleep`，并刷新目标日期 `core.training_day` 汇总，避免同日补发截图删除其它模块数据。
+- Telegram `ready + stored` 图片批次不再默认用数据库全量快照覆盖 `训练记录.md`，改为仅对目标日期做 Markdown 增量合并；数据库写入失败时仍保留 fallback Markdown 与 pending 队列。
+- `src/db/training/write.mjs` 拆出 Telegram 图片增量写入与 core/archive 子表 upsert 职责，保留原对外入口兼容。
+- `tools/telegram-sync-lib.mjs` 拆出日期归档与 Markdown section 合并渲染职责，`analyzeTelegramBatch()` 与 `applyTelegramSyncToMarkdown()` 等既有入口保持兼容。
+- `tools/telegram-sync.mjs` 拆出图片识别/pending replay、fallback Markdown 队列、通知与结果报告职责，`runTelegramSync()` 与 CLI 行为保持兼容。
+- `src/mcp/tools.mjs` 拆出 MCP tool catalog、训练记录、分析、运行时/config 与通用支撑模块，保留 `listMcpTools()`、`callMcpTool()` 与 `resolveMcpConfig()` 入口兼容。
+- `src/db/training/read.mjs` 拆出 SQL 查询、client 并发读取与 row-to-snapshot 映射职责，保留 core/archive 读库入口兼容。
+- `tools/training-analysis.mjs` 拆出分析意图/时间窗解析、训练摘要构造与 AI 请求/Telegram 分段回复职责，保留 `/分析` 生成链路和导出入口兼容。
+- `test/telegram-sync-runner.test.mjs`、`test/telegram-sync.test.mjs` 与 `test/training-db-core.test.mjs` 抽出共享 fixture/helper，降低大测试文件中的重复样板，保留原测试语义和 targeted 覆盖。
+- 新增 V9 真实 Telegram 场景验收 runbook，明确 dev Bot / dev workflow 上单张 sleep、1-4 张相册、partial failure replay 和数据库 fallback 的人工验收步骤与证据模板。
+- 评估 Telegram `ingest` 审计增强后，继续沿用现有 JSON 审计与 pending/report 字段，本轮不新增强制 SQL。
+- Telegram Sync workflow 新增 GitHub Actions summary，并将成功通知 step 改为中性的 result 命名；shared `site-build` 支持跳过重复 `npm ci`，dev Pages 部署固定 Wrangler 版本并补齐 Pages 输出目录配置。
+- `package.json` 版本号更新为 `1.2.3`。
+
+### Fixed
+
+- 补齐 `exportTrainingMarkdown()` 的睡眠段落与饮食 `##### 餐次明细` 导出，并让 `parseTrainingRecord()` 能读回 sleep health metrics、睡眠阶段明细和 nutrition details，避免全量导出造成可见字段丢失。
+
+## [1.2.2] - 2026-06-05
+
+### Added
+
+- 新增睡眠截图支持：Telegram 图片识别、训练解析和数据库归档现在可记录睡眠时长、入睡/起床时间、睡眠阶段摘要以及睡眠健康指标，并写入 `archive.training_sleep`。
+- 新增睡眠健康指标增量 SQL `sql/training_records/sleep_health_metrics.sql`，并同步补齐 `core.sleep` 与 `archive.training_sleep` 的主 schema 字段。
+- 新增睡眠维护文档 `docs/训练系统/Telegram睡眠识别与入库说明.md`，补充识别字段、归档日期口径、数据库落表和排障步骤，便于后期维护与查找问题。
+- 新增睡眠 Prompt 维护说明 `docs/训练系统/Telegram图片识别Prompt维护.md`，同步记录睡眠截图字段提取范围与日期归档规则，便于后续维护。
+- 系统文档同步补齐 Telegram 锻炼、体脂秤、饮食、睡眠图片解析的使用说明、数据流、接口契约、部署验收和排障路径。
+
+### Changed
+
+- 睡眠图片归档口径改为以醒来时间的前一天为准，避免跨午夜睡眠被记到错误日期。
+- 训练快照与 Telegram 同步链路开始汇总睡眠数据，便于首页与分析模块读取恢复相关指标。
+- Telegram Sync 的 main/dev workflow 现在会识别 DB-only 的 `ready + stored` 训练批次，并在仓库文件无变化时继续构建和发布站点。
+- `训练数据解析.md` 调试输出新增睡眠段落，展示总睡眠、睡眠评分、平均心率、HRV、血氧和呼吸率等排查字段。
+- 页面生成在数据库快照不完整或不可用时会自动回退到 Markdown，避免站点停留在“等待数据库重放”的空状态。
+- `package.json` 版本号更新为 `1.2.2`。
+
+### Fixed
+
+- 修复 Telegram 训练图片识别对上游返回内容的 JSON 容错不足问题：现在会自动提取代码块、`data:` 前缀和夹杂杂质文本中的有效 JSON，减少 `telegram_training_image returned invalid JSON` 导致的识别失败与重试队列堆积。
+- 修复 Telegram 睡眠同步在归档后未自动补写 `core.sleep` 的问题：同步结束后会补跑睡眠回填，避免出现 `archive.training_sleep` 有数据但 `core.sleep` 为空的情况。
+- 修复 Markdown/archive 快照归档旧路径没有写入睡眠健康指标的问题，避免构建归档时丢失睡眠评分、心率、HRV、血氧和建议文本。
+- 修复 Telegram 训练同步在第二次更新后只能写入 Markdown、却没有同步触发站点重建与部署的问题；现在数据库回填失败或超时时会降级为 Markdown 重建，并继续发布最新静态站点，避免页面停留在旧数据。
+- 修正 AI schema 校验回归测试的字段定义与用例，避免把可选的 `records.sleep` 误判为必填字段，确保 schema 验证与实际识别契约保持一致。
+- 修复睡眠图片在归档时因纯时间床头信息被误前移到前一天的问题，并补齐 `core.sleep` 的归档回填范围，避免睡眠数据“已归档但页面不显示”。
+- 修复 archive-only 睡眠记录回填 `core.sleep` 时缺少 `nutrition` 字段导致 `sleep backfill failed` 的问题，确保只发送睡眠截图也能补写 core 表并触发页面构建。
+- 修复首页睡眠卡片会把只有深睡/浅睡/评分、但没有总睡眠或夜间睡眠时长的半截记录当成最新睡眠日的问题，避免完整睡眠数据被覆盖成 `—`。
+
+## [1.2.1] - 2026-06-03
+
+### Added
+
+- 新增 `tools/training-maintenance.mjs` 统一维护入口，提供 `maintenance:inspect`、`maintenance:sync`、`maintenance:migrate` 三类命令，并保留旧 `backfill/reconcile/import/export/sync:db` npm scripts 的兼容转发。
+- `site-build` 公共 action 新增 `sync_db_mode` 输入（`auto`/`always`/`never`）与数据库同步输入变更检测，无数据相关文件变更时可跳过 `sync:db`。
+- `ci-tests.yml` 新增 `full-test` job，仅在 `schedule` 或 `workflow_dispatch` 时运行完整 `npm test`，常规 CI 与部署继续使用 `test:fast`。
+- Telegram 同步报告新增 `taskStatus`、`taskId`、`sourceType`、`sourceId`、`retryCount`、`messageIds`、`updateIds`、`failureDisposition` 等任务审计字段，统一 queued / processing / ready / stored / skipped / deferred / partialFailure / resolved / failed 九种状态语义。
+- 新增 `maintenance_scripts.md` 与 v8 checklist，记录维护脚本边界、安全规则与第八轮优化验收状态。
+- 新增维护脚本与 Telegram 报告审计字段回归测试。
+
+### Changed
+
+- `syncTrainingCore` 复用同一数据库 client 处理 archive 与 markdown 阶段，减少远程 PostgreSQL 连接与事务开销。
+- Telegram 首次图片处理与 pending recognition replay 共用 `buildImageProcessingBatch()` 与规范化 runtime env。
+- main/dev Pages 部署 workflow 统一通过 `site-build` 的 `sync_db_mode: auto` 按需执行数据库同步。
+- 同步项目包版本号到 `1.2.1`。
 
 ## [1.2.0] - 2026-06-02
 
@@ -222,7 +291,9 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/soulgo/training_records/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/soulgo/training_records/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/soulgo/training_records/compare/v1.1.9...v1.2.0
 [1.1.9]: https://github.com/soulgo/training_records/compare/v1.1.8...v1.1.9
 [1.1.8]: https://github.com/soulgo/training_records/compare/v1.1.7...v1.1.8

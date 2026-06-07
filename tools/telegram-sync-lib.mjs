@@ -3,9 +3,8 @@ import {
   normalizeActivityType,
   normalizeActivityTime,
   roundTo,
-  splitDateSections,
-  splitLevel4Blocks,
   toNullableNumber,
+  normalizeSleepType,
 } from './training-domain.mjs';
 import {
   DEFAULT_THOUGHT_MODULE,
@@ -14,12 +13,20 @@ import {
   normalizeThoughtModuleOrNull,
   resolveThoughtModuleLabel,
 } from './lib/thought-modules.mjs';
-import { appendMetric } from './lib/markdown-render.mjs';
+import {
+  collectFilenameDates,
+  normalizeRecognitionDate,
+  resolveDetectedDate,
+  resolveSleepArchiveDate,
+} from './telegram-sync-dates.mjs';
+import {
+  applyTelegramSyncToMarkdown,
+  extractCaloriesToken,
+} from './telegram-sync-markdown.mjs';
 import { createTelegramCommandResolver } from '../src/telegram/commands.mjs';
 import { isTelegramHelpText } from '../src/telegram/commands.mjs';
 
-const FINGERPRINT_RE = /^<!-- telegram-fingerprint: ([^ ]+) -->$/m;
-const TELEGRAM_SECTION_TAG = '<!-- telegram-sync-section -->';
+export { applyTelegramSyncToMarkdown };
 
 const telegramCommandResolver = createTelegramCommandResolver({
   move: {
@@ -253,10 +260,12 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const nutritionMeals = [];
   const nutritionDetails = [];
   let nutritionTotalCalories = null;
+  const sleepRecords = [];
   const dateSources = [];
   const sourceImageCount = batch.messages.length;
   let recognizedImageCount = 0;
   const failedMessageIds = [];
+  const dataIssues = [];
 
   for (const message of batch.messages) {
     const recognition = recognitionMap.get(message.messageId);
@@ -290,16 +299,36 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       warnings.push(warning);
     }
 
-    if (normalizedDetectedDate) {
-      imageDates.add(normalizedDetectedDate);
-    }
+    const archiveDate = recognition.imageType === 'sleep'
+      ? resolveSleepArchiveDate(recognition.records?.sleep, normalizedDetectedDate, message)
+      : normalizedDetectedDate;
 
     dateSources.push({
       messageId: message.messageId,
-      detectedDate: normalizedDetectedDate ?? null,
+      detectedDate: archiveDate ?? null,
       dateEvidence: recognition.dateEvidence ?? null,
-      source: normalizedDetectedDate ? 'image' : 'no_date',
+      source: archiveDate ? (archiveDate === normalizedDetectedDate ? 'image' : 'sleep_bedtime') : 'no_date',
     });
+
+    if (recognition.imageType === 'sleep') {
+      const sleepRecord = normalizeSleepRecord(recognition.records?.sleep, archiveDate);
+      if (!sleepRecord) {
+        const issue = `sleep image missing records.sleep for message ${message.messageId}`;
+        issues.push(issue);
+        dataIssues.push(issue);
+        failedMessageIds.push(message.messageId);
+        continue;
+      }
+      if (archiveDate) {
+        imageDates.add(archiveDate);
+      }
+      sleepRecords.push(sleepRecord);
+      continue;
+    }
+
+    if (archiveDate) {
+      imageDates.add(archiveDate);
+    }
 
     if (recognition.imageType === 'measurement' && recognition.records?.measurement) {
       measurementCandidates.push({
@@ -335,6 +364,28 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     }
   }
 
+  if (
+    dataIssues.length > 0 &&
+    measurementCandidates.length === 0 &&
+    activities.length === 0 &&
+    !workoutDailySummary &&
+    nutritionMeals.length === 0 &&
+    nutritionTotalCalories === null &&
+    nutritionDetails.length === 0 &&
+    sleepRecords.length === 0
+  ) {
+    return buildSkippedBatchResult(batch, {
+      reason: dataIssues.join('; '),
+      warnings,
+      issues,
+      dateSources,
+      sourceImageCount,
+      recognizedImageCount,
+      failedImageCount: failedMessageIds.length,
+      failureCategory: 'ai_service',
+    });
+  }
+
   if (imageDates.size > 1) {
     return buildSkippedBatchResult(batch, {
       reason: `conflicting detected dates: ${[...imageDates].sort().join(', ')}`,
@@ -343,7 +394,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       dateSources,
       sourceImageCount,
       recognizedImageCount,
-      failedImageCount: sourceImageCount - recognizedImageCount,
+      failedImageCount: failedMessageIds.length,
     });
   }
 
@@ -364,7 +415,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       dateSources,
       sourceImageCount,
       recognizedImageCount,
-      failedImageCount: sourceImageCount - recognizedImageCount,
+      failedImageCount: failedMessageIds.length,
     });
   } else {
     archivedDate = resolveDetectedDate(filenameDates);
@@ -388,13 +439,14 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       dateSources,
       sourceImageCount,
       recognizedImageCount,
-      failedImageCount: sourceImageCount - recognizedImageCount,
+      failedImageCount: failedMessageIds.length,
     });
   }
 
   const measurement = normalizeMeasurementForArchive(measurementCandidates.at(-1) ?? null, archivedDate);
   const normalizedActivities = normalizeActivities(activities);
   const normalizedNutrition = normalizeNutrition(nutritionMeals, nutritionTotalCalories, nutritionDetails);
+  const normalizedSleep = normalizeSleepRecords(sleepRecords, archivedDate);
 
   return {
     status: 'ready',
@@ -404,12 +456,13 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     activities: normalizedActivities,
     workoutDailySummary: normalizeWorkoutDailySummary(workoutDailySummary),
     nutrition: normalizedNutrition,
+    sleep: normalizedSleep,
     warnings,
     issues,
     dateSources,
     sourceImageCount,
     recognizedImageCount,
-    failedImageCount: sourceImageCount - recognizedImageCount,
+    failedImageCount: failedMessageIds.length,
     confidence: calculateBatchConfidence(recognitions),
     fingerprints: buildFingerprints({
       archivedDate,
@@ -423,37 +476,6 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
 
 export function processTelegramBatch(batch, recognitions, options = {}) {
   return analyzeTelegramBatch(batch, recognitions, options);
-}
-
-export function applyTelegramSyncToMarkdown(markdown, batchResult) {
-  const nextSection = renderDateSection(batchResult);
-  const sections = splitDateSections(markdown);
-  const targetIndex = sections.findIndex((section) => section.date === batchResult.archivedDate);
-
-  if (targetIndex === -1) {
-    const mergedSections = [...sections, { date: batchResult.archivedDate, body: nextSection }];
-    mergedSections.sort((left, right) => left.date.localeCompare(right.date));
-    return {
-      changed: true,
-      markdown: stitchSections(markdown, mergedSections),
-    };
-  }
-
-  const currentSection = sections[targetIndex];
-  const mergedBody = mergeDateSection(currentSection.body, batchResult);
-  if (mergedBody === currentSection.body) {
-    return {
-      changed: false,
-      markdown,
-    };
-  }
-
-  const nextSections = sections.slice();
-  nextSections[targetIndex] = { ...currentSection, body: mergedBody };
-  return {
-    changed: true,
-    markdown: stitchSections(markdown, nextSections),
-  };
 }
 
 export async function processTelegramUpdates({
@@ -768,121 +790,29 @@ function normalizeTelegramImageDocument(document) {
   };
 }
 
-function normalizeRecognitionDate(recognition, message) {
-  const messageDate = dateFromUnix(message.dateUnix);
-  const rawDate = recognition.detectedDate?.trim();
-
-  if (rawDate && shouldParseDateEvidence(recognition.dateEvidence)) {
-    const normalizedRawDate = normalizeDetectedDateValue(rawDate, messageDate.year);
-    if (normalizedRawDate) {
-      return normalizedRawDate;
-    }
-  }
-
-  const measurementDate = normalizeMeasurementRecognitionDate(recognition, messageDate.year);
-  if (measurementDate) {
-    return measurementDate;
-  }
-
-  const evidenceDate = shouldParseDateEvidence(recognition.dateEvidence)
-    ? normalizeDetectedDateValue(recognition.dateEvidence, messageDate.year)
-    : null;
-  if (evidenceDate) {
-    return evidenceDate;
-  }
-
-  return null;
-}
-
-function normalizeMeasurementRecognitionDate(recognition, messageYear) {
-  if (recognition.imageType !== 'measurement') {
-    return null;
-  }
-
-  const measuredAt = recognition.records?.measurement?.measuredAt?.trim();
-  if (!measuredAt) {
-    return null;
-  }
-
-  return normalizeDetectedDateValue(measuredAt, messageYear);
-}
-
-function normalizeDetectedDateValue(value, messageYear) {
-  if (!value) {
-    return null;
-  }
-
-  const directDate = extractDateFromText(value, {
-    messageYear,
-    reasonableYear: true,
-  });
-  if (directDate) {
-    return directDate;
-  }
-
-  const monthDay = parseMonthDay(value);
-  if (Number.isInteger(messageYear) && monthDay && isValidDateParts(messageYear, monthDay.month, monthDay.day)) {
-    return formatDateParts(messageYear, monthDay.month, monthDay.day);
-  }
-
-  return null;
-}
-
-function collectFilenameDates(batch) {
-  const dates = new Set();
-  for (const message of batch.messages ?? []) {
-    for (const photo of message.photos ?? []) {
-      const date = extractFilenameDate(photo.fileName, dateFromUnix(message.dateUnix).year);
-      if (date) {
-        dates.add(date);
-      }
-    }
-  }
-  return dates;
-}
-
-function extractFilenameDate(fileName, messageYear) {
-  if (!fileName) {
-    return null;
-  }
-
-  return extractDateFromText(fileName, {
-    messageYear,
-    allowCompact: true,
-    allowMonthDay: true,
-    reasonableYear: true,
-  });
-}
-
-function shouldParseDateEvidence(dateEvidence) {
-  if (!dateEvidence) {
-    return true;
-  }
-
-  const externalOnly = /\b(?:caption|text|filename|file\s*name)\b/i.test(dateEvidence);
-  const imageEvidence = /\b(?:image|screenshot|ocr|header|screen)\b/i.test(dateEvidence) || /截图|画面|图片/.test(dateEvidence);
-  return !externalOnly || imageEvidence;
-}
-
 function batchLikelyLostOriginalFilename(batch) {
   return (batch.messages ?? []).some((message) =>
     (message.photos ?? []).some((photo) => photo.source === 'photo' && !photo.fileName),
   );
 }
 
-function resolveDetectedDate(detectedDates) {
-  if (detectedDates.size === 1) {
-    return [...detectedDates][0];
-  }
-  return null;
-}
-
-function buildSkippedBatchResult(batch, { reason, warnings = [], issues = [], dateSources = [], sourceImageCount = 0, recognizedImageCount = 0, failedImageCount = 0 }) {
+function buildSkippedBatchResult(batch, {
+  reason,
+  warnings = [],
+  issues = [],
+  dateSources = [],
+  sourceImageCount = 0,
+  recognizedImageCount = 0,
+  failedImageCount = 0,
+  failureCategory = null,
+}) {
   return {
     status: 'skipped',
     kind: batch.kind ?? 'image',
     batchId: batch.batchId,
     reason,
+    failureCategory,
+    failureReason: failureCategory ? reason : null,
     warnings,
     issues,
     dateSources,
@@ -1196,105 +1126,6 @@ function buildFingerprints({ archivedDate, measurement, activities, workoutDaily
   };
 }
 
-function stitchSections(originalMarkdown, sections) {
-  const prefixMatch = originalMarkdown.match(/^[\s\S]*?(?=^### \d{4}-\d{2}-\d{2}\s*$)/m);
-  const prefix = prefixMatch ? prefixMatch[0].trimEnd() : '';
-  const body = sections
-    .map((section) => `### ${section.date}\n\n${section.body.trim()}`)
-    .join('\n\n');
-  return `${prefix ? `${prefix}\n\n` : ''}${body}\n`;
-}
-
-function mergeDateSection(body, batchResult) {
-  let nextBody = body.trim();
-
-  if (batchResult.measurement) {
-    nextBody = upsertBlock(nextBody, /#### .*体脂秤.*(?:\n|$)/, renderMeasurementBlock(batchResult));
-  }
-  if (batchResult.activities?.length || batchResult.workoutDailySummary) {
-    nextBody = upsertBlock(nextBody, /#### .*运动截图记录(?:\n|$)/, renderActivitiesBlock(batchResult), {
-      mergeBlock: mergeWorkoutBlock,
-    });
-  }
-  if (batchResult.nutrition?.meals?.length || batchResult.nutrition?.totalCalories !== null) {
-    nextBody = upsertBlock(nextBody, /#### .*饮食截图记录(?:\n|$)/, renderNutritionBlock(batchResult));
-  }
-
-  return nextBody;
-}
-
-function renderDateSection(batchResult) {
-  const parts = [];
-
-  if (batchResult.measurement) {
-    parts.push(renderMeasurementBlock(batchResult));
-  }
-  if (batchResult.activities?.length || batchResult.workoutDailySummary) {
-    parts.push(renderActivitiesBlock(batchResult));
-  }
-  if (batchResult.nutrition?.meals?.length || batchResult.nutrition?.totalCalories !== null) {
-    parts.push(renderNutritionBlock(batchResult));
-  }
-
-  return parts.join('\n\n').trim();
-}
-
-function renderMeasurementBlock(batchResult) {
-  const measurement = batchResult.measurement;
-  const lines = [
-    '#### 当日体脂秤截图记录',
-    '',
-    TELEGRAM_SECTION_TAG,
-    fingerprintComment(batchResult.fingerprints.measurement[0]),
-    `- 测量时间：${measurement.measuredAt ?? batchResult.archivedDate}`,
-  ];
-
-  appendMetric(lines, '身体得分', measurement.bodyScore, '分');
-  appendMetric(lines, '体重', measurement.weightKg, ' kg');
-  appendMetric(lines, 'BMI', measurement.bmi);
-  appendMetric(lines, '体脂率', measurement.bodyFatPct, '%');
-  appendMetric(lines, '骨骼肌量', measurement.skeletalMuscleKg, ' kg');
-  appendMetric(lines, '内脏脂肪等级', measurement.visceralFatLevel);
-  appendMetric(lines, '基础代谢率', measurement.basalMetabolismKcal, ' kcal/日');
-  appendMetric(lines, '水分率', measurement.bodyWaterPct, '%');
-  appendMetric(lines, '蛋白质', measurement.proteinPct, '%');
-  appendMetric(lines, '骨盐量', measurement.boneMassKg, ' kg');
-  appendMetric(lines, '去脂体重', measurement.fatFreeMassKg, ' kg');
-  appendMetric(lines, '身体年龄', measurement.bodyAge, '岁');
-  if (measurement.bodyType) {
-    lines.push(`- 身体类型：${measurement.bodyType}`);
-  }
-
-  return lines.join('\n');
-}
-
-function renderActivitiesBlock(batchResult) {
-  const lines = ['#### 当日运动截图记录', '', TELEGRAM_SECTION_TAG];
-
-  if (batchResult.workoutDailySummary) {
-    lines.push(fingerprintComment(batchResult.fingerprints.workoutDailySummary[0]));
-    lines.push('##### 当日活动总览');
-    lines.push('');
-    appendMetric(lines, '活动热量', batchResult.workoutDailySummary.activityCaloriesKcal, '千卡');
-    appendMetric(lines, '锻炼时长', batchResult.workoutDailySummary.workoutDurationMinutes, '分钟');
-    appendMetric(lines, '活动小时数', batchResult.workoutDailySummary.activeHours, '小时');
-  }
-
-  if (batchResult.activities.length) {
-    lines.push('');
-    lines.push('##### 活动明细');
-    lines.push('');
-  }
-
-  for (let index = 0; index < batchResult.activities.length; index += 1) {
-    const activity = batchResult.activities[index];
-    const fingerprint = batchResult.fingerprints.activities[index];
-    lines.push(fingerprintComment(fingerprint));
-    lines.push(`- ${normalizeActivityTime(activity.time)} ${activity.type}：${activity.detail}`);
-  }
-  return lines.join('\n');
-}
-
 function normalizeMeasurementForArchive(measurement, archivedDate) {
   if (!measurement) {
     return null;
@@ -1336,205 +1167,144 @@ function normalizeWeightValue(value) {
   return Number.isFinite(value) ? roundTo(value, 3) : value;
 }
 
-function renderNutritionBlock(batchResult) {
-  const nutrition = batchResult.nutrition;
-  const lines = [
-    `#### ${batchResult.archivedDate} 饮食截图记录`,
-    '',
-    TELEGRAM_SECTION_TAG,
-    '##### 餐次汇总',
-    '',
-  ];
+function normalizeSleepRecords(records, archivedDate) {
+  const normalized = (records ?? [])
+    .map((record) => normalizeSleepRecord(record, archivedDate))
+    .filter(Boolean);
 
-  for (let index = 0; index < nutrition.meals.length; index += 1) {
-    const meal = nutrition.meals[index];
-    const fingerprint = batchResult.fingerprints.nutrition[index];
-    lines.push(fingerprintComment(fingerprint));
-    lines.push(
-      `- ${meal.name}：${meal.calories}千卡，建议范围${meal.recommendedMin}–${meal.recommendedMax}千卡`,
-    );
+  if (normalized.length === 0) {
+    return {
+      records: [],
+      totalSleepMinutes: null,
+      nightSleepMinutes: null,
+      napMinutes: null,
+      sleepStartTime: null,
+      sleepEndTime: null,
+      deepSleepMinutes: null,
+      lightSleepMinutes: null,
+      remSleepMinutes: null,
+      awakeMinutes: null,
+      sleepScore: null,
+      sleepScorePercentile: null,
+      deepSleepRatioPct: null,
+      lightSleepRatioPct: null,
+      remSleepRatioPct: null,
+      deepSleepContinuityScore: null,
+      wakeCount: null,
+      breathingQualityScore: null,
+      averageHeartRateBpm: null,
+      hrvMs: null,
+      averageSpo2Pct: null,
+      averageRespiratoryRate: null,
+      analysisText: null,
+      suggestionText: null,
+    };
   }
 
-  if (nutrition.totalCalories !== null) {
-    lines.push(`- 当日截图内已记录总热量：${nutrition.totalCalories}千卡`);
-  }
-
-  if (nutrition.details?.length) {
-    lines.push('');
-    lines.push('##### 餐次明细');
-    lines.push('');
-    for (const detail of nutrition.details) {
-      lines.push(`- ${detail}`);
-    }
-  }
-
-  return lines.join('\n');
+  const latest = normalized.at(-1);
+  const sum = (key) => normalized.reduce((total, item) => total + Number(item[key] ?? 0), 0) || null;
+  return {
+    records: normalized,
+    totalSleepMinutes: latest.totalSleepMinutes ?? sum('totalSleepMinutes'),
+    nightSleepMinutes: latest.nightSleepMinutes ?? sum('nightSleepMinutes'),
+    napMinutes: latest.napMinutes ?? sum('napMinutes'),
+    sleepStartTime: latest.bedtime ?? null,
+    sleepEndTime: latest.wakeTime ?? null,
+    deepSleepMinutes: latest.deepSleepMinutes ?? sum('deepSleepMinutes'),
+    lightSleepMinutes: latest.lightSleepMinutes ?? sum('lightSleepMinutes'),
+    remSleepMinutes: latest.remSleepMinutes ?? sum('remSleepMinutes'),
+    awakeMinutes: latest.awakeMinutes ?? sum('awakeMinutes'),
+    sleepScore: latest.sleepScore ?? null,
+    sleepScorePercentile: latest.sleepScorePercentile ?? null,
+    deepSleepRatioPct: latest.deepSleepRatioPct ?? null,
+    lightSleepRatioPct: latest.lightSleepRatioPct ?? null,
+    remSleepRatioPct: latest.remSleepRatioPct ?? null,
+    deepSleepContinuityScore: latest.deepSleepContinuityScore ?? null,
+    wakeCount: latest.wakeCount ?? null,
+    breathingQualityScore: latest.breathingQualityScore ?? null,
+    averageHeartRateBpm: latest.averageHeartRateBpm ?? null,
+    hrvMs: latest.hrvMs ?? null,
+    averageSpo2Pct: latest.averageSpo2Pct ?? null,
+    averageRespiratoryRate: latest.averageRespiratoryRate ?? null,
+    analysisText: latest.analysisText ?? null,
+    suggestionText: latest.suggestionText ?? null,
+  };
 }
-
-function upsertBlock(sectionBody, headingPattern, nextBlock, options = {}) {
-  const targetRange = findLevel4BlockRange(sectionBody, headingPattern);
-  if (!targetRange) {
-    return `${sectionBody.trim()}\n\n${nextBlock}`.trim();
+function normalizeSleepRecord(record, archivedDate) {
+  if (!record) {
+    return null;
   }
 
-  const originalChunk = sectionBody.slice(targetRange.start, targetRange.end);
-  const existingBlock = originalChunk.trim();
-  const merge = options.mergeBlock ?? mergeBlock;
-  const mergedBlock = merge(existingBlock, nextBlock);
-  if (mergedBlock === existingBlock) {
-    return sectionBody;
-  }
+  const hasValues = [
+    record.totalSleepMinutes,
+    record.nightSleepMinutes,
+    record.napMinutes,
+    record.bedtime,
+    record.wakeTime,
+    record.deepSleepMinutes,
+    record.lightSleepMinutes,
+    record.remSleepMinutes,
+    record.awakeMinutes,
+    record.sleepStageText,
+    record.sleepStageDetail,
+    record.sleepScore,
+    record.sleepScorePercentile,
+    record.deepSleepRatioPct,
+    record.lightSleepRatioPct,
+    record.remSleepRatioPct,
+    record.deepSleepContinuityScore,
+    record.wakeCount,
+    record.breathingQualityScore,
+    record.averageHeartRateBpm,
+    record.hrvMs,
+    record.averageSpo2Pct,
+    record.averageRespiratoryRate,
+    record.analysisText,
+    record.suggestionText,
+  ].some((value) => value !== null && value !== undefined && value !== '');
 
-  const separator = originalChunk.match(/\s*$/)?.[0] ?? '\n\n';
-  return `${sectionBody.slice(0, targetRange.start)}${mergedBlock}${separator}${sectionBody.slice(targetRange.end)}`.trim();
-}
-
-function findLevel4BlockRange(sectionBody, headingPattern) {
-  const matches = [...sectionBody.matchAll(/^#### .+$/gm)];
-  const targetIndex = matches.findIndex((match) => headingPattern.test(`${match[0]}\n`));
-  if (targetIndex === -1) {
+  if (!hasValues) {
     return null;
   }
 
   return {
-    start: matches[targetIndex].index,
-    end: targetIndex + 1 < matches.length ? matches[targetIndex + 1].index : sectionBody.length,
+    sleepType: normalizeSleepType(record.sleepType ?? '夜间睡眠'),
+    bedtime: normalizeClockTime(record.bedtime),
+    wakeTime: normalizeClockTime(record.wakeTime),
+    nightSleepMinutes: record.nightSleepMinutes ?? null,
+    totalSleepMinutes: record.totalSleepMinutes ?? null,
+    napMinutes: record.napMinutes ?? null,
+    deepSleepMinutes: record.deepSleepMinutes ?? null,
+    lightSleepMinutes: record.lightSleepMinutes ?? null,
+    remSleepMinutes: record.remSleepMinutes ?? null,
+    awakeMinutes: record.awakeMinutes ?? null,
+    sleepStageText: record.sleepStageText ?? null,
+    sleepStageDetail: Array.isArray(record.sleepStageDetail) ? record.sleepStageDetail : null,
+    sleepScore: record.sleepScore ?? null,
+    sleepScorePercentile: record.sleepScorePercentile ?? null,
+    deepSleepRatioPct: record.deepSleepRatioPct ?? null,
+    lightSleepRatioPct: record.lightSleepRatioPct ?? null,
+    remSleepRatioPct: record.remSleepRatioPct ?? null,
+    deepSleepContinuityScore: record.deepSleepContinuityScore ?? null,
+    wakeCount: record.wakeCount ?? null,
+    breathingQualityScore: record.breathingQualityScore ?? null,
+    averageHeartRateBpm: record.averageHeartRateBpm ?? null,
+    hrvMs: record.hrvMs ?? null,
+    averageSpo2Pct: record.averageSpo2Pct ?? null,
+    averageRespiratoryRate: record.averageRespiratoryRate ?? null,
+    analysisText: record.analysisText ?? null,
+    suggestionText: record.suggestionText ?? null,
+    archivedDate,
   };
 }
 
-function mergeBlock(existingBlock, nextBlock) {
-  const incoming = nextBlock.trim();
-  if (!incoming) {
-    return existingBlock;
+function normalizeClockTime(value) {
+  if (!value) {
+    return null;
   }
-
-  if (incoming === existingBlock.trim()) {
-    return existingBlock;
-  }
-
-  return incoming;
-}
-
-function mergeWorkoutBlock(existingBlock, nextBlock) {
-  const existing = splitWorkoutBlock(existingBlock);
-  const incoming = splitWorkoutBlock(nextBlock);
-  const summaryBody = incoming.summaryBody ?? existing.summaryBody;
-  const activityBody = incoming.activityBody
-    ? mergeActivityBodies(existing.activityBody, incoming.activityBody)
-    : existing.activityBody;
-  const lines = [existing.headingLine ?? incoming.headingLine ?? '#### 当日运动截图记录', '', TELEGRAM_SECTION_TAG];
-
-  if (summaryBody) {
-    lines.push('');
-    lines.push('##### 当日活动总览');
-    lines.push('');
-    lines.push(stripLevel5Heading(summaryBody, '当日活动总览').trim());
-  }
-
-  if (activityBody) {
-    lines.push('');
-    lines.push('##### 活动明细');
-    lines.push('');
-    lines.push(stripLevel5Heading(activityBody, '活动明细').trim());
-  }
-
-  return lines.join('\n').trim();
-}
-
-function splitWorkoutBlock(block) {
-  const [headingLine = '#### 当日运动截图记录', ...bodyLines] = block.trim().split(/\r?\n/);
-  const body = bodyLines.join('\n').trim();
-  return {
-    headingLine,
-    summaryBody: extractLevel5Body(body, '当日活动总览'),
-    activityBody: extractLevel5Body(body, '活动明细') ?? extractLegacyActivityBody(body),
-  };
-}
-
-function extractLevel5Body(content, heading) {
-  const block = splitLevel5Blocks(content).find((item) => item.heading === heading);
-  return block ? block.body.trim() : null;
-}
-
-function splitLevel5Blocks(content) {
-  const matches = [...content.matchAll(/^##### (.+)$/gm)];
-  return matches.map((match, index) => {
-    const start = match.index + match[0].length;
-    const end = index + 1 < matches.length ? matches[index + 1].index : content.length;
-    return {
-      headingLine: match[0],
-      heading: match[1].trim(),
-      body: content.slice(start, end).trim(),
-    };
-  });
-}
-
-function stripLevel5Heading(content, heading) {
-  const trimmed = content.trim();
-  const headingLine = `##### ${heading}`;
-  return trimmed.startsWith(headingLine) ? trimmed.slice(headingLine.length).trim() : trimmed;
-}
-
-function extractLegacyActivityBody(content) {
-  const entries = parseActivityEntries(content);
-  return entries.length ? renderActivityEntries(entries) : null;
-}
-
-function mergeActivityBodies(existingBody, incomingBody) {
-  const entriesByKey = new Map();
-  for (const entry of parseActivityEntries(existingBody ?? '')) {
-    entriesByKey.set(entry.key, entry);
-  }
-  for (const entry of parseActivityEntries(incomingBody ?? '')) {
-    entriesByKey.set(entry.key, entry);
-  }
-  const entries = [...entriesByKey.values()].sort((left, right) =>
-    left.time === right.time ? left.line.localeCompare(right.line) : left.time.localeCompare(right.time),
-  );
-  return entries.length ? renderActivityEntries(entries) : null;
-}
-
-function parseActivityEntries(content) {
-  const entries = [];
-  let pendingFingerprint = null;
-
-  for (const rawLine of String(content ?? '').split(/\r?\n/)) {
-    const line = rawLine.trim();
-    const fingerprint = line.match(/^<!-- telegram-fingerprint: ([^ ]+) -->$/)?.[1] ?? null;
-    if (fingerprint) {
-      pendingFingerprint = fingerprint.startsWith('a-') ? line : null;
-      continue;
-    }
-
-    const activityMatch = line.match(/^- (\d{2}:\d{2})\s+([^：]+)：(.+)$/);
-    if (!activityMatch) {
-      pendingFingerprint = null;
-      continue;
-    }
-
-    const [, time, type, detail] = activityMatch;
-    const normalizedType = normalizeActivityType(type);
-    entries.push({
-      key: `activity:${time}|${normalizedType}`,
-      time,
-      line: `- ${time} ${normalizedType}：${detail.trim()}`,
-      fingerprint: pendingFingerprint,
-    });
-    pendingFingerprint = null;
-  }
-
-  return entries;
-}
-
-function renderActivityEntries(entries) {
-  const lines = [];
-  for (const entry of entries) {
-    if (entry.fingerprint) {
-      lines.push(entry.fingerprint);
-    }
-    lines.push(entry.line);
-  }
-  return lines.join('\n');
+  return String(value).match(/(?:^|\s)(\d{1,2}):(\d{2})(?:\s|$)/)?.slice(1).map((part, index) =>
+    index === 0 ? String(Number(part)).padStart(2, '0') : part
+  ).join(':') ?? String(value);
 }
 
 function buildInboxEntry({ batch, recognitions, analyzed }) {
@@ -1840,160 +1610,4 @@ function parseHelpCommand(text) {
   return {
     command: String(text).trim(),
   };
-}
-
-function fingerprintComment(value) {
-  return `<!-- telegram-fingerprint: ${value} -->`;
-}
-
-function extractDateFromText(text, options = {}) {
-  if (!text) {
-    return null;
-  }
-
-  const messageYear = options.messageYear;
-  const normalized = text.replace(/[./_年]/g, '-').replace(/[月]/g, '-').replace(/[日]/g, '');
-  const directMatch = normalized.match(/(?:^|[^\d])(\d{4})-(\d{1,2})-(\d{1,2})(?=$|[^\d])/);
-  if (directMatch) {
-    return normalizeDateParts({
-      year: Number(directMatch[1]),
-      month: Number(directMatch[2]),
-      day: Number(directMatch[3]),
-      messageYear,
-      reasonableYear: options.reasonableYear,
-    });
-  }
-
-  if (options.allowCompact) {
-    const compactMatch = text.match(/(?:^|[^\d])(\d{4})(\d{2})(\d{2})(?=$|[^\d])/);
-    if (compactMatch) {
-      return normalizeDateParts({
-        year: Number(compactMatch[1]),
-        month: Number(compactMatch[2]),
-        day: Number(compactMatch[3]),
-        messageYear,
-        reasonableYear: options.reasonableYear,
-      });
-    }
-  }
-
-  if (options.allowMonthDay) {
-    const monthDay = parseMonthDay(text);
-    if (Number.isInteger(messageYear) && monthDay) {
-      return normalizeDateParts({
-        year: messageYear,
-        month: monthDay.month,
-        day: monthDay.day,
-        messageYear,
-        reasonableYear: false,
-      });
-    }
-  }
-
-  return null;
-}
-
-function normalizeDateParts({
-  year,
-  month,
-  day,
-  messageYear,
-  reasonableYear = false,
-}) {
-  if (!isValidDateParts(year, month, day)) {
-    return null;
-  }
-  if (reasonableYear && Number.isInteger(messageYear) && !isReasonableYear(year, messageYear)) {
-    return null;
-  }
-  return formatDateParts(year, month, day);
-}
-
-function parseDateParts(value) {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) {
-    return null;
-  }
-  return {
-    year: Number(match[1]),
-    month: Number(match[2]),
-    day: Number(match[3]),
-  };
-}
-
-function parseMonthDay(value) {
-  if (!value) {
-    return null;
-  }
-  const monthDayMatch = value.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*日/);
-  if (monthDayMatch) {
-    return {
-      month: Number(monthDayMatch[1]),
-      day: Number(monthDayMatch[2]),
-    };
-  }
-  const isoLikeMatch = value
-    .replace(/[./_年]/g, '-')
-    .replace(/[月]/g, '-')
-    .replace(/[日]/g, '')
-    .match(/(?:^|[^\d])\d{4}-(\d{1,2})-(\d{1,2})(?=$|[^\d])/);
-  if (isoLikeMatch) {
-    return {
-      month: Number(isoLikeMatch[1]),
-      day: Number(isoLikeMatch[2]),
-    };
-  }
-  return null;
-}
-
-function isReasonableYear(year, messageYear) {
-  return year >= messageYear - 1 && year <= messageYear + 1;
-}
-
-function isValidDateParts(year, month, day) {
-  if (
-    !Number.isInteger(year) ||
-    !Number.isInteger(month) ||
-    !Number.isInteger(day) ||
-    month < 1 ||
-    month > 12 ||
-    day < 1 ||
-    day > 31
-  ) {
-    return false;
-  }
-
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    !Number.isNaN(date.getTime()) &&
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() + 1 === month &&
-    date.getUTCDate() === day
-  );
-}
-
-function dateFromUnix(unixSeconds) {
-  if (!Number.isFinite(unixSeconds)) {
-    return {
-      year: null,
-      month: null,
-      day: null,
-    };
-  }
-
-  const date = new Date(unixSeconds * 1000);
-  return {
-    year: date.getUTCFullYear(),
-    month: date.getUTCMonth() + 1,
-    day: date.getUTCDate(),
-  };
-}
-
-function formatDateParts(year, month, day) {
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
-function extractCaloriesToken(detail) {
-  const match = detail.match(/(\d+(?:\.\d+)?)千卡/);
-  return match ? match[1] : 'na';
 }

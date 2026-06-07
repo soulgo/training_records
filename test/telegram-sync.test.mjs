@@ -3,22 +3,13 @@ import assert from 'node:assert/strict';
 
 import { parseTrainingRecord } from '../tools/training-parser.mjs';
 import { parseWeightKg } from '../src/domain/training/training-domain.mjs';
-
-async function importTelegramSyncLib() {
-  try {
-    return await import('../src/telegram/sync-batch.mjs');
-  } catch {
-    return null;
-  }
-}
-
-async function importTelegramCommandRegistry() {
-  try {
-    return await import('../src/telegram/command-registry.mjs');
-  } catch {
-    return null;
-  }
-}
+import {
+  importTelegramCommandRegistry,
+  importTelegramSyncLib,
+  telegramDocumentPhoto,
+  telegramPhoto,
+  telegramUpdate,
+} from './helpers/telegram-sync-fixtures.mjs';
 
 test('groups album document images and applies filename date when screenshots are undated', async () => {
   const lib = await importTelegramSyncLib();
@@ -27,45 +18,37 @@ test('groups album document images and applies filename date when screenshots ar
   assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
 
   const updates = [
-    {
-      update_id: 101,
-      message: {
-        message_id: 1,
+    telegramUpdate(101, {
+      messageId: 1,
+      telegram: {
         media_group_id: 'album-1',
-        date: 1_746_748_800,
-        chat: { id: 42 },
-        document: {
-          file_id: 'file-a',
-          file_unique_id: 'uniq-a',
-          file_name: '饮食记录 2026-05-09.jpg',
-          mime_type: 'image/jpeg',
-        },
+        document: telegramDocumentPhoto({
+          fileId: 'file-a',
+          fileUniqueId: 'uniq-a',
+          fileName: '饮食记录 2026-05-09.jpg',
+        }),
       },
-    },
-    {
-      update_id: 102,
-      message: {
-        message_id: 2,
+    }),
+    telegramUpdate(102, {
+      messageId: 2,
+      date: 1_746_748_900,
+      telegram: {
         media_group_id: 'album-1',
-        date: 1_746_748_900,
-        chat: { id: 42 },
-        document: {
-          file_id: 'file-b',
-          file_unique_id: 'uniq-b',
-          file_name: '2026_05_09 运动截图.png',
-          mime_type: 'image/png',
-        },
+        document: telegramDocumentPhoto({
+          fileId: 'file-b',
+          fileUniqueId: 'uniq-b',
+          fileName: '2026_05_09 运动截图.png',
+          mimeType: 'image/png',
+        }),
       },
-    },
-    {
-      update_id: 103,
-      message: {
-        message_id: 3,
-        date: 1_746_749_000,
-        chat: { id: 42 },
-        photo: [{ file_id: 'file-c', file_unique_id: 'uniq-c' }],
+    }),
+    telegramUpdate(103, {
+      messageId: 3,
+      date: 1_746_749_000,
+      telegram: {
+        photo: [telegramPhoto({ fileId: 'file-c', fileUniqueId: 'uniq-c' })],
       },
-    },
+    }),
   ];
 
   const batches = lib.groupTelegramUpdates(updates);
@@ -129,21 +112,14 @@ test('uses meal calories as nutrition total when recognition omits totalCalories
   assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
 
   const updates = [
-    {
-      update_id: 151,
-      message: {
-        message_id: 51,
+    telegramUpdate(151, {
+      messageId: 51,
+      date: 1_748_044_800,
+      telegram: {
         media_group_id: 'album-meal-total',
-        date: 1_748_044_800,
-        chat: { id: 42 },
-        document: {
-          file_id: 'file-a',
-          file_unique_id: 'uniq-a',
-          file_name: '饮食记录 2026-05-24.jpg',
-          mime_type: 'image/jpeg',
-        },
+        document: telegramDocumentPhoto({ fileName: '饮食记录 2026-05-24.jpg' }),
       },
-    },
+    }),
   ];
 
   const [batch] = lib.groupTelegramUpdates(updates);
@@ -175,48 +151,155 @@ test('uses meal calories as nutrition total when recognition omits totalCalories
   assert.equal(analyzed.nutrition.totalCalories, 938);
 });
 
+test('sleep screenshots are archived by bedtime date and keep Huawei sleep health metrics', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const [batch] = lib.groupTelegramUpdates([
+    telegramUpdate(161, {
+      messageId: 61,
+      date: Math.floor(new Date('2026-06-04T01:30:00Z').getTime() / 1000),
+      telegram: {
+        photo: [telegramPhoto({ fileId: 'sleep-file', fileUniqueId: 'sleep-uniq' })],
+      },
+    }),
+  ]);
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 61,
+      imageType: 'sleep',
+      detectedDate: '2026-06-04',
+      dateEvidence: 'image header: 6月4日 周四, timeline shows 6/3 入睡23:26',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: null,
+        sleep: {
+          sleepType: '夜间睡眠',
+          bedtime: '6/3 23:26',
+          wakeTime: '6/4 06:19',
+          nightSleepMinutes: 411,
+          totalSleepMinutes: 411,
+          napMinutes: null,
+          deepSleepMinutes: 145,
+          lightSleepMinutes: 195,
+          remSleepMinutes: 71,
+          awakeMinutes: null,
+          sleepStageText: '深睡2小时25分钟；浅睡3小时15分钟；快速眼动1小时11分钟',
+          sleepStageDetail: ['深睡 2小时25分钟', '浅睡 3小时15分钟', '快速眼动 1小时11分钟'],
+          sleepScore: 81,
+          sleepScorePercentile: 77,
+          deepSleepRatioPct: 35,
+          lightSleepRatioPct: 47,
+          remSleepRatioPct: 18,
+          deepSleepContinuityScore: 85,
+          wakeCount: 1,
+          breathingQualityScore: 98,
+          averageHeartRateBpm: 68,
+          hrvMs: 34,
+          averageSpo2Pct: 97,
+          averageRespiratoryRate: 14,
+          analysisText: '睡眠质量良好。睡眠时长6小时51分钟，在正常范围内。',
+          suggestionText: '建议睡觉时关灯，并选择遮光效果好的窗帘。',
+        },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-06-03');
+  assert.equal(analyzed.sleep.totalSleepMinutes, 411);
+  assert.equal(analyzed.sleep.sleepStartTime, '23:26');
+  assert.equal(analyzed.sleep.sleepEndTime, '06:19');
+  assert.equal(analyzed.sleep.sleepScore, 81);
+  assert.equal(analyzed.sleep.deepSleepRatioPct, 35);
+  assert.equal(analyzed.sleep.records[0].averageHeartRateBpm, 68);
+  assert.equal(analyzed.sleep.records[0].analysisText, '睡眠质量良好。睡眠时长6小时51分钟，在正常范围内。');
+});
+
+test('sleep screenshots without extracted sleep fields are not reported as stored training data', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const [batch] = lib.groupTelegramUpdates([
+    telegramUpdate(162, {
+      messageId: 62,
+      date: Math.floor(new Date('2026-06-04T01:30:00Z').getTime() / 1000),
+      telegram: {
+        photo: [telegramPhoto({ fileId: 'sleep-file-empty', fileUniqueId: 'sleep-uniq-empty' })],
+      },
+    }),
+  ]);
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 62,
+      imageType: 'sleep',
+      detectedDate: '2026-06-04',
+      dateEvidence: 'image header: 6月4日 周四',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: null,
+        sleep: null,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.equal(analyzed.failureCategory, 'ai_service');
+  assert.match(analyzed.reason, /sleep image missing records\.sleep/);
+  assert.equal(analyzed.archivedDate, undefined);
+  assert.equal(analyzed.recognizedImageCount, 1);
+  assert.equal(analyzed.failedImageCount, 1);
+});
+
 test('groups /thought and /随想 messages into thought batches and ignores normal text', async () => {
   const lib = await importTelegramSyncLib();
 
   assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
 
   const updates = [
-    {
-      update_id: 201,
-      message: {
-        message_id: 11,
-        date: 1_746_748_800,
-        chat: { id: 42 },
+    telegramUpdate(201, {
+      messageId: 11,
+      telegram: {
         text: '/thought 今天训练后臀部发力更明显\n感觉动作路线更顺了',
       },
-    },
-    {
-      update_id: 202,
-      message: {
-        message_id: 12,
-        date: 1_746_748_900,
-        chat: { id: 42 },
+    }),
+    telegramUpdate(202, {
+      messageId: 12,
+      date: 1_746_748_900,
+      telegram: {
         text: '/随想 恢复节奏更稳了',
       },
-    },
-    {
-      update_id: 203,
-      message: {
-        message_id: 13,
-        date: 1_746_748_900,
-        chat: { id: 42 },
+    }),
+    telegramUpdate(203, {
+      messageId: 13,
+      date: 1_746_748_900,
+      telegram: {
         text: '/thoughts 这个不应该被识别',
       },
-    },
-    {
-      update_id: 204,
-      message: {
-        message_id: 14,
-        date: 1_746_748_900,
-        chat: { id: 42 },
+    }),
+    telegramUpdate(204, {
+      messageId: 14,
+      date: 1_746_748_900,
+      telegram: {
         text: '只是普通文本',
       },
-    },
+    }),
   ];
 
   const batches = lib.groupTelegramUpdates(updates);
@@ -240,33 +323,26 @@ test('groups module-scoped thought commands into module-specific thought batches
   assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
 
   const batches = lib.groupTelegramUpdates([
-    {
-      update_id: 205,
-      message: {
-        message_id: 15,
-        date: 1_746_748_800,
-        chat: { id: 42 },
+    telegramUpdate(205, {
+      messageId: 15,
+      telegram: {
         text: '/随想 杂七杂八 今天整理了一堆没来得及记的事',
       },
-    },
-    {
-      update_id: 206,
-      message: {
-        message_id: 16,
-        date: 1_746_748_801,
-        chat: { id: 42 },
+    }),
+    telegramUpdate(206, {
+      messageId: 16,
+      date: 1_746_748_801,
+      telegram: {
         text: '/thought 锻炼 今天腿练得很实',
       },
-    },
-    {
-      update_id: 207,
-      message: {
-        message_id: 17,
-        date: 1_746_748_802,
-        chat: { id: 42 },
+    }),
+    telegramUpdate(207, {
+      messageId: 17,
+      date: 1_746_748_802,
+      telegram: {
         text: '/随想 身体反馈 今天硬拉后右侧腰背有点刺痛',
       },
-    },
+    }),
   ]);
 
   assert.equal(batches.length, 3);
@@ -284,40 +360,33 @@ test('groups thought captions with images and albums without treating them as tr
   assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
 
   const batches = lib.groupTelegramUpdates([
-    {
-      update_id: 211,
-      message: {
-        message_id: 31,
-        date: 1_746_748_800,
-        chat: { id: 42 },
+    telegramUpdate(211, {
+      messageId: 31,
+      telegram: {
         caption: '/随想 杂七杂八 今天训练后的动作截图',
         photo: [
-          { file_id: 'small', file_unique_id: 'small-u', width: 90, height: 90, file_size: 1000 },
-          { file_id: 'large', file_unique_id: 'large-u', width: 1280, height: 960, file_size: 8000 },
+          telegramPhoto({ fileId: 'small', fileUniqueId: 'small-u', width: 90, height: 90, fileSize: 1000 }),
+          telegramPhoto({ fileId: 'large', fileUniqueId: 'large-u', width: 1280, height: 960, fileSize: 8000 }),
         ],
       },
-    },
-    {
-      update_id: 212,
-      message: {
-        message_id: 32,
+    }),
+    telegramUpdate(212, {
+      messageId: 32,
+      date: 1_746_748_810,
+      telegram: {
         media_group_id: 'album-thought',
-        date: 1_746_748_810,
-        chat: { id: 42 },
         caption: '/thought 相册随想',
-        photo: [{ file_id: 'album-a', file_unique_id: 'album-a-u' }],
+        photo: [telegramPhoto({ fileId: 'album-a', fileUniqueId: 'album-a-u' })],
       },
-    },
-    {
-      update_id: 213,
-      message: {
-        message_id: 33,
+    }),
+    telegramUpdate(213, {
+      messageId: 33,
+      date: 1_746_748_811,
+      telegram: {
         media_group_id: 'album-thought',
-        date: 1_746_748_811,
-        chat: { id: 42 },
-        photo: [{ file_id: 'album-b', file_unique_id: 'album-b-u' }],
+        photo: [telegramPhoto({ fileId: 'album-b', fileUniqueId: 'album-b-u' })],
       },
-    },
+    }),
   ]);
 
   assert.equal(batches.length, 2);
@@ -339,33 +408,26 @@ test('groups /analysis text messages into analysis batches', async () => {
   assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
 
   const batches = lib.groupTelegramUpdates([
-    {
-      update_id: 301,
-      message: {
-        message_id: 21,
-        date: 1_746_748_800,
-        chat: { id: 42 },
+    telegramUpdate(301, {
+      messageId: 21,
+      telegram: {
         text: '/analysis 今天怎么练',
       },
-    },
-    {
-      update_id: 302,
-      message: {
-        message_id: 22,
-        date: 1_746_748_900,
-        chat: { id: 42 },
+    }),
+    telegramUpdate(302, {
+      messageId: 22,
+      date: 1_746_748_900,
+      telegram: {
         text: '/分析 最近饮食怎么样',
       },
-    },
-    {
-      update_id: 303,
-      message: {
-        message_id: 23,
-        date: 1_746_749_000,
-        chat: { id: 42 },
+    }),
+    telegramUpdate(303, {
+      messageId: 23,
+      date: 1_746_749_000,
+      telegram: {
         text: '只是普通文本',
       },
-    },
+    }),
   ]);
 
   assert.equal(batches.length, 2);
@@ -385,33 +447,26 @@ test('groups /ai text messages into ai agent batches', async () => {
   assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
 
   const batches = lib.groupTelegramUpdates([
-    {
-      update_id: 321,
-      message: {
-        message_id: 31,
-        date: 1_746_748_800,
-        chat: { id: 42 },
+    telegramUpdate(321, {
+      messageId: 31,
+      telegram: {
         text: '/ai 搜一下右肩疼痛相关记录',
       },
-    },
-    {
-      update_id: 322,
-      message: {
-        message_id: 32,
-        date: 1_746_748_900,
-        chat: { id: 42 },
+    }),
+    telegramUpdate(322, {
+      messageId: 32,
+      date: 1_746_748_900,
+      telegram: {
         text: '/智能助手 同步状态正常吗',
       },
-    },
-    {
-      update_id: 323,
-      message: {
-        message_id: 33,
-        date: 1_746_749_000,
-        chat: { id: 42 },
+    }),
+    telegramUpdate(323, {
+      messageId: 33,
+      date: 1_746_749_000,
+      telegram: {
         text: '/ais 这个不应该被识别',
       },
-    },
+    }),
   ]);
 
   assert.equal(batches.length, 2);
@@ -1126,6 +1181,73 @@ test('writes measurement workout and nutrition into markdown idempotently', asyn
   assert.equal(day.measurement?.weightKg, 72.85);
   assert.equal(day.activities.length, 1);
   assert.equal(day.nutrition.totalCalories, 308);
+});
+
+test('writes sleep into an existing markdown date section', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.applyTelegramSyncToMarkdown, 'applyTelegramSyncToMarkdown export missing');
+
+  const markdown = `
+### 2026-06-04
+
+#### 当日运动截图记录
+
+##### 当日活动总览
+
+- 活动热量：0千卡
+`;
+  const batchResult = {
+    batchId: 'single-sleep-36',
+    archivedDate: '2026-06-04',
+    measurement: null,
+    activities: [],
+    workoutDailySummary: null,
+    nutrition: { meals: [], totalCalories: null, details: [] },
+    sleep: {
+      records: [
+        {
+          sleepType: '夜间睡眠',
+          bedtime: '23:26',
+          wakeTime: '06:19',
+          nightSleepMinutes: 411,
+          totalSleepMinutes: 411,
+          deepSleepMinutes: 145,
+          lightSleepMinutes: 195,
+          remSleepMinutes: 71,
+          sleepScore: 81,
+          sleepScorePercentile: 77,
+        },
+      ],
+      totalSleepMinutes: 411,
+      nightSleepMinutes: 411,
+      napMinutes: null,
+      sleepStartTime: '23:26',
+      sleepEndTime: '06:19',
+      deepSleepMinutes: 145,
+      lightSleepMinutes: 195,
+      remSleepMinutes: 71,
+      awakeMinutes: null,
+      sleepScore: 81,
+      sleepScorePercentile: 77,
+    },
+    fingerprints: {
+      measurement: [],
+      activities: [],
+      workoutDailySummary: [],
+      nutrition: [],
+    },
+  };
+
+  const result = lib.applyTelegramSyncToMarkdown(markdown, batchResult);
+  const parsed = parseTrainingRecord(result.markdown);
+  const day = parsed.daily.find((entry) => entry.date === '2026-06-04');
+
+  assert.equal(result.changed, true);
+  assert.match(result.markdown, /#### 2026-06-04 睡眠截图记录/);
+  assert.ok(day);
+  assert.equal(day.sleepSummary.totalSleepMinutes, 411);
+  assert.equal(day.sleepSummary.deepSleepMinutes, 145);
 });
 
 test('processes only allowed chats and advances state to the highest processed update id', async () => {

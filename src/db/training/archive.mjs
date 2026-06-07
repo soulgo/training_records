@@ -147,6 +147,16 @@ export async function persistTrainingArchive(options) {
           updatedAtIso,
         });
       }
+
+      for (const sleep of day.sleep ?? []) {
+        await upsertTrainingSleep({
+          client,
+          sourceHash,
+          archivedDate: day.date,
+          sleep,
+          updatedAtIso,
+        });
+      }
     }
 
     await client.query(
@@ -461,6 +471,120 @@ async function upsertTrainingMeal({ client, sourceHash, archivedDate, meal, upda
       meal.calories ?? null,
       meal.recommendedMin ?? null,
       meal.recommendedMax ?? null,
+      updatedAtIso,
+    ],
+  );
+}
+
+async function upsertTrainingSleep({ client, sourceHash, archivedDate, sleep, updatedAtIso }) {
+  const sleepHash = createHash('md5')
+    .update(
+      [
+        archivedDate,
+        sleep.sleepType ?? '',
+        sleep.sleepStartTime ?? '',
+        sleep.sleepEndTime ?? '',
+        sleep.totalSleepMinutes ?? '',
+      ].join('|'),
+      'utf8',
+    )
+    .digest('hex');
+
+  await client.query(
+    `
+      insert into archive.training_sleep (
+        sleep_hash,
+        archived_date,
+        source_hash,
+        sleep_type,
+        bedtime,
+        wake_time,
+        night_sleep_minutes,
+        total_sleep_minutes,
+        nap_minutes,
+        deep_sleep_minutes,
+        light_sleep_minutes,
+        rem_sleep_minutes,
+        awake_minutes,
+        sleep_stage_text,
+        sleep_stage_detail,
+        sleep_score,
+        sleep_score_percentile,
+        deep_sleep_ratio_pct,
+        light_sleep_ratio_pct,
+        rem_sleep_ratio_pct,
+        deep_sleep_continuity_score,
+        wake_count,
+        breathing_quality_score,
+        average_heart_rate_bpm,
+        hrv_ms,
+        average_spo2_pct,
+        average_respiratory_rate,
+        analysis_text,
+        suggestion_text,
+        updated_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+      on conflict (sleep_hash) do update set
+        source_hash = excluded.source_hash,
+        sleep_type = excluded.sleep_type,
+        bedtime = excluded.bedtime,
+        wake_time = excluded.wake_time,
+        night_sleep_minutes = excluded.night_sleep_minutes,
+        total_sleep_minutes = excluded.total_sleep_minutes,
+        nap_minutes = excluded.nap_minutes,
+        deep_sleep_minutes = excluded.deep_sleep_minutes,
+        light_sleep_minutes = excluded.light_sleep_minutes,
+        rem_sleep_minutes = excluded.rem_sleep_minutes,
+        awake_minutes = excluded.awake_minutes,
+        sleep_stage_text = excluded.sleep_stage_text,
+        sleep_stage_detail = excluded.sleep_stage_detail,
+        sleep_score = excluded.sleep_score,
+        sleep_score_percentile = excluded.sleep_score_percentile,
+        deep_sleep_ratio_pct = excluded.deep_sleep_ratio_pct,
+        light_sleep_ratio_pct = excluded.light_sleep_ratio_pct,
+        rem_sleep_ratio_pct = excluded.rem_sleep_ratio_pct,
+        deep_sleep_continuity_score = excluded.deep_sleep_continuity_score,
+        wake_count = excluded.wake_count,
+        breathing_quality_score = excluded.breathing_quality_score,
+        average_heart_rate_bpm = excluded.average_heart_rate_bpm,
+        hrv_ms = excluded.hrv_ms,
+        average_spo2_pct = excluded.average_spo2_pct,
+        average_respiratory_rate = excluded.average_respiratory_rate,
+        analysis_text = excluded.analysis_text,
+        suggestion_text = excluded.suggestion_text,
+        updated_at = excluded.updated_at
+    `,
+    [
+      sleepHash,
+      archivedDate,
+      sourceHash,
+      sleep.sleepType ?? '夜间睡眠',
+      sleep.sleepStartTime ?? null,
+      sleep.sleepEndTime ?? null,
+      sleep.nightSleepMinutes ?? null,
+      sleep.totalSleepMinutes ?? null,
+      sleep.napMinutes ?? null,
+      sleep.deepSleepMinutes ?? null,
+      sleep.lightSleepMinutes ?? null,
+      sleep.remSleepMinutes ?? null,
+      sleep.awakeMinutes ?? null,
+      sleep.sleepStageText ?? null,
+      sleep.sleepStageDetail ? JSON.stringify(sleep.sleepStageDetail) : null,
+      sleep.sleepScore ?? null,
+      sleep.sleepScorePercentile ?? null,
+      sleep.deepSleepRatioPct ?? null,
+      sleep.lightSleepRatioPct ?? null,
+      sleep.remSleepRatioPct ?? null,
+      sleep.deepSleepContinuityScore ?? null,
+      sleep.wakeCount ?? null,
+      sleep.breathingQualityScore ?? null,
+      sleep.averageHeartRateBpm ?? null,
+      sleep.hrvMs ?? null,
+      sleep.averageSpo2Pct ?? null,
+      sleep.averageRespiratoryRate ?? null,
+      sleep.analysisText ?? null,
+      sleep.suggestionText ?? null,
       updatedAtIso,
     ],
   );

@@ -150,6 +150,23 @@ export function renderTrainingDebugMarkdown(parsed) {
     }
     lines.push('');
 
+    lines.push('### 睡眠');
+    lines.push('');
+    const sleep = day.sleepSummary ?? {};
+    lines.push(`- 总睡眠：${formatDebugValue(sleep.totalSleepMinutes)} 分钟`);
+    lines.push(`- 夜间睡眠：${formatDebugValue(sleep.nightSleepMinutes)} 分钟`);
+    lines.push(`- 入睡/起床：${sleep.sleepStartTime ?? '无'} → ${sleep.sleepEndTime ?? '无'}`);
+    lines.push(`- 深睡：${formatDebugValue(sleep.deepSleepMinutes)} 分钟`);
+    lines.push(`- 浅睡：${formatDebugValue(sleep.lightSleepMinutes)} 分钟`);
+    lines.push(`- REM：${formatDebugValue(sleep.remSleepMinutes)} 分钟`);
+    lines.push(`- 清醒：${formatDebugValue(sleep.awakeMinutes)} 分钟`);
+    lines.push(`- 睡眠评分：${formatDebugValue(sleep.sleepScore)} 分`);
+    lines.push(`- 平均心率：${formatDebugValue(sleep.averageHeartRateBpm)} 次/分钟`);
+    lines.push(`- HRV：${formatDebugValue(sleep.hrvMs)} 毫秒`);
+    lines.push(`- 平均血氧：${formatDebugValue(sleep.averageSpo2Pct)}%`);
+    lines.push(`- 平均呼吸率：${formatDebugValue(sleep.averageRespiratoryRate)} 次/分钟`);
+    lines.push('');
+
     lines.push('### 饮食');
     lines.push('');
     lines.push(`- 总热量：${day.nutrition.totalCalories ?? '无'} kcal`);
@@ -181,7 +198,8 @@ function resolveSnapshotSource(argv, env) {
   return configured === 'database' ? 'database' : 'markdown';
 }
 
-function isStrictDatabaseSnapshotMode(env = process.env) {
-  const flag = String(env.TRAINING_SNAPSHOT_STRICT_DATABASE ?? '').trim().toLowerCase();
-  return ['1', 'true', 'yes', 'on'].includes(flag);
+function isStrictDatabaseSnapshotMode(env) {
+  return ['1', 'true', 'yes', 'on'].includes(
+    String(env.TRAINING_SNAPSHOT_STRICT_DATABASE ?? '').trim().toLowerCase(),
+  );
 }

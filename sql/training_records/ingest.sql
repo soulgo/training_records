@@ -5,14 +5,14 @@
  Source Server Type    : PostgreSQL
  Source Server Version : 170000 (170000)
  Source Host           : 122.51.66.213:15432
- Source Catalog        : training_records
+ Source Catalog        : training_records_dev
  Source Schema         : ingest
 
  Target Server Type    : PostgreSQL
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 01/06/2026 11:15:08
+ Date: 04/06/2026 16:13:02
 */
 
 
@@ -116,9 +116,7 @@ CREATE TABLE "ingest"."telegram_recognition" (
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
-ALTER SEQUENCE "ingest"."telegram_pending_batch_pending_id_seq"
-OWNED BY "ingest"."telegram_pending_batch"."pending_id";
-SELECT setval('"ingest"."telegram_pending_batch_pending_id_seq"', 1, false);
+SELECT setval('"ingest"."telegram_pending_batch_pending_id_seq"', 2, true);
 
 -- ----------------------------
 -- Primary Key structure for table telegram_batch

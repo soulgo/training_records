@@ -53,6 +53,119 @@ test('dashboard view falls back to the latest valid daily date when latest dates
   assert.equal(view.chartPayload.charts.weightKg.length, 2);
 });
 
+test('dashboard sleep cards use the latest day that has sleep data', () => {
+  const view = buildDashboardViewModel({
+    generatedAt: '2026-06-04T00:00:00.000Z',
+    latest: {
+      measurement: { archivedDate: '2026-06-04', weightKg: 72.1 },
+      daily: buildDay('2026-06-04', {
+        measurement: { archivedDate: '2026-06-04', weightKg: 72.1 },
+        trainingCalories: 240,
+      }),
+    },
+    daily: [
+      buildDay('2026-06-03', {
+        sleepSummary: {
+          totalSleepMinutes: 411,
+          nightSleepMinutes: 411,
+          napMinutes: null,
+          deepSleepMinutes: 145,
+          lightSleepMinutes: 195,
+          remSleepMinutes: 71,
+          awakeMinutes: null,
+          sleepStartTime: '23:26',
+          sleepEndTime: '06:19',
+          sleepScore: 81,
+          deepSleepRatioPct: 35,
+          lightSleepRatioPct: 47,
+          remSleepRatioPct: 18,
+        },
+      }),
+      buildDay('2026-06-04', {
+        measurement: { archivedDate: '2026-06-04', weightKg: 72.1 },
+        trainingCalories: 240,
+      }),
+    ],
+    charts: {
+      weightKg: [{ date: '2026-06-04', value: 72.1 }],
+    },
+  });
+
+  assert.match(view.sleepCards[0].valueHtml, /411/);
+  assert.match(view.sleepCards[1].valueHtml, /145/);
+  assert.match(view.sleepCards[1].valueHtml, /195/);
+  assert.match(view.sleepCards[2].valueHtml, /35/);
+  assert.match(view.sleepCards[2].valueHtml, /47/);
+});
+
+test('dashboard sleep cards ignore incomplete latest sleep metrics without duration', () => {
+  const view = buildDashboardViewModel({
+    generatedAt: '2026-06-05T00:00:00.000Z',
+    latest: {
+      measurement: { archivedDate: '2026-06-05', weightKg: 72.1 },
+      daily: buildDay('2026-06-05', {
+        measurement: { archivedDate: '2026-06-05', weightKg: 72.1 },
+        sleepSummary: {
+          totalSleepMinutes: null,
+          nightSleepMinutes: null,
+          napMinutes: null,
+          deepSleepMinutes: 82,
+          lightSleepMinutes: 271,
+          remSleepMinutes: 85,
+          awakeMinutes: 15,
+          sleepScore: 79,
+        },
+      }),
+    },
+    daily: [
+      buildDay('2026-06-03', {
+        sleepSummary: {
+          totalSleepMinutes: 411,
+          nightSleepMinutes: 411,
+          napMinutes: null,
+          deepSleepMinutes: 145,
+          lightSleepMinutes: 115,
+          remSleepMinutes: 111,
+          awakeMinutes: null,
+        },
+      }),
+      buildDay('2026-06-04', {
+        sleepSummary: {
+          totalSleepMinutes: 473,
+          nightSleepMinutes: 473,
+          napMinutes: null,
+          deepSleepMinutes: 60,
+          lightSleepMinutes: 276,
+          remSleepMinutes: 85,
+          awakeMinutes: 52,
+          deepSleepRatioPct: 18,
+          lightSleepRatioPct: 63,
+        },
+      }),
+      buildDay('2026-06-05', {
+        measurement: { archivedDate: '2026-06-05', weightKg: 72.1 },
+        sleepSummary: {
+          totalSleepMinutes: null,
+          nightSleepMinutes: null,
+          napMinutes: null,
+          deepSleepMinutes: 82,
+          lightSleepMinutes: 271,
+          remSleepMinutes: 85,
+          awakeMinutes: 15,
+          sleepScore: 79,
+        },
+      }),
+    ],
+    charts: {},
+  });
+
+  assert.match(view.sleepCards[0].valueHtml, /473/);
+  assert.match(view.sleepCards[1].valueHtml, /60/);
+  assert.match(view.sleepCards[1].valueHtml, /276/);
+  assert.match(view.sleepCards[2].valueHtml, /18/);
+  assert.match(view.sleepCards[2].valueHtml, /63/);
+});
+
 test('dashboard view model keeps the stable rendering contract for overview cards and charts', () => {
   const view = buildDashboardViewModel({
     generatedAt: '2026-05-13T00:00:00.000Z',
@@ -67,6 +180,17 @@ test('dashboard view model keeps the stable rendering contract for overview card
         workoutDurationMinutes: 45,
         cyclingDistanceKm: 3.2,
         totalCalories: 1560,
+        sleepSummary: {
+          totalSleepMinutes: 420,
+          nightSleepMinutes: 390,
+          napMinutes: 30,
+          deepSleepMinutes: 110,
+          lightSleepMinutes: 240,
+          remSleepMinutes: 70,
+          awakeMinutes: 20,
+          sleepStartTime: '23:15',
+          sleepEndTime: '06:25',
+        },
         countsByType: { 力量训练: 1 },
       }),
     },
@@ -94,6 +218,17 @@ test('dashboard view model keeps the stable rendering contract for overview card
         workoutDurationMinutes: 45,
         cyclingDistanceKm: 3.2,
         totalCalories: 1560,
+        sleepSummary: {
+          totalSleepMinutes: 420,
+          nightSleepMinutes: 390,
+          napMinutes: 30,
+          deepSleepMinutes: 110,
+          lightSleepMinutes: 240,
+          remSleepMinutes: 70,
+          awakeMinutes: 20,
+          sleepStartTime: '23:15',
+          sleepEndTime: '06:25',
+        },
         countsByType: { 力量训练: 1 },
       }),
     ],
@@ -130,6 +265,7 @@ test('dashboard view model keeps the stable rendering contract for overview card
       'primaryMetrics',
       'recentDays',
       'secondaryMetrics',
+      'sleepCards',
       'totalArchivedDays',
       'trainedDays',
     ].sort(),
@@ -202,6 +338,11 @@ test('dashboard view model keeps the stable rendering contract for overview card
   assert.match(view.recentDays[0].cardHtml, /力量训练 × 1/);
   assert.match(view.primaryMetrics[0].comparisonHtml, /hero-card__comparison/);
   assert.match(view.secondaryMetrics[0].comparisonHtml, /metric-card__comparison/);
+  assert.match(view.sleepCards[0].comparisonHtml, /metric-card__comparison/);
+  assert.deepEqual(
+    view.sleepCards.map((card) => card.title),
+    ['总睡眠', '深睡 / 浅睡', '深睡 / 浅睡比例'],
+  );
   assert.deepEqual(
     view.chartPayload.charts.weightKg.map((point) => point.date),
     ['2026-04-13', '2026-05-12'],
@@ -237,6 +378,17 @@ function buildDay(date, overrides = null) {
         cyclingDistanceKm: overrides.cyclingDistanceKm ?? 0,
         countsByType: overrides.countsByType ?? {},
       },
+      sleepSummary: overrides.sleepSummary ?? {
+        totalSleepMinutes: null,
+        nightSleepMinutes: null,
+        napMinutes: null,
+        deepSleepMinutes: null,
+        lightSleepMinutes: null,
+        remSleepMinutes: null,
+        awakeMinutes: null,
+        sleepStartTime: null,
+        sleepEndTime: null,
+      },
       nutrition: {
         meals: [],
         totalCalories: overrides.totalCalories ?? null,
@@ -258,6 +410,17 @@ function buildDay(date, overrides = null) {
       activeHours: null,
       cyclingDistanceKm: 0,
       countsByType: {},
+    },
+    sleepSummary: {
+      totalSleepMinutes: null,
+      nightSleepMinutes: null,
+      napMinutes: null,
+      deepSleepMinutes: null,
+      lightSleepMinutes: null,
+      remSleepMinutes: null,
+      awakeMinutes: null,
+      sleepStartTime: null,
+      sleepEndTime: null,
     },
     nutrition: {
       meals: [],

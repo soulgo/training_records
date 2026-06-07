@@ -329,18 +329,29 @@ npx wrangler deploy
 并且运行时使用 `TELEGRAM_SYNC_TRANSPORT=webhook`：
 
 - `repository_dispatch` 时直接消费 webhook payload
-- `repository_dispatch` 使用快速路径：跳过全量 archive backfill、Markdown reconcile 和额外 export，只处理当前 Telegram payload 与 pending fallback
+- `repository_dispatch` 使用快速路径：跳过全量 archive backfill、Markdown reconcile 和额外 export，只处理当前 Telegram payload、pending recognition 和 pending fallback
 - `push` / 手动触发时不会再调用 `getUpdates`
 - `push` / 手动触发仍会执行完整 backfill、reconcile 和 export，用于维护或修复主数据
 - 由 `github-actions[bot]` 推送出来的同步提交会跳过二次 `Telegram Sync`
 - 仍然会重放待补偿批次并在需要时刷新 Markdown
-- 当同步提交了新的 `训练记录.md` 后，会在同一个 workflow 里直接构建并部署 GitHub Pages；不能依赖 bot push 再触发独立的 Pages workflow
+- 正常 `ready + stored` 图片批次不再默认全量导出覆盖 `训练记录.md`；如果需要更新人工账本，只对本批次目标日期做增量合并
+- 当同步提交了新的 `训练记录.md`、`source/_posts` 或 `source/images`，或仅产生 DB-only 训练数据变化时，会在同一个 workflow 里直接构建并部署 GitHub Pages；不能依赖 bot push 再触发独立的 Pages workflow
+- Telegram Sync 已经执行过 `npm ci` 后，调用共享 `site-build` 时传 `install_dependencies: false`，避免重复安装依赖
+- `repository_dispatch` 会写 GitHub Step Summary，按批次输出 `batchId`、`taskStatus`、`persistenceStatus`、`archivedDate`、图片计数、pending 状态、`failureDisposition` 和失败 message ids
+- 成功通知步骤名是 `Notify Telegram sync result`，用于表示同步结果通知，不代表每个业务批次都一定已完整入库
 - `repository_dispatch` 触发的同步如果在依赖安装、同步、测试、提交、rebase、push 或站点构建阶段失败，会运行 `tools/telegram-action-monitor.mjs` 回发 Telegram。回复会包含失败阶段、`github_action` 分类和 GitHub Actions run URL。
 
 [`deploy-pages.yml`](../../.github/workflows/deploy-pages.yml) 用于普通人工 push / 手动触发：
 
 - 在 `main` 的站点相关文件真正发生 push 后再部署
 - 不再因为一次 `Telegram Sync` 完成就无条件额外跑一次 Pages workflow
+
+[`deploy-cloudflare-pages-dev.yml`](../../.github/workflows/deploy-cloudflare-pages-dev.yml) 用于 `dev` 分支在线预览：
+
+- 调用共享 `site-build` 构建并运行快速测试
+- 删除 `public/CNAME`，避免 dev Pages 带上生产自定义域名
+- 使用固定 Wrangler 版本 direct upload `public/` 到 Cloudflare Pages
+- 默认项目名为 `training-records-dev`，可用 `CLOUDFLARE_PAGES_DEV_PROJECT_NAME` 覆盖
 
 ## 4. 自动刷新 Telegram webhook
 
@@ -405,7 +416,7 @@ Invoke-RestMethod `
 
 ## 6. 验证方法
 
-1. 给 Bot 发一张新的训练/饮食/体脂截图，应触发 1 次 `Telegram Sync`
+1. 给 Bot 发一张新的锻炼/饮食/体脂秤/睡眠截图，应触发 1 次 `Telegram Sync`
 2. 给 Bot 发 2 张相册截图，应只触发 1 次 `Telegram Sync`
 3. 给 Bot 发一条 `/thought 今天训练后背阔发力更明显` 或 `/随想 今天训练后背阔发力更明显`，应触发 1 次 `Telegram Sync`，并收到“随想写入成功”反馈
 4. 给 Bot 发一条 `/analysis 今天怎么练` 或 `/分析 最近饮食怎么样`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的分析建议
@@ -425,9 +436,11 @@ Invoke-RestMethod `
 - Telegram `/analysis` / `/分析` 默认长期目标是“增肌减腹”；如果配置了 `TRAINING_ANALYSIS_GOAL`，线上回复会优先使用该变量
 - `/analysis` 的数据来源跟随 `TRAINING_SNAPSHOT_SOURCE`；如果配置为 `database`，还需要保证 `TRAINING_DB_ENABLED`、`TRAINING_DB_URL` 和 PostgreSQL `core.*` 数据可用
 - PostgreSQL 失败时，Telegram 同步会回退写 Markdown，并把待补偿批次写到 `runtime/telegram-sync-pending.ndjson`
+- PostgreSQL 成功时，Telegram 图片批次只增量写入当前批次和目标日期汇总，不会删除同日其它模块，也不会每次全量覆盖 `训练记录.md`
 - 对 `/thought` 来说，“回退写 Markdown”指的是保留已经生成在 `source/_posts/` 下的随想文件，并把待补偿入库信息写到 `runtime/telegram-sync-pending.ndjson`
 - 随想新增、编辑、删除、移动现在会回发成功反馈；如果数据库失败但 Markdown 已写入，反馈会明确说明“数据库待补偿”
 - 图片识别、随想、`/analysis` 和 `/ai` 的失败反馈会尽量标注 `user_input`、`ai_service`、`telegram_api`、`database`、`github_action` 或 `system_bug`
+- 睡眠截图按醒来日期减一天归档，并写入 `core.sleep`、`core.training_day` 睡眠汇总和 `archive.training_sleep`
 - PostgreSQL 恢复后，后续同步会先重放待补偿批次
 - `deploy-pages.yml` 是否依赖 PostgreSQL，取决于 `TRAINING_SNAPSHOT_SOURCE`
   - `markdown`：页面构建不依赖 PostgreSQL

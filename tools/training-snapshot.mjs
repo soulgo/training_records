@@ -30,10 +30,10 @@ export async function buildTrainingSnapshot(options = {}) {
       }
       throw new Error('database snapshot is empty or missing measurements');
     } catch (error) {
-      if (isIncompleteDatabaseSnapshotError(error)) {
-        throw error;
-      }
       const message = error instanceof Error ? error.message : String(error);
+      if (isIncompleteDatabaseSnapshotError(error) || isUnavailableDatabaseSnapshotError(error)) {
+        return readTrainingSnapshotFromMarkdown(rootDir, options.now);
+      }
       throw new Error(`database snapshot unavailable: ${message}`);
     }
   }
