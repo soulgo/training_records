@@ -118,10 +118,13 @@ npm run server
 | 变量 | 作用 |
 | --- | --- |
 | `TRAINING_SNAPSHOT_SOURCE` | 页面和分析数据源，`markdown` 或 `database`，默认 `markdown` |
+| `TRAINING_SNAPSHOT_STRICT_DATABASE` | 严格数据库快照模式，数据库源失败时不回退 Markdown，默认 `false` |
 | `TRAINING_DB_ENABLED` | 是否启用 PostgreSQL |
 | `TRAINING_DB_URL` | PostgreSQL 连接串 |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot token |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | 允许处理的 Telegram chat id，逗号分隔 |
+| `TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE` | 图片识别输入模式：`auto`、`url` 或 `inline`；Action 默认 `inline` |
+| `TELEGRAM_RECOGNITION_MODEL` | 可选，仅覆盖 Telegram 图片识别模型 |
 | `AI_API_KEY` | AI 服务鉴权 |
 | `AI_BASE_URL` | Chat Completions base URL |
 | `AI_MODEL` | AI 模型名 |
@@ -149,7 +152,7 @@ Telegram 自动流程：
 4. 图片批次调用 AI 识别；随想、分析、AI Agent 按命令分支处理。
 5. 图片和随想优先写 PostgreSQL。
 6. PostgreSQL 失败时写 Markdown 或 pending 队列。
-7. 内容变化后 workflow 提交文件并部署 GitHub Pages。
+7. 内容变化后 workflow 只提交文件；站点构建部署由 push 或 DB-only 异步 deploy workflow 完成。
 
 详细规则见 [训练记录生成与解析](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/训练系统/训练记录生成与解析.md)。
 
@@ -168,7 +171,7 @@ Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` �
 | `ci-tests.yml` | 运行 `npm test` |
 | `deploy-pages.yml` | 构建并部署 GitHub Pages |
 | `deploy-cloudflare-pages-dev.yml` | 构建 dev 分支并部署 Cloudflare Pages 预览 |
-| `telegram-sync.yml` | 处理 Telegram 同步、提交内容变化并部署站点 |
+| `telegram-sync.yml` | 处理 Telegram 同步、提交内容变化，并在 DB-only 入库时异步触发站点部署 |
 | `deploy-cloudflare-worker.yml` | 部署 Cloudflare Worker，并刷新 Telegram webhook |
 | `refresh-telegram-webhook.yml` | 手动或每 6 小时刷新 Telegram webhook |
 
@@ -181,7 +184,7 @@ Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` �
 - `训练记录.md`：人工可读、人工修订、页面默认数据源和数据库故障回退层。
 - PostgreSQL `core.*`：Telegram 自动同步后的主结构化数据层。
 
-`TRAINING_SNAPSHOT_SOURCE=markdown` 时，页面从 Markdown 构建；`TRAINING_SNAPSHOT_SOURCE=database` 时，页面从 PostgreSQL 构建。数据库源不可用时，部分构建路径会按现有 fallback 规则回退到 Markdown。
+`TRAINING_SNAPSHOT_SOURCE=markdown` 时，页面从 Markdown 构建；`TRAINING_SNAPSHOT_SOURCE=database` 时，页面从 PostgreSQL 构建。数据库源不可用时，部分构建路径会按现有 fallback 规则回退到 Markdown；DB-only 异步部署会启用 `TRAINING_SNAPSHOT_STRICT_DATABASE=true`，避免读库失败时发布旧 Markdown 页面。
 
 ## 常见维护操作
 

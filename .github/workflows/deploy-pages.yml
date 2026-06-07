@@ -2,6 +2,11 @@ name: Deploy GitHub Pages
 
 on:
   workflow_dispatch:
+    inputs:
+      strict_database_snapshot:
+        description: Fail the build instead of falling back to Markdown when the database snapshot is unavailable.
+        required: false
+        default: 'false'
   push:
     branches:
       - main
@@ -37,6 +42,7 @@ jobs:
       TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
       TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
       TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
+      TRAINING_SNAPSHOT_STRICT_DATABASE: ${{ github.event_name == 'workflow_dispatch' && inputs.strict_database_snapshot || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

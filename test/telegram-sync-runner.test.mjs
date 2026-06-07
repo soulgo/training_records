@@ -7,8 +7,11 @@ import path from 'node:path';
 
 import {
   buildTelegramSyncReport,
+  createRecognitionAiProvider,
   loadRecognitionSystemPrompt,
+  recognizeBatch,
   runTelegramSync,
+  resolveRecognitionImageInputMode,
   shouldPersistTelegramArtifacts,
 } from '../tools/telegram-sync.mjs';
 import { notifyTelegramActionFailure } from '../tools/telegram-action-monitor.mjs';
@@ -127,10 +130,124 @@ test('recognition cache key changes with prompt schema and model versions', () =
   assert.equal(isRecognitionCacheEnabled({ TELEGRAM_RECOGNITION_CACHE_ENABLED: '' }), false);
 });
 
-test('runTelegramSync persists ready batches to the database and exports derived markdown', async () => {
+test('recognition image input mode defaults to auto with inline retry and accepts explicit modes', () => {
+  assert.equal(resolveRecognitionImageInputMode({}), 'auto');
+  assert.equal(resolveRecognitionImageInputMode({ TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: 'inline' }), 'inline');
+  assert.equal(resolveRecognitionImageInputMode({ TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: 'url' }), 'url');
+  assert.equal(resolveRecognitionImageInputMode({ TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: 'AUTO' }), 'auto');
+  assert.equal(resolveRecognitionImageInputMode({ TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: 'invalid' }), 'auto');
+});
+
+test('createRecognitionAiProvider overrides only the image recognition model when configured', () => {
+  const defaultProvider = {
+    name: 'test-provider',
+    env: { model: 'gpt-default' },
+    async requestChatCompletion() {
+      throw new Error('not used');
+    },
+  };
+
+  assert.equal(createRecognitionAiProvider({}, defaultProvider), defaultProvider);
+
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-default',
+      TELEGRAM_RECOGNITION_MODEL: 'gpt-vision-fast',
+    },
+    defaultProvider,
+  );
+
+  assert.notEqual(recognitionProvider, defaultProvider);
+  assert.equal(recognitionProvider.env.model, 'gpt-vision-fast');
+});
+
+test('recognizeBatch sends inline Telegram image data when inline mode is configured', async () => {
+  const requestedImageUrls = [];
+  const downloadedFileIds = [];
+
+  const result = await recognizeBatch(
+    {
+      batchId: 'single-inline',
+      messages: [
+        {
+          messageId: 701,
+          updateId: 901,
+          mediaGroupId: null,
+          caption: '归档到 2026-05-31',
+          text: '',
+          chatId: 42,
+          dateUnix: Math.floor(new Date('2026-05-31T02:30:00Z').getTime() / 1000),
+          photos: [{ fileId: 'file-inline', fileUniqueId: 'uniq-inline', source: 'photo' }],
+        },
+      ],
+    },
+    {
+      botToken: 'token',
+      aiConcurrency: 1,
+    },
+    {
+      rawEnv: {
+        TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: 'inline',
+      },
+      fetchTelegramFileById: async (fileId) => {
+        downloadedFileIds.push(fileId);
+        return {
+          filePath: 'photos/file-inline.jpg',
+          contentType: 'image/jpeg',
+          data: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+        };
+      },
+      aiProvider: {
+        env: { model: 'gpt-vision-fast' },
+        async requestChatCompletion(input) {
+          const imagePart = input.messages?.[1]?.content?.find((part) => part.type === 'image_url');
+          requestedImageUrls.push(imagePart?.image_url?.url ?? '');
+          return {
+            ok: true,
+            async json() {
+              return {
+                choices: [
+                  {
+                    message: {
+                      content: JSON.stringify({
+                        imageType: 'nutrition',
+                        detectedDate: '2026-05-31',
+                        dateEvidence: 'image header',
+                        confidence: 0.98,
+                        warnings: [],
+                        records: {
+                          measurement: null,
+                          activities: [],
+                          meals: [{ name: '晚餐', calories: 868, recommendedMin: 310, recommendedMax: 723 }],
+                          totalCalories: 868,
+                          details: ['晚餐 868 千卡'],
+                          dailyWorkoutSummary: null,
+                        },
+                      }),
+                    },
+                  },
+                ],
+              };
+            },
+          };
+        },
+      },
+    },
+  );
+
+  assert.deepEqual(downloadedFileIds, ['file-inline']);
+  assert.equal(requestedImageUrls.length, 1);
+  assert.match(requestedImageUrls[0], /^data:image\/jpeg;base64,/);
+  assert.equal(result.recognitions.length, 1);
+  assert.equal(result.recognitions[0].model, 'gpt-vision-fast');
+  assert.equal(result.recognitionErrors.length, 0);
+});
+
+test('runTelegramSync persists ready batches to the database and rewrites markdown incrementally', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-runner-'));
   const persistedBatches = [];
-  const writtenMarkdown = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -179,54 +296,19 @@ test('runTelegramSync persists ready batches to the database and exports derived
       persistedBatches.push(batch);
       return { status: 'stored', archivedDate: batch.archivedDate };
     },
-    buildTrainingSnapshot: async () => ({
-      generatedAt: '2026-05-13T00:00:00.000Z',
-      latest: {
-        measurement: null,
-        daily: { date: '2026-05-09' },
-      },
-      daily: [
-        {
-          date: '2026-05-09',
-          measurement: null,
-          measurements: [],
-          activities: [],
-          workoutSummary: {
-            totalActivities: 0,
-            totalDurationSeconds: 0,
-            trainingCalories: 0,
-            workoutDurationMinutes: null,
-            activeHours: null,
-            cyclingDistanceKm: 0,
-            countsByType: {},
-          },
-          nutrition: {
-            meals: [{ name: '晚餐', calories: 1065, recommendedMin: 317, recommendedMax: 740 }],
-            totalCalories: 1593,
-            details: ['晚餐 1065 千卡'],
-          },
-        },
-      ],
-      charts: {
-        weightKg: [],
-        bodyFatPct: [],
-        skeletalMuscleKg: [],
-        basalMetabolism: [],
-        visceralFatLevel: [],
-        intakeCalories: [],
-        trainingCalories: [],
-        cyclingDistanceKm: [],
-      },
-    }),
-    exportTrainingMarkdown: (snapshot) => {
-      writtenMarkdown.push(snapshot);
-      return '### 2026-05-09\n';
+    buildTrainingSnapshot: async () => {
+      throw new Error('Telegram sync should not block on rebuilding a database snapshot');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('Telegram sync should not export a database snapshot inline');
     },
   });
 
   assert.equal(result.changed, true);
   assert.equal(persistedBatches.length, 1);
-  assert.equal(writtenMarkdown.length, 1);
+  assert.ok(result.timingsMs.recognition >= 0);
+  assert.ok(result.timingsMs.persist >= 0);
+  assert.ok(result.timingsMs.total >= 0);
   assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /2026-05-09/);
 });
 
@@ -832,6 +914,45 @@ test('buildTelegramSyncReport exposes fallback and archived date details for log
       },
     ],
   });
+});
+
+test('buildTelegramSyncReport includes optional sync stage timings', () => {
+  const report = buildTelegramSyncReport({
+    changed: true,
+    fallbackUsed: false,
+    updatesFetched: 1,
+    lastProcessedUpdateId: 520905500,
+    readyBatches: 1,
+    timingsMs: {
+      resolveUpdates: 1.4,
+      recognition: 1234.6,
+      persist: 22,
+      total: 1300.2,
+      skippedNegative: -1,
+      skippedText: 'slow',
+    },
+    batchResults: [],
+  });
+
+  assert.deepEqual(report.timingsMs, {
+    resolveUpdates: 1,
+    recognition: 1235,
+    persist: 22,
+    total: 1300,
+  });
+});
+
+test('buildTelegramSyncReport omits timings when unavailable for compatibility', () => {
+  const report = buildTelegramSyncReport({
+    changed: false,
+    fallbackUsed: false,
+    updatesFetched: 0,
+    lastProcessedUpdateId: 520905501,
+    readyBatches: 0,
+    batchResults: [],
+  });
+
+  assert.equal(Object.hasOwn(report, 'timingsMs'), false);
 });
 
 test('runTelegramSync replays pending fallback batches into the database before new updates', async () => {

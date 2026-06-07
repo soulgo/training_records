@@ -37,7 +37,7 @@ export async function generateTrainingData(options = {}) {
   const canFallbackFromDatabase = canUseDatabaseFallback({
     source: snapshotSource,
     config: trainingDbConfig,
-  });
+  }) && !isStrictDatabaseSnapshotMode(env);
 
   const markdown = await readFile(recordPath, 'utf8');
   const snapshotOptions = {
@@ -179,4 +179,9 @@ function resolveSnapshotSource(argv, env) {
   }
   const configured = String(env.TRAINING_SNAPSHOT_SOURCE ?? 'markdown').trim().toLowerCase();
   return configured === 'database' ? 'database' : 'markdown';
+}
+
+function isStrictDatabaseSnapshotMode(env = process.env) {
+  const flag = String(env.TRAINING_SNAPSHOT_STRICT_DATABASE ?? '').trim().toLowerCase();
+  return ['1', 'true', 'yes', 'on'].includes(flag);
 }

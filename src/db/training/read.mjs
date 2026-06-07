@@ -220,7 +220,7 @@ export async function getLastProcessedTelegramUpdateId(options = {}) {
   }
 }
 
-export async function readTrainingSnapshotFromDatabaseClient(client, now) {
+export async function readTrainingSnapshotFromDatabaseClient(client, now, dateFrom, dateTo) {
   const dayResult = await client.query(TRAINING_DAY_QUERY);
   const measurementResult = await client.query(TRAINING_MEASUREMENT_QUERY);
   const activityResult = await client.query(TRAINING_ACTIVITY_QUERY);
@@ -234,10 +234,40 @@ export async function readTrainingSnapshotFromDatabaseClient(client, now) {
     mealRows: mealResult.rows,
     bodyFeedbackRows: bodyFeedbackResult.rows,
     now,
+    dateFrom,
+    dateTo,
   });
 }
 
-async function readTrainingSnapshotFromDatabaseWithClients({ createClient, config, now, dateFrom, dateTo }) {
+async function readTrainingSnapshotFromDatabaseWithClients(options) {
+  try {
+    return await readTrainingSnapshotFromDatabaseWithParallelClients(options);
+  } catch (error) {
+    process.stderr.write(
+      `[training-db-read] parallel core snapshot read failed: ${formatErrorMessage(error)}; retrying with one client\n`,
+    );
+    const client = options.createClient(options.config);
+    try {
+      await client.connect();
+      return await readTrainingSnapshotFromDatabaseClient(
+        client,
+        options.now,
+        options.dateFrom,
+        options.dateTo,
+      );
+    } finally {
+      await client.end?.();
+    }
+  }
+}
+
+async function readTrainingSnapshotFromDatabaseWithParallelClients({
+  createClient,
+  config,
+  now,
+  dateFrom,
+  dateTo,
+}) {
   const clients = Array.from({ length: 5 }, () => createClient(config));
 
   try {
@@ -519,4 +549,8 @@ function formatDatePartsInShanghai(date) {
     date: `${parts.year}-${parts.month}-${parts.day}`,
     time: `${parts.hour}:${parts.minute}`,
   };
+}
+
+function formatErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
 }
