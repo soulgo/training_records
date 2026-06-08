@@ -13,6 +13,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- V11 优化 Telegram 同步与构建链路：部署构建通过 `TRAINING_BUILD_ARCHIVE_WRITE=false` 跳过 archive 写库，archive 写入支持相同 `source_hash` 早停和批量 upsert，Telegram sleep backfill 只在真实 sleep 入库或显式开关时运行。
+- Telegram Sync main/dev workflow 显式透传 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_CACHE_ENABLED`，便于在 GitHub Settings 中切换 OpenAI-compatible 服务。
+- Telegram 图片增量入库刷新 `core.training_day` 汇总时改为单条 CTE upsert，减少远程 PostgreSQL 往返并保留未覆盖模块。
+
 ## [1.2.4] - 2026-06-08
 
 ### Added

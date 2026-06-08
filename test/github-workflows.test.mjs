@@ -54,6 +54,7 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /deploy:\s*'true'/);
   assert.match(workflow, /strict_database_snapshot:/);
   assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:/);
+  assert.match(workflow, /TRAINING_BUILD_ARCHIVE_WRITE:\s*false/);
 });
 
 test('ci-tests workflow runs npm run test:fast without deploying Pages', async () => {
@@ -119,6 +120,7 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_URL\s*\}\}/);
   assert.match(workflow, /TRAINING_DB_APP_NAME:\s*\$\{\{\s*vars\.DEV_TRAINING_DB_APP_NAME\s*\}\}/);
   assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:/);
+  assert.match(workflow, /TRAINING_BUILD_ARCHIVE_WRITE:\s*false/);
   assert.match(workflow, /ref:\s*dev/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
@@ -210,8 +212,11 @@ test('telegram-sync workflow notifies after sync and dispatches async site deplo
   assert.match(workflow, /batchId \| taskStatus \| persistenceStatus \| archivedDate \| images \| pending \| failureDisposition \| failed messageIds/);
   assert.match(workflow, /TELEGRAM_SYNC_NOTIFY_STAGE: after_action/);
   assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH: \$\{\{ runner\.temp \}\}\/telegram-sync-result\.json/);
+  assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
+  assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_MODEL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
   assert.match(workflow, /- name: Trigger async site deploy/);
   assert.match(workflow, /actions\/workflows\/deploy-pages\.yml\/dispatches/);
   assert.match(workflow, /steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/);
@@ -251,6 +256,9 @@ test('telegram-sync workflows keep database-only detection without blocking on p
 
   for (const workflow of [prodWorkflow, devWorkflow]) {
     assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH/);
+    assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
+    assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
+    assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
     assert.match(workflow, /db_content_changed=true/);
     assert.match(workflow, /readyStoredTrainingBatches/);
     assert.match(workflow, /- name: Write Telegram sync summary/);
@@ -305,8 +313,11 @@ test('telegram-sync dev workflow leaves Pages deployment to the dev deploy workf
   assert.doesNotMatch(workflow, /STEP_PAGES_DEPLOY_OUTCOME/);
   assert.match(workflow, /- name: Trigger async dev site deploy/);
   assert.match(workflow, /actions\/workflows\/deploy-cloudflare-pages-dev\.yml\/dispatches/);
+  assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
+  assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_MODEL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
   assert.match(workflow, /-d '\{"ref":"dev","inputs":\{"strict_database_snapshot":"true"\}\}'/);
   assert.match(deployWorkflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
   assert.match(deployWorkflow, /workflow_dispatch:/);

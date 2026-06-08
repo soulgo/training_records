@@ -487,8 +487,9 @@ test('persistNormalizedBatch upserts measurement without deleting other core mod
   assert.equal(calls.some(([sql]) => /insert into core\.meal/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal|sleep)/i.test(sql)), false);
-  assert.deepEqual(trainingDayInsert[1][9], 900);
-  assert.deepEqual(trainingDayInsert[1][10], JSON.stringify(['existing dinner']));
+  assert.match(trainingDayInsert[0], /existing_day/i);
+  assert.equal(trainingDayInsert[1][9], false);
+  assert.equal(trainingDayInsert[1][10], false);
 });
 
 test('persistNormalizedBatch upserts activity without deleting same-day nutrition or sleep', async () => {
@@ -543,9 +544,9 @@ test('persistNormalizedBatch upserts activity without deleting same-day nutritio
   assert.equal(calls.some(([sql]) => /insert into core\.meal/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal|sleep)/i.test(sql)), false);
-  assert.deepEqual(trainingDayInsert[1][3], 2);
-  assert.deepEqual(trainingDayInsert[1][5], normalizedBatch.workoutDailySummary.activityCaloriesKcal);
-  assert.deepEqual(trainingDayInsert[1][10], JSON.stringify(['existing dinner']));
+  assert.equal(trainingDayInsert[1][3], normalizedBatch.workoutDailySummary.activityCaloriesKcal);
+  assert.equal(trainingDayInsert[1][9], true);
+  assert.equal(trainingDayInsert[1][10], false);
 });
 
 test('persistNormalizedBatch upserts nutrition details without deleting activity or sleep', async () => {
@@ -606,8 +607,10 @@ test('persistNormalizedBatch upserts nutrition details without deleting activity
   assert.equal(calls.some(([sql]) => /insert into core\.activity/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal|sleep)/i.test(sql)), false);
-  assert.deepEqual(trainingDayInsert[1][9], normalizedBatch.nutrition.totalCalories);
-  assert.deepEqual(trainingDayInsert[1][10], JSON.stringify(normalizedBatch.nutrition.details));
+  assert.equal(trainingDayInsert[1][6], normalizedBatch.nutrition.totalCalories);
+  assert.equal(trainingDayInsert[1][7], JSON.stringify(normalizedBatch.nutrition.details));
+  assert.equal(trainingDayInsert[1][9], false);
+  assert.equal(trainingDayInsert[1][10], true);
 });
 
 test('persistNormalizedBatch upserts sleep without deleting nutrition details', async () => {
@@ -681,7 +684,59 @@ test('persistNormalizedBatch upserts sleep without deleting nutrition details', 
   assert.equal(calls.some(([sql]) => /insert into core\.activity/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /insert into core\.meal/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal|sleep)/i.test(sql)), false);
-  assert.deepEqual(trainingDayInsert[1][10], JSON.stringify(['existing dinner']));
+  assert.match(trainingDayInsert[0], /existing_day/i);
+  assert.equal(trainingDayInsert[1][9], false);
+  assert.equal(trainingDayInsert[1][10], false);
+});
+
+test('persistNormalizedBatch refreshes core training day summary with one CTE upsert', async () => {
+  const { calls, client } = createIncrementalPersistClient({
+    activitySummary: { total_activities: 1, total_duration_seconds: 600, training_calories: 120, cycling_distance_km: 0 },
+    mealSummary: { intake_calories: 900 },
+    daySummary: {
+      workout_duration_minutes: 10,
+      active_hours: 1,
+      intake_calories: 900,
+      nutrition_details_json: ['existing dinner'],
+    },
+  });
+
+  await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'summary-cte',
+      measurement: null,
+      activities: [],
+      workoutDailySummary: null,
+      nutrition: { meals: [], totalCalories: null, details: [] },
+      sleep: null,
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return client;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  const trainingDayInsert = calls.filter(([sql]) => /insert into core\.training_day/i.test(sql)).at(-1);
+  const oldSummaryReads = calls.filter(([sql]) =>
+    (/^\s*select[\s\S]*count\(\*\)::integer as total_activities/i.test(sql)) ||
+    (/^\s*select\s+coalesce\(sum\(calories\), 0\)::integer as intake_calories/i.test(sql)) ||
+    (/^\s*select\s+workout_duration_minutes/i.test(sql) && /from core\.training_day/i.test(sql))
+  );
+
+  assert.ok(trainingDayInsert);
+  assert.match(trainingDayInsert[0], /with\s+activity_summary/i);
+  assert.match(trainingDayInsert[0], /meal_summary/i);
+  assert.match(trainingDayInsert[0], /existing_day/i);
+  assert.match(trainingDayInsert[0], /case\s+when\s+\$10::boolean/i);
+  assert.match(trainingDayInsert[0], /case\s+when\s+\$11::boolean/i);
+  assert.equal(oldSummaryReads.length, 0);
+  assert.equal(trainingDayInsert[1][9], false);
+  assert.equal(trainingDayInsert[1][10], false);
 });
 
 test('persistNormalizedBatch stores sleep payload in core without writing archive sleep', async () => {
@@ -764,7 +819,8 @@ test('persistNormalizedBatch stores sleep payload in core without writing archiv
   assert.equal(archiveSleepInsert, undefined);
   assert.equal(archiveSnapshotInsert, undefined);
   assert.ok(ingestBatchInsert);
-  assert.match(sleepInsert[0], /\$16::jsonb\[\]/i);
+  assert.match(sleepInsert[0], /\$16::text\[\]/i);
+  assert.doesNotMatch(sleepInsert[0], /sleep_stage_detail[\s\S]*jsonb\[\]/i);
   assert.equal(sleepInsert[1][0][0], createHash('md5').update('2026-06-03|夜间睡眠|23:26|06:19|411').digest('hex'));
   assert.deepEqual(sleepInsert[1][1], ['2026-06-03']);
   assert.deepEqual(sleepInsert[1][7], [411]);
@@ -774,7 +830,7 @@ test('persistNormalizedBatch stores sleep payload in core without writing archiv
   assert.deepEqual(sleepInsert[1][17], [77]);
   assert.deepEqual(sleepInsert[1][24], [68]);
   assert.deepEqual(sleepInsert[1][29], ['建议睡觉时关灯。']);
-  assert.equal(trainingDayInsert[1].length, 12);
+  assert.equal(trainingDayInsert[1].length, 11);
   assert.equal(JSON.parse(ingestBatchInsert[1][9]).sleep.records[0].totalSleepMinutes, 411);
   assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal|sleep)/i.test(sql)), false);
 });
@@ -877,7 +933,7 @@ test('persistNormalizedBatch merges an existing core day using only schema-defin
   assert.equal(calls.some(([sql]) => /archive\.training_sleep/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /delete from core\.sleep/i.test(sql)), false);
-  assert.equal(trainingDayInsert[1].length, 12);
+  assert.equal(trainingDayInsert[1].length, 11);
 });
 
 test('backfillCoreSleepFromIngestBatchesClient does not write archive sleep without source hash', async () => {

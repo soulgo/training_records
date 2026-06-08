@@ -211,7 +211,7 @@ export async function runTelegramSync(options = {}) {
     readPendingFallbackBatches(pendingQueuePath),
   );
   let replayStoredAny = false;
-  let replayStoredImageAny = false;
+  let storedSleepAny = false;
 
   await measureSyncStage(timings, 'replayFallbackPersist', async () => {
     for (const pending of pendingBatches) {
@@ -223,9 +223,11 @@ export async function runTelegramSync(options = {}) {
         });
         if (replayResult.status === 'stored' || replayResult.status === 'unchanged') {
           replayStoredAny = replayStoredAny || replayResult.status === 'stored';
-          replayStoredImageAny =
-            replayStoredImageAny ||
-            (isTrainingDataBatchKind(pending.batch?.kind) && replayResult.status === 'stored');
+          storedSleepAny =
+            storedSleepAny ||
+            (isTrainingDataBatchKind(pending.batch?.kind) &&
+              replayResult.status === 'stored' &&
+              hasSleepBatchPayload(pending.batch));
           pending.replayed = true;
         }
       } catch {
@@ -277,7 +279,9 @@ export async function runTelegramSync(options = {}) {
     }),
   );
   changed ||= replayRecognitionResults.changed;
-  replayStoredImageAny ||= replayRecognitionResults.replayStoredImageAny;
+  storedSleepAny ||= replayRecognitionResults.batchResults.some((batch) =>
+    batch.persistenceStatus === 'stored' && hasSleepBatchPayload(batch)
+  );
   batchResults.push(...replayRecognitionResults.batchResults);
 
   for (const batch of grouped) {
@@ -414,7 +418,7 @@ export async function runTelegramSync(options = {}) {
         persistResult.status === 'stored' &&
         hasSleepBatchPayload(persistedBatch);
       changed ||= persistedBatch.status === 'ready' && persistResult.status === 'stored';
-      replayStoredImageAny ||= storedSleepImageBatch;
+      storedSleepAny ||= storedSleepImageBatch;
       batchResults.push({
         ...persistedBatch,
         persistenceStatus: persistResult.status,
@@ -453,7 +457,7 @@ export async function runTelegramSync(options = {}) {
     updates.reduce((max, update) => Math.max(max, update.update_id ?? 0), 0),
   );
 
-  if (shouldRunSleepBackfill({ rawEnv, replayStoredImageAny })) {
+  if (shouldRunSleepBackfill({ rawEnv, storedSleepAny })) {
     try {
       await measureSyncStage(timings, 'sleepBackfill', () =>
         backfillCoreSleep({
@@ -559,7 +563,7 @@ export function createRecognitionAiProvider(rawEnv, defaultProvider) {
   });
 }
 
-function shouldRunSleepBackfill({ rawEnv, replayStoredImageAny }) {
+function shouldRunSleepBackfill({ rawEnv, storedSleepAny }) {
   const flag = String(rawEnv.TELEGRAM_SYNC_RUN_SLEEP_BACKFILL ?? '').trim().toLowerCase();
   if (['1', 'true', 'yes', 'on'].includes(flag)) {
     return true;
@@ -567,7 +571,7 @@ function shouldRunSleepBackfill({ rawEnv, replayStoredImageAny }) {
   if (['0', 'false', 'no', 'off'].includes(flag)) {
     return false;
   }
-  return replayStoredImageAny;
+  return storedSleepAny;
 }
 
 function hasSleepBatchPayload(batch) {

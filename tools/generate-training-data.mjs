@@ -79,6 +79,23 @@ export async function generateTrainingData(options = {}) {
 
   const runtimeContext = resolveTrainingArchiveRuntimeContext({ env, argv });
   const runFinishedAt = options.runFinishedAt ?? new Date();
+  const archiveWriteDecision = resolveBuildArchiveWriteDecision({
+    env,
+    snapshotSource,
+    strictDatabaseSnapshot: isStrictDatabaseSnapshotMode(env),
+  });
+
+  if (!archiveWriteDecision.enabled) {
+    stderr.write(`[training-db-archive] skipped by TRAINING_BUILD_ARCHIVE_WRITE=${archiveWriteDecision.mode}\n`);
+    return {
+      rootDir,
+      recordPath,
+      outputPath,
+      dashboardViewPath,
+      debugOutputPath,
+      parsed,
+    };
+  }
 
   try {
     await persistArchive({
@@ -202,4 +219,32 @@ function isStrictDatabaseSnapshotMode(env) {
   return ['1', 'true', 'yes', 'on'].includes(
     String(env.TRAINING_SNAPSHOT_STRICT_DATABASE ?? '').trim().toLowerCase(),
   );
+}
+
+function resolveBuildArchiveWriteDecision({ env, snapshotSource, strictDatabaseSnapshot }) {
+  const mode = normalizeBuildArchiveWriteMode(env.TRAINING_BUILD_ARCHIVE_WRITE);
+
+  if (mode === 'true') {
+    return {
+      mode,
+      enabled: true,
+    };
+  }
+
+  if (mode === 'false') {
+    return {
+      mode,
+      enabled: false,
+    };
+  }
+
+  return {
+    mode,
+    enabled: snapshotSource === 'markdown' && !strictDatabaseSnapshot,
+  };
+}
+
+function normalizeBuildArchiveWriteMode(value) {
+  const normalized = String(value ?? 'auto').trim().toLowerCase();
+  return ['auto', 'true', 'false'].includes(normalized) ? normalized : 'auto';
 }

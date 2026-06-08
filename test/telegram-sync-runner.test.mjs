@@ -679,6 +679,136 @@ test('runTelegramSync can explicitly run sleep backfill for a fresh stored image
   assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), true);
 });
 
+test('runTelegramSync runs sleep backfill when pending recognition replay stores sleep data', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-pending-sleep-backfill-'));
+  await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');
+  const backfillCalls = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv({
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+    }),
+    repositoryDispatchEvent: { client_payload: {} },
+    getLastProcessedUpdateId: async () => 900,
+    readPendingRecognitionBatches: async () => [
+      {
+        batchId: 'pending-sleep',
+        batch: {
+          kind: 'image',
+          batchId: 'pending-sleep',
+          messages: [
+            {
+              messageId: 129,
+              updateId: 901,
+              dateUnix: 1775433600,
+              chatId: 42,
+              caption: '归档到 2026-05-30',
+              photos: [{ fileId: 'file-sleep', fileUniqueId: 'uniq-sleep' }],
+            },
+          ],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 129,
+        imageType: 'sleep',
+        detectedDate: '2026-05-30',
+        dateEvidence: 'image header',
+        confidence: 0.97,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [],
+          totalCalories: null,
+          details: [],
+          dailyWorkoutSummary: null,
+          sleep: {
+            totalSleepMinutes: 505,
+            nightSleepMinutes: 505,
+            bedtime: '22:56',
+            wakeTime: '07:21',
+          },
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    markPendingRecognitionResolved: async ({ batchId }) => ({ status: 'resolved', batchId }),
+    appendPendingRecognitionBatch: async () => ({ status: 'queued' }),
+    backfillCoreSleepFromIngestBatches: async (input) => {
+      backfillCalls.push(input);
+      return { status: 'synced' };
+    },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(backfillCalls.length, 1);
+  assert.equal(backfillCalls[0].sourceChannel, 'telegram_sync');
+  assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), true);
+});
+
+test('runTelegramSync does not run sleep backfill when pending recognition replay stores non-sleep data', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-pending-nonsleep-backfill-'));
+  await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv({
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+    }),
+    repositoryDispatchEvent: { client_payload: {} },
+    getLastProcessedUpdateId: async () => 900,
+    readPendingRecognitionBatches: async () => [
+      {
+        batchId: 'pending-food',
+        batch: {
+          kind: 'image',
+          batchId: 'pending-food',
+          messages: [
+            {
+              messageId: 130,
+              updateId: 901,
+              dateUnix: 1775433600,
+              chatId: 42,
+              caption: '归档到 2026-05-30',
+              photos: [{ fileId: 'file-food', fileUniqueId: 'uniq-food' }],
+            },
+          ],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 130,
+        imageType: 'nutrition',
+        detectedDate: '2026-05-30',
+        dateEvidence: 'image header',
+        confidence: 0.97,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [{ name: '晚餐', calories: 329, recommendedMin: 310, recommendedMax: 723 }],
+          totalCalories: 329,
+          details: ['晚餐 329 千卡'],
+          dailyWorkoutSummary: null,
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    markPendingRecognitionResolved: async ({ batchId }) => ({ status: 'resolved', batchId }),
+    appendPendingRecognitionBatch: async () => ({ status: 'queued' }),
+    backfillCoreSleepFromIngestBatches: async () => {
+      throw new Error('sleep backfill should not run for non-sleep pending replay');
+    },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), false);
+});
+
 test('runTelegramSync queues database replay when image persistence fails', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-fallback-'));
 
@@ -1326,8 +1456,7 @@ test('runTelegramSync replays pending fallback batches into the database before 
 
   assert.equal(result.changed, true);
   assert.deepEqual(persistedBatchIds, ['pending-batch']);
-  assert.equal(backfillCalls.length, 1);
-  assert.equal(backfillCalls[0].sourceChannel, 'telegram_sync');
+  assert.equal(backfillCalls.length, 0);
   assert.equal(
     await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
     '',
@@ -4744,7 +4873,7 @@ test('runTelegramSync replays pending recognition batches and marks them resolve
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].nutrition.totalCalories, 868);
   assert.deepEqual(resolved, ['single-383']);
-  assert.equal(backfillCalls.length, 1);
+  assert.equal(backfillCalls.length, 0);
 });
 
 test('runTelegramSync uses the normalized runtime env for first-time and replayed image recognition', async () => {

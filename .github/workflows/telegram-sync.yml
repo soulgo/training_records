@@ -55,11 +55,14 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openai-compatible' }}
           AI_BASE_URL: ${{ vars.AI_BASE_URL }}
           AI_MODEL: ${{ vars.AI_MODEL }}
+          AI_TIMEOUT_MS: ${{ vars.AI_TIMEOUT_MS }}
           AI_CONCURRENCY: ${{ vars.AI_CONCURRENCY }}
           TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline
           TELEGRAM_RECOGNITION_MODEL: ${{ vars.TELEGRAM_RECOGNITION_MODEL }}
+          TELEGRAM_RECOGNITION_CACHE_ENABLED: ${{ vars.TELEGRAM_RECOGNITION_CACHE_ENABLED }}
           TRAINING_ANALYSIS_GOAL: ${{ vars.TRAINING_ANALYSIS_GOAL }}
           TELEGRAM_ALLOWED_CHAT_IDS: ${{ vars.TELEGRAM_ALLOWED_CHAT_IDS }}
           TELEGRAM_POLL_LIMIT: ${{ vars.TELEGRAM_POLL_LIMIT }}

@@ -133,12 +133,67 @@ function normalizeBatchSleep(sleep) {
 
 async function refreshCoreTrainingDaySummary(client, batch, processedAtIso) {
   const archivedDate = normalizeDateKey(batch.archivedDate);
-  const summary = await readIncrementalCoreDaySummary(client, archivedDate);
-  const hasBatchWorkoutSummary = batch.workoutDailySummary && Object.keys(batch.workoutDailySummary).length > 0;
+  const hasBatchWorkoutSummary = Boolean(batch.workoutDailySummary && Object.keys(batch.workoutDailySummary).length > 0);
   const hasBatchNutrition = hasNutritionPayload(batch.nutrition);
 
   await client.query(
     `
+      with activity_summary as (
+        select
+          count(*)::integer as total_activities,
+          coalesce(sum(duration_seconds), 0)::integer as total_duration_seconds,
+          coalesce(sum(calories), 0)::numeric as training_calories,
+          coalesce(sum(distance_km), 0)::numeric as cycling_distance_km
+        from core.activity
+        where archived_date = $1
+      ),
+      meal_summary as (
+        select coalesce(sum(calories), 0)::integer as intake_calories
+        from core.meal
+        where archived_date = $1
+      ),
+      existing_day as (
+        select
+          workout_duration_minutes,
+          active_hours,
+          intake_calories,
+          nutrition_details_json
+        from core.training_day
+        where archived_date = $1
+      ),
+      summary_values as (
+        select
+          $1::date as archived_date,
+          $2::text as source_batch_id,
+          $3::text as source_channel,
+          coalesce(a.total_activities, 0)::integer as total_activities,
+          coalesce(a.total_duration_seconds, 0)::integer as total_duration_seconds,
+          case when $10::boolean
+            then coalesce($4::numeric, a.training_calories, 0)
+            else coalesce(a.training_calories, 0)
+          end as training_calories,
+          case when $10::boolean
+            then coalesce($5::integer, e.workout_duration_minutes)
+            else e.workout_duration_minutes
+          end as workout_duration_minutes,
+          case when $10::boolean
+            then coalesce($6::integer, e.active_hours)
+            else e.active_hours
+          end as active_hours,
+          coalesce(a.cycling_distance_km, 0)::numeric as cycling_distance_km,
+          case when $11::boolean
+            then coalesce($7::integer, nullif(m.intake_calories, 0), e.intake_calories)
+            else coalesce(nullif(m.intake_calories, 0), e.intake_calories)
+          end as intake_calories,
+          case when $11::boolean
+            then coalesce($8::jsonb, e.nutrition_details_json, '[]'::jsonb)
+            else coalesce(e.nutrition_details_json, '[]'::jsonb)
+          end as nutrition_details_json,
+          $9::timestamptz as updated_at
+        from activity_summary a
+        cross join meal_summary m
+        left join existing_day e on true
+      )
       insert into core.training_day (
         archived_date,
         source_batch_id,
@@ -153,7 +208,20 @@ async function refreshCoreTrainingDaySummary(client, batch, processedAtIso) {
         nutrition_details_json,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
+      select
+        archived_date,
+        source_batch_id,
+        source_channel,
+        total_activities,
+        total_duration_seconds,
+        training_calories,
+        workout_duration_minutes,
+        active_hours,
+        cycling_distance_km,
+        intake_calories,
+        nutrition_details_json,
+        updated_at
+      from summary_values
       on conflict (archived_date) do update set
         source_batch_id = excluded.source_batch_id,
         source_channel = excluded.source_channel,
@@ -171,81 +239,18 @@ async function refreshCoreTrainingDaySummary(client, batch, processedAtIso) {
       archivedDate,
       batch.batchId,
       'telegram',
-      summary.totalActivities,
-      summary.totalDurationSeconds,
-      hasBatchWorkoutSummary
-        ? batch.workoutDailySummary.activityCaloriesKcal ?? summary.trainingCalories
-        : summary.trainingCalories,
-      hasBatchWorkoutSummary
-        ? batch.workoutDailySummary.workoutDurationMinutes ?? summary.workoutDurationMinutes
-        : summary.workoutDurationMinutes,
-      hasBatchWorkoutSummary
-        ? batch.workoutDailySummary.activeHours ?? summary.activeHours
-        : summary.activeHours,
-      summary.cyclingDistanceKm,
-      hasBatchNutrition
-        ? batch.nutrition.totalCalories ?? summary.intakeCalories
-        : summary.intakeCalories,
+      batch.workoutDailySummary?.activityCaloriesKcal ?? null,
+      batch.workoutDailySummary?.workoutDurationMinutes ?? null,
+      batch.workoutDailySummary?.activeHours ?? null,
+      hasBatchNutrition ? batch.nutrition.totalCalories ?? null : null,
       JSON.stringify(hasBatchNutrition && (batch.nutrition.details?.length ?? 0) > 0
         ? batch.nutrition.details
-        : summary.nutritionDetails),
+        : []),
       processedAtIso,
+      hasBatchWorkoutSummary,
+      hasBatchNutrition,
     ],
   );
-}
-
-async function readIncrementalCoreDaySummary(client, archivedDate) {
-  const activityResult = await client.query(
-    `
-      select
-        count(*)::integer as total_activities,
-        coalesce(sum(duration_seconds), 0)::integer as total_duration_seconds,
-        coalesce(sum(calories), 0)::numeric as training_calories,
-        coalesce(sum(distance_km), 0)::numeric as cycling_distance_km
-      from core.activity
-      where archived_date = $1
-    `,
-    [archivedDate],
-  );
-  const mealResult = await client.query(
-    `
-      select coalesce(sum(calories), 0)::integer as intake_calories
-      from core.meal
-      where archived_date = $1
-    `,
-    [archivedDate],
-  );
-  const dayResult = await client.query(
-    `
-      select
-        workout_duration_minutes,
-        active_hours,
-        intake_calories,
-        nutrition_details_json
-      from core.training_day
-      where archived_date = $1
-    `,
-    [archivedDate],
-  );
-  const activity = activityResult.rows[0] ?? {};
-  const meal = mealResult.rows[0] ?? {};
-  const existingDay = dayResult.rows[0] ?? {};
-  const mealCalories = normalizeNumber(meal.intake_calories, null);
-
-  return {
-    totalActivities: normalizeNumber(activity.total_activities, 0),
-    totalDurationSeconds: normalizeNumber(activity.total_duration_seconds, 0),
-    trainingCalories: normalizeNumber(activity.training_calories, 0),
-    workoutDurationMinutes: normalizeNumber(existingDay.workout_duration_minutes, null),
-    activeHours: normalizeNumber(existingDay.active_hours, null),
-    cyclingDistanceKm: normalizeNumber(activity.cycling_distance_km, 0),
-    intakeCalories: mealCalories && mealCalories > 0
-      ? mealCalories
-      : normalizeNumber(existingDay.intake_calories, null),
-    nutritionDetails: Array.isArray(existingDay.nutrition_details_json)
-      ? existingDay.nutrition_details_json
-      : [],
-  };
 }
 
 function normalizeBatchActivity(activity) {
@@ -299,14 +304,6 @@ function hasSleepPayload(sleep) {
     sleep.sleepStageDetail,
     ...SLEEP_HEALTH_FIELDS.map((field) => sleep[field]),
   ].some((value) => value !== null && value !== undefined && value !== '' && value !== 0));
-}
-
-function normalizeNumber(value, fallback) {
-  if (value === null || value === undefined || value === '') {
-    return fallback;
-  }
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
 }
 
 function normalizeDateKey(value) {

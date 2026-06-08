@@ -77,125 +77,64 @@ export async function persistTrainingArchive(options) {
     await client.query('BEGIN');
     transactionStarted = true;
 
-    await client.query(
-      `
-        insert into archive.training_parse_snapshot (
-          source_hash,
-          payload_version,
-          payload_json,
-          daily_count,
-          latest_archived_date,
-          parsed_generated_at,
-          first_seen_at,
-          last_seen_at
-        )
-        values ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)
-        on conflict (source_hash) do update set
-          payload_version = excluded.payload_version,
-          payload_json = excluded.payload_json,
-          daily_count = excluded.daily_count,
-          latest_archived_date = excluded.latest_archived_date,
-          parsed_generated_at = excluded.parsed_generated_at,
-          last_seen_at = excluded.last_seen_at
-      `,
-      [
-        sourceHash,
-        1,
-        JSON.stringify(options.parsed),
-        dailyCount,
-        latestArchivedDate,
-        options.parsed.generatedAt,
-        updatedAtIso,
-        updatedAtIso,
-      ],
-    );
+    const existingSnapshot = await readExistingSnapshotSourceHash(client, sourceHash);
+    const snapshotUnchanged = existingSnapshot === sourceHash;
 
-    for (const day of options.parsed.daily) {
-      await upsertTrainingDay({
-        client,
+    if (snapshotUnchanged) {
+      await updateTrainingParseSnapshotLastSeen(client, {
         sourceHash,
-        day,
         updatedAtIso,
       });
-
-      for (const measurement of resolveMeasurements(day)) {
-        await upsertTrainingMeasurement({
-          client,
-          sourceHash,
-          archivedDate: day.date,
-          measurement,
-          updatedAtIso,
-        });
-      }
-
-      for (const activity of day.activities ?? []) {
-        await upsertTrainingActivity({
-          client,
-          sourceHash,
-          archivedDate: day.date,
-          activity,
-          updatedAtIso,
-        });
-      }
-
-      for (const meal of day.nutrition?.meals ?? []) {
-        await upsertTrainingMeal({
-          client,
-          sourceHash,
-          archivedDate: day.date,
-          meal,
-          updatedAtIso,
-        });
-      }
-
-      for (const sleep of day.sleep ?? []) {
-        await upsertTrainingSleep({
-          client,
-          sourceHash,
-          archivedDate: day.date,
-          sleep,
-          updatedAtIso,
-        });
-      }
-    }
-
-    await client.query(
-      `
-        insert into archive.training_parse_run (
-          run_id,
-          source_hash,
-          trigger_name,
-          actor_name,
-          runtime_env,
-          run_started_at,
-          run_finished_at,
-          daily_count,
-          latest_archived_date,
-          main_output_written,
-          db_sync_status
-        )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      `,
-      [
-        runId,
+    } else {
+      await upsertTrainingParseSnapshot(client, {
         sourceHash,
-        runtimeContext.triggerName,
-        runtimeContext.actorName,
-        runtimeContext.runtimeEnv,
-        options.runStartedAt.toISOString(),
-        options.runFinishedAt.toISOString(),
+        parsed: options.parsed,
         dailyCount,
         latestArchivedDate,
-        true,
-        'success',
-      ],
-    );
+        updatedAtIso,
+      });
+      await upsertTrainingDays(client, buildTrainingDayRows({
+        days: options.parsed.daily,
+        sourceHash,
+        updatedAtIso,
+      }));
+      await upsertTrainingMeasurements(client, buildTrainingMeasurementRows({
+        days: options.parsed.daily,
+        sourceHash,
+        updatedAtIso,
+      }));
+      await upsertTrainingActivities(client, buildTrainingActivityRows({
+        days: options.parsed.daily,
+        sourceHash,
+        updatedAtIso,
+      }));
+      await upsertTrainingMeals(client, buildTrainingMealRows({
+        days: options.parsed.daily,
+        sourceHash,
+        updatedAtIso,
+      }));
+      await upsertTrainingSleeps(client, buildTrainingSleepRows({
+        days: options.parsed.daily,
+        sourceHash,
+        updatedAtIso,
+      }));
+    }
+
+    await insertTrainingParseRun(client, {
+      runId,
+      sourceHash,
+      runtimeContext,
+      runStartedAt: options.runStartedAt,
+      runFinishedAt: options.runFinishedAt,
+      dailyCount,
+      latestArchivedDate,
+    });
 
     await client.query('COMMIT');
     transactionStarted = false;
 
     return {
-      status: 'synced',
+      status: snapshotUnchanged ? 'unchanged' : 'synced',
       runId,
       sourceHash,
       dailyCount,
@@ -240,7 +179,118 @@ function parsePositiveInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-async function upsertTrainingDay({ client, sourceHash, day, updatedAtIso }) {
+async function readExistingSnapshotSourceHash(client, sourceHash) {
+  const result = await client.query(
+    `
+      select source_hash
+      from archive.training_parse_snapshot
+      where source_hash = $1
+      limit 1
+    `,
+    [sourceHash],
+  );
+  return result?.rows?.[0]?.source_hash ?? null;
+}
+
+async function updateTrainingParseSnapshotLastSeen(client, { sourceHash, updatedAtIso }) {
+  await client.query(
+    `
+      update archive.training_parse_snapshot
+      set last_seen_at = $2
+      where source_hash = $1
+    `,
+    [sourceHash, updatedAtIso],
+  );
+}
+
+async function upsertTrainingParseSnapshot(client, {
+  sourceHash,
+  parsed,
+  dailyCount,
+  latestArchivedDate,
+  updatedAtIso,
+}) {
+  await client.query(
+    `
+      insert into archive.training_parse_snapshot (
+        source_hash,
+        payload_version,
+        payload_json,
+        daily_count,
+        latest_archived_date,
+        parsed_generated_at,
+        first_seen_at,
+        last_seen_at
+      )
+      values ($1, $2, $3::jsonb, $4, $5, $6, $7, $8)
+      on conflict (source_hash) do update set
+        payload_version = excluded.payload_version,
+        payload_json = excluded.payload_json,
+        daily_count = excluded.daily_count,
+        latest_archived_date = excluded.latest_archived_date,
+        parsed_generated_at = excluded.parsed_generated_at,
+        last_seen_at = excluded.last_seen_at
+    `,
+    [
+      sourceHash,
+      1,
+      JSON.stringify(parsed),
+      dailyCount,
+      latestArchivedDate,
+      parsed.generatedAt,
+      updatedAtIso,
+      updatedAtIso,
+    ],
+  );
+}
+
+async function insertTrainingParseRun(client, {
+  runId,
+  sourceHash,
+  runtimeContext,
+  runStartedAt,
+  runFinishedAt,
+  dailyCount,
+  latestArchivedDate,
+}) {
+  await client.query(
+    `
+      insert into archive.training_parse_run (
+        run_id,
+        source_hash,
+        trigger_name,
+        actor_name,
+        runtime_env,
+        run_started_at,
+        run_finished_at,
+        daily_count,
+        latest_archived_date,
+        main_output_written,
+        db_sync_status
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `,
+    [
+      runId,
+      sourceHash,
+      runtimeContext.triggerName,
+      runtimeContext.actorName,
+      runtimeContext.runtimeEnv,
+      runStartedAt.toISOString(),
+      runFinishedAt.toISOString(),
+      dailyCount,
+      latestArchivedDate,
+      true,
+      'success',
+    ],
+  );
+}
+
+async function upsertTrainingDays(client, rows) {
+  if (rows.length === 0) {
+    return;
+  }
+
   await client.query(
     `
       insert into archive.training_day (
@@ -257,7 +307,21 @@ async function upsertTrainingDay({ client, sourceHash, day, updatedAtIso }) {
         meal_count,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      select *
+      from unnest(
+        $1::date[],
+        $2::text[],
+        $3::integer[],
+        $4::integer[],
+        $5::integer[],
+        $6::integer[],
+        $7::integer[],
+        $8::numeric[],
+        $9::integer[],
+        $10::integer[],
+        $11::integer[],
+        $12::timestamptz[]
+      )
       on conflict (archived_date) do update set
         source_hash = excluded.source_hash,
         total_activities = excluded.total_activities,
@@ -272,35 +336,26 @@ async function upsertTrainingDay({ client, sourceHash, day, updatedAtIso }) {
         updated_at = excluded.updated_at
     `,
     [
-      day.date,
-      sourceHash,
-      day.workoutSummary?.totalActivities ?? 0,
-      day.workoutSummary?.totalDurationSeconds ?? 0,
-      day.workoutSummary?.trainingCalories ?? null,
-      day.workoutSummary?.workoutDurationMinutes ?? null,
-      day.workoutSummary?.activeHours ?? null,
-      day.workoutSummary?.cyclingDistanceKm ?? null,
-      day.nutrition?.totalCalories ?? null,
-      resolveMeasurements(day).length,
-      day.nutrition?.meals?.length ?? 0,
-      updatedAtIso,
+      rows.map((row) => row.archivedDate),
+      rows.map((row) => row.sourceHash),
+      rows.map((row) => row.totalActivities),
+      rows.map((row) => row.totalDurationSeconds),
+      rows.map((row) => row.trainingCalories),
+      rows.map((row) => row.workoutDurationMinutes),
+      rows.map((row) => row.activeHours),
+      rows.map((row) => row.cyclingDistanceKm),
+      rows.map((row) => row.intakeCalories),
+      rows.map((row) => row.measurementCount),
+      rows.map((row) => row.mealCount),
+      rows.map((row) => row.updatedAt),
     ],
   );
 }
 
-async function upsertTrainingActivity({ client, sourceHash, archivedDate, activity, updatedAtIso }) {
-  const activityHash = createHash('md5')
-    .update(
-      [
-        archivedDate,
-        activity.time ?? '',
-        activity.type ?? '',
-        activity.detail ?? '',
-        activity.durationSeconds ?? '',
-      ].join('|'),
-      'utf8',
-    )
-    .digest('hex');
+async function upsertTrainingActivities(client, rows) {
+  if (rows.length === 0) {
+    return;
+  }
 
   await client.query(
     `
@@ -320,7 +375,23 @@ async function upsertTrainingActivity({ client, sourceHash, archivedDate, activi
         duration_seconds,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      select *
+      from unnest(
+        $1::text[],
+        $2::date[],
+        $3::text[],
+        $4::text[],
+        $5::text[],
+        $6::text[],
+        $7::text[],
+        $8::integer[],
+        $9::integer[],
+        $10::numeric[],
+        $11::numeric[],
+        $12::text[],
+        $13::integer[],
+        $14::timestamptz[]
+      )
       on conflict (activity_hash) do update set
         source_hash = excluded.source_hash,
         activity_time = excluded.activity_time,
@@ -336,42 +407,28 @@ async function upsertTrainingActivity({ client, sourceHash, archivedDate, activi
         updated_at = excluded.updated_at
     `,
     [
-      activityHash,
-      archivedDate,
-      sourceHash,
-      activity.time ?? null,
-      activity.type ?? '未知活动',
-      activity.rawType ?? null,
-      activity.detail ?? null,
-      activity.calories ?? null,
-      activity.heartRate ?? null,
-      activity.distanceKm ?? null,
-      activity.avgSpeedKmh ?? null,
-      activity.durationText ?? null,
-      activity.durationSeconds ?? null,
-      updatedAtIso,
+      rows.map((row) => row.activityHash),
+      rows.map((row) => row.archivedDate),
+      rows.map((row) => row.sourceHash),
+      rows.map((row) => row.activityTime),
+      rows.map((row) => row.activityType),
+      rows.map((row) => row.rawType),
+      rows.map((row) => row.detail),
+      rows.map((row) => row.calories),
+      rows.map((row) => row.heartRate),
+      rows.map((row) => row.distanceKm),
+      rows.map((row) => row.avgSpeedKmh),
+      rows.map((row) => row.durationText),
+      rows.map((row) => row.durationSeconds),
+      rows.map((row) => row.updatedAt),
     ],
   );
 }
 
-async function upsertTrainingMeasurement({
-  client,
-  sourceHash,
-  archivedDate,
-  measurement,
-  updatedAtIso,
-}) {
-  const measurementHash = createHash('md5')
-    .update(
-      [
-        archivedDate,
-        measurement.measuredAt ?? '',
-        measurement.weightKg ?? '',
-        measurement.bodyFatPct ?? '',
-      ].join('|'),
-      'utf8',
-    )
-    .digest('hex');
+async function upsertTrainingMeasurements(client, rows) {
+  if (rows.length === 0) {
+    return;
+  }
 
   await client.query(
     `
@@ -395,7 +452,27 @@ async function upsertTrainingMeasurement({
         fat_free_mass_kg,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      select *
+      from unnest(
+        $1::text[],
+        $2::date[],
+        $3::text[],
+        $4::text[],
+        $5::numeric[],
+        $6::numeric[],
+        $7::numeric[],
+        $8::numeric[],
+        $9::numeric[],
+        $10::numeric[],
+        $11::numeric[],
+        $12::numeric[],
+        $13::integer[],
+        $14::integer[],
+        $15::integer[],
+        $16::text[],
+        $17::numeric[],
+        $18::timestamptz[]
+      )
       on conflict (measurement_hash) do update set
         source_hash = excluded.source_hash,
         measured_at = excluded.measured_at,
@@ -415,32 +492,32 @@ async function upsertTrainingMeasurement({
         updated_at = excluded.updated_at
     `,
     [
-      measurementHash,
-      archivedDate,
-      sourceHash,
-      measurement.measuredAt ?? null,
-      measurement.weightKg ?? null,
-      measurement.bmi ?? null,
-      measurement.bodyFatPct ?? null,
-      measurement.skeletalMuscleKg ?? null,
-      measurement.bodyWaterPct ?? null,
-      measurement.proteinPct ?? null,
-      measurement.boneMassKg ?? null,
-      measurement.visceralFatLevel ?? null,
-      measurement.basalMetabolismKcal ?? null,
-      measurement.bodyAge ?? null,
-      measurement.bodyScore ?? null,
-      measurement.bodyType ?? null,
-      measurement.fatFreeMassKg ?? null,
-      updatedAtIso,
+      rows.map((row) => row.measurementHash),
+      rows.map((row) => row.archivedDate),
+      rows.map((row) => row.sourceHash),
+      rows.map((row) => row.measuredAt),
+      rows.map((row) => row.weightKg),
+      rows.map((row) => row.bmi),
+      rows.map((row) => row.bodyFatPct),
+      rows.map((row) => row.skeletalMuscleKg),
+      rows.map((row) => row.bodyWaterPct),
+      rows.map((row) => row.proteinPct),
+      rows.map((row) => row.boneMassKg),
+      rows.map((row) => row.visceralFatLevel),
+      rows.map((row) => row.basalMetabolismKcal),
+      rows.map((row) => row.bodyAge),
+      rows.map((row) => row.bodyScore),
+      rows.map((row) => row.bodyType),
+      rows.map((row) => row.fatFreeMassKg),
+      rows.map((row) => row.updatedAt),
     ],
   );
 }
 
-async function upsertTrainingMeal({ client, sourceHash, archivedDate, meal, updatedAtIso }) {
-  const mealHash = createHash('md5')
-    .update([archivedDate, meal.name ?? '', meal.calories ?? ''].join('|'), 'utf8')
-    .digest('hex');
+async function upsertTrainingMeals(client, rows) {
+  if (rows.length === 0) {
+    return;
+  }
 
   await client.query(
     `
@@ -454,7 +531,17 @@ async function upsertTrainingMeal({ client, sourceHash, archivedDate, meal, upda
         recommended_max,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8)
+      select *
+      from unnest(
+        $1::text[],
+        $2::date[],
+        $3::text[],
+        $4::text[],
+        $5::integer[],
+        $6::integer[],
+        $7::integer[],
+        $8::timestamptz[]
+      )
       on conflict (meal_hash) do update set
         source_hash = excluded.source_hash,
         meal_name = excluded.meal_name,
@@ -464,31 +551,22 @@ async function upsertTrainingMeal({ client, sourceHash, archivedDate, meal, upda
         updated_at = excluded.updated_at
     `,
     [
-      mealHash,
-      archivedDate,
-      sourceHash,
-      meal.name ?? '未命名餐次',
-      meal.calories ?? null,
-      meal.recommendedMin ?? null,
-      meal.recommendedMax ?? null,
-      updatedAtIso,
+      rows.map((row) => row.mealHash),
+      rows.map((row) => row.archivedDate),
+      rows.map((row) => row.sourceHash),
+      rows.map((row) => row.mealName),
+      rows.map((row) => row.calories),
+      rows.map((row) => row.recommendedMin),
+      rows.map((row) => row.recommendedMax),
+      rows.map((row) => row.updatedAt),
     ],
   );
 }
 
-async function upsertTrainingSleep({ client, sourceHash, archivedDate, sleep, updatedAtIso }) {
-  const sleepHash = createHash('md5')
-    .update(
-      [
-        archivedDate,
-        sleep.sleepType ?? '',
-        sleep.sleepStartTime ?? '',
-        sleep.sleepEndTime ?? '',
-        sleep.totalSleepMinutes ?? '',
-      ].join('|'),
-      'utf8',
-    )
-    .digest('hex');
+async function upsertTrainingSleeps(client, rows) {
+  if (rows.length === 0) {
+    return;
+  }
 
   await client.query(
     `
@@ -524,7 +602,39 @@ async function upsertTrainingSleep({ client, sourceHash, archivedDate, sleep, up
         suggestion_text,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+      select *
+      from unnest(
+        $1::text[],
+        $2::date[],
+        $3::text[],
+        $4::text[],
+        $5::text[],
+        $6::text[],
+        $7::integer[],
+        $8::integer[],
+        $9::integer[],
+        $10::integer[],
+        $11::integer[],
+        $12::integer[],
+        $13::integer[],
+        $14::text[],
+        $15::text[],
+        $16::integer[],
+        $17::integer[],
+        $18::numeric[],
+        $19::numeric[],
+        $20::numeric[],
+        $21::integer[],
+        $22::integer[],
+        $23::integer[],
+        $24::integer[],
+        $25::integer[],
+        $26::numeric[],
+        $27::numeric[],
+        $28::text[],
+        $29::text[],
+        $30::timestamptz[]
+      )
       on conflict (sleep_hash) do update set
         source_hash = excluded.source_hash,
         sleep_type = excluded.sleep_type,
@@ -556,37 +666,191 @@ async function upsertTrainingSleep({ client, sourceHash, archivedDate, sleep, up
         updated_at = excluded.updated_at
     `,
     [
-      sleepHash,
-      archivedDate,
-      sourceHash,
-      sleep.sleepType ?? '夜间睡眠',
-      sleep.sleepStartTime ?? null,
-      sleep.sleepEndTime ?? null,
-      sleep.nightSleepMinutes ?? null,
-      sleep.totalSleepMinutes ?? null,
-      sleep.napMinutes ?? null,
-      sleep.deepSleepMinutes ?? null,
-      sleep.lightSleepMinutes ?? null,
-      sleep.remSleepMinutes ?? null,
-      sleep.awakeMinutes ?? null,
-      sleep.sleepStageText ?? null,
-      sleep.sleepStageDetail ? JSON.stringify(sleep.sleepStageDetail) : null,
-      sleep.sleepScore ?? null,
-      sleep.sleepScorePercentile ?? null,
-      sleep.deepSleepRatioPct ?? null,
-      sleep.lightSleepRatioPct ?? null,
-      sleep.remSleepRatioPct ?? null,
-      sleep.deepSleepContinuityScore ?? null,
-      sleep.wakeCount ?? null,
-      sleep.breathingQualityScore ?? null,
-      sleep.averageHeartRateBpm ?? null,
-      sleep.hrvMs ?? null,
-      sleep.averageSpo2Pct ?? null,
-      sleep.averageRespiratoryRate ?? null,
-      sleep.analysisText ?? null,
-      sleep.suggestionText ?? null,
-      updatedAtIso,
+      rows.map((row) => row.sleepHash),
+      rows.map((row) => row.archivedDate),
+      rows.map((row) => row.sourceHash),
+      rows.map((row) => row.sleepType),
+      rows.map((row) => row.bedtime),
+      rows.map((row) => row.wakeTime),
+      rows.map((row) => row.nightSleepMinutes),
+      rows.map((row) => row.totalSleepMinutes),
+      rows.map((row) => row.napMinutes),
+      rows.map((row) => row.deepSleepMinutes),
+      rows.map((row) => row.lightSleepMinutes),
+      rows.map((row) => row.remSleepMinutes),
+      rows.map((row) => row.awakeMinutes),
+      rows.map((row) => row.sleepStageText),
+      rows.map((row) => row.sleepStageDetail),
+      rows.map((row) => row.sleepScore),
+      rows.map((row) => row.sleepScorePercentile),
+      rows.map((row) => row.deepSleepRatioPct),
+      rows.map((row) => row.lightSleepRatioPct),
+      rows.map((row) => row.remSleepRatioPct),
+      rows.map((row) => row.deepSleepContinuityScore),
+      rows.map((row) => row.wakeCount),
+      rows.map((row) => row.breathingQualityScore),
+      rows.map((row) => row.averageHeartRateBpm),
+      rows.map((row) => row.hrvMs),
+      rows.map((row) => row.averageSpo2Pct),
+      rows.map((row) => row.averageRespiratoryRate),
+      rows.map((row) => row.analysisText),
+      rows.map((row) => row.suggestionText),
+      rows.map((row) => row.updatedAt),
     ],
+  );
+}
+
+function buildTrainingDayRows({ days, sourceHash, updatedAtIso }) {
+  return days.map((day) => ({
+    archivedDate: day.date,
+    sourceHash,
+    totalActivities: day.workoutSummary?.totalActivities ?? 0,
+    totalDurationSeconds: day.workoutSummary?.totalDurationSeconds ?? 0,
+    trainingCalories: day.workoutSummary?.trainingCalories ?? null,
+    workoutDurationMinutes: day.workoutSummary?.workoutDurationMinutes ?? null,
+    activeHours: day.workoutSummary?.activeHours ?? null,
+    cyclingDistanceKm: day.workoutSummary?.cyclingDistanceKm ?? null,
+    intakeCalories: day.nutrition?.totalCalories ?? null,
+    measurementCount: resolveMeasurements(day).length,
+    mealCount: day.nutrition?.meals?.length ?? 0,
+    updatedAt: updatedAtIso,
+  }));
+}
+
+function buildTrainingMeasurementRows({ days, sourceHash, updatedAtIso }) {
+  return days.flatMap((day) =>
+    resolveMeasurements(day).map((measurement) => ({
+      measurementHash: createHash('md5')
+        .update(
+          [
+            day.date,
+            measurement.measuredAt ?? '',
+            measurement.weightKg ?? '',
+            measurement.bodyFatPct ?? '',
+          ].join('|'),
+          'utf8',
+        )
+        .digest('hex'),
+      archivedDate: day.date,
+      sourceHash,
+      measuredAt: measurement.measuredAt ?? null,
+      weightKg: measurement.weightKg ?? null,
+      bmi: measurement.bmi ?? null,
+      bodyFatPct: measurement.bodyFatPct ?? null,
+      skeletalMuscleKg: measurement.skeletalMuscleKg ?? null,
+      bodyWaterPct: measurement.bodyWaterPct ?? null,
+      proteinPct: measurement.proteinPct ?? null,
+      boneMassKg: measurement.boneMassKg ?? null,
+      visceralFatLevel: measurement.visceralFatLevel ?? null,
+      basalMetabolismKcal: measurement.basalMetabolismKcal ?? null,
+      bodyAge: measurement.bodyAge ?? null,
+      bodyScore: measurement.bodyScore ?? null,
+      bodyType: measurement.bodyType ?? null,
+      fatFreeMassKg: measurement.fatFreeMassKg ?? null,
+      updatedAt: updatedAtIso,
+    })),
+  );
+}
+
+function buildTrainingActivityRows({ days, sourceHash, updatedAtIso }) {
+  return days.flatMap((day) =>
+    (day.activities ?? []).map((activity) => ({
+      activityHash: createHash('md5')
+        .update(
+          [
+            day.date,
+            activity.time ?? '',
+            activity.type ?? '',
+            activity.detail ?? '',
+            activity.durationSeconds ?? '',
+          ].join('|'),
+          'utf8',
+        )
+        .digest('hex'),
+      archivedDate: day.date,
+      sourceHash,
+      activityTime: activity.time ?? null,
+      activityType: activity.type ?? '未知活动',
+      rawType: activity.rawType ?? null,
+      detail: activity.detail ?? null,
+      calories: activity.calories ?? null,
+      heartRate: activity.heartRate ?? null,
+      distanceKm: activity.distanceKm ?? null,
+      avgSpeedKmh: activity.avgSpeedKmh ?? null,
+      durationText: activity.durationText ?? null,
+      durationSeconds: activity.durationSeconds ?? null,
+      updatedAt: updatedAtIso,
+    })),
+  );
+}
+
+function buildTrainingMealRows({ days, sourceHash, updatedAtIso }) {
+  return days.flatMap((day) =>
+    (day.nutrition?.meals ?? []).map((meal) => ({
+      mealHash: createHash('md5')
+        .update([day.date, meal.name ?? '', meal.calories ?? ''].join('|'), 'utf8')
+        .digest('hex'),
+      archivedDate: day.date,
+      sourceHash,
+      mealName: meal.name ?? '未命名餐次',
+      calories: meal.calories ?? null,
+      recommendedMin: meal.recommendedMin ?? null,
+      recommendedMax: meal.recommendedMax ?? null,
+      updatedAt: updatedAtIso,
+    })),
+  );
+}
+
+function buildTrainingSleepRows({ days, sourceHash, updatedAtIso }) {
+  return days.flatMap((day) =>
+    (day.sleep ?? []).map((sleep) => {
+      const sleepType = sleep.sleepType ?? '夜间睡眠';
+      const bedtime = sleep.bedtime ?? sleep.sleepStartTime ?? null;
+      const wakeTime = sleep.wakeTime ?? sleep.sleepEndTime ?? null;
+      return {
+        sleepHash: createHash('md5')
+          .update(
+            [
+              day.date,
+              sleepType,
+              bedtime ?? '',
+              wakeTime ?? '',
+              sleep.totalSleepMinutes ?? '',
+            ].join('|'),
+            'utf8',
+          )
+          .digest('hex'),
+        archivedDate: day.date,
+        sourceHash,
+        sleepType,
+        bedtime,
+        wakeTime,
+        nightSleepMinutes: sleep.nightSleepMinutes ?? null,
+        totalSleepMinutes: sleep.totalSleepMinutes ?? null,
+        napMinutes: sleep.napMinutes ?? null,
+        deepSleepMinutes: sleep.deepSleepMinutes ?? null,
+        lightSleepMinutes: sleep.lightSleepMinutes ?? null,
+        remSleepMinutes: sleep.remSleepMinutes ?? null,
+        awakeMinutes: sleep.awakeMinutes ?? null,
+        sleepStageText: sleep.sleepStageText ?? null,
+        sleepStageDetail: sleep.sleepStageDetail ? JSON.stringify(sleep.sleepStageDetail) : null,
+        sleepScore: sleep.sleepScore ?? null,
+        sleepScorePercentile: sleep.sleepScorePercentile ?? null,
+        deepSleepRatioPct: sleep.deepSleepRatioPct ?? null,
+        lightSleepRatioPct: sleep.lightSleepRatioPct ?? null,
+        remSleepRatioPct: sleep.remSleepRatioPct ?? null,
+        deepSleepContinuityScore: sleep.deepSleepContinuityScore ?? null,
+        wakeCount: sleep.wakeCount ?? null,
+        breathingQualityScore: sleep.breathingQualityScore ?? null,
+        averageHeartRateBpm: sleep.averageHeartRateBpm ?? null,
+        hrvMs: sleep.hrvMs ?? null,
+        averageSpo2Pct: sleep.averageSpo2Pct ?? null,
+        averageRespiratoryRate: sleep.averageRespiratoryRate ?? null,
+        analysisText: sleep.analysisText ?? null,
+        suggestionText: sleep.suggestionText ?? null,
+        updatedAt: updatedAtIso,
+      };
+    }),
   );
 }
 
