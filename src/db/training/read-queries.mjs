@@ -173,12 +173,15 @@ export const BODY_FEEDBACK_QUERY = `
     telegram_message_id,
     telegram_chat_id,
     body,
+    command,
+    thought_module,
+    tags_json,
     message_date_unix,
     markdown_path,
+    image_refs_json,
     updated_at
   from core.thought
-  where thought_module = 'body_feedback'
-    and status = 'active'
+  where status = 'active'
   order by coalesce(message_date_unix, extract(epoch from updated_at)) asc,
     telegram_message_id asc
 `;

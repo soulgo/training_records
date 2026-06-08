@@ -54,10 +54,37 @@ test('training maintenance sync delegates to syncTrainingCore', async () => {
   });
 
   assert.equal(calls.length, 1);
+  assert.equal(calls[0].phase, 'safe');
   assert.equal(result.mode, 'sync');
+  assert.equal(result.phase, 'safe');
   assert.equal(result.readonly, false);
   assert.equal(result.status, 'unchanged');
   assert.deepEqual(result.result, { status: 'unchanged', archive: { status: 'unchanged' } });
+});
+
+test('training maintenance sync can explicitly run all database phases', async () => {
+  const calls = [];
+  const result = await runTrainingMaintenance({
+    argv: ['sync', '--phase', 'all'],
+    syncTrainingCore: async (options) => {
+      calls.push(options);
+      return {
+        status: 'stored',
+        archive: { status: 'unchanged' },
+        ingest: { status: 'unchanged' },
+        markdown: { status: 'stored', days: 1 },
+        thoughts: { status: 'unchanged' },
+      };
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].phase, 'all');
+  assert.equal(result.mode, 'sync');
+  assert.equal(result.phase, 'all');
+  assert.equal(result.status, 'stored');
+  assert.equal(result.result.markdown.status, 'stored');
 });
 
 test('training maintenance sync can run one legacy database phase through the unified entrypoint', async () => {
@@ -149,7 +176,7 @@ test('training maintenance migrate supports dry-run without running sync', async
   assert.equal(result.mode, 'migrate');
   assert.equal(result.status, 'planned');
   assert.equal(result.dryRun, true);
-  assert.deepEqual(result.plan, ['sync committed archive, ingest repairs, markdown, and thoughts into core tables']);
+  assert.deepEqual(result.plan, ['sync committed archive, ingest repairs, and thoughts into core tables']);
 });
 
 test('training maintenance migrate runs only with explicit confirm', async () => {
@@ -183,6 +210,23 @@ test('package exposes explicit maintenance command boundaries', async () => {
   assert.equal(packageJson.scripts['import:markdown'], 'node tools/training-maintenance.mjs sync --phase markdown');
   assert.equal(packageJson.scripts['reconcile:markdown'], 'node tools/training-maintenance.mjs sync --phase markdown');
   assert.equal(packageJson.scripts['export:markdown'], 'node tools/training-maintenance.mjs export markdown');
+});
+
+test('training maintenance import markdown remains an explicit legacy phase', async () => {
+  const calls = [];
+  const result = await runTrainingMaintenance({
+    argv: ['sync', '--phase', 'markdown'],
+    syncTrainingCore: async (options) => {
+      calls.push(options);
+      return { status: 'stored', markdown: { status: 'stored', days: 1 } };
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].phase, 'markdown');
+  assert.equal(result.phase, 'markdown');
+  assert.equal(result.status, 'stored');
 });
 
 test('v8 maintenance guide documents inspect sync and migrate commands', async () => {

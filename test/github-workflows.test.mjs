@@ -23,8 +23,8 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
     action,
     /key:\s*hexo-\$\{\{\s*runner\.os\s*\}\}-\$\{\{\s*hashFiles\('package-lock\.json', '_config\.yml', 'source\/\*\*', 'themes\/\*\*'\)\s*\}\}/,
   );
-  assert.match(action, /- name: Sync archive and markdown to database/);
-  assert.match(action, /- name: Detect database sync input changes/);
+  assert.match(action, /- name: Sync safe database repairs/);
+  assert.match(action, /- name: Detect safe database sync input changes/);
   assert.match(action, /sync_db_needed=false/);
   assert.match(action, /sync_db_reason=no_data_changes/);
   assert.match(action, /if: \$\{\{ inputs\.run_backfill == 'true' && \(inputs\.sync_db_mode == 'always' \|\| steps\.sync_db_changes\.outputs\.sync_db_needed == 'true'\) \}\}/);
@@ -54,6 +54,7 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /deploy:\s*'true'/);
   assert.match(workflow, /strict_database_snapshot:/);
   assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:/);
+  assert.match(workflow, /TRAINING_BUILD_ARCHIVE_WRITE:\s*false/);
 });
 
 test('ci-tests workflow runs npm run test:fast without deploying Pages', async () => {
@@ -84,6 +85,7 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
     '.github/workflows/deploy-cloudflare-worker-dev.yml',
     '.github/workflows/deploy-cloudflare-pages-dev.yml',
     '.github/workflows/refresh-telegram-webhook.yml',
+    '.github/workflows/markdown-backup.yml',
     '.github/workflows/ci-tests.yml',
     'package.json',
     'package-lock.json',
@@ -91,11 +93,15 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
     assert.match(workflow, new RegExp(`-\\s*${escapeRegExp(expectedPath)}`));
   }
   assert.match(workflow, /actions\/checkout@v4/);
+  assert.match(workflow, /fetch-depth:\s*0/);
   assert.doesNotMatch(workflow, /ref:\s*main/);
   assert.match(workflow, /actions\/setup-node@v4/);
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /cache:\s*npm/);
   assert.match(workflow, /run:\s*npm ci/);
+  assert.match(workflow, /- name: Check protected derived data changes/);
+  assert.match(workflow, /if: github\.event_name == 'pull_request' && github\.base_ref == 'main'/);
+  assert.match(workflow, /run:\s*npm run check:derived-data-merge -- --base origin\/main/);
   assert.match(workflow, /run:\s*npm run test:fast/);
   assert.match(workflow, /full-test:/);
   assert.match(workflow, /if: github\.event_name == 'schedule' \|\| github\.event_name == 'workflow_dispatch'/);
@@ -114,6 +120,7 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_URL\s*\}\}/);
   assert.match(workflow, /TRAINING_DB_APP_NAME:\s*\$\{\{\s*vars\.DEV_TRAINING_DB_APP_NAME\s*\}\}/);
   assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:/);
+  assert.match(workflow, /TRAINING_BUILD_ARCHIVE_WRITE:\s*false/);
   assert.match(workflow, /ref:\s*dev/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
@@ -205,8 +212,11 @@ test('telegram-sync workflow notifies after sync and dispatches async site deplo
   assert.match(workflow, /batchId \| taskStatus \| persistenceStatus \| archivedDate \| images \| pending \| failureDisposition \| failed messageIds/);
   assert.match(workflow, /TELEGRAM_SYNC_NOTIFY_STAGE: after_action/);
   assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH: \$\{\{ runner\.temp \}\}\/telegram-sync-result\.json/);
+  assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
+  assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_MODEL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
   assert.match(workflow, /- name: Trigger async site deploy/);
   assert.match(workflow, /actions\/workflows\/deploy-pages\.yml\/dispatches/);
   assert.match(workflow, /steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/);
@@ -229,12 +239,9 @@ test('telegram-sync workflow keeps change detection and maintenance gating intac
   assert.match(workflow, /content_changed=false/);
   assert.match(
     workflow,
-    /- name: Sync archive and markdown to database\n\s+if: github\.event_name != 'repository_dispatch'\n\s+run:\s*npm run sync:db/,
+    /- name: Sync safe database repairs\n\s+if: github\.event_name != 'repository_dispatch'\n\s+run:\s*npm run sync:db/,
   );
-  assert.match(
-    workflow,
-    /- name: Export markdown from database snapshot\n\s+if: github\.event_name != 'repository_dispatch'/,
-  );
+  assert.doesNotMatch(workflow, /- name: Export markdown from database snapshot/);
   assert.doesNotMatch(workflow, /run:\s*npm run backfill:core/);
   assert.doesNotMatch(workflow, /run:\s*npm run reconcile:markdown/);
   assert.doesNotMatch(workflow, /run:\s*npm run backfill:thoughts/);
@@ -249,6 +256,9 @@ test('telegram-sync workflows keep database-only detection without blocking on p
 
   for (const workflow of [prodWorkflow, devWorkflow]) {
     assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH/);
+    assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
+    assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
+    assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
     assert.match(workflow, /db_content_changed=true/);
     assert.match(workflow, /readyStoredTrainingBatches/);
     assert.match(workflow, /- name: Write Telegram sync summary/);
@@ -257,6 +267,27 @@ test('telegram-sync workflows keep database-only detection without blocking on p
     assert.match(workflow, /strict_database_snapshot/);
     assert.doesNotMatch(workflow, /steps\.detect\.outputs\.db_content_changed == 'true'[\s\S]*uses:\s*\.\/\.github\/actions\/site-build/);
   }
+});
+
+test('markdown backup workflow exports database snapshots behind GitHub variable gates', async () => {
+  const workflow = await readWorkflow('.github/workflows/markdown-backup.yml');
+
+  assert.match(workflow, /name:\s*Markdown Backup/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /schedule:\s*\n\s*-\s*cron:\s*'37 19 \* \* \*'/);
+  assert.match(workflow, /MARKDOWN_BACKUP_ENABLED:\s*\$\{\{\s*vars\.MARKDOWN_BACKUP_ENABLED \|\| 'false'\s*\}\}/);
+  assert.match(workflow, /MARKDOWN_BACKUP_FREQUENCY:\s*\$\{\{\s*vars\.MARKDOWN_BACKUP_FREQUENCY \|\| 'weekly'\s*\}\}/);
+  assert.match(workflow, /MARKDOWN_BACKUP_BRANCH:\s*\$\{\{\s*vars\.MARKDOWN_BACKUP_BRANCH \|\| 'main'\s*\}\}/);
+  assert.match(workflow, /MARKDOWN_BACKUP_COMMIT:\s*\$\{\{\s*vars\.MARKDOWN_BACKUP_COMMIT \|\| 'true'\s*\}\}/);
+  assert.match(workflow, /TRAINING_SNAPSHOT_SOURCE:\s*database/);
+  assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:\s*'true'/);
+  assert.match(workflow, /if \[ "\$enabled" != "true" \]/);
+  assert.match(workflow, /if \[ "\$frequency" = "daily" \]/);
+  assert.match(workflow, /if \[ "\$frequency" = "weekly" \] && \[ "\$\(date -u \+%u\)" = "1" \]/);
+  assert.match(workflow, /run:\s*npm run export:markdown/);
+  assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
+  assert.match(workflow, /git commit -m "chore: backup markdown from database"/);
+  assert.match(workflow, /git push origin HEAD:"\$MARKDOWN_BACKUP_BRANCH"/);
 });
 
 test('telegram-sync dev workflow only handles dev dispatches and writes dev branch', async () => {
@@ -282,8 +313,11 @@ test('telegram-sync dev workflow leaves Pages deployment to the dev deploy workf
   assert.doesNotMatch(workflow, /STEP_PAGES_DEPLOY_OUTCOME/);
   assert.match(workflow, /- name: Trigger async dev site deploy/);
   assert.match(workflow, /actions\/workflows\/deploy-cloudflare-pages-dev\.yml\/dispatches/);
+  assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
+  assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_MODEL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
   assert.match(workflow, /-d '\{"ref":"dev","inputs":\{"strict_database_snapshot":"true"\}\}'/);
   assert.match(deployWorkflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
   assert.match(deployWorkflow, /workflow_dispatch:/);

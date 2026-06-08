@@ -13,25 +13,44 @@
 
 ## [Unreleased]
 
+### Changed
+
+- V11 优化 Telegram 同步与构建链路：部署构建通过 `TRAINING_BUILD_ARCHIVE_WRITE=false` 跳过 archive 写库，archive 写入支持相同 `source_hash` 早停和批量 upsert，Telegram sleep backfill 只在真实 sleep 入库或显式开关时运行。
+- Telegram Sync main/dev workflow 显式透传 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_CACHE_ENABLED`，便于在 GitHub Settings 中切换 OpenAI-compatible 服务。
+- Telegram 图片增量入库刷新 `core.training_day` 汇总时改为单条 CTE upsert，减少远程 PostgreSQL 往返并保留未覆盖模块。
+
+## [1.2.4] - 2026-06-08
+
 ### Added
 
+- 新增 `markdown-backup.yml`，用固定 cron 唤醒并通过 `MARKDOWN_BACKUP_ENABLED`、`MARKDOWN_BACKUP_FREQUENCY`、`MARKDOWN_BACKUP_BRANCH`、`MARKDOWN_BACKUP_COMMIT` 控制 DB -> Markdown 备份。
+- 新增 `docs/优化重构/数据库唯一事实源与Markdown备份方案.md`，记录 PostgreSQL canonical、Markdown 备份边界、GitHub Variables 和验收标准。
 - 新增 `deploy-cloudflare-pages-dev.yml`，将 `dev` 分支构建产物发布到 Cloudflare Pages 预览环境，默认地址为 `https://training-records-dev.pages.dev`。
 - Telegram 同步报告新增阶段耗时 `timingsMs`，并在 GitHub Actions summary 与日志中输出 `resolveUpdates`、`recognition`、`persist`、`sleepBackfill`、`markdownRewrite`、`notify` 等耗时，便于下次直接定位同步慢点。
 - 新增 `TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE=auto|url|inline`，支持先下载 Telegram 图片并以内联 data URL 发送给 AI；GitHub Actions 默认使用 `inline`。
 - 新增 `TELEGRAM_RECOGNITION_MODEL`，可只覆盖 Telegram 图片识别模型，未配置时继续使用 `AI_MODEL`。
 - Deploy Pages 与 Dev Cloudflare Pages workflow 新增 `strict_database_snapshot` 手动输入，并映射为 `TRAINING_SNAPSHOT_STRICT_DATABASE`。
+- 新增 `merge:dev-to-main` 与 `check:derived-data-merge` 命令，dev 合并 main 时保留 main 的生产数据备份，并在 PR 到 main 时阻断派生数据误合并。
 
 ### Changed
 
+- PostgreSQL `core.*` 成为训练、饮食、体脂、睡眠、随想和身体反馈的唯一事实源；Markdown 调整为数据库派生备份和显式人工维护输入。
+- `sync:db` 默认只执行 archive 回填、ingest 睡眠修复和 thoughts 同步，不再自动执行 Markdown -> DB 对账；`import:markdown` / `reconcile:markdown` 仅保留为显式人工维护入口。
+- Telegram 图片成功路径改为只增量 upsert 本批次 `core.measurement`、`core.activity`、`core.meal`、`core.sleep` 并刷新 `core.training_day`，不再即时改写 `训练记录.md`。
+- Telegram 随想和身体反馈以 `core.thought` 为准；Markdown 文章由 DB -> Markdown 备份任务导出，带图随想只即时保存图片 artifact。
+- `export:markdown` 改为严格从数据库导出 `训练记录.md` 和随想 Markdown，数据库快照不可用或不完整时直接失败，不再回退旧 Markdown。
 - Telegram Sync main/dev workflow 移除同步 action 内联站点构建与 Pages 部署，改为在 commit/push 后立即发送 Telegram “已入库/解析完成”通知，再异步触发独立站点部署 workflow。
 - Telegram Sync 失败监控不再把站点构建或 Pages 部署状态归为同步失败原因；站点部署失败改由独立部署 workflow 暴露，不影响 Telegram 入库回执。
 - Dev 环境文档改为包含 Cloudflare Pages 在线预览流程，保留本地 `npm run server` 作为快速调试入口。
 - Telegram Sync 在 `repository_dispatch` 入库成功后，只要仓库文件或数据库内容发生变化，都会异步 dispatch 独立部署 workflow，并启用严格数据库快照模式。
 - 页面构建读取 PostgreSQL 快照时保留多连接并发读取，遇到连接或查询失败后会重试一次单连接读取，降低构建阶段因连接抖动回退 Markdown 的概率。
 - Telegram Sync workflow 权限收敛为 `contents: write` 与 `actions: write`，不再为同步 workflow 申请 Pages/id-token 权限。
+- `package.json` 版本号更新为 `1.2.4`。
 
 ### Fixed
 
+- 修复部署或维护默认同步可能把旧 Markdown 回灌到数据库、导致页面 DB 数据在版本更新后丢失的问题。
+- 修复 `sync:db` 经维护入口调用时默认 phase 被解析为 `all` 的问题，现在默认与底层 safe 同步保持一致。
 - 修复 Dev Telegram webhook URL 误填 Cloudflare Account ID 导致 `setWebhook` 失败的问题，明确应使用 Workers 子域名。
 - 修复 Dev Telegram Sync 由 `GITHUB_TOKEN` 推送内容后不会触发 Dev Pages 自动部署的问题：repo 或 DB 内容变化都会异步 dispatch `deploy-cloudflare-pages-dev.yml`。
 - 修复 Telegram Sync 在 `repository_dispatch` 下仍等待站点 build/deploy 导致单次图片同步耗时过长的问题；现在 Action 只等待解析与入库，页面展示由独立 deploy workflow 异步完成。

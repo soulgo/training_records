@@ -156,6 +156,45 @@ export function createIncrementalPersistClient({
       if (/select payload_hash\s+from ingest\.telegram_batch/i.test(sql)) {
         return { rows: [] };
       }
+      if (/from core\.measurement/i.test(sql) && !/insert into core\.measurement/i.test(sql)) {
+        return { rows: measurementRows };
+      }
+      if (/count\(\*\)::integer as total_activities/i.test(sql)) {
+        return {
+          rows: [{
+            total_activities: activitySummary.total_activities ?? 0,
+            total_duration_seconds: activitySummary.total_duration_seconds ?? 0,
+            training_calories: activitySummary.training_calories ?? 0,
+            cycling_distance_km: activitySummary.cycling_distance_km ?? 0,
+          }],
+        };
+      }
+      if (/select coalesce\(sum\(calories\), 0\)::integer as intake_calories/i.test(sql)) {
+        return { rows: [{ intake_calories: mealSummary.intake_calories ?? 0 }] };
+      }
+      if (/from core\.activity/i.test(sql) && !/insert into core\.activity/i.test(sql)) {
+        return { rows: activityRows };
+      }
+      if (/from core\.meal/i.test(sql) && !/insert into core\.meal/i.test(sql)) {
+        return { rows: mealRows };
+      }
+      if (/from core\.sleep/i.test(sql) && !/insert into core\.sleep/i.test(sql)) {
+        return { rows: sleepRows };
+      }
+      if (
+        /from core\.training_day/i.test(sql) &&
+        /workout_duration_minutes/i.test(sql) &&
+        !/insert into core\.training_day/i.test(sql)
+      ) {
+        return {
+          rows: [{
+            workout_duration_minutes: daySummary.workout_duration_minutes ?? null,
+            active_hours: daySummary.active_hours ?? null,
+            intake_calories: daySummary.intake_calories ?? null,
+            nutrition_details_json: daySummary.nutrition_details_json ?? [],
+          }],
+        };
+      }
       if (
         /from core\.training_day/i.test(sql) &&
         /where archived_date = \$1/i.test(sql) &&
@@ -171,45 +210,6 @@ export function createIncrementalPersistClient({
             active_hours: daySummary.active_hours ?? null,
             cycling_distance_km: activitySummary.cycling_distance_km ?? 0,
             intake_calories: daySummary.intake_calories ?? mealSummary.intake_calories ?? null,
-            nutrition_details_json: daySummary.nutrition_details_json ?? [],
-          }],
-        };
-      }
-      if (/from core\.measurement/i.test(sql) && !/insert into core\.measurement/i.test(sql)) {
-        return { rows: measurementRows };
-      }
-      if (/from core\.activity/i.test(sql) && !/insert into core\.activity/i.test(sql)) {
-        return { rows: activityRows };
-      }
-      if (/from core\.meal/i.test(sql) && !/insert into core\.meal/i.test(sql)) {
-        return { rows: mealRows };
-      }
-      if (/from core\.sleep/i.test(sql) && !/insert into core\.sleep/i.test(sql)) {
-        return { rows: sleepRows };
-      }
-      if (/count\(\*\)::integer as total_activities/i.test(sql)) {
-        return {
-          rows: [{
-            total_activities: activitySummary.total_activities ?? 0,
-            total_duration_seconds: activitySummary.total_duration_seconds ?? 0,
-            training_calories: activitySummary.training_calories ?? 0,
-            cycling_distance_km: activitySummary.cycling_distance_km ?? 0,
-          }],
-        };
-      }
-      if (/select coalesce\(sum\(calories\), 0\)::integer as intake_calories/i.test(sql)) {
-        return { rows: [{ intake_calories: mealSummary.intake_calories ?? 0 }] };
-      }
-      if (
-        /from core\.training_day/i.test(sql) &&
-        /workout_duration_minutes/i.test(sql) &&
-        !/insert into core\.training_day/i.test(sql)
-      ) {
-        return {
-          rows: [{
-            workout_duration_minutes: daySummary.workout_duration_minutes ?? null,
-            active_hours: daySummary.active_hours ?? null,
-            intake_calories: daySummary.intake_calories ?? null,
             nutrition_details_json: daySummary.nutrition_details_json ?? [],
           }],
         };

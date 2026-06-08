@@ -40,6 +40,7 @@ jobs:
       TRAINING_DB_APP_NAME: ${{ vars.DEV_TRAINING_DB_APP_NAME }}
       TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
       TRAINING_SNAPSHOT_STRICT_DATABASE: ${{ github.event_name == 'workflow_dispatch' && inputs.strict_database_snapshot || 'false' }}
+      TRAINING_BUILD_ARCHIVE_WRITE: false
     steps:
       - name: Checkout dev branch
         uses: actions/checkout@v4

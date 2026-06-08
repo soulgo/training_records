@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { exportDerivedTrainingMarkdown } from '../tools/export-training-markdown.mjs';
 
-test('exportDerivedTrainingMarkdown prefers markdown when telegram fallback batches are pending', async () => {
+test('exportDerivedTrainingMarkdown still uses database when telegram fallback batches are pending', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const runtimeDir = path.join(tempRoot, 'runtime');
   const recordPath = path.join(tempRoot, '训练记录.md');
@@ -46,18 +46,23 @@ test('exportDerivedTrainingMarkdown prefers markdown when telegram fallback batc
     exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-04-06\n',
   });
 
-  assert.deepEqual(observedSources, ['markdown']);
+  assert.deepEqual(observedSources, ['database']);
   assert.match(await readFile(recordPath, 'utf8'), /2026-04-06/);
 });
 
 test('exportDerivedTrainingMarkdown uses database when no telegram fallback batches are pending', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const observedSources = [];
+  const observedStrictValues = [];
 
   await exportDerivedTrainingMarkdown({
     rootDir: tempRoot,
-    buildTrainingSnapshot: async ({ source }) => {
+    env: {
+      TRAINING_SNAPSHOT_STRICT_DATABASE: 'false',
+    },
+    buildTrainingSnapshot: async ({ source, env }) => {
       observedSources.push(source);
+      observedStrictValues.push(env.TRAINING_SNAPSHOT_STRICT_DATABASE);
       return {
         generatedAt: '2026-05-13T00:00:00.000Z',
         latest: {
@@ -81,112 +86,61 @@ test('exportDerivedTrainingMarkdown uses database when no telegram fallback batc
   });
 
   assert.deepEqual(observedSources, ['database']);
+  assert.deepEqual(observedStrictValues, ['true']);
 });
 
-test('exportDerivedTrainingMarkdown falls back to markdown when database snapshot lacks measurements', async () => {
+test('exportDerivedTrainingMarkdown surfaces incomplete database snapshots', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const recordPath = path.join(tempRoot, '训练记录.md');
   const observedSources = [];
-  const stderrChunks = [];
 
   await writeFile(recordPath, '# 训练记录\n\n### 2026-04-06\n', 'utf8');
 
-  await exportDerivedTrainingMarkdown({
-    rootDir: tempRoot,
-    env: {
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
-    stderr: {
-      write(chunk) {
-        stderrChunks.push(String(chunk));
+  await assert.rejects(
+    exportDerivedTrainingMarkdown({
+      rootDir: tempRoot,
+      env: {
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       },
-    },
-    buildTrainingSnapshot: async ({ source }) => {
-      observedSources.push(source);
-      if (source === 'database') {
+      buildTrainingSnapshot: async ({ source }) => {
+        observedSources.push(source);
         throw new Error('database snapshot is empty or missing measurements');
-      }
-      return {
-        generatedAt: '2026-05-13T00:00:00.000Z',
-        latest: {
-          measurement: {
-            archivedDate: '2026-04-06',
-            measuredAt: '2026-04-06 07:00',
-            weightKg: 72.4,
-          },
-          daily: { date: '2026-04-06' },
-        },
-        daily: [],
-        charts: {
-          weightKg: [],
-          bodyFatPct: [],
-          skeletalMuscleKg: [],
-          basalMetabolism: [],
-          visceralFatLevel: [],
-          intakeCalories: [],
-          trainingCalories: [],
-          cyclingDistanceKm: [],
-        },
-      };
-    },
-    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-04-06\n',
-  });
+      },
+      exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-04-06\n',
+    }),
+    /database snapshot is empty or missing measurements/i,
+  );
 
-  assert.deepEqual(observedSources, ['database', 'markdown']);
+  assert.deepEqual(observedSources, ['database']);
   assert.match(await readFile(recordPath, 'utf8'), /2026-04-06/);
-  assert.match(stderrChunks.join(''), /falling back to markdown/i);
 });
 
-test('exportDerivedTrainingMarkdown falls back to markdown when database snapshot is unavailable', async () => {
+test('exportDerivedTrainingMarkdown surfaces unavailable database snapshots', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const recordPath = path.join(tempRoot, '训练记录.md');
   const observedSources = [];
-  const stderrChunks = [];
 
   await writeFile(recordPath, '# 训练记录\n\n### 2026-05-14\n', 'utf8');
 
-  await exportDerivedTrainingMarkdown({
-    rootDir: tempRoot,
-    env: {
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
-    stderr: {
-      write(chunk) {
-        stderrChunks.push(String(chunk));
+  await assert.rejects(
+    exportDerivedTrainingMarkdown({
+      rootDir: tempRoot,
+      env: {
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       },
-    },
-    buildTrainingSnapshot: async ({ source }) => {
-      observedSources.push(source);
-      if (source === 'database') {
+      buildTrainingSnapshot: async ({ source }) => {
+        observedSources.push(source);
         throw new Error('database snapshot unavailable: timeout expired');
-      }
-      return {
-        generatedAt: '2026-05-14T00:00:00.000Z',
-        latest: {
-          measurement: null,
-          daily: { date: '2026-05-14' },
-        },
-        daily: [],
-        charts: {
-          weightKg: [],
-          bodyFatPct: [],
-          skeletalMuscleKg: [],
-          basalMetabolism: [],
-          visceralFatLevel: [],
-          intakeCalories: [],
-          trainingCalories: [],
-          cyclingDistanceKm: [],
-        },
-      };
-    },
-    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-05-14\n',
-  });
+      },
+      exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-05-14\n',
+    }),
+    /database snapshot unavailable: timeout expired/i,
+  );
 
-  assert.deepEqual(observedSources, ['database', 'markdown']);
+  assert.deepEqual(observedSources, ['database']);
   assert.match(await readFile(recordPath, 'utf8'), /2026-05-14/);
-  assert.match(stderrChunks.join(''), /timeout expired; falling back to markdown/i);
 });
 
 test('exportDerivedTrainingMarkdown does not hide incomplete database snapshots when database is not configured', async () => {

@@ -46,7 +46,7 @@ jobs:
         id: install
         run: npm ci
 
-      - name: Sync archive and markdown to database
+      - name: Sync safe database repairs
         if: github.event_name != 'repository_dispatch'
         run: npm run sync:db
 
@@ -55,11 +55,14 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openai-compatible' }}
           AI_BASE_URL: ${{ vars.AI_BASE_URL }}
           AI_MODEL: ${{ vars.AI_MODEL }}
+          AI_TIMEOUT_MS: ${{ vars.AI_TIMEOUT_MS }}
           AI_CONCURRENCY: ${{ vars.AI_CONCURRENCY }}
           TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline
           TELEGRAM_RECOGNITION_MODEL: ${{ vars.TELEGRAM_RECOGNITION_MODEL }}
+          TELEGRAM_RECOGNITION_CACHE_ENABLED: ${{ vars.TELEGRAM_RECOGNITION_CACHE_ENABLED }}
           TRAINING_ANALYSIS_GOAL: ${{ vars.TRAINING_ANALYSIS_GOAL }}
           TELEGRAM_ALLOWED_CHAT_IDS: ${{ vars.TELEGRAM_ALLOWED_CHAT_IDS }}
           TELEGRAM_POLL_LIMIT: ${{ vars.TELEGRAM_POLL_LIMIT }}
@@ -67,10 +70,6 @@ jobs:
           TELEGRAM_SYNC_NOTIFY_STAGE: after_action
           TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
         run: npm run sync:telegram
-
-      - name: Export markdown from database snapshot
-        if: github.event_name != 'repository_dispatch'
-        run: npm run export:markdown
 
       - name: Detect changes
         id: detect
@@ -168,7 +167,7 @@ jobs:
               .join(', ');
             const images = `${batch.sourceImageCount ?? 0}/${batch.recognizedImageCount ?? 0}/${batch.failedImageCount ?? 0}`;
             const failureDisposition = batch.failureDisposition ??
-              (batch.recognitionPendingStatus === 'queued' || batch.persistenceStatus === 'fallback_markdown' ? 'auto_retry' :
+              (batch.recognitionPendingStatus === 'queued' || batch.persistenceStatus === 'pending_replay' ? 'auto_retry' :
                 (batch.status === 'skipped' || batch.status === 'ignored' ? 'skip' : 'none'));
             console.log(`| ${batch.batchId ?? ''} | ${batch.taskStatus ?? batch.status ?? ''} | ${batch.persistenceStatus ?? ''} | ${batch.archivedDate ?? ''} | ${images} | ${batch.recognitionPendingStatus ?? ''} | ${failureDisposition} | ${failedIds} |`);
           }

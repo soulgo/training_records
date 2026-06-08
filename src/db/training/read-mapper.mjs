@@ -113,12 +113,14 @@ export function buildTrainingSnapshotFromRows({
     };
   });
 
+  const thoughts = filteredBodyFeedbackRows.map(normalizeThoughtRow);
   return {
     ...buildTrainingSnapshotFromDaily(
       daily,
       now?.toISOString?.() ?? new Date().toISOString(),
     ),
-    bodyFeedback: filteredBodyFeedbackRows.map(normalizeBodyFeedbackRow),
+    thoughts,
+    bodyFeedback: thoughts.filter((entry) => entry.thoughtModule === 'body_feedback'),
   };
 }
 
@@ -332,14 +334,22 @@ function filterFeedbackRowsByDateWindow(rows, dateFrom, dateTo) {
 }
 
 function normalizeBodyFeedbackRow(row) {
+  return normalizeThoughtRow(row);
+}
+
+function normalizeThoughtRow(row) {
   const dateParts = normalizeBodyFeedbackDateParts(row.message_date_unix, row.updated_at);
   return {
     date: dateParts.date,
     time: dateParts.time,
     body: String(row.body ?? '').trim(),
+    command: row.command ?? '/thought',
+    thoughtModule: row.thought_module ?? 'workout',
+    tags: Array.isArray(row.tags_json) ? row.tags_json : [],
     telegramMessageId: toNullableNumber(row.telegram_message_id),
     telegramChatId: toNullableNumber(row.telegram_chat_id),
     markdownPath: row.markdown_path ?? null,
+    imageRefs: Array.isArray(row.image_refs_json) ? row.image_refs_json : [],
     source: 'database',
   };
 }

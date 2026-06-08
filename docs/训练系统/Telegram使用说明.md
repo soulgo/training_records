@@ -71,13 +71,13 @@ Bot 会直接回发当前可用命令清单，包括截图、随想、编辑、�
 | 锻炼总览、活动明细 | 当日活动热量、锻炼时长、活动小时数、活动明细、距离、心率等 | `core.training_day`、`core.activity`、`archive.training_activity` |
 | 体脂秤、身体成分 | 体重、BMI、体脂率、骨骼肌、内脏脂肪、基础代谢、水分、蛋白质、骨盐量、去脂体重等 | `core.measurement`、`archive.training_measurement` |
 | 饮食记录 | 餐次热量、建议范围、总摄入、餐次明细 | `core.training_day`、`core.meal`、`archive.training_meal` |
-| 睡眠记录 | 入睡/起床时间、总睡眠、深睡/浅睡/REM/清醒、睡眠评分、心率、HRV、血氧、呼吸率、解读和建议 | `core.sleep`、`core.training_day` 睡眠汇总、`archive.training_sleep` |
+| 睡眠记录 | 入睡/起床时间、总睡眠、深睡/浅睡/REM/清醒、睡眠评分、心率、HRV、血氧、呼吸率、解读和建议 | `core.sleep`、`core.training_day` 睡眠汇总 |
 
 睡眠截图有一个特殊日期口径：系统会把“醒来日期的前一天”作为睡眠归档日。例如截图显示 2026-06-05 早上醒来，这条夜间睡眠会归到 2026-06-04。这样可以避免跨午夜睡眠被记到醒来的那一天。
 
 如果你只补发一张无日期的体脂秤或饮食图，推荐用 Telegram `文件` 发送，并让文件名带 `YYYY-MM-DD` 或 `YYYYMMDD`。如果是睡眠图，尽量保证截图里能看到醒来日期或完整的睡眠日期范围；睡眠图不会靠 AI 猜当前日期。
 
-图片批次识别并入库成功后，数据库是页面和分析的主事实源。系统不会每次都用数据库全量快照覆盖整份 `训练记录.md`；需要保持人工账本可见时，只会把本批次目标日期增量合并进去。数据库失败时才会明确回退写 Markdown，并提示后续 pending replay。
+图片批次识别并入库成功后，数据库是页面和分析的主事实源。系统不会即时写 `训练记录.md`；Markdown 由 DB -> Markdown 备份 workflow 定时导出。数据库失败时会写入 pending replay 队列，并提示后续自动重放。
 
 ## 4. 发送随想
 
@@ -98,9 +98,9 @@ Bot 会直接回发当前可用命令清单，包括截图、随想、编辑、�
 随想写入成功，已入库
 ```
 
-如果 Markdown 已经写入，但 PostgreSQL 暂时失败，Bot 会说明“Markdown 已写入，数据库待补偿”，系统会在后续同步中自动重放 pending 队列。
+如果 PostgreSQL 暂时失败，Bot 会说明“已记录，数据库待补偿”，系统会在后续同步中自动重放 pending 队列。Markdown 不再作为即时 fallback 写入目标。
 
-训练图片也遵循同样的补偿口径：如果 Telegram 回复或 GitHub Actions summary 中看到 `fallback_markdown`、`pending_replay` 或 `auto_retry`，表示当前批次已经进入自动补偿链路；如果失败分类是 `user_input`，通常需要重新发送更清晰的图片或修正日期来源。
+训练图片也遵循同样的补偿口径：如果 Telegram 回复或 GitHub Actions summary 中看到 `pending_replay` 或 `auto_retry`，表示当前批次已经进入自动补偿链路；如果失败分类是 `user_input`，通常需要重新发送更清晰的图片或修正日期来源。
 
 ### 4.2 指定随想模块
 
@@ -229,7 +229,7 @@ Bot 会直接回发当前可用命令清单，包括截图、随想、编辑、�
 - `/随想删` 必须回复原随想消息
 - `/随想删 126` 是直接按 id 删除
 - 删除时不需要写模块名
-- 删除后会一起删掉对应的随想 Markdown 和关联图片
+- 删除后会把 `core.thought` 标记为 deleted；已存在的 Markdown 备份和图片 artifact 不作为事实源
 
 ## 8. 移动随想
 
@@ -285,7 +285,7 @@ Telegram 同步会尽量把失败原因直接回复到原消息：
 - `user_input`：图片无可靠日期、置信度低、未授权 chat、目标随想不存在等输入问题。
 - `ai_service`：AI 服务 HTTP 错误、限流、超时、空响应、JSON/schema 错误。
 - `telegram_api`：Telegram 文件下载或消息回发失败。
-- `database`：PostgreSQL 写入失败，通常会进入 Markdown/pending 补偿。
+- `database`：PostgreSQL 写入失败，通常会进入 pending replay 补偿。
 - `github_action`：GitHub Actions 的安装依赖、同步、测试、提交、推送或部署阶段失败。
 - `system_bug`：未归入上述类别的代码异常。
 

@@ -248,7 +248,7 @@ test('recognizeBatch sends inline Telegram image data when inline mode is config
   assert.equal(result.recognitionErrors.length, 0);
 });
 
-test('runTelegramSync persists ready batches to the database and merges markdown incrementally', async () => {
+test('runTelegramSync persists ready image batches to the database without writing markdown', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-runner-'));
   const persistedBatches = [];
 
@@ -302,13 +302,13 @@ test('runTelegramSync persists ready batches to the database and merges markdown
 
   assert.equal(result.changed, true);
   assert.equal(persistedBatches.length, 1);
-  const markdown = await readFile(path.join(tempRoot, '训练记录.md'), 'utf8');
-  assert.match(markdown, /### 2026-05-09/);
-  assert.match(markdown, /#### 2026-05-09 饮食截图记录/);
-  assert.match(markdown, /晚餐：1065千卡/);
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches[0].archivedDate, '2026-05-09');
+  assert.equal(persistedBatches[0].nutrition.meals[0].name, '晚餐');
+  await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
 });
 
-test('runTelegramSync writes the ready batch back into markdown without rebuilding a database snapshot', async () => {
+test('runTelegramSync leaves existing markdown untouched after storing an image batch', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-stale-db-snapshot-'));
 
   await import('node:fs/promises').then(({ writeFile }) =>
@@ -369,11 +369,14 @@ test('runTelegramSync writes the ready batch back into markdown without rebuildi
 
   assert.equal(result.changed, true);
   assert.equal(result.fallbackUsed, false);
-  assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /### 2026-04-06/);
-  assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /活动热量：402千卡/);
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(
+    await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'),
+    '# 训练记录\n\n### 2026-05-09\n\n#### 当日运动截图记录\n\n##### 当日活动总览\n\n- 活动热量：643千卡\n',
+  );
 });
 
-test('runTelegramSync incrementally merges markdown after storing a batch even if database snapshot is unavailable', async () => {
+test('runTelegramSync stores image batches even when markdown contains stale data', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-incomplete-db-snapshot-'));
 
   await import('node:fs/promises').then(({ writeFile }) =>
@@ -429,10 +432,14 @@ test('runTelegramSync incrementally merges markdown after storing a batch even i
 
   assert.equal(result.changed, true);
   assert.equal(result.fallbackUsed, false);
-  assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /晚餐：329千卡/);
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(
+    await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'),
+    '# 训练记录\n\n### 2026-05-14\n\n#### 2026-05-14 饮食截图记录\n\n##### 餐次汇总\n\n- 午餐：420千卡，建议范围620–1033千卡\n',
+  );
 });
 
-test('runTelegramSync writes stored sleep image batches back into markdown', async () => {
+test('runTelegramSync stores sleep image batches without writing markdown', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-sleep-markdown-'));
 
   await writeFile(
@@ -500,12 +507,10 @@ test('runTelegramSync writes stored sleep image batches back into markdown', asy
     backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
   });
 
-  const markdown = await readFile(path.join(tempRoot, '训练记录.md'), 'utf8');
   assert.equal(result.changed, true);
   assert.equal(result.fallbackUsed, false);
-  assert.match(markdown, /### 2026-05-29/);
-  assert.match(markdown, /#### 2026-05-29 睡眠截图记录/);
-  assert.match(markdown, /总睡眠：505分钟/);
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), '# 训练记录\n');
 });
 
 test('runTelegramSync runs sleep backfill for a fresh stored sleep image by default', async () => {
@@ -674,9 +679,138 @@ test('runTelegramSync can explicitly run sleep backfill for a fresh stored image
   assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), true);
 });
 
-test('runTelegramSync falls back to markdown when database persistence fails', async () => {
+test('runTelegramSync runs sleep backfill when pending recognition replay stores sleep data', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-pending-sleep-backfill-'));
+  await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');
+  const backfillCalls = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv({
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+    }),
+    repositoryDispatchEvent: { client_payload: {} },
+    getLastProcessedUpdateId: async () => 900,
+    readPendingRecognitionBatches: async () => [
+      {
+        batchId: 'pending-sleep',
+        batch: {
+          kind: 'image',
+          batchId: 'pending-sleep',
+          messages: [
+            {
+              messageId: 129,
+              updateId: 901,
+              dateUnix: 1775433600,
+              chatId: 42,
+              caption: '归档到 2026-05-30',
+              photos: [{ fileId: 'file-sleep', fileUniqueId: 'uniq-sleep' }],
+            },
+          ],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 129,
+        imageType: 'sleep',
+        detectedDate: '2026-05-30',
+        dateEvidence: 'image header',
+        confidence: 0.97,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [],
+          totalCalories: null,
+          details: [],
+          dailyWorkoutSummary: null,
+          sleep: {
+            totalSleepMinutes: 505,
+            nightSleepMinutes: 505,
+            bedtime: '22:56',
+            wakeTime: '07:21',
+          },
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    markPendingRecognitionResolved: async ({ batchId }) => ({ status: 'resolved', batchId }),
+    appendPendingRecognitionBatch: async () => ({ status: 'queued' }),
+    backfillCoreSleepFromIngestBatches: async (input) => {
+      backfillCalls.push(input);
+      return { status: 'synced' };
+    },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(backfillCalls.length, 1);
+  assert.equal(backfillCalls[0].sourceChannel, 'telegram_sync');
+  assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), true);
+});
+
+test('runTelegramSync does not run sleep backfill when pending recognition replay stores non-sleep data', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-pending-nonsleep-backfill-'));
+  await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv({
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+    }),
+    repositoryDispatchEvent: { client_payload: {} },
+    getLastProcessedUpdateId: async () => 900,
+    readPendingRecognitionBatches: async () => [
+      {
+        batchId: 'pending-food',
+        batch: {
+          kind: 'image',
+          batchId: 'pending-food',
+          messages: [
+            {
+              messageId: 130,
+              updateId: 901,
+              dateUnix: 1775433600,
+              chatId: 42,
+              caption: '归档到 2026-05-30',
+              photos: [{ fileId: 'file-food', fileUniqueId: 'uniq-food' }],
+            },
+          ],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 130,
+        imageType: 'nutrition',
+        detectedDate: '2026-05-30',
+        dateEvidence: 'image header',
+        confidence: 0.97,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [{ name: '晚餐', calories: 329, recommendedMin: 310, recommendedMax: 723 }],
+          totalCalories: 329,
+          details: ['晚餐 329 千卡'],
+          dailyWorkoutSummary: null,
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    markPendingRecognitionResolved: async ({ batchId }) => ({ status: 'resolved', batchId }),
+    appendPendingRecognitionBatch: async () => ({ status: 'queued' }),
+    backfillCoreSleepFromIngestBatches: async () => {
+      throw new Error('sleep backfill should not run for non-sleep pending replay');
+    },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), false);
+});
+
+test('runTelegramSync queues database replay when image persistence fails', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-fallback-'));
-  const fallbackMarkdown = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -719,17 +853,13 @@ test('runTelegramSync falls back to markdown when database persistence fails', a
     exportTrainingMarkdown: () => {
       throw new Error('should not export from database on fallback');
     },
-    onFallbackMarkdownWritten: (markdown) => {
-      fallbackMarkdown.push(markdown);
-    },
   });
 
-  assert.equal(result.changed, true);
-  assert.equal(result.fallbackUsed, true);
-  assert.equal(fallbackMarkdown.length, 1);
-  assert.equal(result.batchResults[0].persistenceStatus, 'fallback_markdown');
+  assert.equal(result.changed, false);
+  assert.equal(result.fallbackUsed, false);
+  assert.equal(result.batchResults[0].persistenceStatus, 'pending_replay');
   assert.equal(result.batchResults[0].persistenceError, 'database unavailable');
-  assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /晚餐：1065千卡/);
+  await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
   assert.match(
     await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
     /album-1/,
@@ -997,17 +1127,17 @@ test('runTelegramSync skips conflicting-date batches and continues processing re
   assert.equal(result.batchResults[0].failureCategory, 'user_input');
   assert.match(result.batchResults[0].failureReason, /conflicting detected dates/);
   assert.equal(result.batchResults[1].status, 'ready');
-  assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /2026-05-14/);
+  await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
   assert.equal(
     await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
     '',
   );
 });
 
-test('buildTelegramSyncReport exposes fallback and archived date details for logs', () => {
+test('buildTelegramSyncReport exposes pending replay and archived date details for logs', () => {
   const report = buildTelegramSyncReport({
     changed: true,
-    fallbackUsed: true,
+    fallbackUsed: false,
     updatesFetched: 1,
     lastProcessedUpdateId: 520905402,
     readyBatches: 1,
@@ -1016,7 +1146,7 @@ test('buildTelegramSyncReport exposes fallback and archived date details for log
         batchId: 'album-1',
         status: 'ready',
         archivedDate: '2026-04-06',
-        persistenceStatus: 'fallback_markdown',
+        persistenceStatus: 'pending_replay',
         persistenceError: 'database unavailable',
         warnings: [],
         issues: [],
@@ -1026,7 +1156,7 @@ test('buildTelegramSyncReport exposes fallback and archived date details for log
 
   assert.deepEqual(report, {
     changed: true,
-    fallbackUsed: true,
+    fallbackUsed: false,
     updatesFetched: 1,
     lastProcessedUpdateId: 520905402,
     readyBatches: 1,
@@ -1047,7 +1177,7 @@ test('buildTelegramSyncReport exposes fallback and archived date details for log
         archivedDate: '2026-04-06',
         postPath: null,
         thoughtWriteStatus: null,
-        persistenceStatus: 'fallback_markdown',
+        persistenceStatus: 'pending_replay',
         persistenceError: 'database unavailable',
         failureCategory: null,
         failureReason: null,
@@ -1326,8 +1456,7 @@ test('runTelegramSync replays pending fallback batches into the database before 
 
   assert.equal(result.changed, true);
   assert.deepEqual(persistedBatchIds, ['pending-batch']);
-  assert.equal(backfillCalls.length, 1);
-  assert.equal(backfillCalls[0].sourceChannel, 'telegram_sync');
+  assert.equal(backfillCalls.length, 0);
   assert.equal(
     await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
     '',
@@ -1432,7 +1561,8 @@ test('runTelegramSync processes updates from repository dispatch payload without
   assert.equal(result.updatesFetched, 1);
   assert.equal(result.lastProcessedUpdateId, 901);
   assert.equal(persistedBatches.length, 1);
-  assert.match(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /2026-05-09/);
+  assert.equal(persistedBatches[0].archivedDate, '2026-05-09');
+  await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
 });
 
 test('runTelegramSync processes repository dispatch updates when database offset read times out', async () => {
@@ -1736,7 +1866,7 @@ test('runTelegramSync skips polling when webhook mode is enabled without dispatc
   assert.equal(result.lastProcessedUpdateId, 900);
 });
 
-test('runTelegramSync writes a /thought telegram message into source/_posts and persists ingest only', async () => {
+test('runTelegramSync stores a /thought telegram message in core without writing a post', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-'));
   const persistedBatches = [];
 
@@ -1767,32 +1897,26 @@ test('runTelegramSync writes a /thought telegram message into source/_posts and 
     },
   });
 
-  const postPath = path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-501.md');
-  const postContent = await readFile(postPath, 'utf8');
-
   assert.equal(result.changed, true);
   assert.equal(result.fallbackUsed, false);
   assert.equal(result.batchResults.length, 1);
   assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'written');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'no_images');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].kind, 'thought');
   assert.equal(persistedBatches[0].thought.thoughtModule, 'workout');
-  assert.equal(
-    persistedBatches[0].thought.storage.markdownPath,
-    'source/_posts/2026-05-14-telegram-thought-501.md',
-  );
+  assert.equal(persistedBatches[0].thought.storage.markdownPath, null);
   assert.deepEqual(persistedBatches[0].thought.storage.photoPaths, []);
-  assert.doesNotMatch(postContent, /^title:/m);
-  assert.match(postContent, /date: 2026-05-14 10:30:00/);
-  assert.match(postContent, /telegram_message_id: 501/);
-  assert.match(postContent, /telegram_chat_id: 42/);
-  assert.match(postContent, /今天训练后臀部发力更明显/);
-  assert.match(postContent, /感觉动作路线更顺了/);
+  assert.match(persistedBatches[0].thought.body, /今天训练后臀部发力更明显/);
+  assert.match(persistedBatches[0].thought.body, /感觉动作路线更顺了/);
+  await assert.rejects(
+    readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-501.md'), 'utf8'),
+    /ENOENT/,
+  );
 });
 
-test('runTelegramSync writes a /随想 image caption into source/_posts with downloaded photos', async () => {
+test('runTelegramSync writes /随想 image artifacts and stores core thought metadata', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-photo-'));
   const persistedBatches = [];
   const downloadedFileIds = [];
@@ -1853,8 +1977,6 @@ test('runTelegramSync writes a /随想 image caption into source/_posts with dow
     },
   });
 
-  const postPath = path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-502.md');
-  const postContent = await readFile(postPath, 'utf8');
   const imagePath = path.join(
     tempRoot,
     'source',
@@ -1868,23 +1990,21 @@ test('runTelegramSync writes a /随想 image caption into source/_posts with dow
   assert.equal(result.changed, true);
   assert.equal(result.batchResults[0].kind, 'thought');
   assert.equal(result.batchResults[0].thought.command, '/随想');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'images_written');
   assert.equal(recognized, false);
   assert.deepEqual(downloadedFileIds, ['photo-large']);
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].kind, 'thought');
-  assert.equal(
-    persistedBatches[0].thought.storage.markdownPath,
-    'source/_posts/2026-05-14-telegram-thought-502.md',
-  );
+  assert.equal(persistedBatches[0].thought.storage.markdownPath, null);
   assert.deepEqual(persistedBatches[0].thought.storage.photoPaths, [
     '/images/thoughts/2026/05/2026-05-14-telegram-thought-502-1.jpg',
   ]);
-  assert.match(postContent, /photos:\n  - \/images\/thoughts\/2026\/05\/2026-05-14-telegram-thought-502-1\.jpg/);
-  assert.match(postContent, /今天深蹲动作轨迹更稳了/);
+  assert.match(persistedBatches[0].thought.body, /今天深蹲动作轨迹更稳了/);
   assert.equal(await readFile(imagePath, 'utf8'), 'fake image content');
+  await assert.rejects(readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-502.md'), 'utf8'), /ENOENT/);
 });
 
-test('runTelegramSync writes a module-scoped /随想 caption into source/_posts with module metadata', async () => {
+test('runTelegramSync stores module-scoped /随想 metadata in core payload', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-misc-'));
   const persistedBatches = [];
 
@@ -1922,16 +2042,14 @@ test('runTelegramSync writes a module-scoped /随想 caption into source/_posts 
     },
   });
 
-  const postPath = path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-503.md');
-  const postContent = await readFile(postPath, 'utf8');
-
   assert.equal(result.batchResults[0].thought.thoughtModule, 'misc');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'images_written');
   assert.equal(persistedBatches[0].thought.thoughtModule, 'misc');
-  assert.match(postContent, /thought_module: misc/);
-  assert.match(postContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
+  assert.deepEqual(persistedBatches[0].thought.tags, ['杂七杂八', '随想', 'Telegram']);
+  await assert.rejects(readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-503.md'), 'utf8'), /ENOENT/);
 });
 
-test('runTelegramSync writes a body feedback /随想 caption into source/_posts with module metadata', async () => {
+test('runTelegramSync stores body feedback /随想 metadata in core payload', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-body-feedback-'));
   const persistedBatches = [];
 
@@ -1965,17 +2083,15 @@ test('runTelegramSync writes a body feedback /随想 caption into source/_posts 
     },
   });
 
-  const postPath = path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-504.md');
-  const postContent = await readFile(postPath, 'utf8');
-
   assert.equal(result.batchResults[0].thought.thoughtModule, 'body_feedback');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'no_images');
   assert.equal(persistedBatches[0].thought.thoughtModule, 'body_feedback');
-  assert.match(postContent, /thought_module: body_feedback/);
-  assert.match(postContent, /tags:\n  - 身体反馈\n  - 随想\n  - Telegram/);
-  assert.match(postContent, /今天硬拉后右侧腰背有点刺痛/);
+  assert.deepEqual(persistedBatches[0].thought.tags, ['身体反馈', '随想', 'Telegram']);
+  assert.match(persistedBatches[0].thought.body, /今天硬拉后右侧腰背有点刺痛/);
+  await assert.rejects(readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-504.md'), 'utf8'), /ENOENT/);
 });
 
-test('runTelegramSync writes a /thought album caption as one thought post with all photos', async () => {
+test('runTelegramSync writes /thought album images as artifacts only', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-album-'));
   const downloadedFileIds = [];
 
@@ -2023,20 +2139,27 @@ test('runTelegramSync writes a /thought album caption as one thought post with a
     },
   });
 
-  const postContent = await readFile(
-    path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-601.md'),
-    'utf8',
-  );
-
   assert.equal(result.batchResults.length, 1);
   assert.equal(result.batchResults[0].kind, 'thought');
   assert.equal(result.batchResults[0].batchId, 'thought-601');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'images_written');
   assert.deepEqual(downloadedFileIds, ['album-photo-a', 'album-photo-b']);
-  assert.match(postContent, /\/images\/thoughts\/2026\/05\/2026-05-14-telegram-thought-601-1\.png/);
-  assert.match(postContent, /\/images\/thoughts\/2026\/05\/2026-05-14-telegram-thought-601-2\.png/);
+  assert.deepEqual(result.batchResults[0].thought.storage.photoPaths, [
+    '/images/thoughts/2026/05/2026-05-14-telegram-thought-601-1.png',
+    '/images/thoughts/2026/05/2026-05-14-telegram-thought-601-2.png',
+  ]);
+  assert.equal(
+    await readFile(path.join(tempRoot, 'source', 'images', 'thoughts', '2026', '05', '2026-05-14-telegram-thought-601-1.png'), 'utf8'),
+    'album-photo-a',
+  );
+  assert.equal(
+    await readFile(path.join(tempRoot, 'source', 'images', 'thoughts', '2026', '05', '2026-05-14-telegram-thought-601-2.png'), 'utf8'),
+    'album-photo-b',
+  );
+  await assert.rejects(readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-601.md'), 'utf8'), /ENOENT/);
 });
 
-test('runTelegramSync treats an existing thought post as duplicate and does not overwrite it', async () => {
+test('runTelegramSync ignores existing markdown posts when storing new core thoughts', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-duplicate-'));
   const postsDir = path.join(tempRoot, 'source', '_posts');
   await import('node:fs/promises').then(({ mkdir, writeFile }) =>
@@ -2074,7 +2197,7 @@ test('runTelegramSync treats an existing thought post as duplicate and does not 
   });
 
   assert.equal(result.changed, true);
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'duplicate');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'no_images');
   assert.equal(
     await readFile(path.join(postsDir, '2026-05-14-telegram-thought-501.md'), 'utf8'),
     'original thought content\n',
@@ -2141,18 +2264,16 @@ telegram_chat_id: 42
 
   assert.equal(result.batchResults.length, 1);
   assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_edit_database_only');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].kind, 'thought_edit');
-  assert.equal(
-    persistedBatches[0].thoughtEdit.storage.markdownPath,
-    'source/_posts/2026-05-17-telegram-thought-126.md',
-  );
+  assert.equal(persistedBatches[0].thoughtEdit.storage.markdownPath, null);
   assert.deepEqual(persistedBatches[0].thoughtEdit.storage.photoPaths, []);
-  assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, 'misc');
+  assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, null);
+  assert.equal(persistedBatches[0].thoughtEdit.tags, undefined);
+  assert.match(persistedBatches[0].thoughtEdit.body, /今天骑行 40 公里，动作更顺/);
   assert.match(postContent, /thought_module: misc/);
-  assert.match(postContent, /今天骑行 40 公里，动作更顺/);
-  assert.doesNotMatch(postContent, /旧正文/);
+  assert.match(postContent, /旧正文/);
 });
 
 test('runTelegramSync keeps scanning same-id thought posts until the chat id matches', async () => {
@@ -2244,14 +2365,11 @@ tags:
   );
 
   assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
-  assert.equal(
-    persistedBatches[0].thoughtEdit.storage.markdownPath,
-    'source/_posts/2026-05-17-telegram-thought-126.md',
-  );
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_edit_database_only');
+  assert.equal(persistedBatches[0].thoughtEdit.storage.markdownPath, null);
+  assert.match(persistedBatches[0].thoughtEdit.body, /正确 chat 的新正文/);
   assert.match(otherPostContent, /别的 chat 的旧正文/);
-  assert.match(targetPostContent, /正确 chat 的新正文/);
-  assert.doesNotMatch(targetPostContent, /目标旧正文/);
+  assert.match(targetPostContent, /目标旧正文/);
 });
 
 test('runTelegramSync updates an existing telegram thought when a reply-based revision targets it', async () => {
@@ -2317,15 +2435,15 @@ telegram_chat_id: 42
 
   assert.equal(result.batchResults.length, 1);
   assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_edit_database_only');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].kind, 'thought_edit');
-  assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, 'misc');
-  assert.deepEqual(persistedBatches[0].thoughtEdit.tags, ['杂七杂八', '随想', 'Telegram']);
+  assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, null);
+  assert.equal(persistedBatches[0].thoughtEdit.tags, undefined);
+  assert.match(persistedBatches[0].thoughtEdit.body, /高德地图骑行的公里数和华为手表骑行的公里数差别太大了/);
   assert.match(postContent, /thought_module: misc/);
   assert.match(postContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
-  assert.match(postContent, /高德地图骑行的公里数和华为手表骑行的公里数差别太大了/);
-  assert.doesNotMatch(postContent, /旧正文/);
+  assert.match(postContent, /旧正文/);
   await assert.rejects(
     readFile(path.join(postsDir, '2026-05-18-telegram-thought-131.md'), 'utf8'),
     /ENOENT/,
@@ -2407,20 +2525,16 @@ photos:
 
   assert.equal(result.batchResults.length, 1);
   assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'images_written');
   assert.equal(persistedBatches[0].thoughtEdit.replacePhotos, true);
   assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, 'misc');
+  assert.deepEqual(persistedBatches[0].thoughtEdit.tags, ['杂七杂八', '随想', 'Telegram']);
   assert.deepEqual(downloadedFileIds, ['new-photo']);
-  assert.match(postContent, /今天骑行 40 公里，补充图片/);
-  assert.match(postContent, /thought_module: misc/);
-  assert.match(postContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
-  assert.match(postContent, /photos:\n  - \/images\/thoughts\/2026\/05\/2026-05-17-telegram-thought-126-1\.png/);
-  await assert.rejects(
-    readFile(path.join(imageDir, '2026-05-17-telegram-thought-126-1.jpg'), 'utf8'),
-    /ENOENT/,
-  );
+  assert.match(persistedBatches[0].thoughtEdit.body, /今天骑行 40 公里，补充图片/);
+  assert.match(postContent, /旧正文/);
+  assert.equal(await readFile(path.join(imageDir, '2026-05-17-telegram-thought-126-1.jpg'), 'utf8'), 'old image');
   assert.equal(
-    await readFile(path.join(imageDir, '2026-05-17-telegram-thought-126-1.png'), 'utf8'),
+    await readFile(path.join(imageDir, '2026-05-18-telegram-thought-126-1.png'), 'utf8'),
     'new image',
   );
 });
@@ -2495,24 +2609,13 @@ photos:
 
   assert.equal(result.batchResults.length, 1);
   assert.equal(result.batchResults[0].kind, 'thought_delete');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'deleted');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_delete_database_only');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].kind, 'thought_delete');
-  assert.equal(
-    persistedBatches[0].thoughtDelete.storage.markdownPath,
-    'source/_posts/2026-05-17-telegram-thought-126.md',
-  );
-  assert.deepEqual(persistedBatches[0].thoughtDelete.storage.deletedPhotoPaths, [
-    '/images/thoughts/2026/05/2026-05-17-telegram-thought-126-1.jpg',
-  ]);
-  await assert.rejects(
-    readFile(path.join(postsDir, '2026-05-17-telegram-thought-126.md'), 'utf8'),
-    /ENOENT/,
-  );
-  await assert.rejects(
-    readFile(path.join(imageDir, '2026-05-17-telegram-thought-126-1.jpg'), 'utf8'),
-    /ENOENT/,
-  );
+  assert.equal(persistedBatches[0].thoughtDelete.storage.markdownPath, null);
+  assert.deepEqual(persistedBatches[0].thoughtDelete.storage.deletedPhotoPaths, []);
+  assert.match(await readFile(path.join(postsDir, '2026-05-17-telegram-thought-126.md'), 'utf8'), /待删除正文/);
+  assert.equal(await readFile(path.join(imageDir, '2026-05-17-telegram-thought-126-1.jpg'), 'utf8'), 'fake image');
 });
 
 test('runTelegramSync moves a telegram thought to another module by reply command', async () => {
@@ -2575,16 +2678,13 @@ telegram_chat_id: 42
 
   assert.equal(result.batchResults.length, 1);
   assert.equal(result.batchResults[0].kind, 'thought_move');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_move_database_only');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].kind, 'thought_move');
   assert.equal(persistedBatches[0].thoughtMove.thoughtModule, 'misc');
-  assert.equal(
-    persistedBatches[0].thoughtMove.storage.markdownPath,
-    'source/_posts/2026-05-17-telegram-thought-126.md',
-  );
-  assert.match(postContent, /thought_module: misc/);
-  assert.match(postContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
+  assert.equal(persistedBatches[0].thoughtMove.storage.markdownPath, null);
+  assert.match(postContent, /thought_module: workout/);
+  assert.match(postContent, /tags:\n  - 训练\n  - 随想\n  - Telegram/);
   assert.match(postContent, /发错模块的正文/);
 });
 
@@ -2645,8 +2745,9 @@ telegram_chat_id: 42
 
   assert.equal(result.batchResults[0].kind, 'thought_move');
   assert.equal(persistedBatches[0].thoughtMove.thoughtModule, 'workout');
-  assert.match(postContent, /thought_module: workout/);
-  assert.match(postContent, /tags:\n  - 训练\n  - 随想\n  - Telegram/);
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_move_database_only');
+  assert.match(postContent, /thought_module: misc/);
+  assert.match(postContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
   assert.match(postContent, /应该回到锻炼随想的正文/);
 });
 
@@ -2702,9 +2803,9 @@ telegram_chat_id: 42
   );
 
   assert.equal(result.batchResults[0].kind, 'thought_move');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'updated');
-  assert.match(targetContent, /thought_module: misc/);
-  assert.match(targetContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_move_database_only');
+  assert.match(targetContent, /thought_module: workout/);
+  assert.match(targetContent, /tags:\n  - 训练\n  - 随想\n  - Telegram/);
   assert.match(targetContent, /利用欲望让自己努力/);
   await assert.rejects(
     readFile(path.join(postsDir, '2026-05-22-telegram-thought-176.md'), 'utf8'),
@@ -2741,12 +2842,12 @@ test('runTelegramSync keeps thought posts when database persistence fails and qu
     },
   });
 
-  assert.equal(result.changed, true);
+  assert.equal(result.changed, false);
   assert.equal(result.fallbackUsed, false);
   assert.equal(result.batchResults[0].persistenceStatus, 'pending_replay');
-  assert.match(
-    await readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-701.md'), 'utf8'),
-    /今晚训练结束后心率回落更快了/,
+  await assert.rejects(
+    readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-701.md'), 'utf8'),
+    /ENOENT/,
   );
   assert.match(
     await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
@@ -4436,7 +4537,7 @@ test('runTelegramSync sends Telegram result notification after writing a thought
   });
 
   assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'written');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'no_images');
   assert.equal(sentMessages.length, 1);
   assert.deepEqual(sentMessages[0], {
     chatId: 42,
@@ -4480,7 +4581,7 @@ test('runTelegramSync defers Telegram success notification until the action fini
 
   assert.equal(result.batchResults[0].kind, 'thought');
   const savedResult = JSON.parse(await readFile(resultPath, 'utf8'));
-  assert.equal(savedResult.batchResults[0].thoughtWriteStatus, 'written');
+  assert.equal(savedResult.batchResults[0].thoughtWriteStatus, 'no_images');
   assert.equal(savedResult.batchResults[0].persistenceStatus, 'stored');
 
   const notifierMessages = [];
@@ -4549,7 +4650,7 @@ test('runTelegramSync explains thought database fallback in Telegram notificatio
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].chatId, 42);
   assert.equal(sentMessages[0].replyToMessageId, 904);
-  assert.match(sentMessages[0].text, /随想写入成功，Markdown 已写入，数据库待补偿/);
+  assert.match(sentMessages[0].text, /随想写入成功，已记录，数据库待补偿/);
   assert.match(sentMessages[0].text, /database unavailable/);
 });
 
@@ -4772,7 +4873,7 @@ test('runTelegramSync replays pending recognition batches and marks them resolve
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].nutrition.totalCalories, 868);
   assert.deepEqual(resolved, ['single-383']);
-  assert.equal(backfillCalls.length, 1);
+  assert.equal(backfillCalls.length, 0);
 });
 
 test('runTelegramSync uses the normalized runtime env for first-time and replayed image recognition', async () => {

@@ -136,12 +136,13 @@ test('persistTrainingArchive writes snapshot and run rows in one transaction', a
   assert.match(result.runId, /^[0-9a-f-]{36}$/);
   assert.equal(calls[0][0], 'connect');
   assert.equal(calls[1][0], 'BEGIN');
-  assert.match(calls[2][0], /insert into archive\.training_parse_snapshot/i);
-  assert.match(calls[3][0], /insert into archive\.training_day/i);
-  assert.match(calls[4][0], /insert into archive\.training_measurement/i);
-  assert.match(calls[5][0], /insert into archive\.training_parse_run/i);
-  assert.equal(calls[6][0], 'COMMIT');
-  assert.equal(calls[7][0], 'end');
+  assert.ok(calls.some(([sql]) => /select source_hash\s+from archive\.training_parse_snapshot/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into archive\.training_parse_snapshot/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into archive\.training_day/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into archive\.training_measurement/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into archive\.training_parse_run/i.test(sql)));
+  assert.equal(calls.at(-2)[0], 'COMMIT');
+  assert.equal(calls.at(-1)[0], 'end');
 });
 
 test('persistTrainingArchive writes activity and meal rows when parsed data contains them', async () => {
@@ -289,11 +290,159 @@ test('persistTrainingArchive writes sleep health metrics into archive sleep rows
   assert.match(sleepInsert[0], /sleep_score/i);
   assert.match(sleepInsert[0], /average_heart_rate_bpm/i);
   assert.match(sleepInsert[0], /analysis_text/i);
-  assert.match(sleepInsert[0], /\$15::jsonb/i);
-  assert.equal(sleepInsert[1][15], 81);
-  assert.equal(sleepInsert[1][16], 77);
-  assert.equal(sleepInsert[1][23], 68);
-  assert.equal(sleepInsert[1][28], '建议睡觉时关灯。');
+  assert.match(sleepInsert[0], /\$15::text\[\]/i);
+  assert.doesNotMatch(sleepInsert[0], /sleep_stage_detail[\s\S]*jsonb\[\]/i);
+  assert.deepEqual(sleepInsert[1][15], [81]);
+  assert.deepEqual(sleepInsert[1][16], [77]);
+  assert.deepEqual(sleepInsert[1][23], [68]);
+  assert.deepEqual(sleepInsert[1][28], ['建议睡觉时关灯。']);
+});
+
+test('persistTrainingArchive only updates snapshot and run when source hash is unchanged', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select\s+source_hash\s+from archive\.training_parse_snapshot/i.test(sql)) {
+        return { rows: [{ source_hash: params[0] }] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await persistTrainingArchive({
+    markdownRaw: sampleMarkdown,
+    parsed: sampleParsed,
+    runStartedAt: new Date('2026-05-12T00:00:00.000Z'),
+    runFinishedAt: new Date('2026-05-12T00:00:02.000Z'),
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    runtimeContext: {
+      triggerName: 'local-build-data',
+      runtimeEnv: 'local',
+      actorName: 'tester',
+    },
+    createClient() {
+      return fakeClient;
+    },
+  });
+
+  const executedSql = calls.map(([sql]) => sql).filter((sql) => typeof sql === 'string');
+  assert.equal(result.status, 'unchanged');
+  assert.ok(executedSql.some((sql) => /update archive\.training_parse_snapshot/i.test(sql)));
+  assert.ok(executedSql.some((sql) => /insert into archive\.training_parse_run/i.test(sql)));
+  assert.ok(!executedSql.some((sql) => /insert into archive\.training_day/i.test(sql)));
+  assert.ok(!executedSql.some((sql) => /insert into archive\.training_measurement/i.test(sql)));
+  assert.ok(!executedSql.some((sql) => /insert into archive\.training_activity/i.test(sql)));
+  assert.ok(!executedSql.some((sql) => /insert into archive\.training_meal/i.test(sql)));
+  assert.ok(!executedSql.some((sql) => /insert into archive\.training_sleep/i.test(sql)));
+});
+
+test('persistTrainingArchive writes archive child tables with batch unnest upserts', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select\s+source_hash\s+from archive\.training_parse_snapshot/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  await persistTrainingArchive({
+    markdownRaw: sampleMarkdown,
+    parsed: {
+      ...sampleParsed,
+      daily: [
+        {
+          ...sampleParsed.daily[0],
+          measurements: [sampleParsed.daily[0].measurement],
+          activities: [
+            {
+              time: '08:30',
+              type: '燃脂训练',
+              rawType: '自由训练',
+              detail: '总消耗120千卡，时长00:15:00',
+              calories: 120,
+              heartRate: 135,
+              distanceKm: null,
+              avgSpeedKmh: null,
+              durationText: '00:15:00',
+              durationSeconds: 900,
+            },
+          ],
+          nutrition: {
+            totalCalories: 500,
+            meals: [
+              {
+                name: '早餐',
+                calories: 500,
+                recommendedMin: 300,
+                recommendedMax: 600,
+              },
+            ],
+          },
+          sleep: [
+            {
+              sleepType: '夜间睡眠',
+              sleepStartTime: '23:26',
+              sleepEndTime: '06:19',
+              totalSleepMinutes: 411,
+            },
+          ],
+        },
+      ],
+    },
+    runStartedAt: new Date('2026-05-12T00:00:00.000Z'),
+    runFinishedAt: new Date('2026-05-12T00:00:02.000Z'),
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    runtimeContext: {
+      triggerName: 'local-build-data',
+      runtimeEnv: 'local',
+      actorName: 'tester',
+    },
+    createClient() {
+      return fakeClient;
+    },
+  });
+
+  for (const table of [
+    'training_day',
+    'training_measurement',
+    'training_activity',
+    'training_meal',
+    'training_sleep',
+  ]) {
+    const insert = calls.find(([sql]) =>
+      typeof sql === 'string' && new RegExp(`insert into archive\\.${table}`, 'i').test(sql)
+    );
+    assert.ok(insert, `${table} should be inserted`);
+    assert.match(insert[0], /from unnest\(/i, `${table} should use batch unnest`);
+  }
+
+  const sleepInsert = calls.find(([sql]) =>
+    typeof sql === 'string' && /insert into archive\.training_sleep/i.test(sql)
+  );
+  assert.match(sleepInsert[0], /\$15::text\[\]/i);
+  assert.doesNotMatch(sleepInsert[0], /sleep_stage_detail[\s\S]*jsonb\[\]/i);
 });
 
 test('generateTrainingData keeps main outputs when archive sync fails', async () => {
@@ -332,6 +481,113 @@ test('generateTrainingData keeps main outputs when archive sync fails', async ()
   assert.match(await readFile(debugOutputPath, 'utf8'), /训练数据解析排查/);
   assert.equal(loggedFailures.length, 1);
   assert.match(stderrChunks.join(''), /database unavailable/);
+});
+
+test('generateTrainingData skips archive sync when build archive write is disabled', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-build-archive-disabled-'));
+  const recordPath = path.join(tempRoot, '训练记录.md');
+  const stdoutChunks = [];
+  const stderrChunks = [];
+  const archiveCalls = [];
+  const loggedFailures = [];
+
+  await writeFile(recordPath, sampleMarkdown, 'utf8');
+
+  await generateTrainingData({
+    rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TRAINING_BUILD_ARCHIVE_WRITE: 'false',
+    },
+    argv: ['--trigger=local-build-data'],
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+    stderr: {
+      write(chunk) {
+        stderrChunks.push(String(chunk));
+      },
+    },
+    persistArchive: async () => {
+      archiveCalls.push('persist');
+      throw new Error('archive should be skipped');
+    },
+    appendArchiveFailureLog: async (entry) => {
+      loggedFailures.push(entry);
+    },
+  });
+
+  assert.ok(JSON.parse(await readFile(path.join(tempRoot, 'source', '_data', 'training.json'), 'utf8')));
+  assert.ok(JSON.parse(await readFile(path.join(tempRoot, 'source', '_data', 'dashboardView.json'), 'utf8')));
+  assert.match(await readFile(path.join(tempRoot, '训练数据解析.md'), 'utf8'), /训练数据解析排查/);
+  assert.deepEqual(archiveCalls, []);
+  assert.equal(loggedFailures.length, 0);
+  assert.match(stdoutChunks.join(''), /Generated source\/_data\/training\.json/);
+  assert.match(stderrChunks.join(''), /\[training-db-archive\] skipped by TRAINING_BUILD_ARCHIVE_WRITE=false/);
+});
+
+test('generateTrainingData skips archive sync for strict database snapshots in auto mode', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-build-archive-auto-db-'));
+  const recordPath = path.join(tempRoot, '训练记录.md');
+  const stderrChunks = [];
+  const archiveCalls = [];
+
+  await writeFile(recordPath, sampleMarkdown, 'utf8');
+
+  await generateTrainingData({
+    rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TRAINING_SNAPSHOT_SOURCE: 'database',
+      TRAINING_SNAPSHOT_STRICT_DATABASE: 'true',
+      TRAINING_BUILD_ARCHIVE_WRITE: 'auto',
+    },
+    argv: ['--trigger=github-actions-build'],
+    stdout: { write() {} },
+    stderr: {
+      write(chunk) {
+        stderrChunks.push(String(chunk));
+      },
+    },
+    buildSnapshot: async () => sampleParsed,
+    persistArchive: async () => {
+      archiveCalls.push('persist');
+    },
+  });
+
+  assert.deepEqual(archiveCalls, []);
+  assert.match(stderrChunks.join(''), /\[training-db-archive\] skipped by TRAINING_BUILD_ARCHIVE_WRITE=auto/);
+});
+
+test('generateTrainingData keeps archive sync for markdown snapshots in auto mode', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-build-archive-auto-markdown-'));
+  const recordPath = path.join(tempRoot, '训练记录.md');
+  const archiveCalls = [];
+
+  await writeFile(recordPath, sampleMarkdown, 'utf8');
+
+  await generateTrainingData({
+    rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TRAINING_SNAPSHOT_SOURCE: 'markdown',
+      TRAINING_BUILD_ARCHIVE_WRITE: 'auto',
+    },
+    argv: ['--trigger=local-build-data'],
+    stdout: { write() {} },
+    stderr: { write() {} },
+    persistArchive: async () => {
+      archiveCalls.push('persist');
+      return { status: 'synced' };
+    },
+  });
+
+  assert.deepEqual(archiveCalls, ['persist']);
 });
 
 test('generateTrainingData can write outputs from the shared snapshot builder', async () => {

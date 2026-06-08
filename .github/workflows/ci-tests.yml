@@ -28,6 +28,7 @@ on:
       - .github/workflows/deploy-cloudflare-worker-dev.yml
       - .github/workflows/deploy-cloudflare-pages-dev.yml
       - .github/workflows/refresh-telegram-webhook.yml
+      - .github/workflows/markdown-backup.yml
       - .github/workflows/ci-tests.yml
       - package.json
       - package-lock.json
@@ -52,6 +53,7 @@ on:
       - .github/workflows/deploy-cloudflare-worker-dev.yml
       - .github/workflows/deploy-cloudflare-pages-dev.yml
       - .github/workflows/refresh-telegram-webhook.yml
+      - .github/workflows/markdown-backup.yml
       - .github/workflows/ci-tests.yml
       - package.json
       - package-lock.json
@@ -65,6 +67,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -74,6 +78,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Check protected derived data changes
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: npm run check:derived-data-merge -- --base origin/main
 
       - name: Run tests
         run: npm run test:fast

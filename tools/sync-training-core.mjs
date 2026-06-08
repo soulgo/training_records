@@ -21,11 +21,13 @@ export async function syncTrainingCore(options = {}) {
   const result =
     phase === 'thoughts'
       ? {}
-      : options.backfillTrainingCoreFromArchive || options.reconcileTrainingMarkdownToCore
+      : options.backfillTrainingCoreFromArchive ||
+          options.backfillCoreSleepFromIngestBatchesClient ||
+          options.reconcileTrainingMarkdownToCore
         ? await syncTrainingCoreWithInjectedPhases(options, stderr, phase)
         : await syncTrainingCoreDefault(options, stderr, phase);
 
-  if ((phase === 'all' || phase === 'thoughts') && !result.thoughts) {
+  if ((phase === 'safe' || phase === 'all' || phase === 'thoughts') && !result.thoughts) {
     result.thoughts = await runPhase(
       'thoughts',
       options.backfillThoughtsToCore ?? backfillThoughtsToCore,
@@ -52,9 +54,12 @@ async function syncTrainingCoreWithInjectedPhases(options, stderr, phase) {
   const result = {};
   const phases = [
     ['archive', options.backfillTrainingCoreFromArchive ?? backfillTrainingCoreFromArchive],
+    ['ingest', options.backfillCoreSleepFromIngestBatchesClient ?? defaultInjectedIngestPhase],
     ['markdown', options.reconcileTrainingMarkdownToCore ?? reconcileTrainingMarkdownToCore],
   ];
-  for (const [name, run] of phases.filter(([name]) => phase === 'all' || name === phase)) {
+  for (const [name, run] of phases.filter(
+    ([name]) => phase === 'all' || name === phase || (phase === 'safe' && ['archive', 'ingest'].includes(name)),
+  )) {
     result[name] = await runPhase(
       name,
       run,
@@ -69,6 +74,14 @@ async function syncTrainingCoreWithInjectedPhases(options, stderr, phase) {
     );
   }
   return result;
+}
+
+async function defaultInjectedIngestPhase() {
+  return {
+    status: 'unchanged',
+    batchesBackfilled: 0,
+    daysBackfilled: [],
+  };
 }
 
 async function syncTrainingCoreDefault(options, stderr, phase) {
@@ -100,7 +113,7 @@ async function syncTrainingCoreDefault(options, stderr, phase) {
   try {
     await client.connect();
     const result = {};
-    if (phase === 'all' || phase === 'archive') {
+    if (phase === 'safe' || phase === 'all' || phase === 'archive') {
       result.archive = await runPhase(
         'archive',
         () =>
@@ -113,7 +126,7 @@ async function syncTrainingCoreDefault(options, stderr, phase) {
         stderr,
       );
     }
-    if (phase === 'all' || phase === 'ingest') {
+    if (phase === 'safe' || phase === 'all' || phase === 'ingest') {
       result.ingest = await runPhase(
         'ingest',
         () =>
@@ -183,6 +196,12 @@ async function syncTrainingCoreDefault(options, stderr, phase) {
 }
 
 function buildPhasedResult(phase, result) {
+  if (phase === 'safe') {
+    return {
+      archive: result.archive,
+      ingest: result.ingest,
+    };
+  }
   if (phase === 'all') {
     return result;
   }
@@ -229,8 +248,8 @@ function summarizeStatus(result) {
 }
 
 function normalizeSyncPhase(value) {
-  const phase = String(value ?? 'all').trim();
-  return ['all', 'archive', 'ingest', 'markdown', 'thoughts'].includes(phase) ? phase : 'all';
+  const phase = String(value ?? 'safe').trim();
+  return ['safe', 'all', 'archive', 'ingest', 'markdown', 'thoughts'].includes(phase) ? phase : 'safe';
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

@@ -3,7 +3,7 @@ description: Shared setup, build, and deploy steps for the Hexo site
 
 inputs:
   run_backfill:
-    description: Whether to sync committed data back into the database before building
+    description: Whether to run safe database repairs before building
     required: false
     default: 'true'
   sync_db_mode:
@@ -44,7 +44,7 @@ runs:
       shell: bash
       run: npm ci
 
-    - name: Detect database sync input changes
+    - name: Detect safe database sync input changes
       id: sync_db_changes
       shell: bash
       env:
@@ -106,7 +106,7 @@ runs:
           echo "sync_db_reason=data_changes" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: Sync archive and markdown to database
+    - name: Sync safe database repairs
       if: ${{ inputs.run_backfill == 'true' && (inputs.sync_db_mode == 'always' || steps.sync_db_changes.outputs.sync_db_needed == 'true') }}
       shell: bash
       run: npm run sync:db

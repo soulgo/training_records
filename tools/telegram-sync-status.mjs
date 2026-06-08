@@ -419,7 +419,7 @@ function formatPersistenceStatus(status) {
     return '已入库';
   }
   if (status === 'fallback_markdown') {
-    return '已写入 Markdown，等待数据库重放';
+    return '已记录，等待数据库重放';
   }
   if (status === 'pending_replay') {
     return '已记录，等待数据库重放';
@@ -576,7 +576,7 @@ function formatThoughtPersistenceText(status) {
     return '已入库';
   }
   if (status === 'pending_replay') {
-    return 'Markdown 已写入，数据库待补偿';
+    return '已记录，数据库待补偿';
   }
   return formatPersistenceStatus(status);
 }
