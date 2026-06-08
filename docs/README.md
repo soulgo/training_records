@@ -27,7 +27,7 @@
 | [数据流转](数据流转/) | Markdown、PostgreSQL、Telegram、Hexo、GitHub Pages 的数据链路 |
 | [训练系统](训练系统/) | 训练记录格式、Telegram 使用、图片日期归档、随想、分析和 prompt 维护 |
 | [dev_env](dev_env/) | Dev Bot、Dev 数据库、Dev Worker 和 Cloudflare Pages 预览环境配置 |
-| [部署维护](部署维护/) | GitHub Actions、Cloudflare Worker、MCP、本地和线上维护 |
+| [部署维护](部署维护/) | GitHub Actions、Cloudflare Worker、本地和线上维护 |
 | [模块说明](模块说明/) | AI provider、AI schema 校验等内部模块说明 |
 | [问题排查](问题排查/) | 同步、构建、日期、数据库、AI、部署常见问题 |
 | [优化重构](优化重构/) | 已实施或待实施的阶段性重构方案、checklist、验收 runbook |

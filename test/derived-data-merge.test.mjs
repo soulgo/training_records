@@ -192,6 +192,7 @@ test('checkDerivedDataMerge fails on protected data changes and allows code docs
 async function createRepo(prefix) {
   const repo = await mkdtemp(path.join(os.tmpdir(), prefix));
   await git(repo, ['init', '--initial-branch=main']);
+  await git(repo, ['config', 'core.autocrlf', 'false']);
   await git(repo, ['config', 'user.email', 'test@example.com']);
   await git(repo, ['config', 'user.name', 'Test User']);
   return repo;

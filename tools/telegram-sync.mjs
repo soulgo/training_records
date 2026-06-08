@@ -15,7 +15,6 @@ import {
   generateTrainingAnalysisReply,
   splitTelegramMessage,
 } from './training-analysis.mjs';
-import { runTelegramAiAgent } from './telegram-ai-agent.mjs';
 import {
   fetchTelegramUpdates,
   resolveDispatchTelegramUpdates,
@@ -158,16 +157,6 @@ export async function runTelegramSync(options = {}) {
     options.generateTrainingAnalysisReply ??
     ((input) =>
       generateTrainingAnalysisReply({
-        ...input,
-        rootDir: activeRootDir,
-        env: rawEnv,
-        now,
-        aiProvider,
-      }));
-  const runAiAgent =
-    options.runTelegramAiAgent ??
-    ((input) =>
-      runTelegramAiAgent({
         ...input,
         rootDir: activeRootDir,
         env: rawEnv,
@@ -354,31 +343,6 @@ export async function runTelegramSync(options = {}) {
         failureReason:
           analysisResult.status === 'failed'
             ? analysisResult.error
-            : persistedBatch.failureReason,
-      });
-      continue;
-    }
-
-    if (persistedBatch.kind === 'ai_agent') {
-      const aiAgentResult = await measureSyncStage(timings, 'aiAgent', () =>
-        handleAiAgentBatch({
-          batch: persistedBatch,
-          runAiAgent,
-          sendMessage,
-        }),
-      );
-      batchResults.push({
-        ...persistedBatch,
-        aiAgentReplyStatus: aiAgentResult.status,
-        aiAgentReplyError: aiAgentResult.error ?? null,
-        aiAgentReplyParts: aiAgentResult.parts ?? 0,
-        failureCategory:
-          aiAgentResult.status === 'failed'
-            ? classifyFailureCategory(aiAgentResult.error, { phase: 'ai_agent' })
-            : persistedBatch.failureCategory,
-        failureReason:
-          aiAgentResult.status === 'failed'
-            ? aiAgentResult.error
             : persistedBatch.failureReason,
       });
       continue;
@@ -807,41 +771,6 @@ async function handleHelpBatch({ batch, sendMessage }) {
     return {
       status: 'failed',
       error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
-async function handleAiAgentBatch({ batch, runAiAgent, sendMessage }) {
-  const message = batch.messages?.[0] ?? {};
-  try {
-    const reply = await runAiAgent({
-      question: batch.aiAgent?.question ?? '',
-      chatId: message.chatId,
-      messageId: message.messageId,
-    });
-    const parts = splitTelegramMessage(reply);
-    for (const [index, part] of parts.entries()) {
-      await sendMessage({
-        chatId: message.chatId,
-        text: part,
-        replyToMessageId: index === 0 ? message.messageId : null,
-      });
-    }
-    return {
-      status: 'sent',
-      parts: parts.length,
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    await sendMessage({
-      chatId: message.chatId,
-      text: `AI 助手暂时生成失败：${errorMessage}`,
-      replyToMessageId: message.messageId,
-    });
-    return {
-      status: 'failed',
-      error: errorMessage,
-      parts: 1,
     };
   }
 }

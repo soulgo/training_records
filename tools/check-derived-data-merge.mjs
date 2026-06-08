@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
 import { DERIVED_DATA_PATTERNS, filterDerivedDataPaths } from './lib/derived-data-paths.mjs';
@@ -73,7 +73,7 @@ async function gitLines(args, { cwd }) {
   return stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(new URL(process.argv[1], 'file:'))) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(pathToFileURL(process.argv[1]))) {
   const result = await checkDerivedDataMerge();
   if (!result.ok) {
     process.exitCode = 1;

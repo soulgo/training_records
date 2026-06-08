@@ -476,13 +476,12 @@ Invoke-RestMethod `
 2. 给 Bot 发 2 张相册截图，应只触发 1 次 `Telegram Sync`
 3. 给 Bot 发一条 `/thought 今天训练后背阔发力更明显` 或 `/随想 今天训练后背阔发力更明显`，应触发 1 次 `Telegram Sync`，并收到“随想写入成功”反馈
 4. 给 Bot 发一条 `/analysis 今天怎么练` 或 `/分析 最近饮食怎么样`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的分析建议
-5. 给 Bot 发一条 `/ai 搜一下右肩疼痛相关记录`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的 Agent 回复
-6. 给 Bot 发一条 `/help` 或 `帮助`，应直接收到命令清单，且不触发 `Telegram Sync`
-7. 直接编辑一条已经归档的 `/thought` / `/随想` 消息，应触发 1 次 `Telegram Sync`，并更新 `core.thought`
-8. 回复原随想消息发送 `/随想删`，或单独发送 `/随想删 126`，应触发 1 次 `Telegram Sync`，并在 `core.thought` 中软删除
-9. 在 Cloudflare Worker 请求日志确认收到了 `POST`
-10. 在 GitHub Actions 确认普通同步请求被 `repository_dispatch` 触发
-11. 临时使用无效的 Cloudflare `GITHUB_TOKEN` 验证时，应收到“GitHub Action 未能启动”反馈；恢复 token 后再继续测试
+5. 给 Bot 发一条 `/help` 或 `帮助`，应直接收到命令清单，且不触发 `Telegram Sync`
+6. 直接编辑一条已经归档的 `/thought` / `/随想` 消息，应触发 1 次 `Telegram Sync`，并更新 `core.thought`
+7. 回复原随想消息发送 `/随想删`，或单独发送 `/随想删 126`，应触发 1 次 `Telegram Sync`，并在 `core.thought` 中软删除
+8. 在 Cloudflare Worker 请求日志确认收到了 `POST`
+9. 在 GitHub Actions 确认普通同步请求被 `repository_dispatch` 触发
+10. 临时使用无效的 Cloudflare `GITHUB_TOKEN` 验证时，应收到“GitHub Action 未能启动”反馈；恢复 token 后再继续测试
 
 ## 7. 当前实现下的重要说明
 
@@ -496,7 +495,7 @@ Invoke-RestMethod `
 - PostgreSQL 成功时，Telegram 图片批次只增量写入当前批次和目标日期汇总，不会删除同日其它模块，也不会每次全量覆盖 `训练记录.md`
 - 对 `/thought` 来说，正文和模块信息以 `core.thought` 为准；图片只保留 `source/images/thoughts/` artifact，Markdown 文章由备份任务导出
 - 随想新增、编辑、删除、移动现在会回发成功反馈；如果数据库失败，反馈会明确说明“数据库待补偿”
-- 图片识别、随想、`/analysis` 和 `/ai` 的失败反馈会尽量标注 `user_input`、`ai_service`、`telegram_api`、`database`、`github_action` 或 `system_bug`
+- 图片识别、随想和 `/analysis` 的失败反馈会尽量标注 `user_input`、`ai_service`、`telegram_api`、`database`、`github_action` 或 `system_bug`
 - 睡眠截图按醒来日期减一天归档，并写入 `core.sleep` 和 `core.training_day` 睡眠汇总；`archive.training_sleep` 只作为历史回填/维护兼容层
 - 默认 sleep backfill 不再由所有图片入库触发，只在真实 sleep 入库或显式 `TELEGRAM_SYNC_RUN_SLEEP_BACKFILL=true` 时运行
 - PostgreSQL 恢复后，后续同步会先重放待补偿批次

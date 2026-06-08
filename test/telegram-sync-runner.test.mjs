@@ -3168,12 +3168,11 @@ test('telegram action monitor ignores site deployment stages outside telegram sy
   assert.match(sentMessages[0].text, /GitHub Action 执行失败：Unknown workflow stage/);
 });
 
-test('runTelegramSync replies to /ai through the telegram ai agent without file writes', async () => {
+test('runTelegramSync ignores removed /ai assistant commands without side effects', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-ai-agent-'));
   const sentMessages = [];
   let recognized = false;
   let persisted = false;
-  const agentCalls = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -3198,10 +3197,6 @@ test('runTelegramSync replies to /ai through the telegram ai agent without file 
       persisted = true;
       return { status: 'stored' };
     },
-    runTelegramAiAgent: async (input) => {
-      agentCalls.push(input);
-      return '找到 1 条相关身体反馈：右肩训练后有刺痛。';
-    },
     sendTelegramMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 10004 };
@@ -3216,29 +3211,17 @@ test('runTelegramSync replies to /ai through the telegram ai agent without file 
 
   assert.equal(result.changed, false);
   assert.equal(result.fallbackUsed, false);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'ai_agent');
-  assert.equal(result.batchResults[0].aiAgentReplyStatus, 'sent');
-  assert.equal(result.batchResults[0].aiAgentReplyParts, 1);
+  assert.equal(result.batchResults.length, 0);
   assert.equal(recognized, false);
   assert.equal(persisted, false);
-  assert.equal(agentCalls.length, 1);
-  assert.equal(agentCalls[0].question, '搜一下右肩疼痛相关记录');
-  assert.equal(agentCalls[0].chatId, 42);
-  assert.equal(sentMessages.length, 1);
-  assert.deepEqual(sentMessages[0], {
-    chatId: 42,
-    text: '找到 1 条相关身体反馈：右肩训练后有刺痛。',
-    replyToMessageId: 9014,
-  });
+  assert.equal(sentMessages.length, 0);
 
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
   await assert.rejects(readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-9014.md'), 'utf8'), /ENOENT/);
 });
 
-test('runTelegramSync ignores unauthorized /ai commands without invoking the agent', async () => {
+test('runTelegramSync ignores removed unauthorized /ai commands without replies', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-ai-agent-unauthorized-'));
-  let agentCalled = false;
   let sent = false;
 
   const result = await runTelegramSync({
@@ -3256,21 +3239,13 @@ test('runTelegramSync ignores unauthorized /ai commands without invoking the age
         },
       },
     ],
-    runTelegramAiAgent: async () => {
-      agentCalled = true;
-      return 'should not run';
-    },
     sendTelegramMessage: async () => {
       sent = true;
     },
   });
 
   assert.equal(result.changed, false);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'ai_agent');
-  assert.equal(result.batchResults[0].status, 'ignored');
-  assert.equal(result.batchResults[0].reason, 'unauthorized chat');
-  assert.equal(agentCalled, false);
+  assert.equal(result.batchResults.length, 0);
   assert.equal(sent, false);
 });
 
