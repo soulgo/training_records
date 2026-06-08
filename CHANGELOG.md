@@ -13,6 +13,8 @@
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-06-08
+
 ### Added
 
 - 新增 `markdown-backup.yml`，用固定 cron 唤醒并通过 `MARKDOWN_BACKUP_ENABLED`、`MARKDOWN_BACKUP_FREQUENCY`、`MARKDOWN_BACKUP_BRANCH`、`MARKDOWN_BACKUP_COMMIT` 控制 DB -> Markdown 备份。
@@ -22,6 +24,7 @@
 - 新增 `TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE=auto|url|inline`，支持先下载 Telegram 图片并以内联 data URL 发送给 AI；GitHub Actions 默认使用 `inline`。
 - 新增 `TELEGRAM_RECOGNITION_MODEL`，可只覆盖 Telegram 图片识别模型，未配置时继续使用 `AI_MODEL`。
 - Deploy Pages 与 Dev Cloudflare Pages workflow 新增 `strict_database_snapshot` 手动输入，并映射为 `TRAINING_SNAPSHOT_STRICT_DATABASE`。
+- 新增 `merge:dev-to-main` 与 `check:derived-data-merge` 命令，dev 合并 main 时保留 main 的生产数据备份，并在 PR 到 main 时阻断派生数据误合并。
 
 ### Changed
 
@@ -36,6 +39,7 @@
 - Telegram Sync 在 `repository_dispatch` 入库成功后，只要仓库文件或数据库内容发生变化，都会异步 dispatch 独立部署 workflow，并启用严格数据库快照模式。
 - 页面构建读取 PostgreSQL 快照时保留多连接并发读取，遇到连接或查询失败后会重试一次单连接读取，降低构建阶段因连接抖动回退 Markdown 的概率。
 - Telegram Sync workflow 权限收敛为 `contents: write` 与 `actions: write`，不再为同步 workflow 申请 Pages/id-token 权限。
+- `package.json` 版本号更新为 `1.2.4`。
 
 ### Fixed
 

@@ -1,0 +1,3 @@
+训练记录.md -merge
+source/_posts/*-telegram-thought-*.md -merge
+source/images/thoughts/** -merge

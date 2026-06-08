@@ -206,9 +206,16 @@ Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` �
 | 显式 Markdown 与数据库对账 | `npm run reconcile:markdown` |
 | 重放/补齐 archive 到 core | `npm run backfill:core` |
 | 随想 Markdown 回填 core | `npm run backfill:thoughts` |
+| dev 合并 main 并保留 main 数据 | `npm run merge:dev-to-main` |
 | 处理 Telegram 同步 | `npm run sync:telegram` |
 | 刷新 Telegram webhook | `npm run telegram:webhook` |
 | 启动 MCP Server | `npm run mcp:server` |
+
+### dev 合并 main 的数据保护
+
+从 `dev` 合并到 `main` 时，使用 `npm run merge:dev-to-main`。该命令只合并代码、手写文档和站点结构；`训练记录.md`、`source/_posts/*-telegram-thought-*.md` 和 `source/images/thoughts/**` 会保留 `main` 侧版本，避免 dev 的解析/备份数据覆盖生产数据。
+
+PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`。如果确实需要更新这些备份文件，应通过生产数据库导出的 `markdown-backup.yml` 或 `npm run export:markdown` 在 main 侧完成。
 
 ## 文档导航
 

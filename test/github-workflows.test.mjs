@@ -92,11 +92,15 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
     assert.match(workflow, new RegExp(`-\\s*${escapeRegExp(expectedPath)}`));
   }
   assert.match(workflow, /actions\/checkout@v4/);
+  assert.match(workflow, /fetch-depth:\s*0/);
   assert.doesNotMatch(workflow, /ref:\s*main/);
   assert.match(workflow, /actions\/setup-node@v4/);
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /cache:\s*npm/);
   assert.match(workflow, /run:\s*npm ci/);
+  assert.match(workflow, /- name: Check protected derived data changes/);
+  assert.match(workflow, /if: github\.event_name == 'pull_request' && github\.base_ref == 'main'/);
+  assert.match(workflow, /run:\s*npm run check:derived-data-merge -- --base origin\/main/);
   assert.match(workflow, /run:\s*npm run test:fast/);
   assert.match(workflow, /full-test:/);
   assert.match(workflow, /if: github\.event_name == 'schedule' \|\| github\.event_name == 'workflow_dispatch'/);

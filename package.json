@@ -1,11 +1,12 @@
 {
   "name": "training-records-dashboard",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "private": true,
   "description": "Hexo dashboard for Markdown-based training records",
   "scripts": {
     "test": "node --test",
     "test:fast": "node --test --test-skip-pattern \"dashboard renders|dashboard defaults|dashboard chart script|dashboard embeds|dashboard explains|dashboard fallback view|homepage|thoughts page|thought detail page|thought module pages\"",
+    "check:derived-data-merge": "node tools/check-derived-data-merge.mjs",
     "build:data": "node tools/generate-training-data.mjs",
     "backfill:core": "node tools/training-maintenance.mjs sync --phase archive",
     "backfill:thoughts": "node tools/training-maintenance.mjs sync --phase thoughts",
@@ -21,6 +22,7 @@
     "clean": "node tools/run-hexo-command.mjs clean",
     "server": "npm run build:data && node tools/run-hexo-command.mjs server",
     "mcp:server": "node src/mcp/server.mjs",
+    "merge:dev-to-main": "node tools/merge-dev-to-main.mjs",
     "sync:telegram": "node tools/telegram-sync.mjs",
     "telegram:sync": "npm run sync:telegram",
     "telegram:webhook": "node tools/telegram-webhook.mjs"
