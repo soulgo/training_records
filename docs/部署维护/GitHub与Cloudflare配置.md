@@ -144,34 +144,38 @@ gpt-4.1
 - 用途：控制 Pages 构建时站点数据来自 `markdown` 还是 `database`
 - 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`
 - 是否必填：否
-- 推荐值：
+- 首次接入安全值：
 
 ```text
 markdown
 ```
 
-- 如果确认页面构建直接读取 PostgreSQL，再改成：
+- 生产稳态推荐值：
 
 ```text
 database
 ```
+
+- 说明：`markdown` 只适合首次 bootstrap、本地兼容构建或数据库尚未接通时使用。当前线上长期口径是 PostgreSQL `core.*` 作为唯一事实源。
 
 #### `TRAINING_DB_ENABLED`
 
 - 用途：控制 GitHub Actions 是否启用 PostgreSQL 主链路
 - 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`telegram-sync-dev.yml`
 - 是否必填：否
-- 推荐值：
+- 首次接入安全值：
 
 ```text
 false
 ```
 
-- 数据库链路本地和线上都确认没问题后，再改成：
+- 生产稳态推荐值：
 
 ```text
 true
 ```
+
+- 说明：`false` 用于避免未配置数据库时误写或误读；正式 Telegram 同步、页面数据库构建和 DB-only 部署需要启用 PostgreSQL。
 
 #### `TRAINING_DB_TIMEOUT_MS`
 
@@ -274,6 +278,13 @@ TRAINING_DB_APP_NAME=training-records-dashboard
 TRAINING_BUILD_ARCHIVE_WRITE=auto
 TELEGRAM_WEBHOOK_URL=https://telegram-sync-dispatch.1406221797.workers.dev/
 CLOUDFLARE_PAGES_DEV_PROJECT_NAME=training-records-dev
+```
+
+上面的 Variables 模板是首次 bootstrap 的安全起点。生产稳态确认 PostgreSQL 可读写后，应至少调整为：
+
+```text
+TRAINING_SNAPSHOT_SOURCE=database
+TRAINING_DB_ENABLED=true
 ```
 
 ## 2. Cloudflare Worker
@@ -453,7 +464,7 @@ Invoke-RestMethod `
 2. 再配置 `AI_BASE_URL`、`AI_MODEL`、`AI_PROVIDER`、`AI_TIMEOUT_MS`、`AI_CONCURRENCY`、`TRAINING_ANALYSIS_GOAL`、`TELEGRAM_ALLOWED_CHAT_IDS`、`TELEGRAM_POLL_LIMIT`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_CACHE_ENABLED`
 3. 再配置 `TRAINING_DB_URL`、`TRAINING_SNAPSHOT_SOURCE`、`TRAINING_DB_TIMEOUT_MS`、`TRAINING_DB_APP_NAME`
 4. 先把 `TRAINING_DB_ENABLED` 设成 `false`
-5. 本地确认 PostgreSQL 链路和回退链路都正常后，再改成 `true`
+5. 本地确认 PostgreSQL 链路和 pending replay 链路都正常后，再改成 `TRAINING_DB_ENABLED=true`，并把生产构建切到 `TRAINING_SNAPSHOT_SOURCE=database`
 6. 如果启用 Telegram webhook，再配置 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
 7. 再去 Cloudflare 配 `GITHUB_TOKEN`、`TELEGRAM_BOT_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`GITHUB_OWNER`、`GITHUB_REPO` 和 `TELEGRAM_ALBUM_BUFFER`
 8. 再在 GitHub Actions 配 `TELEGRAM_SECRET_TOKEN` Secret 和 `TELEGRAM_WEBHOOK_URL` Variable
