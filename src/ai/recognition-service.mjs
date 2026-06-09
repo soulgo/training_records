@@ -86,7 +86,7 @@ export async function recognizeTelegramImageMessage({
     }
   }
 
-  const parsed = await requestRecognition({
+  const recognitionResult = await requestRecognitionWithProviderFallback({
     aiProvider,
     imageUrl,
     message,
@@ -94,6 +94,8 @@ export async function recognizeTelegramImageMessage({
     schemaName,
     schemaVersion,
   });
+  const parsed = recognitionResult.value;
+  const usedModel = recognitionResult.aiProvider?.env?.model ?? model;
 
   return {
     messageId: message.messageId,
@@ -101,8 +103,15 @@ export async function recognizeTelegramImageMessage({
     promptVersion,
     schemaName,
     schemaVersion,
-    model,
-    cacheKey,
+    model: usedModel,
+    cacheKey: usedModel === model
+      ? cacheKey
+      : buildRecognitionCacheKey({
+          fileUniqueId,
+          promptVersion,
+          schemaVersion,
+          model: usedModel,
+        }),
     cacheStatus: cacheKey && isRecognitionCacheEnabled(env) ? 'miss' : 'disabled',
   };
 }
@@ -116,22 +125,76 @@ async function readCachedRecognition({
   schemaVersion,
   model,
 }) {
-  const cached =
-    readRecognitionCache
-      ? await readRecognitionCache({ cacheKey, fileUniqueId, promptVersion, schemaVersion, model })
-      : await readRecognitionFromDatabaseCache({
-          env,
-          fileUniqueId,
-          promptVersion,
-          schemaVersion,
-          model,
-        });
+  let cached = null;
+  try {
+    cached =
+      readRecognitionCache
+        ? await readRecognitionCache({ cacheKey, fileUniqueId, promptVersion, schemaVersion, model })
+        : await readRecognitionFromDatabaseCache({
+            env,
+            fileUniqueId,
+            promptVersion,
+            schemaVersion,
+            model,
+          });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(
+      `[telegram-sync] recognition cache read failed for ${fileUniqueId}: ${message}; continuing without cache\n`,
+    );
+    return null;
+  }
 
   if (!cached) {
     return null;
   }
 
   return stripRecognitionRuntimeMetadata(cached);
+}
+
+async function requestRecognitionWithProviderFallback(input) {
+  const { aiProvider } = input;
+  try {
+    return {
+      value: await requestRecognition(input),
+      aiProvider,
+    };
+  } catch (error) {
+    const fallbackProvider = aiProvider?.fallbackProvider;
+    if (!fallbackProvider || !shouldRetryWithFallbackProvider(error)) {
+      throw error;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(
+      `[telegram-sync] primary AI recognition failed: ${message}; retrying with fallback provider\n`,
+    );
+    return {
+      value: await requestRecognition({
+        ...input,
+        aiProvider: fallbackProvider,
+      }),
+      aiProvider: fallbackProvider,
+    };
+  }
+}
+
+function shouldRetryWithFallbackProvider(error) {
+  if (error instanceof AiProviderError) {
+    return true;
+  }
+  if (error?.status && RECOGNITION_RETRYABLE_STATUSES.has(Number(error.status))) {
+    return true;
+  }
+  const name = String(error?.name ?? '');
+  if (name === 'AbortError' || name === 'TimeoutError') {
+    return true;
+  }
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  if (/timeout|timed out|empty content|rate limit|HTTP\s*(?:429|5\d\d)|network|fetch failed/i.test(message)) {
+    return true;
+  }
+  return Boolean(error?.cause && shouldRetryWithFallbackProvider(error.cause));
 }
 
 export async function readRecognitionFromDatabaseCache(options = {}) {

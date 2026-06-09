@@ -10,7 +10,6 @@
 - 通过 Telegram 发送锻炼、饮食、体脂秤和睡眠截图，并调用 AI 识别归档。
 - Telegram `/随想` / `/thought` 写入随想和身体反馈，支持编辑、删除、移动和带图。
 - Telegram `/分析` / `/analysis` 基于训练快照生成训练建议，只回发 Telegram，不写入数据。
-- Telegram `/ai` / `/智能助手` 调用 MCP 工具查询历史、同步状态或生成综合回答。
 - PostgreSQL 写入失败时，批次进入待补偿队列，数据库恢复后重放。
 - 定时从数据库导出 Markdown 备份。
 - 生成 `source/_data/training.json` 和 `source/_data/dashboardView.json`，由 Hexo 渲染为 GitHub Pages 静态站点。
@@ -25,11 +24,10 @@
 | 自动化 | GitHub Actions、GitHub Pages |
 | Telegram 入口 | Telegram Bot API、Cloudflare Worker、Durable Object |
 | AI | OpenAI-compatible Chat Completions |
-| Agent 工具 | 本地 MCP stdio server |
 
 ## 系统架构简述
 
-`TrainingSnapshot` 是系统统一中间层。页面构建、训练分析、MCP 查询和 Markdown/数据库互导都围绕它工作。
+`TrainingSnapshot` 是系统统一中间层。页面构建、训练分析和 Markdown/数据库互导都围绕它工作。
 
 ```mermaid
 flowchart TD
@@ -76,7 +74,7 @@ flowchart TD
 - `source/`：Hexo 内容源，包含首页、随想页、文章、图片和 CNAME。
 - `source/_data/`：构建生成的 `training.json` 与 `dashboardView.json`。
 - `tools/`：CLI 入口和核心编排脚本。
-- `src/`：AI、Telegram、MCP 等内部模块。
+- `src/`：AI、Telegram、数据库、站点和任务等内部模块。
 - `cloudflare/`：Telegram webhook 转 GitHub dispatch 的 Worker。
 - `sql/`：PostgreSQL 初始化 SQL。
 - `runtime/`：待补偿队列和归档失败日志。
@@ -153,7 +151,7 @@ Telegram 自动流程：
 1. Telegram 消息进入 Cloudflare Worker。
 2. Worker 校验 secret；帮助消息直接回复，其它消息触发 GitHub `repository_dispatch`。
 3. `telegram-sync.yml` 执行 `npm run sync:telegram`。
-4. 图片批次调用 AI 识别；随想、分析、AI Agent 按命令分支处理。
+4. 图片批次调用 AI 识别；随想和分析按命令分支处理。
 5. 图片、随想和身体反馈写 PostgreSQL。
 6. PostgreSQL 失败时写 pending 队列。
 7. 内容变化后 workflow 只提交文件；站点构建部署由 push 或 DB-only 异步 deploy workflow 完成。
@@ -209,7 +207,6 @@ Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` �
 | dev 合并 main 并保留 main 数据 | `npm run merge:dev-to-main` |
 | 处理 Telegram 同步 | `npm run sync:telegram` |
 | 刷新 Telegram webhook | `npm run telegram:webhook` |
-| 启动 MCP Server | `npm run mcp:server` |
 
 ### dev 合并 main 的数据保护
 
@@ -242,9 +239,6 @@ PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`
 
 **`/分析` 会改训练记录吗？**
 不会。它只读取 `TrainingSnapshot`，调用 AI 后回发 Telegram。
-
-**`/ai` 会改数据吗？**
-不会。当前 Agent 入口只调用 MCP 查询和分析类工具，不写 Markdown、数据库或 Telegram 以外的状态。
 
 **数据库挂了会丢数据吗？**
 批次会进入 pending 队列。数据库恢复后，下次同步会先重放队列；Markdown 备份由数据库恢复后的导出 workflow 生成。

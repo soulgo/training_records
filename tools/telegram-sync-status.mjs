@@ -69,11 +69,6 @@ export function buildTelegramSyncReport(result) {
       normalized.batches[index].analysisReplyError = batch.analysisReplyError ?? null;
       normalized.batches[index].analysisReplyParts = batch.analysisReplyParts ?? null;
     }
-    if ((batch.kind ?? 'image') === 'ai_agent') {
-      normalized.batches[index].aiAgentReplyStatus = batch.aiAgentReplyStatus ?? null;
-      normalized.batches[index].aiAgentReplyError = batch.aiAgentReplyError ?? null;
-      normalized.batches[index].aiAgentReplyParts = batch.aiAgentReplyParts ?? null;
-    }
     if ((batch.kind ?? 'image') === 'help') {
       normalized.batches[index].helpReplyStatus = batch.helpReplyStatus ?? null;
       normalized.batches[index].helpReplyError = batch.helpReplyError ?? null;
@@ -451,7 +446,7 @@ function formatChineseDate(dateValue) {
 }
 
 export function isTrainingDataBatchKind(kind) {
-  return kind !== 'thought' && kind !== 'thought_edit' && kind !== 'thought_delete' && kind !== 'thought_move' && kind !== 'analysis';
+  return kind !== 'thought' && kind !== 'thought_edit' && kind !== 'thought_delete' && kind !== 'thought_move' && kind !== 'analysis' && kind !== 'help';
 }
 
 export function hasPartialRecognitionFailure(batch) {

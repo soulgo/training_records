@@ -1,6 +1,6 @@
 {
   "name": "training-records-dashboard",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "private": true,
   "description": "Hexo dashboard for Markdown-based training records",
   "scripts": {
@@ -21,7 +21,6 @@
     "build": "npm run build:data && npm run build:site",
     "clean": "node tools/run-hexo-command.mjs clean",
     "server": "npm run build:data && node tools/run-hexo-command.mjs server",
-    "mcp:server": "node src/mcp/server.mjs",
     "merge:dev-to-main": "node tools/merge-dev-to-main.mjs",
     "sync:telegram": "node tools/telegram-sync.mjs",
     "telegram:sync": "npm run sync:telegram",

@@ -120,7 +120,7 @@ create table if not exists archive.training_sleep (
   rem_sleep_minutes integer null,
   awake_minutes integer null,
   sleep_stage_text text null,
-  sleep_stage_detail text null,
+  sleep_stage_detail jsonb null,
   sleep_score integer null,
   sleep_score_percentile integer null,
   deep_sleep_ratio_pct numeric(10, 2) null,

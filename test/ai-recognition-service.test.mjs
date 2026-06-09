@@ -397,6 +397,224 @@ test('recognizeTelegramImageMessage misses cache when prompt version changes', a
   assert.equal(result.schemaVersion, 'v1');
 });
 
+test('recognizeTelegramImageMessage treats cache read failures as cache misses', async () => {
+  let requestCount = 0;
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      env: { model: 'gpt-test' },
+      async requestChatCompletion() {
+        requestCount += 1;
+        return {
+          ok: true,
+          async json() {
+            return {
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      imageType: 'workout',
+                      detectedDate: '2026-06-08',
+                      dateEvidence: 'image header: 2026-06-08',
+                      confidence: 0.91,
+                      warnings: [],
+                      records: {
+                        measurement: null,
+                        activities: [],
+                        meals: [],
+                        totalCalories: null,
+                        details: [],
+                        dailyWorkoutSummary: {
+                          activityCaloriesKcal: 864,
+                          workoutDurationMinutes: 119,
+                          activeHours: 16,
+                        },
+                      },
+                    }),
+                  },
+                },
+              ],
+            };
+          },
+        };
+      },
+    },
+    message: {
+      messageId: 84,
+      caption: '',
+      text: '',
+      photos: [{ fileUniqueId: 'file-cache-timeout' }],
+    },
+    imageUrl: 'https://example.com/workout.jpg',
+    systemPrompt: 'system prompt',
+    promptMetadata,
+    env: {
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true',
+    },
+    readRecognitionCache: async () => {
+      throw new Error('timeout expired');
+    },
+  });
+
+  assert.equal(requestCount, 1);
+  assert.equal(result.cacheStatus, 'miss');
+  assert.equal(result.imageType, 'workout');
+});
+
+test('recognizeTelegramImageMessage retries configured fallback provider after empty primary content', async () => {
+  const calls = [];
+  const fallbackProvider = {
+    name: 'openai-compatible',
+    env: { model: 'gpt-fallback' },
+    async requestChatCompletion() {
+      calls.push('fallback');
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    imageType: 'workout',
+                    detectedDate: '2026-06-08',
+                    dateEvidence: 'image header: 2026-06-08',
+                    confidence: 0.93,
+                    warnings: [],
+                    records: {
+                      measurement: null,
+                      activities: [],
+                      meals: [],
+                      totalCalories: null,
+                      details: [],
+                      dailyWorkoutSummary: {
+                        activityCaloriesKcal: 864,
+                        workoutDurationMinutes: 119,
+                        activeHours: 16,
+                      },
+                    },
+                  }),
+                },
+              },
+            ],
+          };
+        },
+      };
+    },
+  };
+  const primaryProvider = {
+    name: 'openai-compatible',
+    env: { model: 'gpt-primary' },
+    fallbackProvider,
+    async requestChatCompletion() {
+      calls.push('primary');
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: '',
+                },
+              },
+            ],
+          };
+        },
+      };
+    },
+  };
+
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: primaryProvider,
+    message: {
+      messageId: 85,
+      caption: '',
+      text: '',
+      photos: [{ fileUniqueId: 'file-empty-primary' }],
+    },
+    imageUrl: 'https://example.com/workout.jpg',
+    systemPrompt: 'system prompt',
+    promptMetadata,
+    env: {
+      AI_MODEL: 'gpt-primary',
+      TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
+    },
+  });
+
+  assert.deepEqual(calls, ['primary', 'fallback']);
+  assert.equal(result.imageType, 'workout');
+  assert.equal(result.model, 'gpt-fallback');
+});
+
+test('recognizeTelegramImageMessage retries fallback provider when primary timeout is wrapped', async () => {
+  const calls = [];
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      name: 'openai-compatible',
+      env: { model: 'gpt-primary' },
+      fallbackProvider: {
+        name: 'openai-compatible',
+        env: { model: 'gpt-fallback' },
+        async requestChatCompletion() {
+          calls.push('fallback');
+          return {
+            ok: true,
+            async json() {
+              return {
+                choices: [
+                  {
+                    message: {
+                      content: JSON.stringify({
+                        imageType: 'nutrition',
+                        detectedDate: '2026-06-08',
+                        dateEvidence: 'image header: 2026-06-08',
+                        confidence: 0.9,
+                        warnings: [],
+                        records: {
+                          measurement: null,
+                          activities: [],
+                          meals: [],
+                          totalCalories: null,
+                          details: [],
+                          dailyWorkoutSummary: null,
+                        },
+                      }),
+                    },
+                  },
+                ],
+              };
+            },
+          };
+        },
+      },
+      async requestChatCompletion() {
+        calls.push('primary');
+        throw new Error('AI recognition request failed', {
+          cause: new Error('AI request timed out after 8000ms'),
+        });
+      },
+    },
+    message: {
+      messageId: 86,
+      caption: '',
+      text: '',
+      photos: [{ fileUniqueId: 'file-wrapped-timeout' }],
+    },
+    imageUrl: 'https://example.com/nutrition.jpg',
+    systemPrompt: 'system prompt',
+    promptMetadata,
+    env: {
+      AI_MODEL: 'gpt-primary',
+      TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
+    },
+  });
+
+  assert.deepEqual(calls, ['primary', 'fallback']);
+  assert.equal(result.imageType, 'nutrition');
+  assert.equal(result.model, 'gpt-fallback');
+});
+
 test('recognizeTelegramImageMessage parses SSE-style data response bodies', async () => {
   const recognitionContent = JSON.stringify({
     imageType: 'nutrition',

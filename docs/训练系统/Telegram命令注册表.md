@@ -16,12 +16,11 @@
 2. `move`
 3. `delete`
 4. `analysis`
-5. `ai_agent`
-6. `explicit_edit`
-7. `edited_message`
-8. `reply_edit`
-9. `thought`
-10. `image`
+5. `explicit_edit`
+6. `edited_message`
+7. `reply_edit`
+8. `thought`
+9. `image`
 
 ## 2. 现有 alias
 
@@ -31,7 +30,6 @@
 | `move` | `/move`、`/移动`、`/thought`、`/随想` |
 | `delete` | `/thought-delete`、`/thoughtdel`、`/delete-thought`、`/删随想`、`/随想删` |
 | `analysis` | `/analysis`、`/分析` |
-| `ai_agent` | `/ai`、`/智能助手` |
 | `explicit_edit` | `/thought-edit`、`/thoughtedit`、`/edit-thought`、`/编随想`、`/随想编` |
 | `thought` | `/thought`、`/随想` |
 
@@ -41,7 +39,7 @@
 
 - `move` 必须排在 `thought` 前面，保证 `/随想 <id> <模块>` 继续按移动处理。
 - `help` 必须最先处理，避免帮助消息被其它文本分支误消费。
-- `analysis` 和 `ai_agent` 都是不写数据的直接回复分支。
+- `analysis` 是不写数据的直接回复分支。
 - `explicit_edit` 必须排在相册图片归组前面，保证单图 caption 的编辑命令仍可替换图片。
 - `edited_message` 和 `reply_edit` 必须排在 `thought` 前面，保证已知随想的编辑不会被识别成新随想。
 - 图片和相册仍由原分组逻辑处理，registry 只声明其优先级位置。

@@ -20,33 +20,28 @@ const TELEGRAM_COMMAND_REGISTRY = Object.freeze([
     aliases: ['/analysis', '/分析'],
   }),
   Object.freeze({
-    name: 'ai_agent',
-    priority: 4,
-    aliases: ['/ai', '/智能助手'],
-  }),
-  Object.freeze({
     name: 'explicit_edit',
-    priority: 5,
+    priority: 4,
     aliases: ['/thought-edit', '/thoughtedit', '/edit-thought', '/编随想', '/随想编'],
   }),
   Object.freeze({
     name: 'edited_message',
-    priority: 6,
+    priority: 5,
     aliases: [],
   }),
   Object.freeze({
     name: 'reply_edit',
-    priority: 7,
+    priority: 6,
     aliases: [],
   }),
   Object.freeze({
     name: 'thought',
-    priority: 8,
+    priority: 7,
     aliases: ['/thought', '/随想'],
   }),
   Object.freeze({
     name: 'image',
-    priority: 9,
+    priority: 8,
     aliases: [],
   }),
 ]);

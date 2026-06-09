@@ -13,11 +13,38 @@
 
 ## [Unreleased]
 
+### Added
+
+- Telegram 图片识别新增备用 OpenAI-compatible AI 配置：`TELEGRAM_RECOGNITION_FALLBACK_API_KEY`、`TELEGRAM_RECOGNITION_FALLBACK_BASE_URL`、`TELEGRAM_RECOGNITION_FALLBACK_MODEL` 和 `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS`。主 AI 出现 timeout、HTTP 429/5xx、空内容或网络失败时，会自动切到备用 AI 重试。
+- GitHub Actions main/dev Telegram Sync workflow 新增备用 AI 配置透传，并补齐 GitHub + Cloudflare 配置清单和 AI Provider 文档。
+
+### Fixed
+
+- 修复 Telegram 图片识别缓存读取 PostgreSQL 超时时被误归类为 AI 识别失败的问题。识别缓存查库失败现在会降级为 cache miss 并继续调用 AI。
+- 修复主 AI 返回空内容或包装后的 timeout 时只能进入 pending 队列的问题；配置备用 AI 后会先用备用 provider 进行当前批次识别重试。
+
+## [1.2.5] - 2026-06-08
+
+### Removed
+
+- 删除 MCP stdio server、`src/mcp/**` tool 层、`mcp:server` npm 脚本、MCP 当前使用文档和 MCP 测试。
+- 删除 Telegram `/ai` / `/智能助手` 独立 Agent 入口、`tools/telegram-ai-agent.mjs`、`ai_agent` 命令注册/解析/运行/report/help 文案和相关测试。
+
 ### Changed
 
 - V11 优化 Telegram 同步与构建链路：部署构建通过 `TRAINING_BUILD_ARCHIVE_WRITE=false` 跳过 archive 写库，archive 写入支持相同 `source_hash` 早停和批量 upsert，Telegram sleep backfill 只在真实 sleep 入库或显式开关时运行。
 - Telegram Sync main/dev workflow 显式透传 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_CACHE_ENABLED`，便于在 GitHub Settings 中切换 OpenAI-compatible 服务。
 - Telegram 图片增量入库刷新 `core.training_day` 汇总时改为单条 CTE upsert，减少远程 PostgreSQL 往返并保留未覆盖模块。
+- 统一 README、系统接口、睡眠入库、部署配置和 Dev 环境文档中的事实源口径：PostgreSQL `core.*` 为当前唯一事实源，Markdown 仅作为备份或显式人工维护输入；V9 及更早 fallback 口径降级为历史背景。
+- README、长期 docs、Telegram 命令说明和排障文档移除 MCP 与 `/ai` Agent 当前能力口径，保留 Telegram 图片识别、随想入库和 `/analysis` 主链路。
+- `sql/training_records/` 明确为当前数据库结构基准，`sql/pgsql17.sql` 调整为向拆分 schema 对齐的总初始化脚本。
+- Telegram `/ai` / `/智能助手` 消息不再进入同步 batch，也不会触发 AI Agent 回复或文件/数据库写入。
+- `package.json` 版本号更新为 `1.2.5`。
+
+### Fixed
+
+- 修正 `sql/pgsql17.sql` 中 `archive.training_sleep.sleep_stage_detail` 类型为 `jsonb`，与 `sql/training_records/` 最终结构一致。
+- 修复 Windows 环境下派生数据 merge 相关测试的 file URL 与路径分隔符问题，避免本地验证因平台差异失败。
 
 ## [1.2.4] - 2026-06-08
 

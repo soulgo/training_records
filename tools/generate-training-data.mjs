@@ -73,9 +73,9 @@ export async function generateTrainingData(options = {}) {
   );
   await writeFile(debugOutputPath, renderTrainingDebugMarkdown(parsed), 'utf8');
 
-  stdout.write(`Generated ${path.relative(rootDir, outputPath)}\n`);
-  stdout.write(`Generated ${path.relative(rootDir, dashboardViewPath)}\n`);
-  stdout.write(`Generated ${path.relative(rootDir, debugOutputPath)}\n`);
+  stdout.write(`Generated ${toPosixRelativePath(rootDir, outputPath)}\n`);
+  stdout.write(`Generated ${toPosixRelativePath(rootDir, dashboardViewPath)}\n`);
+  stdout.write(`Generated ${toPosixRelativePath(rootDir, debugOutputPath)}\n`);
 
   const runtimeContext = resolveTrainingArchiveRuntimeContext({ env, argv });
   const runFinishedAt = options.runFinishedAt ?? new Date();
@@ -128,6 +128,10 @@ export async function generateTrainingData(options = {}) {
     debugOutputPath,
     parsed,
   };
+}
+
+function toPosixRelativePath(rootDir, targetPath) {
+  return path.relative(rootDir, targetPath).split(path.sep).join('/');
 }
 
 export function renderTrainingDebugMarkdown(parsed) {

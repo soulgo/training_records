@@ -26,6 +26,12 @@
 - 使用工作流：`telegram-sync.yml`
 - 是否必填：是
 
+#### `TELEGRAM_RECOGNITION_FALLBACK_API_KEY`
+
+- 用途：Telegram 图片识别备用 AI 服务鉴权；主 AI timeout、HTTP 429/5xx、空内容或网络失败时使用
+- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`
+- 是否必填：否；只有同时配置 `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` 和 `TELEGRAM_RECOGNITION_FALLBACK_MODEL` 时才启用
+
 #### `TRAINING_DB_URL`
 
 - 用途：PostgreSQL 连接串
@@ -144,34 +150,38 @@ gpt-4.1
 - 用途：控制 Pages 构建时站点数据来自 `markdown` 还是 `database`
 - 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`
 - 是否必填：否
-- 推荐值：
+- 首次接入安全值：
 
 ```text
 markdown
 ```
 
-- 如果确认页面构建直接读取 PostgreSQL，再改成：
+- 生产稳态推荐值：
 
 ```text
 database
 ```
+
+- 说明：`markdown` 只适合首次 bootstrap、本地兼容构建或数据库尚未接通时使用。当前线上长期口径是 PostgreSQL `core.*` 作为唯一事实源。
 
 #### `TRAINING_DB_ENABLED`
 
 - 用途：控制 GitHub Actions 是否启用 PostgreSQL 主链路
 - 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`telegram-sync-dev.yml`
 - 是否必填：否
-- 推荐值：
+- 首次接入安全值：
 
 ```text
 false
 ```
 
-- 数据库链路本地和线上都确认没问题后，再改成：
+- 生产稳态推荐值：
 
 ```text
 true
 ```
+
+- 说明：`false` 用于避免未配置数据库时误写或误读；正式 Telegram 同步、页面数据库构建和 DB-only 部署需要启用 PostgreSQL。
 
 #### `TRAINING_DB_TIMEOUT_MS`
 
@@ -201,6 +211,34 @@ training-records-dashboard
 - 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`
 - 是否必填：否
 - 默认值：未配置时使用 `AI_MODEL`
+
+#### `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL`
+
+- 用途：Telegram 图片识别备用 AI 服务基础地址
+- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`
+- 是否必填：否；启用备用 AI 时必填
+- 推荐格式：
+
+```text
+https://api.openai.com/v1
+```
+
+#### `TELEGRAM_RECOGNITION_FALLBACK_MODEL`
+
+- 用途：Telegram 图片识别备用 AI 模型名
+- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`
+- 是否必填：否；启用备用 AI 时必填
+
+#### `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS`
+
+- 用途：Telegram 图片识别备用 AI 请求超时时间，单位毫秒
+- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`
+- 是否必填：否；未配置时沿用 `AI_TIMEOUT_MS`
+- 推荐值：
+
+```text
+30000
+```
 
 #### `TELEGRAM_RECOGNITION_CACHE_ENABLED`
 
@@ -248,6 +286,7 @@ https://training-records-dev.pages.dev
 ```text
 TELEGRAM_BOT_TOKEN=你的 Telegram Bot Token
 AI_API_KEY=你的 AI 平台 API Key
+TELEGRAM_RECOGNITION_FALLBACK_API_KEY=你的备用 AI 平台 API Key
 TRAINING_DB_URL=postgresql://training_writer:你的数据库密码@你的数据库公网IP或域名:5432/training_records
 CLOUDFLARE_API_TOKEN=你的 Cloudflare API Token
 CLOUDFLARE_ACCOUNT_ID=你的 Cloudflare Account ID
@@ -266,6 +305,9 @@ TRAINING_ANALYSIS_GOAL=增肌减腹：优先增加或保住骨骼肌/瘦体重�
 TELEGRAM_ALLOWED_CHAT_IDS=你的 Telegram Chat ID
 TELEGRAM_POLL_LIMIT=20
 TELEGRAM_RECOGNITION_MODEL=
+TELEGRAM_RECOGNITION_FALLBACK_BASE_URL=
+TELEGRAM_RECOGNITION_FALLBACK_MODEL=
+TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS=
 TELEGRAM_RECOGNITION_CACHE_ENABLED=
 TRAINING_SNAPSHOT_SOURCE=markdown
 TRAINING_DB_ENABLED=false
@@ -274,6 +316,13 @@ TRAINING_DB_APP_NAME=training-records-dashboard
 TRAINING_BUILD_ARCHIVE_WRITE=auto
 TELEGRAM_WEBHOOK_URL=https://telegram-sync-dispatch.1406221797.workers.dev/
 CLOUDFLARE_PAGES_DEV_PROJECT_NAME=training-records-dev
+```
+
+上面的 Variables 模板是首次 bootstrap 的安全起点。生产稳态确认 PostgreSQL 可读写后，应至少调整为：
+
+```text
+TRAINING_SNAPSHOT_SOURCE=database
+TRAINING_DB_ENABLED=true
 ```
 
 ## 2. Cloudflare Worker
@@ -377,7 +426,8 @@ npx wrangler deploy
 - 由 `github-actions[bot]` 推送出来的同步提交会跳过二次 `Telegram Sync`
 - 仍然会重放待补偿批次，但不会即时刷新 Markdown
 - 正常 `ready + stored` 图片批次不写 `训练记录.md`；人工账本由 DB -> Markdown 备份 workflow 导出
-- Telegram main/dev workflow 会显式透传 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL` 和 `TELEGRAM_RECOGNITION_CACHE_ENABLED`；未配置时 provider 仍为 `openai-compatible`，图片识别模型回落到 `AI_MODEL`
+- Telegram main/dev workflow 会显式透传 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_*` 和 `TELEGRAM_RECOGNITION_CACHE_ENABLED`；未配置时 provider 仍为 `openai-compatible`，图片识别模型回落到 `AI_MODEL`
+- 如果完整配置了 `TELEGRAM_RECOGNITION_FALLBACK_API_KEY`、`TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` 和 `TELEGRAM_RECOGNITION_FALLBACK_MODEL`，Telegram 图片识别会在主 AI timeout、HTTP 429/5xx、空内容或网络失败后自动切到备用 AI；备用 AI 只影响图片识别，不影响 `/analysis`
 - 未显式开启 `TELEGRAM_SYNC_RUN_SLEEP_BACKFILL` 时，sleep backfill 只在 pending replay 或当前批次真实入库 sleep payload 后运行；非 sleep 图片不会触发
 - 当同步产生文件变化或 DB-only 训练数据变化时，会异步 dispatch `deploy-pages.yml` 并启用严格数据库快照模式；站点构建结果到对应 deploy workflow 查看
 - `repository_dispatch` 会写 GitHub Step Summary，按批次输出 `batchId`、`taskStatus`、`persistenceStatus`、`archivedDate`、图片计数、pending 状态、`failureDisposition` 和失败 message ids
@@ -450,10 +500,10 @@ Invoke-RestMethod `
 ## 5. 推荐配置顺序
 
 1. 先配置 `TELEGRAM_BOT_TOKEN`、`AI_API_KEY`
-2. 再配置 `AI_BASE_URL`、`AI_MODEL`、`AI_PROVIDER`、`AI_TIMEOUT_MS`、`AI_CONCURRENCY`、`TRAINING_ANALYSIS_GOAL`、`TELEGRAM_ALLOWED_CHAT_IDS`、`TELEGRAM_POLL_LIMIT`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_CACHE_ENABLED`
+2. 再配置 `AI_BASE_URL`、`AI_MODEL`、`AI_PROVIDER`、`AI_TIMEOUT_MS`、`AI_CONCURRENCY`、`TRAINING_ANALYSIS_GOAL`、`TELEGRAM_ALLOWED_CHAT_IDS`、`TELEGRAM_POLL_LIMIT`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_API_KEY`、`TELEGRAM_RECOGNITION_FALLBACK_BASE_URL`、`TELEGRAM_RECOGNITION_FALLBACK_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_CACHE_ENABLED`
 3. 再配置 `TRAINING_DB_URL`、`TRAINING_SNAPSHOT_SOURCE`、`TRAINING_DB_TIMEOUT_MS`、`TRAINING_DB_APP_NAME`
 4. 先把 `TRAINING_DB_ENABLED` 设成 `false`
-5. 本地确认 PostgreSQL 链路和回退链路都正常后，再改成 `true`
+5. 本地确认 PostgreSQL 链路和 pending replay 链路都正常后，再改成 `TRAINING_DB_ENABLED=true`，并把生产构建切到 `TRAINING_SNAPSHOT_SOURCE=database`
 6. 如果启用 Telegram webhook，再配置 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
 7. 再去 Cloudflare 配 `GITHUB_TOKEN`、`TELEGRAM_BOT_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`GITHUB_OWNER`、`GITHUB_REPO` 和 `TELEGRAM_ALBUM_BUFFER`
 8. 再在 GitHub Actions 配 `TELEGRAM_SECRET_TOKEN` Secret 和 `TELEGRAM_WEBHOOK_URL` Variable
@@ -465,18 +515,17 @@ Invoke-RestMethod `
 2. 给 Bot 发 2 张相册截图，应只触发 1 次 `Telegram Sync`
 3. 给 Bot 发一条 `/thought 今天训练后背阔发力更明显` 或 `/随想 今天训练后背阔发力更明显`，应触发 1 次 `Telegram Sync`，并收到“随想写入成功”反馈
 4. 给 Bot 发一条 `/analysis 今天怎么练` 或 `/分析 最近饮食怎么样`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的分析建议
-5. 给 Bot 发一条 `/ai 搜一下右肩疼痛相关记录`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的 Agent 回复
-6. 给 Bot 发一条 `/help` 或 `帮助`，应直接收到命令清单，且不触发 `Telegram Sync`
-7. 直接编辑一条已经归档的 `/thought` / `/随想` 消息，应触发 1 次 `Telegram Sync`，并更新 `core.thought`
-8. 回复原随想消息发送 `/随想删`，或单独发送 `/随想删 126`，应触发 1 次 `Telegram Sync`，并在 `core.thought` 中软删除
-9. 在 Cloudflare Worker 请求日志确认收到了 `POST`
-10. 在 GitHub Actions 确认普通同步请求被 `repository_dispatch` 触发
-11. 临时使用无效的 Cloudflare `GITHUB_TOKEN` 验证时，应收到“GitHub Action 未能启动”反馈；恢复 token 后再继续测试
+5. 给 Bot 发一条 `/help` 或 `帮助`，应直接收到命令清单，且不触发 `Telegram Sync`
+6. 直接编辑一条已经归档的 `/thought` / `/随想` 消息，应触发 1 次 `Telegram Sync`，并更新 `core.thought`
+7. 回复原随想消息发送 `/随想删`，或单独发送 `/随想删 126`，应触发 1 次 `Telegram Sync`，并在 `core.thought` 中软删除
+8. 在 Cloudflare Worker 请求日志确认收到了 `POST`
+9. 在 GitHub Actions 确认普通同步请求被 `repository_dispatch` 触发
+10. 临时使用无效的 Cloudflare `GITHUB_TOKEN` 验证时，应收到“GitHub Action 未能启动”反馈；恢复 token 后再继续测试
 
 ## 7. 当前实现下的重要说明
 
 - `telegram-sync.yml` 现在会直接访问 PostgreSQL
-- `telegram-sync.yml` 与 `telegram-sync-dev.yml` 都会透传 AI provider、timeout、识别模型和识别缓存变量；当前 provider adapter 仍只支持 OpenAI-compatible 协议
+- `telegram-sync.yml` 与 `telegram-sync-dev.yml` 都会透传 AI provider、timeout、识别模型、识别备用 AI 和识别缓存变量；当前 provider adapter 仍只支持 OpenAI-compatible 协议
 - Telegram `/thought` 虽然不走图片识别，但当前 `npm run sync:telegram` 入口仍会统一校验 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`，所以这些变量不能省
 - Telegram `/analysis` / `/分析` 不走图片识别、不写数据库、不提交仓库，但会读取现有 `TrainingSnapshot` 并调用 AI 回发建议，所以同样依赖 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 和 `TELEGRAM_BOT_TOKEN`
 - Telegram `/analysis` / `/分析` 默认长期目标是“增肌减腹”；如果配置了 `TRAINING_ANALYSIS_GOAL`，线上回复会优先使用该变量
@@ -485,7 +534,7 @@ Invoke-RestMethod `
 - PostgreSQL 成功时，Telegram 图片批次只增量写入当前批次和目标日期汇总，不会删除同日其它模块，也不会每次全量覆盖 `训练记录.md`
 - 对 `/thought` 来说，正文和模块信息以 `core.thought` 为准；图片只保留 `source/images/thoughts/` artifact，Markdown 文章由备份任务导出
 - 随想新增、编辑、删除、移动现在会回发成功反馈；如果数据库失败，反馈会明确说明“数据库待补偿”
-- 图片识别、随想、`/analysis` 和 `/ai` 的失败反馈会尽量标注 `user_input`、`ai_service`、`telegram_api`、`database`、`github_action` 或 `system_bug`
+- 图片识别、随想和 `/analysis` 的失败反馈会尽量标注 `user_input`、`ai_service`、`telegram_api`、`database`、`github_action` 或 `system_bug`
 - 睡眠截图按醒来日期减一天归档，并写入 `core.sleep` 和 `core.training_day` 睡眠汇总；`archive.training_sleep` 只作为历史回填/维护兼容层
 - 默认 sleep backfill 不再由所有图片入库触发，只在真实 sleep 入库或显式 `TELEGRAM_SYNC_RUN_SLEEP_BACKFILL=true` 时运行
 - PostgreSQL 恢复后，后续同步会先重放待补偿批次

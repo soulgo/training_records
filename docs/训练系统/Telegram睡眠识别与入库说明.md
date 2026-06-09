@@ -71,7 +71,7 @@ Telegram 睡眠图进入同一条图片同步链路：
 4. `analyzeTelegramBatch()` 汇总 `records.sleep`，生成 `batchResult.sleep`。
 5. `status=ready` 的批次优先写 PostgreSQL；正常成功路径只增量 upsert 当前 sleep 明细并刷新目标 `core.training_day` 睡眠汇总。
 6. 成功路径不会写 `训练记录.md`；Markdown 由 DB -> Markdown 备份 workflow 定期导出。
-7. 数据库写入失败时，仍会回退写 `训练记录.md`，并进入 pending 队列等待后续重放。
+7. 数据库写入失败时，不写 `训练记录.md` 兜底；批次进入 pending 队列，等待数据库恢复后重放。
 8. 页面构建读取数据库快照；严格数据库模式下，数据库快照不可用或不完整会阻止发布旧 Markdown 页面。
 
 睡眠记录在同步结果中会汇总为：

@@ -87,29 +87,23 @@ postgresql://training_writer:<密码>@<主机>:5432/training_records_dev
 
 ---
 
-## 步骤 4：修改 Worker 源码 + 创建部署配置文件
+## 步骤 4：复核 Worker 源码和 Dev 部署配置
 
-这一步做两件事：修改 Worker 源码让同一份代码可同时服务生产和开发；创建 Dev Worker 的 Wrangler 部署配置。
+当前仓库已经具备 Dev Worker 所需的代码和配置。首次搭建或接手维护时，只需要复核这些文件仍然满足下面的条件；不要重复创建同名文件。
 
-### 4.1 修改 Worker 源码（让 event_type 可配置）
+### 4.1 复核 Worker event_type 可配置
 
-打开 `cloudflare/telegram-sync-dispatch-worker.mjs`，找到 `dispatchTelegramUpdates` 函数中这一行（约第 336 行）：
-
-```javascript
-event_type: 'telegram_update',
-```
-
-改为：
+打开 `cloudflare/telegram-sync-dispatch-worker.mjs`，确认 `dispatchTelegramUpdates` 使用环境变量选择 GitHub Dispatch 事件类型：
 
 ```javascript
 event_type: env.GITHUB_DISPATCH_EVENT_TYPE?.trim() || 'telegram_update',
 ```
 
-> **为什么改这一行：** 当前代码把 GitHub Dispatch 的事件类型写死为 `telegram_update`。生产 Worker 会触发 `telegram-sync.yml`，Dev Worker 需要触发不同的 `telegram-sync-dev.yml`，所以事件类型必须可配置。改完之后，不设置 `GITHUB_DISPATCH_EVENT_TYPE` 变量时行为不变（默认 `telegram_update`），向后兼容。
+生产 Worker 不设置 `GITHUB_DISPATCH_EVENT_TYPE` 时仍触发 `telegram_update`；Dev Worker 需要设置为 `telegram_update_dev`。
 
-### 4.2 创建 `wrangler.dev.toml`
+### 4.2 复核 `wrangler.dev.toml`
 
-在仓库根目录新建文件 `wrangler.dev.toml`，内容如下：
+仓库根目录应已有 `wrangler.dev.toml`。核心内容应保持为：
 
 ```toml
 name = "telegram-sync-dispatch-dev"
@@ -127,16 +121,9 @@ new_sqlite_classes = ["TelegramAlbumBuffer"]
 
 > 与 `wrangler.toml` 的唯一区别是 `name` 改为了 `telegram-sync-dispatch-dev`。`main`、`compatibility_date`、Durable Object 绑定与生产 Worker 完全一致。
 
-### 4.3 提交代码
+### 4.3 如果复核不通过
 
-这两处改动（`telegram-sync-dispatch-worker.mjs` + `wrangler.dev.toml`）需要先提交到仓库：
-
-```powershell
-git add cloudflare/telegram-sync-dispatch-worker.mjs wrangler.dev.toml
-git commit -m "feat: make Worker dispatch event_type configurable via env var"
-```
-
-暂时不需要 push，等步骤 8 的 workflow 文件也创建好后一起提交。
+如果缺少上述代码或配置，先在本地补齐并提交，再继续部署 Dev Worker。正常接手维护时不需要执行额外提交。
 
 ---
 
@@ -243,9 +230,10 @@ npm run telegram:webhook
 ```
 
 看到 `"ok": true` 即表示 webhook 设置成功。
-## 步骤 7：创建 GitHub Actions 工作流文件
 
-以下两个文件必须放在 `main` 分支（`repository_dispatch` 只能触发默认分支上的工作流文件）。
+## 步骤 7：复核 GitHub Actions 工作流文件
+
+相关 workflow 文件必须放在 `main` 分支（`repository_dispatch` 只能触发默认分支上的工作流文件）。
 
 ### 7.1 确认 `.github/workflows/telegram-sync-dev.yml`
 
@@ -261,7 +249,9 @@ npm run telegram:webhook
 - 成功通知步骤名应为 `Notify Telegram sync result`，不要再使用容易误读的 `Notify Telegram sync success`。
 - 失败通知要包含 `STEP_SITE_BUILD_OUTCOME` 和 `STEP_PAGES_DEPLOY_OUTCOME`，方便区分同步、构建和 dev Pages 发布问题。
 
-### 7.2 创建 `.github/workflows/deploy-cloudflare-worker-dev.yml`（可选）
+### 7.2 可选：创建 `.github/workflows/deploy-cloudflare-worker-dev.yml`
+
+当前仓库如果没有 Dev Worker 自动部署 workflow，可以按下面模板新增；否则只需复核它部署 `wrangler.dev.toml` 并刷新 Dev webhook。
 
 ```yaml
 name: Deploy Cloudflare Worker (Dev)
@@ -309,22 +299,22 @@ jobs:
 
 ---
 
-## 步骤 8：创建 dev 分支
+## 步骤 8：确认 dev 分支
 
-在本机执行：
+如果远端尚未有 `dev` 分支，在本机执行：
 
 ```powershell
 git checkout -b dev
 git push -u origin dev
 ```
 
-这会在 GitHub 上创建 `dev` 分支，后续 Dev Sync 的自动提交将推送到此分支。
+这会在 GitHub 上创建 `dev` 分支，后续 Dev Sync 的自动提交将推送到此分支。若 `dev` 分支已经存在，只需确认本地已切到正确分支并能 push。
 
 ---
 
-## 步骤 9：修改 CI 工作流使其在 dev 分支也触发
+## 步骤 9：复核 CI 工作流在 dev 分支触发
 
-编辑 `.github/workflows/ci-tests.yml`，在 `push` 的 `branches` 列表中添加 `dev`：
+确认 `.github/workflows/ci-tests.yml` 的 `push.branches` 包含 `dev`：
 
 ```yaml
 on:
@@ -334,7 +324,7 @@ on:
       - dev
 ```
 
-这样 dev 分支的 push（包括 Dev Sync 自动提交）也会运行测试。
+这样 dev 分支的 push（包括 Dev Sync 自动提交）也会运行测试。若已包含 `dev`，不需要重复修改。
 
 ---
 
@@ -367,16 +357,16 @@ on:
 | `GITHUB_REPO` | Cloudflare Dev Worker Variables | 可选（默认 `training_records`） |
 | `CLOUDFLARE_PAGES_DEV_PROJECT_NAME` | GitHub Variables | 可选（默认 `training-records-dev`） |
 
-### 代码变更清单
+### 代码与工作流复核清单
 
-| 文件 | 变更类型 | 说明 |
+| 文件 | 当前复核点 | 说明 |
 | --- | --- | --- |
-| `cloudflare/telegram-sync-dispatch-worker.mjs` | **修改 1 行** | 将硬编码的 `event_type` 改为从 `env.GITHUB_DISPATCH_EVENT_TYPE` 读取 |
-| `wrangler.dev.toml` | **新增** | Dev Worker 部署配置 |
-| `.github/workflows/telegram-sync-dev.yml` | **新增** | Dev Telegram 同步工作流 |
-| `.github/workflows/deploy-cloudflare-worker-dev.yml` | **新增** | Dev Worker 自动部署工作流（可选） |
-| `.github/workflows/deploy-cloudflare-pages-dev.yml` | **新增** | Dev Cloudflare Pages 预览部署工作流 |
-| `.github/workflows/ci-tests.yml` | **修改 1 行** | push branches 增加 `dev` |
+| `cloudflare/telegram-sync-dispatch-worker.mjs` | event type 可配置 | 使用 `env.GITHUB_DISPATCH_EVENT_TYPE?.trim() || 'telegram_update'` |
+| `wrangler.dev.toml` | 应已存在 | Dev Worker 部署配置 |
+| `.github/workflows/telegram-sync-dev.yml` | 应已存在 | Dev Telegram 同步工作流 |
+| `.github/workflows/deploy-cloudflare-worker-dev.yml` | 可选 | Dev Worker 自动部署工作流 |
+| `.github/workflows/deploy-cloudflare-pages-dev.yml` | 应已存在 | Dev Cloudflare Pages 预览部署工作流 |
+| `.github/workflows/ci-tests.yml` | dev 分支触发 | push branches 包含 `dev` |
 
 ---
 
