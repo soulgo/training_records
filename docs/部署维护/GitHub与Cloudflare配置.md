@@ -26,6 +26,12 @@
 - 使用工作流：`telegram-sync.yml`
 - 是否必填：是
 
+#### `TELEGRAM_RECOGNITION_FALLBACK_API_KEY`
+
+- 用途：Telegram 图片识别备用 AI 服务鉴权；主 AI timeout、HTTP 429/5xx、空内容或网络失败时使用
+- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`
+- 是否必填：否；只有同时配置 `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` 和 `TELEGRAM_RECOGNITION_FALLBACK_MODEL` 时才启用
+
 #### `TRAINING_DB_URL`
 
 - 用途：PostgreSQL 连接串
@@ -206,6 +212,34 @@ training-records-dashboard
 - 是否必填：否
 - 默认值：未配置时使用 `AI_MODEL`
 
+#### `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL`
+
+- 用途：Telegram 图片识别备用 AI 服务基础地址
+- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`
+- 是否必填：否；启用备用 AI 时必填
+- 推荐格式：
+
+```text
+https://api.openai.com/v1
+```
+
+#### `TELEGRAM_RECOGNITION_FALLBACK_MODEL`
+
+- 用途：Telegram 图片识别备用 AI 模型名
+- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`
+- 是否必填：否；启用备用 AI 时必填
+
+#### `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS`
+
+- 用途：Telegram 图片识别备用 AI 请求超时时间，单位毫秒
+- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`
+- 是否必填：否；未配置时沿用 `AI_TIMEOUT_MS`
+- 推荐值：
+
+```text
+30000
+```
+
 #### `TELEGRAM_RECOGNITION_CACHE_ENABLED`
 
 - 用途：控制 Telegram 图片识别是否读取数据库识别缓存
@@ -252,6 +286,7 @@ https://training-records-dev.pages.dev
 ```text
 TELEGRAM_BOT_TOKEN=你的 Telegram Bot Token
 AI_API_KEY=你的 AI 平台 API Key
+TELEGRAM_RECOGNITION_FALLBACK_API_KEY=你的备用 AI 平台 API Key
 TRAINING_DB_URL=postgresql://training_writer:你的数据库密码@你的数据库公网IP或域名:5432/training_records
 CLOUDFLARE_API_TOKEN=你的 Cloudflare API Token
 CLOUDFLARE_ACCOUNT_ID=你的 Cloudflare Account ID
@@ -270,6 +305,9 @@ TRAINING_ANALYSIS_GOAL=增肌减腹：优先增加或保住骨骼肌/瘦体重�
 TELEGRAM_ALLOWED_CHAT_IDS=你的 Telegram Chat ID
 TELEGRAM_POLL_LIMIT=20
 TELEGRAM_RECOGNITION_MODEL=
+TELEGRAM_RECOGNITION_FALLBACK_BASE_URL=
+TELEGRAM_RECOGNITION_FALLBACK_MODEL=
+TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS=
 TELEGRAM_RECOGNITION_CACHE_ENABLED=
 TRAINING_SNAPSHOT_SOURCE=markdown
 TRAINING_DB_ENABLED=false
@@ -388,7 +426,8 @@ npx wrangler deploy
 - 由 `github-actions[bot]` 推送出来的同步提交会跳过二次 `Telegram Sync`
 - 仍然会重放待补偿批次，但不会即时刷新 Markdown
 - 正常 `ready + stored` 图片批次不写 `训练记录.md`；人工账本由 DB -> Markdown 备份 workflow 导出
-- Telegram main/dev workflow 会显式透传 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL` 和 `TELEGRAM_RECOGNITION_CACHE_ENABLED`；未配置时 provider 仍为 `openai-compatible`，图片识别模型回落到 `AI_MODEL`
+- Telegram main/dev workflow 会显式透传 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_*` 和 `TELEGRAM_RECOGNITION_CACHE_ENABLED`；未配置时 provider 仍为 `openai-compatible`，图片识别模型回落到 `AI_MODEL`
+- 如果完整配置了 `TELEGRAM_RECOGNITION_FALLBACK_API_KEY`、`TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` 和 `TELEGRAM_RECOGNITION_FALLBACK_MODEL`，Telegram 图片识别会在主 AI timeout、HTTP 429/5xx、空内容或网络失败后自动切到备用 AI；备用 AI 只影响图片识别，不影响 `/analysis`
 - 未显式开启 `TELEGRAM_SYNC_RUN_SLEEP_BACKFILL` 时，sleep backfill 只在 pending replay 或当前批次真实入库 sleep payload 后运行；非 sleep 图片不会触发
 - 当同步产生文件变化或 DB-only 训练数据变化时，会异步 dispatch `deploy-pages.yml` 并启用严格数据库快照模式；站点构建结果到对应 deploy workflow 查看
 - `repository_dispatch` 会写 GitHub Step Summary，按批次输出 `batchId`、`taskStatus`、`persistenceStatus`、`archivedDate`、图片计数、pending 状态、`failureDisposition` 和失败 message ids
@@ -461,7 +500,7 @@ Invoke-RestMethod `
 ## 5. 推荐配置顺序
 
 1. 先配置 `TELEGRAM_BOT_TOKEN`、`AI_API_KEY`
-2. 再配置 `AI_BASE_URL`、`AI_MODEL`、`AI_PROVIDER`、`AI_TIMEOUT_MS`、`AI_CONCURRENCY`、`TRAINING_ANALYSIS_GOAL`、`TELEGRAM_ALLOWED_CHAT_IDS`、`TELEGRAM_POLL_LIMIT`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_CACHE_ENABLED`
+2. 再配置 `AI_BASE_URL`、`AI_MODEL`、`AI_PROVIDER`、`AI_TIMEOUT_MS`、`AI_CONCURRENCY`、`TRAINING_ANALYSIS_GOAL`、`TELEGRAM_ALLOWED_CHAT_IDS`、`TELEGRAM_POLL_LIMIT`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_API_KEY`、`TELEGRAM_RECOGNITION_FALLBACK_BASE_URL`、`TELEGRAM_RECOGNITION_FALLBACK_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_CACHE_ENABLED`
 3. 再配置 `TRAINING_DB_URL`、`TRAINING_SNAPSHOT_SOURCE`、`TRAINING_DB_TIMEOUT_MS`、`TRAINING_DB_APP_NAME`
 4. 先把 `TRAINING_DB_ENABLED` 设成 `false`
 5. 本地确认 PostgreSQL 链路和 pending replay 链路都正常后，再改成 `TRAINING_DB_ENABLED=true`，并把生产构建切到 `TRAINING_SNAPSHOT_SOURCE=database`
@@ -486,7 +525,7 @@ Invoke-RestMethod `
 ## 7. 当前实现下的重要说明
 
 - `telegram-sync.yml` 现在会直接访问 PostgreSQL
-- `telegram-sync.yml` 与 `telegram-sync-dev.yml` 都会透传 AI provider、timeout、识别模型和识别缓存变量；当前 provider adapter 仍只支持 OpenAI-compatible 协议
+- `telegram-sync.yml` 与 `telegram-sync-dev.yml` 都会透传 AI provider、timeout、识别模型、识别备用 AI 和识别缓存变量；当前 provider adapter 仍只支持 OpenAI-compatible 协议
 - Telegram `/thought` 虽然不走图片识别，但当前 `npm run sync:telegram` 入口仍会统一校验 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`，所以这些变量不能省
 - Telegram `/analysis` / `/分析` 不走图片识别、不写数据库、不提交仓库，但会读取现有 `TrainingSnapshot` 并调用 AI 回发建议，所以同样依赖 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 和 `TELEGRAM_BOT_TOKEN`
 - Telegram `/analysis` / `/分析` 默认长期目标是“增肌减腹”；如果配置了 `TRAINING_ANALYSIS_GOAL`，线上回复会优先使用该变量

@@ -216,6 +216,10 @@ test('telegram-sync workflow notifies after sync and dispatches async site deplo
   assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_MODEL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_API_KEY \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
   assert.match(workflow, /- name: Trigger async site deploy/);
   assert.match(workflow, /actions\/workflows\/deploy-pages\.yml\/dispatches/);
@@ -259,6 +263,10 @@ test('telegram-sync workflows keep database-only detection without blocking on p
     assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
     assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
     assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
+    assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_API_KEY \}\}/);
+    assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \}\}/);
+    assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
+    assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
     assert.match(workflow, /db_content_changed=true/);
     assert.match(workflow, /readyStoredTrainingBatches/);
     assert.match(workflow, /- name: Write Telegram sync summary/);
@@ -317,6 +325,10 @@ test('telegram-sync dev workflow leaves Pages deployment to the dev deploy workf
   assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_MODEL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_API_KEY \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
   assert.match(workflow, /-d '\{"ref":"dev","inputs":\{"strict_database_snapshot":"true"\}\}'/);
   assert.match(deployWorkflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);

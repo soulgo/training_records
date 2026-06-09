@@ -166,6 +166,35 @@ test('createRecognitionAiProvider overrides only the image recognition model whe
   assert.equal(recognitionProvider.env.model, 'gpt-vision-fast');
 });
 
+test('createRecognitionAiProvider attaches a configured fallback provider for image recognition', () => {
+  const defaultProvider = {
+    name: 'test-provider',
+    env: { model: 'gpt-default' },
+    async requestChatCompletion() {
+      throw new Error('not used');
+    },
+  };
+
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'primary-key',
+      AI_BASE_URL: 'https://primary.example.com/v1',
+      AI_MODEL: 'gpt-default',
+      TELEGRAM_RECOGNITION_MODEL: 'gpt-vision-fast',
+      TELEGRAM_RECOGNITION_FALLBACK_API_KEY: 'fallback-key',
+      TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: 'https://fallback.example.com/v1/',
+      TELEGRAM_RECOGNITION_FALLBACK_MODEL: 'gpt-vision-backup',
+      TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: '15000',
+    },
+    defaultProvider,
+  );
+
+  assert.equal(recognitionProvider.env.model, 'gpt-vision-fast');
+  assert.equal(recognitionProvider.fallbackProvider.env.baseUrl, 'https://fallback.example.com/v1');
+  assert.equal(recognitionProvider.fallbackProvider.env.model, 'gpt-vision-backup');
+  assert.equal(recognitionProvider.fallbackProvider.env.timeoutMs, 15000);
+});
+
 test('recognizeBatch sends inline Telegram image data when inline mode is configured', async () => {
   const requestedImageUrls = [];
   const downloadedFileIds = [];

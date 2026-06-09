@@ -13,6 +13,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- Telegram 图片识别新增备用 OpenAI-compatible AI 配置：`TELEGRAM_RECOGNITION_FALLBACK_API_KEY`、`TELEGRAM_RECOGNITION_FALLBACK_BASE_URL`、`TELEGRAM_RECOGNITION_FALLBACK_MODEL` 和 `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS`。主 AI 出现 timeout、HTTP 429/5xx、空内容或网络失败时，会自动切到备用 AI 重试。
+- GitHub Actions main/dev Telegram Sync workflow 新增备用 AI 配置透传，并补齐 GitHub + Cloudflare 配置清单和 AI Provider 文档。
+
+### Fixed
+
+- 修复 Telegram 图片识别缓存读取 PostgreSQL 超时时被误归类为 AI 识别失败的问题。识别缓存查库失败现在会降级为 cache miss 并继续调用 AI。
+- 修复主 AI 返回空内容或包装后的 timeout 时只能进入 pending 队列的问题；配置备用 AI 后会先用备用 provider 进行当前批次识别重试。
+
 ## [1.2.5] - 2026-06-08
 
 ### Removed

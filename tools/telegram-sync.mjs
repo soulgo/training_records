@@ -518,12 +518,44 @@ function logSyncTimings(timingsMs) {
 
 export function createRecognitionAiProvider(rawEnv, defaultProvider) {
   const recognitionModel = String(rawEnv.TELEGRAM_RECOGNITION_MODEL ?? '').trim();
-  if (!recognitionModel) {
-    return defaultProvider;
+  const primaryProvider = recognitionModel
+    ? createAiProvider({
+        ...rawEnv,
+        AI_MODEL: recognitionModel,
+      })
+    : defaultProvider;
+  const fallbackProvider = createRecognitionFallbackAiProvider(rawEnv);
+  if (!fallbackProvider) {
+    return primaryProvider;
   }
+  return {
+    ...primaryProvider,
+    fallbackProvider,
+  };
+}
+
+function createRecognitionFallbackAiProvider(rawEnv) {
+  const apiKey = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_API_KEY ?? '').trim();
+  const baseUrl = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL ?? '').trim();
+  const model = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_MODEL ?? '').trim();
+
+  if (!apiKey && !baseUrl && !model) {
+    return null;
+  }
+  if (!apiKey || !baseUrl || !model) {
+    process.stderr.write(
+      '[telegram-sync] fallback recognition AI provider is not configured completely; ignoring fallback provider\n',
+    );
+    return null;
+  }
+
   return createAiProvider({
     ...rawEnv,
-    AI_MODEL: recognitionModel,
+    AI_API_KEY: apiKey,
+    AI_BASE_URL: baseUrl,
+    AI_MODEL: model,
+    AI_PROVIDER: rawEnv.TELEGRAM_RECOGNITION_FALLBACK_PROVIDER || rawEnv.AI_PROVIDER,
+    AI_TIMEOUT_MS: rawEnv.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS || rawEnv.AI_TIMEOUT_MS,
   });
 }
 
