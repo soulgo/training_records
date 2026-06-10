@@ -1,0 +1,2422 @@
+2026-06-04T09:51:35.0172389Z Current runner version: '2.334.0'
+2026-06-04T09:51:35.0198797Z ##[group]Runner Image Provisioner
+2026-06-04T09:51:35.0199757Z Hosted Compute Agent
+2026-06-04T09:51:35.0200544Z Version: 20260520.533
+2026-06-04T09:51:35.0201227Z Commit: 189110e25284a9812c124fd27b339e2fb4f2f9db
+2026-06-04T09:51:35.0202091Z Build Date: 2026-05-20T17:44:04Z
+2026-06-04T09:51:35.0202840Z Worker ID: {32bf64ed-a071-45c4-900b-ead405d0bdab}
+2026-06-04T09:51:35.0203867Z Azure Region: westus
+2026-06-04T09:51:35.0204629Z ##[endgroup]
+2026-06-04T09:51:35.0206242Z ##[group]Operating System
+2026-06-04T09:51:35.0207029Z Ubuntu
+2026-06-04T09:51:35.0207605Z 24.04.4
+2026-06-04T09:51:35.0208186Z LTS
+2026-06-04T09:51:35.0208861Z ##[endgroup]
+2026-06-04T09:51:35.0209447Z ##[group]Runner Image
+2026-06-04T09:51:35.0210544Z Image: ubuntu-24.04
+2026-06-04T09:51:35.0211247Z Version: 20260525.161.1
+2026-06-04T09:51:35.0212625Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260525.161/images/ubuntu/Ubuntu2404-Readme.md
+2026-06-04T09:51:35.0214481Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260525.161
+2026-06-04T09:51:35.0215602Z ##[endgroup]
+2026-06-04T09:51:35.0216813Z ##[group]GITHUB_TOKEN Permissions
+2026-06-04T09:51:35.0219116Z Contents: read
+2026-06-04T09:51:35.0219782Z Metadata: read
+2026-06-04T09:51:35.0220478Z ##[endgroup]
+2026-06-04T09:51:35.0222942Z Secret source: Actions
+2026-06-04T09:51:35.0224393Z Prepare workflow directory
+2026-06-04T09:51:35.0779362Z Prepare all required actions
+2026-06-04T09:51:35.0818771Z Getting action download info
+2026-06-04T09:51:35.6312010Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+2026-06-04T09:51:35.7538236Z Download action repository 'cloudflare/wrangler-action@v3' (SHA:9acf94ace14e7dc412b076f2c5c20b8ce93c79cd)
+2026-06-04T09:51:36.1765673Z Complete job name: deploy
+2026-06-04T09:51:36.2506900Z ##[group]Run actions/checkout@v4
+2026-06-04T09:51:36.2507951Z with:
+2026-06-04T09:51:36.2508481Z   ref: dev
+2026-06-04T09:51:36.2509009Z   fetch-depth: 0
+2026-06-04T09:51:36.2509596Z   repository: soulgo/training_records
+2026-06-04T09:51:36.2514955Z   token: ***
+2026-06-04T09:51:36.2515513Z   ssh-strict: true
+2026-06-04T09:51:36.2516091Z   ssh-user: git
+2026-06-04T09:51:36.2516638Z   persist-credentials: true
+2026-06-04T09:51:36.2517223Z   clean: true
+2026-06-04T09:51:36.2517772Z   sparse-checkout-cone-mode: true
+2026-06-04T09:51:36.2518401Z   fetch-tags: false
+2026-06-04T09:51:36.2518952Z   show-progress: true
+2026-06-04T09:51:36.2519522Z   lfs: false
+2026-06-04T09:51:36.2520040Z   submodules: false
+2026-06-04T09:51:36.2520600Z   set-safe-directory: true
+2026-06-04T09:51:36.2521494Z env:
+2026-06-04T09:51:36.2522099Z   TRAINING_DB_ENABLED: true
+2026-06-04T09:51:36.2523280Z   TRAINING_DB_URL: ***
+2026-06-04T09:51:36.2524164Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-04T09:51:36.2524882Z   TRAINING_DB_APP_NAME: training-records-dev
+2026-06-04T09:51:36.2525614Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-04T09:51:36.2526253Z ##[endgroup]
+2026-06-04T09:51:36.3709012Z Syncing repository: soulgo/training_records
+2026-06-04T09:51:36.3711169Z ##[group]Getting Git version info
+2026-06-04T09:51:36.3712111Z Working directory is '/home/runner/work/training_records/training_records'
+2026-06-04T09:51:36.3713403Z [command]/usr/bin/git version
+2026-06-04T09:51:36.3803808Z git version 2.54.0
+2026-06-04T09:51:36.3835608Z ##[endgroup]
+2026-06-04T09:51:36.3855198Z Temporarily overriding HOME='/home/runner/work/_temp/17027e11-9215-4270-88e9-f36f237266e0' before making global git config changes
+2026-06-04T09:51:36.3857730Z Adding repository directory to the temporary git global config as a safe directory
+2026-06-04T09:51:36.3870271Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/training_records/training_records
+2026-06-04T09:51:36.3925857Z Deleting the contents of '/home/runner/work/training_records/training_records'
+2026-06-04T09:51:36.3929934Z ##[group]Initializing the repository
+2026-06-04T09:51:36.3934891Z [command]/usr/bin/git init /home/runner/work/training_records/training_records
+2026-06-04T09:51:36.4041437Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-06-04T09:51:36.4044299Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-06-04T09:51:36.4045880Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-06-04T09:51:36.4047148Z hint: call:
+2026-06-04T09:51:36.4047763Z hint:
+2026-06-04T09:51:36.4048545Z hint: 	git config --global init.defaultBranch <name>
+2026-06-04T09:51:36.4049512Z hint:
+2026-06-04T09:51:36.4050394Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-06-04T09:51:36.4051824Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-06-04T09:51:36.4052976Z hint:
+2026-06-04T09:51:36.4053939Z hint: 	git branch -m <name>
+2026-06-04T09:51:36.4054673Z hint:
+2026-06-04T09:51:36.4055424Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-06-04T09:51:36.4061693Z Initialized empty Git repository in /home/runner/work/training_records/training_records/.git/
+2026-06-04T09:51:36.4077753Z [command]/usr/bin/git remote add origin https://github.com/soulgo/training_records
+2026-06-04T09:51:36.4129258Z ##[endgroup]
+2026-06-04T09:51:36.4130884Z ##[group]Disabling automatic garbage collection
+2026-06-04T09:51:36.4134850Z [command]/usr/bin/git config --local gc.auto 0
+2026-06-04T09:51:36.4168027Z ##[endgroup]
+2026-06-04T09:51:36.4169001Z ##[group]Setting up auth
+2026-06-04T09:51:36.4175644Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-06-04T09:51:36.4213722Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-06-04T09:51:36.4576819Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-06-04T09:51:36.4610341Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-06-04T09:51:36.4840519Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-06-04T09:51:36.4874899Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-06-04T09:51:36.5107562Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-06-04T09:51:36.5144379Z ##[endgroup]
+2026-06-04T09:51:36.5145462Z ##[group]Fetching the repository
+2026-06-04T09:51:36.5153177Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/*
+2026-06-04T09:51:37.5127618Z From https://github.com/soulgo/training_records
+2026-06-04T09:51:37.5129954Z  * [new branch]      dev        -> origin/dev
+2026-06-04T09:51:37.5132094Z  * [new branch]      main       -> origin/main
+2026-06-04T09:51:37.5173254Z ##[endgroup]
+2026-06-04T09:51:37.5176001Z ##[group]Determining the checkout info
+2026-06-04T09:51:37.5180162Z [command]/usr/bin/git branch --list --remote origin/dev
+2026-06-04T09:51:37.5272580Z   origin/dev
+2026-06-04T09:51:37.5278810Z ##[endgroup]
+2026-06-04T09:51:37.5283226Z [command]/usr/bin/git sparse-checkout disable
+2026-06-04T09:51:37.5331048Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-06-04T09:51:37.5359928Z ##[group]Checking out the ref
+2026-06-04T09:51:37.5363310Z [command]/usr/bin/git checkout --progress --force -B dev refs/remotes/origin/dev
+2026-06-04T09:51:37.5659982Z Switched to a new branch 'dev'
+2026-06-04T09:51:37.5662212Z branch 'dev' set up to track 'origin/dev'.
+2026-06-04T09:51:37.5673312Z ##[endgroup]
+2026-06-04T09:51:37.5719167Z [command]/usr/bin/git log -1 --format=%H
+2026-06-04T09:51:37.5745913Z acaf6a9b5508c5b48c0a8134a163578290ce71e4
+2026-06-04T09:51:37.6319926Z Prepare all required actions
+2026-06-04T09:51:37.6321465Z Getting action download info
+2026-06-04T09:51:38.0959293Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-06-04T09:51:38.2378843Z Download action repository 'actions/cache@v4' (SHA:0057852bfaa89a56745cba8c7296529d2fc39830)
+2026-06-04T09:51:38.4121260Z Download action repository 'actions/configure-pages@v5' (SHA:983d7736d9b0ae728b81ab479565c72886d7745b)
+2026-06-04T09:51:38.8737909Z Download action repository 'actions/upload-pages-artifact@v3' (SHA:56afc609e74202658d3ffba0e8f6dda462b719fa)
+2026-06-04T09:51:39.1137688Z Download action repository 'actions/deploy-pages@v4' (SHA:d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e)
+2026-06-04T09:51:39.6467211Z Getting action download info
+2026-06-04T09:51:39.8870004Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-06-04T09:51:40.0736176Z ##[group]Run ./.github/actions/site-build
+2026-06-04T09:51:40.0736526Z with:
+2026-06-04T09:51:40.0736733Z   run_backfill: true
+2026-06-04T09:51:40.0736958Z   sync_db_mode: auto
+2026-06-04T09:51:40.0737181Z   run_tests: true
+2026-06-04T09:51:40.0737388Z   deploy: false
+2026-06-04T09:51:40.0737590Z env:
+2026-06-04T09:51:40.0737810Z   TRAINING_DB_ENABLED: true
+2026-06-04T09:51:40.0738628Z   TRAINING_DB_URL: ***
+2026-06-04T09:51:40.0738894Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-04T09:51:40.0739211Z   TRAINING_DB_APP_NAME: training-records-dev
+2026-06-04T09:51:40.0739526Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-04T09:51:40.0739790Z ##[endgroup]
+2026-06-04T09:51:40.0878585Z ##[group]Run actions/setup-node@v4
+2026-06-04T09:51:40.0878889Z with:
+2026-06-04T09:51:40.0879102Z   node-version: 22
+2026-06-04T09:51:40.0879318Z   cache: npm
+2026-06-04T09:51:40.0879525Z   always-auth: false
+2026-06-04T09:51:40.0879749Z   check-latest: false
+2026-06-04T09:51:40.0883010Z   token: ***
+2026-06-04T09:51:40.0883223Z env:
+2026-06-04T09:51:40.0883634Z   TRAINING_DB_ENABLED: true
+2026-06-04T09:51:40.0884198Z   TRAINING_DB_URL: ***
+2026-06-04T09:51:40.0884444Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-04T09:51:40.0884771Z   TRAINING_DB_APP_NAME: training-records-dev
+2026-06-04T09:51:40.0885124Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-04T09:51:40.0885389Z ##[endgroup]
+2026-06-04T09:51:40.3171709Z Found in cache @ /opt/hostedtoolcache/node/22.22.3/x64
+2026-06-04T09:51:40.3181733Z ##[group]Environment details
+2026-06-04T09:51:43.5758557Z node: v22.22.3
+2026-06-04T09:51:43.5759015Z npm: 10.9.8
+2026-06-04T09:51:43.5759394Z yarn: 1.22.22
+2026-06-04T09:51:43.5760891Z ##[endgroup]
+2026-06-04T09:51:43.5783981Z [command]/opt/hostedtoolcache/node/22.22.3/x64/bin/npm config get cache
+2026-06-04T09:51:43.8842112Z /home/runner/.npm
+2026-06-04T09:51:44.2258768Z Cache hit for: node-cache-Linux-x64-npm-f85f5f478d92e82aa9199e3517dd5cfe6ab65cd8ab3fd1c1fe339f6848502976
+2026-06-04T09:51:45.5264976Z Received 108807 of 8497415 (1.3%), 0.1 MBs/sec
+2026-06-04T09:51:45.8744482Z Received 8497415 of 8497415 (100.0%), 6.0 MBs/sec
+2026-06-04T09:51:45.8745104Z Cache Size: ~8 MB (8497415 B)
+2026-06-04T09:51:45.8784531Z [command]/usr/bin/tar -xf /home/runner/work/_temp/8d5a87ea-98f7-402f-adb4-ece143f6f0f1/cache.tzst -P -C /home/runner/work/training_records/training_records --use-compress-program unzstd
+2026-06-04T09:51:45.9709795Z Cache restored successfully
+2026-06-04T09:51:45.9720968Z Cache restored from key: node-cache-Linux-x64-npm-f85f5f478d92e82aa9199e3517dd5cfe6ab65cd8ab3fd1c1fe339f6848502976
+2026-06-04T09:51:46.1295247Z ##[group]Run actions/cache@v4
+2026-06-04T09:51:46.1295518Z with:
+2026-06-04T09:51:46.1295729Z   path: db.json
+
+2026-06-04T09:51:46.1296122Z   key: hexo-Linux-5a8f143f811ad43882d0c964d8156ef914d354e5813f029eed2e4cdf545b1853
+2026-06-04T09:51:46.1296594Z   enableCrossOsArchive: false
+2026-06-04T09:51:46.1296862Z   fail-on-cache-miss: false
+2026-06-04T09:51:46.1297110Z   lookup-only: false
+2026-06-04T09:51:46.1297340Z   save-always: false
+2026-06-04T09:51:46.1297749Z env:
+2026-06-04T09:51:46.1298193Z   TRAINING_DB_ENABLED: true
+2026-06-04T09:51:46.1298895Z   TRAINING_DB_URL: ***
+2026-06-04T09:51:46.1299157Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-04T09:51:46.1299450Z   TRAINING_DB_APP_NAME: training-records-dev
+2026-06-04T09:51:46.1299769Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-04T09:51:46.1300041Z ##[endgroup]
+2026-06-04T09:51:46.6353219Z Cache hit for: hexo-Linux-5a8f143f811ad43882d0c964d8156ef914d354e5813f029eed2e4cdf545b1853
+2026-06-04T09:51:47.0420819Z Received 29826 of 29826 (100.0%), 0.2 MBs/sec
+2026-06-04T09:51:47.0421466Z Cache Size: ~0 MB (29826 B)
+2026-06-04T09:51:47.0466182Z [command]/usr/bin/tar -xf /home/runner/work/_temp/68790199-6c7f-465a-89be-bb0cc4cdabb0/cache.tzst -P -C /home/runner/work/training_records/training_records --use-compress-program unzstd
+2026-06-04T09:51:47.0518643Z Cache restored successfully
+2026-06-04T09:51:47.0600548Z Cache restored from key: hexo-Linux-5a8f143f811ad43882d0c964d8156ef914d354e5813f029eed2e4cdf545b1853
+2026-06-04T09:51:47.0692171Z ##[group]Run npm ci
+2026-06-04T09:51:47.0692496Z [36;1mnpm ci[0m
+2026-06-04T09:51:47.0730160Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-06-04T09:51:47.0730539Z env:
+2026-06-04T09:51:47.0730759Z   TRAINING_DB_ENABLED: true
+2026-06-04T09:51:47.0731444Z   TRAINING_DB_URL: ***
+2026-06-04T09:51:47.0731706Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-04T09:51:47.0732013Z   TRAINING_DB_APP_NAME: training-records-dev
+2026-06-04T09:51:47.0732340Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-04T09:51:47.0732615Z ##[endgroup]
+2026-06-04T09:51:49.6062183Z npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+2026-06-04T09:51:49.6684421Z npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+2026-06-04T09:51:49.6722141Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-06-04T09:51:49.7677738Z npm warn deprecated cuid@2.1.8: Cuid and other k-sortable and non-cryptographic ids (Ulid, ObjectId, KSUID, all UUIDs) are all insecure. Use @paralleldrive/cuid2 instead.
+2026-06-04T09:51:50.0133194Z npm warn deprecated moize@6.1.7: This library has been deprecated in favor of micro-memoize, which as-of version 5 incorporates most of the functionality that this library offers at nearly half the size and better speed.
+2026-06-04T09:51:51.2580709Z 
+2026-06-04T09:51:51.2581638Z added 236 packages, and audited 237 packages in 4s
+2026-06-04T09:51:51.2582532Z 
+2026-06-04T09:51:51.2582918Z 32 packages are looking for funding
+2026-06-04T09:51:51.2583938Z   run `npm fund` for details
+2026-06-04T09:51:51.2594051Z 
+2026-06-04T09:51:51.2594674Z found 0 vulnerabilities
+2026-06-04T09:51:51.3114449Z ##[group]Run mode="auto"
+2026-06-04T09:51:51.3114822Z [36;1mmode="auto"[0m
+2026-06-04T09:51:51.3115097Z [36;1mif [ "true" != "true" ]; then[0m
+2026-06-04T09:51:51.3115482Z [36;1m  echo "sync_db_needed=false" >> "$GITHUB_OUTPUT"[0m
+2026-06-04T09:51:51.3115929Z [36;1m  echo "sync_db_reason=disabled" >> "$GITHUB_OUTPUT"[0m
+2026-06-04T09:51:51.3116275Z [36;1m  exit 0[0m
+2026-06-04T09:51:51.3116504Z [36;1mfi[0m
+2026-06-04T09:51:51.3116712Z [36;1m[0m
+2026-06-04T09:51:51.3116925Z [36;1mif [ "$mode" = "always" ]; then[0m
+2026-06-04T09:51:51.3117271Z [36;1m  echo "sync_db_needed=true" >> "$GITHUB_OUTPUT"[0m
+2026-06-04T09:51:51.3117659Z [36;1m  echo "sync_db_reason=forced" >> "$GITHUB_OUTPUT"[0m
+2026-06-04T09:51:51.3117997Z [36;1m  exit 0[0m
+2026-06-04T09:51:51.3118209Z [36;1mfi[0m
+2026-06-04T09:51:51.3118416Z [36;1m[0m
+2026-06-04T09:51:51.3118626Z [36;1mif [ "$mode" = "never" ]; then[0m
+2026-06-04T09:51:51.3119190Z [36;1m  echo "sync_db_needed=false" >> "$GITHUB_OUTPUT"[0m
+2026-06-04T09:51:51.3119747Z [36;1m  echo "sync_db_reason=disabled_by_mode" >> "$GITHUB_OUTPUT"[0m
+2026-06-04T09:51:51.3120108Z [36;1m  exit 0[0m
+2026-06-04T09:51:51.3120324Z [36;1mfi[0m
+2026-06-04T09:51:51.3120520Z [36;1m[0m
+2026-06-04T09:51:51.3120721Z [36;1mbase=""[0m
+2026-06-04T09:51:51.3121227Z [36;1mif [ "$GITHUB_EVENT_NAME" = "push" ] && [ -n "$GITHUB_EVENT_BEFORE" ] && ! echo "$GITHUB_EVENT_BEFORE" | grep -Eq '^0+$'; then[0m
+2026-06-04T09:51:51.3121818Z [36;1m  base="$GITHUB_EVENT_BEFORE"[0m
+2026-06-04T09:51:51.3122199Z [36;1melif git rev-parse --verify HEAD^ >/dev/null 2>&1; then[0m
+2026-06-04T09:51:51.3122577Z [36;1m  base="HEAD^"[0m
+2026-06-04T09:51:51.3122819Z [36;1mfi[0m
+2026-06-04T09:51:51.3123017Z [36;1m[0m
+2026-06-04T09:51:51.3123346Z [36;1mif [ -z "$base" ] || ! git cat-file -e "$base^{commit}" >/dev/null 2>&1; then[0m
+2026-06-04T09:51:51.3124148Z [36;1m  echo "sync_db_needed=true" >> "$GITHUB_OUTPUT"[0m
+2026-06-04T09:51:51.3124586Z [36;1m  echo "sync_db_reason=unknown_base" >> "$GITHUB_OUTPUT"[0m
+2026-06-04T09:51:51.3124945Z [36;1m  exit 0[0m
+2026-06-04T09:51:51.3125165Z [36;1mfi[0m
+2026-06-04T09:51:51.3125372Z [36;1m[0m
+2026-06-04T09:51:51.3125639Z [36;1mchanged="$(git diff --name-only "$base" HEAD -- \[0m
+2026-06-04T09:51:51.3125989Z [36;1m  '训练记录.md' \[0m
+2026-06-04T09:51:51.3126236Z [36;1m  'source/_posts/**' \[0m
+2026-06-04T09:51:51.3126518Z [36;1m  'source/images/**' \[0m
+2026-06-04T09:51:51.3126778Z [36;1m  'sql/**' \[0m
+2026-06-04T09:51:51.3127028Z [36;1m  'src/db/training/**' \[0m
+2026-06-04T09:51:51.3127324Z [36;1m  'tools/sync-training-core.mjs' \[0m
+2026-06-04T09:51:51.3127717Z [36;1m  'tools/backfill-training-core-from-archive.mjs' \[0m
+2026-06-04T09:51:51.3128124Z [36;1m  'tools/backfill-thoughts-to-core.mjs' \[0m
+2026-06-04T09:51:51.3128524Z [36;1m  'tools/reconcile-training-markdown-to-core.mjs' \[0m
+2026-06-04T09:51:51.3128922Z [36;1m  'tools/import-training-markdown.mjs' \[0m
+2026-06-04T09:51:51.3129304Z [36;1m  'tools/export-training-markdown.mjs' \[0m
+2026-06-04T09:51:51.3129635Z [36;1m  'package.json' \[0m
+2026-06-04T09:51:51.3129904Z [36;1m  'package-lock.json')"[0m
+2026-06-04T09:51:51.3130172Z [36;1m[0m
+2026-06-04T09:51:51.3130387Z [36;1mif [ -z "$changed" ]; then[0m
+2026-06-04T09:51:51.3130731Z [36;1m  echo "sync_db_needed=false" >> "$GITHUB_OUTPUT"[0m
+2026-06-04T09:51:51.3131160Z [36;1m  echo "sync_db_reason=no_data_changes" >> "$GITHUB_OUTPUT"[0m
+2026-06-04T09:51:51.3131519Z [36;1melse[0m
+2026-06-04T09:51:51.3131787Z [36;1m  echo "sync_db_needed=true" >> "$GITHUB_OUTPUT"[0m
+2026-06-04T09:51:51.3132185Z [36;1m  echo "sync_db_reason=data_changes" >> "$GITHUB_OUTPUT"[0m
+2026-06-04T09:51:51.3132532Z [36;1mfi[0m
+2026-06-04T09:51:51.3159214Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-06-04T09:51:51.3159575Z env:
+2026-06-04T09:51:51.3159800Z   TRAINING_DB_ENABLED: true
+2026-06-04T09:51:51.3160749Z   TRAINING_DB_URL: ***
+2026-06-04T09:51:51.3161045Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-04T09:51:51.3161347Z   TRAINING_DB_APP_NAME: training-records-dev
+2026-06-04T09:51:51.3161742Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-04T09:51:51.3162126Z   GITHUB_EVENT_BEFORE: 652a451851078ed6e8e2b2c40816ad92de16bd17
+2026-06-04T09:51:51.3162494Z   GITHUB_EVENT_NAME: push
+2026-06-04T09:51:51.3162745Z ##[endgroup]
+2026-06-04T09:51:51.3326274Z ##[group]Run npm run sync:db
+2026-06-04T09:51:51.3326585Z [36;1mnpm run sync:db[0m
+2026-06-04T09:51:51.3352131Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-06-04T09:51:51.3352527Z env:
+2026-06-04T09:51:51.3352750Z   TRAINING_DB_ENABLED: true
+2026-06-04T09:51:51.3353730Z   TRAINING_DB_URL: ***
+2026-06-04T09:51:51.3354024Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-04T09:51:51.3354339Z   TRAINING_DB_APP_NAME: training-records-dev
+2026-06-04T09:51:51.3354700Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-04T09:51:51.3354999Z ##[endgroup]
+2026-06-04T09:51:51.4352922Z 
+2026-06-04T09:51:51.4354500Z > training-records-dashboard@1.2.3 sync:db
+2026-06-04T09:51:51.4355381Z > node tools/training-maintenance.mjs sync
+2026-06-04T09:51:51.4355827Z 
+2026-06-04T09:52:10.9353021Z {
+2026-06-04T09:52:10.9353951Z   "status": "stored",
+2026-06-04T09:52:10.9354460Z   "mode": "sync",
+2026-06-04T09:52:10.9354945Z   "phase": "all",
+2026-06-04T09:52:10.9355494Z   "readonly": false,
+2026-06-04T09:52:10.9355956Z   "result": {
+2026-06-04T09:52:10.9356352Z     "status": "stored",
+2026-06-04T09:52:10.9356771Z     "archive": {
+2026-06-04T09:52:10.9357210Z       "status": "unchanged",
+2026-06-04T09:52:10.9357821Z       "reason": "no_missing_days",
+2026-06-04T09:52:10.9358519Z       "daysBackfilled": 0
+2026-06-04T09:52:10.9359018Z     },
+2026-06-04T09:52:10.9359395Z     "ingest": {
+2026-06-04T09:52:10.9359931Z       "status": "stored",
+2026-06-04T09:52:10.9360482Z       "batchesBackfilled": 1,
+2026-06-04T09:52:10.9361013Z       "daysBackfilled": [
+2026-06-04T09:52:10.9361459Z         "2026-06-04"
+2026-06-04T09:52:10.9361735Z       ]
+2026-06-04T09:52:10.9362033Z     },
+2026-06-04T09:52:10.9362282Z     "markdown": {
+2026-06-04T09:52:10.9362581Z       "status": "stored",
+2026-06-04T09:52:10.9362896Z       "days": 55
+2026-06-04T09:52:10.9363159Z     },
+2026-06-04T09:52:10.9363660Z     "thoughts": {
+2026-06-04T09:52:10.9364185Z       "status": "stored",
+2026-06-04T09:52:10.9364503Z       "importedCount": 17,
+2026-06-04T09:52:10.9364846Z       "skippedCount": 0,
+2026-06-04T09:52:10.9365177Z       "scannedCount": 17
+2026-06-04T09:52:10.9365465Z     }
+2026-06-04T09:52:10.9365744Z   }
+2026-06-04T09:52:10.9365977Z }
+2026-06-04T09:52:10.9500047Z ##[group]Run npm run test:fast
+2026-06-04T09:52:10.9500595Z [36;1mnpm run test:fast[0m
+2026-06-04T09:52:10.9527837Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-06-04T09:52:10.9528213Z env:
+2026-06-04T09:52:10.9528439Z   TRAINING_DB_ENABLED: true
+2026-06-04T09:52:10.9529161Z   TRAINING_DB_URL: ***
+2026-06-04T09:52:10.9529430Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-04T09:52:10.9529771Z   TRAINING_DB_APP_NAME: training-records-dev
+2026-06-04T09:52:10.9530102Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-04T09:52:10.9530387Z ##[endgroup]
+2026-06-04T09:52:11.0533001Z 
+2026-06-04T09:52:11.0534444Z > training-records-dashboard@1.2.3 test:fast
+2026-06-04T09:52:11.0536915Z > node --test --test-skip-pattern "dashboard renders|dashboard defaults|dashboard chart script|dashboard embeds|dashboard explains|dashboard fallback view|homepage|thoughts page|thought detail page|thought module pages"
+2026-06-04T09:52:11.0538539Z 
+2026-06-04T09:52:11.1704937Z TAP version 13
+2026-06-04T09:52:11.2213927Z # Subtest: normalizeAiProviderName defaults to openai-compatible
+2026-06-04T09:52:11.2244907Z ok 1 - normalizeAiProviderName defaults to openai-compatible
+2026-06-04T09:52:11.2268492Z   ---
+2026-06-04T09:52:11.2284465Z   duration_ms: 1.336167
+2026-06-04T09:52:11.2305303Z   type: 'test'
+2026-06-04T09:52:11.2306093Z   ...
+2026-06-04T09:52:11.2307022Z # Subtest: createAiProvider defaults to openai-compatible and trims the base url
+2026-06-04T09:52:11.2308386Z ok 2 - createAiProvider defaults to openai-compatible and trims the base url
+2026-06-04T09:52:11.2309187Z   ---
+2026-06-04T09:52:11.2309587Z   duration_ms: 0.436609
+2026-06-04T09:52:11.2310052Z   type: 'test'
+2026-06-04T09:52:11.2310436Z   ...
+2026-06-04T09:52:11.2311418Z # Subtest: createAiProvider sends the same chat completion shape used by analysis and recognition
+2026-06-04T09:52:11.2312916Z ok 3 - createAiProvider sends the same chat completion shape used by analysis and recognition
+2026-06-04T09:52:11.2314250Z   ---
+2026-06-04T09:52:11.2314660Z   duration_ms: 2.782762
+2026-06-04T09:52:11.2315167Z   type: 'test'
+2026-06-04T09:52:11.2315558Z   ...
+2026-06-04T09:52:11.2316463Z # Subtest: createAiProvider rejects unsupported providers with a typed adapter error
+2026-06-04T09:52:11.2324746Z ok 4 - createAiProvider rejects unsupported providers with a typed adapter error
+2026-06-04T09:52:11.2325772Z   ---
+2026-06-04T09:52:11.2326361Z   duration_ms: 0.847671
+2026-06-04T09:52:11.2327888Z   type: 'test'
+2026-06-04T09:52:11.2328581Z   ...
+2026-06-04T09:52:11.3125444Z # Subtest: recognition cache key includes file id, prompt version, schema version, and model
+2026-06-04T09:52:11.3191863Z ok 5 - recognition cache key includes file id, prompt version, schema version, and model
+2026-06-04T09:52:11.3193337Z   ---
+2026-06-04T09:52:11.3197764Z   duration_ms: 1.157201
+2026-06-04T09:52:11.3198569Z   type: 'test'
+2026-06-04T09:52:11.3199010Z   ...
+2026-06-04T09:52:11.3199628Z # Subtest: recognition cache is opt-in by default
+2026-06-04T09:52:11.3200407Z ok 6 - recognition cache is opt-in by default
+2026-06-04T09:52:11.3200985Z   ---
+2026-06-04T09:52:11.3201380Z   duration_ms: 0.390693
+2026-06-04T09:52:11.3201825Z   type: 'test'
+2026-06-04T09:52:11.3202203Z   ...
+2026-06-04T09:52:11.3203647Z # Subtest: recognizeTelegramImageMessage skips cache when disabled and keeps runtime metadata out of payload
+2026-06-04T09:52:11.3205463Z ok 7 - recognizeTelegramImageMessage skips cache when disabled and keeps runtime metadata out of payload
+2026-06-04T09:52:11.3206503Z   ---
+2026-06-04T09:52:11.3206908Z   duration_ms: 2.897788
+2026-06-04T09:52:11.3207365Z   type: 'test'
+2026-06-04T09:52:11.3207763Z   ...
+2026-06-04T09:52:11.3208863Z # Subtest: recognizeTelegramImageMessage normalizes incomplete Huawei sleep payloads before schema validation
+2026-06-04T09:52:11.3210588Z ok 8 - recognizeTelegramImageMessage normalizes incomplete Huawei sleep payloads before schema validation
+2026-06-04T09:52:11.3211603Z   ---
+2026-06-04T09:52:11.3211991Z   duration_ms: 1.64116
+2026-06-04T09:52:11.3212446Z   type: 'test'
+2026-06-04T09:52:11.3212833Z   ...
+2026-06-04T09:52:11.3213969Z # Subtest: recognizeTelegramImageMessage hits cache when versioned metadata matches
+2026-06-04T09:52:11.3215328Z ok 9 - recognizeTelegramImageMessage hits cache when versioned metadata matches
+2026-06-04T09:52:11.3216126Z   ---
+2026-06-04T09:52:11.3216554Z   duration_ms: 0.390854
+2026-06-04T09:52:11.3216997Z   type: 'test'
+2026-06-04T09:52:11.3217407Z   ...
+2026-06-04T09:52:11.3218297Z # Subtest: recognizeTelegramImageMessage misses cache when prompt version changes
+2026-06-04T09:52:11.3219607Z ok 10 - recognizeTelegramImageMessage misses cache when prompt version changes
+2026-06-04T09:52:11.3220413Z   ---
+2026-06-04T09:52:11.3220817Z   duration_ms: 0.667422
+2026-06-04T09:52:11.3221255Z   type: 'test'
+2026-06-04T09:52:11.3221651Z   ...
+2026-06-04T09:52:11.3222493Z # Subtest: recognizeTelegramImageMessage parses SSE-style data response bodies
+2026-06-04T09:52:11.3224236Z ok 11 - recognizeTelegramImageMessage parses SSE-style data response bodies
+2026-06-04T09:52:11.3225073Z   ---
+2026-06-04T09:52:11.3225463Z   duration_ms: 0.62342
+2026-06-04T09:52:11.3225931Z   type: 'test'
+2026-06-04T09:52:11.3226331Z   ...
+2026-06-04T09:52:11.3227387Z # Subtest: recognizeTelegramImageMessage includes a safe summary when message content is invalid JSON
+2026-06-04T09:52:11.3229011Z ok 12 - recognizeTelegramImageMessage includes a safe summary when message content is invalid JSON
+2026-06-04T09:52:11.3229995Z   ---
+2026-06-04T09:52:11.3230350Z   duration_ms: 63.16899
+2026-06-04T09:52:11.3230750Z   type: 'test'
+2026-06-04T09:52:11.3231095Z   ...
+2026-06-04T09:52:11.3232196Z # Subtest: recognizeTelegramImageMessage retries once with strict JSON guidance when content is invalid JSON
+2026-06-04T09:52:11.3234131Z ok 13 - recognizeTelegramImageMessage retries once with strict JSON guidance when content is invalid JSON
+2026-06-04T09:52:11.3235116Z   ---
+2026-06-04T09:52:11.3235520Z   duration_ms: 1.473235
+2026-06-04T09:52:11.3235964Z   type: 'test'
+2026-06-04T09:52:11.3236345Z   ...
+2026-06-04T09:52:11.3237415Z # Subtest: recognizeTelegramImageMessage lowers confidence when measurement payload has no measurement data
+2026-06-04T09:52:11.3239136Z ok 14 - recognizeTelegramImageMessage lowers confidence when measurement payload has no measurement data
+2026-06-04T09:52:11.3240149Z   ---
+2026-06-04T09:52:11.3240539Z   duration_ms: 1.202106
+2026-06-04T09:52:11.3240972Z   type: 'test'
+2026-06-04T09:52:11.3242121Z   ...
+2026-06-04T09:52:11.3525290Z # Subtest: extractAiResponseContent throws AiProviderError when content is empty
+2026-06-04T09:52:11.3526916Z ok 15 - extractAiResponseContent throws AiProviderError when content is empty
+2026-06-04T09:52:11.3554154Z   ---
+2026-06-04T09:52:11.3564375Z   duration_ms: 1.762076
+2026-06-04T09:52:11.3594705Z   type: 'test'
+2026-06-04T09:52:11.3595415Z   ...
+2026-06-04T09:52:11.3596564Z # Subtest: parseAiJsonContent throws AiSchemaError for invalid JSON
+2026-06-04T09:52:11.3597904Z ok 16 - parseAiJsonContent throws AiSchemaError for invalid JSON
+2026-06-04T09:52:11.3598711Z   ---
+2026-06-04T09:52:11.3599241Z   duration_ms: 3.58076
+2026-06-04T09:52:11.3599836Z   type: 'test'
+2026-06-04T09:52:11.3600358Z   ...
+2026-06-04T09:52:11.3601301Z # Subtest: parseAiJsonContent throws AiSchemaError for missing required fields
+2026-06-04T09:52:11.3602625Z ok 17 - parseAiJsonContent throws AiSchemaError for missing required fields
+2026-06-04T09:52:11.3603870Z   ---
+2026-06-04T09:52:11.3604424Z   duration_ms: 1.627454
+2026-06-04T09:52:11.3605010Z   type: 'test'
+2026-06-04T09:52:11.3605625Z   ...
+2026-06-04T09:52:11.3606569Z # Subtest: parseAiJsonContent returns a valid recognition payload unchanged
+2026-06-04T09:52:11.3607840Z ok 18 - parseAiJsonContent returns a valid recognition payload unchanged
+2026-06-04T09:52:11.3608706Z   ---
+2026-06-04T09:52:11.3609221Z   duration_ms: 3.020238
+2026-06-04T09:52:11.3609779Z   type: 'test'
+2026-06-04T09:52:11.3610278Z   ...
+2026-06-04T09:52:11.3611298Z # Subtest: backfillThoughtsToCore imports telegram thought markdown into core.thought
+2026-06-04T09:52:11.3612692Z ok 19 - backfillThoughtsToCore imports telegram thought markdown into core.thought
+2026-06-04T09:52:11.3613960Z   ---
+2026-06-04T09:52:11.3614473Z   duration_ms: 14.004242
+2026-06-04T09:52:11.3615035Z   type: 'test'
+2026-06-04T09:52:11.3615536Z   ...
+2026-06-04T09:52:11.3616627Z # Subtest: backfillThoughtsToCore treats legacy telegram thoughts without thought_module as workout
+2026-06-04T09:52:11.3618263Z ok 20 - backfillThoughtsToCore treats legacy telegram thoughts without thought_module as workout
+2026-06-04T09:52:11.3619253Z   ---
+2026-06-04T09:52:11.3619745Z   duration_ms: 5.41759
+2026-06-04T09:52:11.3620292Z   type: 'test'
+2026-06-04T09:52:11.3620794Z   ...
+2026-06-04T09:52:11.3701148Z # Subtest: backfillThoughtsToCore defers instead of throwing when database is unavailable
+2026-06-04T09:52:11.3715201Z ok 21 - backfillThoughtsToCore defers instead of throwing when database is unavailable
+2026-06-04T09:52:11.3734848Z   ---
+2026-06-04T09:52:11.3735559Z   duration_ms: 11.495793
+2026-06-04T09:52:11.3736372Z   type: 'test'
+2026-06-04T09:52:11.3737094Z   ...
+2026-06-04T09:52:11.3814951Z # Subtest: backfillTrainingCoreFromArchive defers instead of throwing when database is unavailable
+2026-06-04T09:52:11.3825666Z ok 22 - backfillTrainingCoreFromArchive defers instead of throwing when database is unavailable
+2026-06-04T09:52:11.3826796Z   ---
+2026-06-04T09:52:11.3827485Z   duration_ms: 1.716591
+2026-06-04T09:52:11.3828405Z   type: 'test'
+2026-06-04T09:52:11.3829050Z   ...
+2026-06-04T09:52:11.4040367Z # Subtest: changelog parser returns the latest released version and skips Unreleased
+2026-06-04T09:52:11.4042273Z ok 23 - changelog parser returns the latest released version and skips Unreleased
+2026-06-04T09:52:11.4043681Z   ---
+2026-06-04T09:52:11.4044403Z   duration_ms: 2.148523
+2026-06-04T09:52:11.4045032Z   type: 'test'
+2026-06-04T09:52:11.4045601Z   ...
+2026-06-04T09:52:11.4046549Z # Subtest: changelog parser returns null when no released version is present
+2026-06-04T09:52:11.4048570Z ok 24 - changelog parser returns null when no released version is present
+2026-06-04T09:52:11.4049621Z   ---
+2026-06-04T09:52:11.4050252Z   duration_ms: 0.351389
+2026-06-04T09:52:11.4050938Z   type: 'test'
+2026-06-04T09:52:11.4051562Z   ...
+2026-06-04T09:52:11.4239097Z # Subtest: wrangler config binds Telegram album Durable Object without storing secrets
+2026-06-04T09:52:11.4241528Z ok 25 - wrangler config binds Telegram album Durable Object without storing secrets
+2026-06-04T09:52:11.4272870Z   ---
+2026-06-04T09:52:11.4273975Z   duration_ms: 8.485083
+2026-06-04T09:52:11.4274476Z   type: 'test'
+2026-06-04T09:52:11.4274877Z   ...
+2026-06-04T09:52:11.4328291Z 1..0
+2026-06-04T09:52:11.4465159Z # Subtest: test/dashboard-page.test.mjs
+2026-06-04T09:52:11.4494774Z ok 8 - test/dashboard-page.test.mjs
+2026-06-04T09:52:11.4524540Z   ---
+2026-06-04T09:52:11.4525315Z   duration_ms: 62.13689
+2026-06-04T09:52:11.4536236Z   type: 'test'
+2026-06-04T09:52:11.4536786Z   ...
+2026-06-04T09:52:11.4997773Z # Subtest: dashboard view normalizes database date objects before calculating chart windows
+2026-06-04T09:52:11.5025175Z ok 27 - dashboard view normalizes database date objects before calculating chart windows
+2026-06-04T09:52:11.5034428Z   ---
+2026-06-04T09:52:11.5072717Z   duration_ms: 6.366347
+2026-06-04T09:52:11.5105218Z   type: 'test'
+2026-06-04T09:52:11.5105711Z   ...
+2026-06-04T09:52:11.5106760Z # Subtest: dashboard view falls back to the latest valid daily date when latest dates are malformed
+2026-06-04T09:52:11.5108304Z ok 28 - dashboard view falls back to the latest valid daily date when latest dates are malformed
+2026-06-04T09:52:11.5109201Z   ---
+2026-06-04T09:52:11.5109593Z   duration_ms: 0.761929
+2026-06-04T09:52:11.5110019Z   type: 'test'
+2026-06-04T09:52:11.5110417Z   ...
+2026-06-04T09:52:11.5111170Z # Subtest: dashboard sleep cards use the latest day that has sleep data
+2026-06-04T09:52:11.5112241Z ok 29 - dashboard sleep cards use the latest day that has sleep data
+2026-06-04T09:52:11.5112854Z   ---
+2026-06-04T09:52:11.5113253Z   duration_ms: 0.995789
+2026-06-04T09:52:11.5114058Z   type: 'test'
+2026-06-04T09:52:11.5114480Z   ...
+2026-06-04T09:52:11.5115464Z # Subtest: dashboard view model keeps the stable rendering contract for overview cards and charts
+2026-06-04T09:52:11.5117324Z ok 30 - dashboard view model keeps the stable rendering contract for overview cards and charts
+2026-06-04T09:52:11.5118259Z   ---
+2026-06-04T09:52:11.5118691Z   duration_ms: 1.698027
+2026-06-04T09:52:11.5119160Z   type: 'test'
+2026-06-04T09:52:11.5119560Z   ...
+2026-06-04T09:52:11.5553747Z # Subtest: exportDerivedTrainingMarkdown prefers markdown when telegram fallback batches are pending
+2026-06-04T09:52:11.5569458Z ok 31 - exportDerivedTrainingMarkdown prefers markdown when telegram fallback batches are pending
+2026-06-04T09:52:11.5574399Z   ---
+2026-06-04T09:52:11.5575260Z   duration_ms: 16.547571
+2026-06-04T09:52:11.5575733Z   type: 'test'
+2026-06-04T09:52:11.5576102Z   ...
+2026-06-04T09:52:11.5587839Z # Subtest: exportDerivedTrainingMarkdown uses database when no telegram fallback batches are pending
+2026-06-04T09:52:11.5590128Z ok 32 - exportDerivedTrainingMarkdown uses database when no telegram fallback batches are pending
+2026-06-04T09:52:11.5591367Z   ---
+2026-06-04T09:52:11.5591784Z   duration_ms: 2.626609
+2026-06-04T09:52:11.5592256Z   type: 'test'
+2026-06-04T09:52:11.5592647Z   ...
+2026-06-04T09:52:11.5617080Z # Subtest: exportDerivedTrainingMarkdown falls back to markdown when database snapshot lacks measurements
+2026-06-04T09:52:11.5619774Z ok 33 - exportDerivedTrainingMarkdown falls back to markdown when database snapshot lacks measurements
+2026-06-04T09:52:11.5621093Z   ---
+2026-06-04T09:52:11.5621990Z   duration_ms: 4.161916
+2026-06-04T09:52:11.5623030Z   type: 'test'
+2026-06-04T09:52:11.5623962Z   ...
+2026-06-04T09:52:11.5646582Z # Subtest: exportDerivedTrainingMarkdown falls back to markdown when database snapshot is unavailable
+2026-06-04T09:52:11.5653048Z ok 34 - exportDerivedTrainingMarkdown falls back to markdown when database snapshot is unavailable
+2026-06-04T09:52:11.5654786Z   ---
+2026-06-04T09:52:11.5655350Z   duration_ms: 3.45269
+2026-06-04T09:52:11.5655947Z   type: 'test'
+2026-06-04T09:52:11.5656556Z   ...
+2026-06-04T09:52:11.5667224Z # Subtest: exportDerivedTrainingMarkdown does not hide incomplete database snapshots when database is not configured
+2026-06-04T09:52:11.5673345Z ok 35 - exportDerivedTrainingMarkdown does not hide incomplete database snapshots when database is not configured
+2026-06-04T09:52:11.5675334Z   ---
+2026-06-04T09:52:11.5676002Z   duration_ms: 2.299956
+2026-06-04T09:52:11.5676747Z   type: 'test'
+2026-06-04T09:52:11.5677370Z   ...
+2026-06-04T09:52:11.5864062Z # Subtest: shared site build action centralizes Hexo build cache and deploy steps
+2026-06-04T09:52:11.5885326Z ok 36 - shared site build action centralizes Hexo build cache and deploy steps
+2026-06-04T09:52:11.5914377Z   ---
+2026-06-04T09:52:11.5922624Z   duration_ms: 14.60587
+2026-06-04T09:52:11.5923761Z   type: 'test'
+2026-06-04T09:52:11.5926676Z   ...
+2026-06-04T09:52:11.5927698Z # Subtest: deploy-pages workflow uses the shared site build action
+2026-06-04T09:52:11.5929051Z ok 37 - deploy-pages workflow uses the shared site build action
+2026-06-04T09:52:11.5930022Z   ---
+2026-06-04T09:52:11.5930660Z   duration_ms: 2.040529
+2026-06-04T09:52:11.5931370Z   type: 'test'
+2026-06-04T09:52:11.5932008Z   ...
+2026-06-04T09:52:11.5933134Z # Subtest: ci-tests workflow runs npm run test:fast without deploying Pages
+2026-06-04T09:52:11.5934869Z ok 38 - ci-tests workflow runs npm run test:fast without deploying Pages
+2026-06-04T09:52:11.5935927Z   ---
+2026-06-04T09:52:11.5936585Z   duration_ms: 5.891935
+2026-06-04T09:52:11.5937271Z   type: 'test'
+2026-06-04T09:52:11.5937895Z   ...
+2026-06-04T09:52:11.5939056Z # Subtest: deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pages preview
+2026-06-04T09:52:11.5940883Z ok 39 - deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pages preview
+2026-06-04T09:52:11.5941978Z   ---
+2026-06-04T09:52:11.5942593Z   duration_ms: 4.502159
+2026-06-04T09:52:11.5943248Z   type: 'test'
+2026-06-04T09:52:11.5944280Z   ...
+2026-06-04T09:52:11.5945394Z # Subtest: deploy-cloudflare-worker workflow refreshes Telegram webhook after deployment
+2026-06-04T09:52:11.5946977Z ok 40 - deploy-cloudflare-worker workflow refreshes Telegram webhook after deployment
+2026-06-04T09:52:11.5947993Z   ---
+2026-06-04T09:52:11.5948551Z   duration_ms: 1.476511
+2026-06-04T09:52:11.5949244Z   type: 'test'
+2026-06-04T09:52:11.5949893Z   ...
+2026-06-04T09:52:11.5951065Z # Subtest: refresh-telegram-webhook workflow supports manual and scheduled webhook refresh
+2026-06-04T09:52:11.5952724Z ok 41 - refresh-telegram-webhook workflow supports manual and scheduled webhook refresh
+2026-06-04T09:52:11.5954228Z   ---
+2026-06-04T09:52:11.5954902Z   duration_ms: 2.274098
+2026-06-04T09:52:11.5955572Z   type: 'test'
+2026-06-04T09:52:11.5956199Z   ...
+2026-06-04T09:52:11.5957220Z # Subtest: deploy-pages workflow still triggers for site-relevant changes
+2026-06-04T09:52:11.5958591Z ok 42 - deploy-pages workflow still triggers for site-relevant changes
+2026-06-04T09:52:11.5959590Z   ---
+2026-06-04T09:52:11.5960225Z   duration_ms: 2.079633
+2026-06-04T09:52:11.5960915Z   type: 'test'
+2026-06-04T09:52:11.5961559Z   ...
+2026-06-04T09:52:11.5962726Z # Subtest: telegram-sync workflow uses the shared site build action after pushing repo changes
+2026-06-04T09:52:11.5964786Z ok 43 - telegram-sync workflow uses the shared site build action after pushing repo changes
+2026-06-04T09:52:11.5965942Z   ---
+2026-06-04T09:52:11.5966684Z   duration_ms: 2.408447
+2026-06-04T09:52:11.5967369Z   type: 'test'
+2026-06-04T09:52:11.5968015Z   ...
+2026-06-04T09:52:11.5969221Z # Subtest: telegram-sync workflow keeps change detection and maintenance gating intact
+2026-06-04T09:52:11.5970831Z ok 44 - telegram-sync workflow keeps change detection and maintenance gating intact
+2026-06-04T09:52:11.5971869Z   ---
+2026-06-04T09:52:11.5972460Z   duration_ms: 1.621483
+2026-06-04T09:52:11.5973096Z   type: 'test'
+2026-06-04T09:52:11.5974126Z   ...
+2026-06-04T09:52:11.6034985Z # Subtest: telegram-sync dev workflow only handles dev dispatches and writes dev branch
+2026-06-04T09:52:11.6044712Z ok 45 - telegram-sync dev workflow only handles dev dispatches and writes dev branch
+2026-06-04T09:52:11.6064317Z   ---
+2026-06-04T09:52:11.6094241Z   duration_ms: 1.55606
+2026-06-04T09:52:11.6114877Z   type: 'test'
+2026-06-04T09:52:11.6144445Z   ...
+2026-06-04T09:52:11.6154765Z # Subtest: telegram-sync dev workflow deploys Pages after bot-created changes
+2026-06-04T09:52:11.6184628Z ok 46 - telegram-sync dev workflow deploys Pages after bot-created changes
+2026-06-04T09:52:11.6194423Z   ---
+2026-06-04T09:52:11.6195105Z   duration_ms: 1.298707
+2026-06-04T09:52:11.6195819Z   type: 'test'
+2026-06-04T09:52:11.6196528Z   ...
+2026-06-04T09:52:11.6197571Z # Subtest: dev Worker config dispatches to the dev Telegram workflow event
+2026-06-04T09:52:11.6198996Z ok 47 - dev Worker config dispatches to the dev Telegram workflow event
+2026-06-04T09:52:11.6199920Z   ---
+2026-06-04T09:52:11.6200469Z   duration_ms: 4.099193
+2026-06-04T09:52:11.6201166Z   type: 'test'
+2026-06-04T09:52:11.6201819Z   ...
+2026-06-04T09:52:11.6202921Z # Subtest: package fast tests skip the slow thought module page render and exposes sync db
+2026-06-04T09:52:11.6204981Z ok 48 - package fast tests skip the slow thought module page render and exposes sync db
+2026-06-04T09:52:11.6205994Z   ---
+2026-06-04T09:52:11.6206555Z   duration_ms: 2.23252
+2026-06-04T09:52:11.6207167Z   type: 'test'
+2026-06-04T09:52:11.6207716Z   ...
+2026-06-04T09:52:11.6208772Z # Subtest: telegram-sync workflow reports repository dispatch failures back to Telegram
+2026-06-04T09:52:11.6210330Z ok 49 - telegram-sync workflow reports repository dispatch failures back to Telegram
+2026-06-04T09:52:11.6211425Z   ---
+2026-06-04T09:52:11.6212065Z   duration_ms: 2.852346
+2026-06-04T09:52:11.6212711Z   type: 'test'
+2026-06-04T09:52:11.6213273Z   ...
+2026-06-04T09:52:11.6214661Z # Subtest: reusable workflow file has been removed so only real workflows appear in Actions
+2026-06-04T09:52:11.6216252Z ok 50 - reusable workflow file has been removed so only real workflows appear in Actions
+2026-06-04T09:52:11.6217319Z   ---
+2026-06-04T09:52:11.6217897Z   duration_ms: 1.995555
+2026-06-04T09:52:11.6218526Z   type: 'test'
+2026-06-04T09:52:11.6219131Z   ...
+2026-06-04T09:52:11.6220248Z # Subtest: Hexo cache is enabled in the root config for shared workflow caching to matter
+2026-06-04T09:52:11.6221829Z ok 51 - Hexo cache is enabled in the root config for shared workflow caching to matter
+2026-06-04T09:52:11.6222866Z   ---
+2026-06-04T09:52:11.6223664Z   duration_ms: 1.205682
+2026-06-04T09:52:11.6224298Z   type: 'test'
+2026-06-04T09:52:11.6224857Z   ...
+2026-06-04T09:52:11.6369089Z # Subtest: MCP JSON-RPC handler lists tools
+2026-06-04T09:52:11.6386819Z ok 52 - MCP JSON-RPC handler lists tools
+2026-06-04T09:52:11.6387360Z   ---
+2026-06-04T09:52:11.6387855Z   duration_ms: 1.69978
+2026-06-04T09:52:11.6388335Z   type: 'test'
+2026-06-04T09:52:11.6388803Z   ...
+2026-06-04T09:52:11.6389548Z # Subtest: MCP JSON-RPC handler calls tools and wraps content as JSON text
+2026-06-04T09:52:11.6390418Z ok 53 - MCP JSON-RPC handler calls tools and wraps content as JSON text
+2026-06-04T09:52:11.6390966Z   ---
+2026-06-04T09:52:11.6391443Z   duration_ms: 1.282517
+2026-06-04T09:52:11.6391917Z   type: 'test'
+2026-06-04T09:52:11.6392396Z   ...
+2026-06-04T09:52:11.6414410Z # Subtest: MCP JSON-RPC handler reports method errors
+2026-06-04T09:52:11.6415235Z ok 54 - MCP JSON-RPC handler reports method errors
+2026-06-04T09:52:11.6415801Z   ---
+2026-06-04T09:52:11.6416164Z   duration_ms: 0.386405
+2026-06-04T09:52:11.6416584Z   type: 'test'
+2026-06-04T09:52:11.6416956Z   ...
+2026-06-04T09:52:11.6818617Z # Subtest: listMcpTools exposes the read-only v1 tool catalog
+2026-06-04T09:52:11.6820019Z ok 55 - listMcpTools exposes the read-only v1 tool catalog
+2026-06-04T09:52:11.6820964Z   ---
+2026-06-04T09:52:11.6821690Z   duration_ms: 1.119049
+2026-06-04T09:52:11.6822506Z   type: 'test'
+2026-06-04T09:52:11.6823159Z   ...
+2026-06-04T09:52:11.6969611Z # Subtest: training.get_snapshot returns a uniform envelope and filters date windows
+2026-06-04T09:52:11.6975022Z ok 56 - training.get_snapshot returns a uniform envelope and filters date windows
+2026-06-04T09:52:11.6976268Z   ---
+2026-06-04T09:52:11.6976884Z   duration_ms: 18.632183
+2026-06-04T09:52:11.6978213Z   type: 'test'
+2026-06-04T09:52:11.6978823Z   ...
+2026-06-04T09:52:11.7080572Z # Subtest: training.get_daily_records can project selected record types
+2026-06-04T09:52:11.7082608Z ok 57 - training.get_daily_records can project selected record types
+2026-06-04T09:52:11.7084059Z   ---
+2026-06-04T09:52:11.7084664Z   duration_ms: 12.286317
+2026-06-04T09:52:11.7085293Z   type: 'test'
+2026-06-04T09:52:11.7085847Z   ...
+2026-06-04T09:52:11.7162189Z # Subtest: training.get_measurements and training.get_activities expose structured slices
+2026-06-04T09:52:11.7164280Z ok 58 - training.get_measurements and training.get_activities expose structured slices
+2026-06-04T09:52:11.7165436Z   ---
+2026-06-04T09:52:11.7166960Z   duration_ms: 6.952598
+2026-06-04T09:52:11.7171673Z   type: 'test'
+2026-06-04T09:52:11.7185470Z   ...
+2026-06-04T09:52:11.7194692Z # Subtest: training.get_config masks secrets and only returns allowlisted keys
+2026-06-04T09:52:11.7207593Z ok 59 - training.get_config masks secrets and only returns allowlisted keys
+2026-06-04T09:52:11.7208622Z   ---
+2026-06-04T09:52:11.7209319Z   duration_ms: 0.530946
+2026-06-04T09:52:11.7210175Z   type: 'test'
+2026-06-04T09:52:11.7211451Z   ...
+2026-06-04T09:52:11.7212726Z # Subtest: runtime.get_sync_status reads queue counts without exposing payloads by default
+2026-06-04T09:52:11.7214584Z ok 60 - runtime.get_sync_status reads queue counts without exposing payloads by default
+2026-06-04T09:52:11.7215684Z   ---
+2026-06-04T09:52:11.7216320Z   duration_ms: 4.527206
+2026-06-04T09:52:11.7217054Z   type: 'test'
+2026-06-04T09:52:11.7217685Z   ...
+2026-06-04T09:52:11.7335312Z # Subtest: training.search_records searches markdown and thought posts
+2026-06-04T09:52:11.7336900Z ok 61 - training.search_records searches markdown and thought posts
+2026-06-04T09:52:11.7374231Z   ---
+2026-06-04T09:52:11.7375549Z   duration_ms: 7.946105
+2026-06-04T09:52:11.7386614Z   type: 'test'
+2026-06-04T09:52:11.7387160Z   ...
+2026-06-04T09:52:11.7388164Z # Subtest: telegram.get_command_registry returns declared commands and aliases
+2026-06-04T09:52:11.7389646Z ok 62 - telegram.get_command_registry returns declared commands and aliases
+2026-06-04T09:52:11.7391058Z   ---
+2026-06-04T09:52:11.7391691Z   duration_ms: 0.701316
+2026-06-04T09:52:11.7392362Z   type: 'test'
+2026-06-04T09:52:11.7392995Z   ...
+2026-06-04T09:52:11.7660153Z # Subtest: training.generate_analysis returns reply summary and focus without Telegram side effects
+2026-06-04T09:52:11.7675077Z ok 63 - training.generate_analysis returns reply summary and focus without Telegram side effects
+2026-06-04T09:52:11.7676275Z   ---
+2026-06-04T09:52:11.7676827Z   duration_ms: 34.984524
+2026-06-04T09:52:11.7677442Z   type: 'test'
+2026-06-04T09:52:11.7677983Z   ...
+2026-06-04T09:52:11.7678770Z # Subtest: callMcpTool returns structured validation errors
+2026-06-04T09:52:11.7679789Z ok 64 - callMcpTool returns structured validation errors
+2026-06-04T09:52:11.7680561Z   ---
+2026-06-04T09:52:11.7681207Z   duration_ms: 0.902834
+2026-06-04T09:52:11.7681977Z   type: 'test'
+2026-06-04T09:52:11.7682602Z   ...
+2026-06-04T09:52:11.7683888Z # Subtest: resolveMcpConfig honors readonly defaults and allowed tool overrides
+2026-06-04T09:52:11.7685288Z ok 65 - resolveMcpConfig honors readonly defaults and allowed tool overrides
+2026-06-04T09:52:11.7686205Z   ---
+2026-06-04T09:52:11.7686761Z   duration_ms: 0.454543
+2026-06-04T09:52:11.7687368Z   type: 'test'
+2026-06-04T09:52:11.7687946Z   ...
+2026-06-04T09:52:11.7865188Z # Subtest: file pending store preserves ndjson format and deduplicates by batch id
+2026-06-04T09:52:11.7898965Z ok 66 - file pending store preserves ndjson format and deduplicates by batch id
+2026-06-04T09:52:11.7904817Z   ---
+2026-06-04T09:52:11.7905746Z   duration_ms: 11.939918
+2026-06-04T09:52:11.7906722Z   type: 'test'
+2026-06-04T09:52:11.7907479Z   ...
+2026-06-04T09:52:11.7908490Z # Subtest: pending store factory keeps file as the default implementation
+2026-06-04T09:52:11.7910390Z ok 67 - pending store factory keeps file as the default implementation
+2026-06-04T09:52:11.7911703Z   ---
+2026-06-04T09:52:11.7912374Z   duration_ms: 2.373675
+2026-06-04T09:52:11.7913032Z   type: 'test'
+2026-06-04T09:52:11.7913913Z   ...
+2026-06-04T09:52:11.7914888Z # Subtest: pending store factory can switch to an injected database store
+2026-06-04T09:52:11.7916198Z ok 68 - pending store factory can switch to an injected database store
+2026-06-04T09:52:11.7917111Z   ---
+2026-06-04T09:52:11.7917750Z   duration_ms: 1.255596
+2026-06-04T09:52:11.7918560Z   type: 'test'
+2026-06-04T09:52:11.7919225Z   ...
+2026-06-04T09:52:11.7920198Z # Subtest: generateRecognitionPrompt includes all key constraints
+2026-06-04T09:52:11.7921542Z ok 69 - generateRecognitionPrompt includes all key constraints
+2026-06-04T09:52:11.7922485Z   ---
+2026-06-04T09:52:11.7923074Z   duration_ms: 9.527339
+2026-06-04T09:52:11.7924609Z   type: 'test'
+2026-06-04T09:52:11.7925260Z   ...
+2026-06-04T09:52:11.7926211Z # Subtest: generateAnalysisPrompt includes all key sections
+2026-06-04T09:52:11.7927496Z ok 70 - generateAnalysisPrompt includes all key sections
+2026-06-04T09:52:11.7928391Z   ---
+2026-06-04T09:52:11.7928984Z   duration_ms: 2.963992
+2026-06-04T09:52:11.7929621Z   type: 'test'
+2026-06-04T09:52:11.7930233Z   ...
+2026-06-04T09:52:11.7931207Z # Subtest: getTimeWindowPolicies returns all five policy codes
+2026-06-04T09:52:11.7932433Z ok 71 - getTimeWindowPolicies returns all five policy codes
+2026-06-04T09:52:11.7933272Z   ---
+2026-06-04T09:52:11.7934171Z   duration_ms: 0.950804
+2026-06-04T09:52:11.7934850Z   type: 'test'
+2026-06-04T09:52:11.7935417Z   ...
+2026-06-04T09:52:11.7936433Z # Subtest: generated recognition prompt loads correctly from structured source
+2026-06-04T09:52:11.7937883Z ok 72 - generated recognition prompt loads correctly from structured source
+2026-06-04T09:52:11.7938898Z   ---
+2026-06-04T09:52:11.7939570Z   duration_ms: 1.929742
+2026-06-04T09:52:11.7940274Z   type: 'test'
+2026-06-04T09:52:11.7940892Z   ...
+2026-06-04T09:52:11.7941970Z # Subtest: generated analysis prompt loads correctly from structured source
+2026-06-04T09:52:11.7943677Z ok 73 - generated analysis prompt loads correctly from structured source
+2026-06-04T09:52:11.7944764Z   ---
+2026-06-04T09:52:11.7945390Z   duration_ms: 1.3264
+2026-06-04T09:52:11.7945975Z   type: 'test'
+2026-06-04T09:52:11.7946515Z   ...
+2026-06-04T09:52:11.7947429Z # Subtest: shared rules load correctly
+2026-06-04T09:52:11.7948308Z ok 74 - shared rules load correctly
+2026-06-04T09:52:11.7949034Z   ---
+2026-06-04T09:52:11.7949681Z   duration_ms: 1.448639
+2026-06-04T09:52:11.7950378Z   type: 'test'
+2026-06-04T09:52:11.7951007Z   ...
+2026-06-04T09:52:11.7951963Z # Subtest: loadStructuredSource throws for unknown source name
+2026-06-04T09:52:11.7953214Z ok 75 - loadStructuredSource throws for unknown source name
+2026-06-04T09:52:11.7954546Z   ---
+2026-06-04T09:52:11.7955188Z   duration_ms: 1.439041
+2026-06-04T09:52:11.7955888Z   type: 'test'
+2026-06-04T09:52:11.7956519Z   ...
+2026-06-04T09:52:11.7957354Z # Subtest: generated prompts are deterministic
+2026-06-04T09:52:11.7958418Z ok 76 - generated prompts are deterministic
+2026-06-04T09:52:11.7959255Z   ---
+2026-06-04T09:52:11.7959926Z   duration_ms: 3.364074
+2026-06-04T09:52:11.7960627Z   type: 'test'
+2026-06-04T09:52:11.7961251Z   ...
+2026-06-04T09:52:11.7962163Z # Subtest: prompt metadata header can be parsed and stripped
+2026-06-04T09:52:11.7963786Z ok 77 - prompt metadata header can be parsed and stripped
+2026-06-04T09:52:11.7964732Z   ---
+2026-06-04T09:52:11.7965359Z   duration_ms: 0.557055
+2026-06-04T09:52:11.7966072Z   type: 'test'
+2026-06-04T09:52:11.7966703Z   ...
+2026-06-04T09:52:11.8498749Z # Subtest: reconcileTrainingMarkdownToCore imports markdown into database when available
+2026-06-04T09:52:11.8504677Z ok 78 - reconcileTrainingMarkdownToCore imports markdown into database when available
+2026-06-04T09:52:11.8505956Z   ---
+2026-06-04T09:52:11.8506635Z   duration_ms: 7.311131
+2026-06-04T09:52:11.8507346Z   type: 'test'
+2026-06-04T09:52:11.8507964Z   ...
+2026-06-04T09:52:11.8522114Z # Subtest: reconcileTrainingMarkdownToCore defers instead of throwing when database is unavailable
+2026-06-04T09:52:11.8527503Z ok 79 - reconcileTrainingMarkdownToCore defers instead of throwing when database is unavailable
+2026-06-04T09:52:11.8528947Z   ---
+2026-06-04T09:52:11.8529712Z   duration_ms: 2.676142
+2026-06-04T09:52:11.8530667Z   type: 'test'
+2026-06-04T09:52:11.8531522Z   ...
+2026-06-04T09:52:12.0345007Z 1..0
+2026-06-04T09:52:12.0525058Z # Subtest: test/run-hexo-command.test.mjs
+2026-06-04T09:52:12.0554612Z ok 17 - test/run-hexo-command.test.mjs
+2026-06-04T09:52:12.0555472Z   ---
+2026-06-04T09:52:12.0557201Z   duration_ms: 284.650567
+2026-06-04T09:52:12.0557957Z   type: 'test'
+2026-06-04T09:52:12.0558600Z   ...
+2026-06-04T09:52:12.0559314Z # Subtest: test/shared-site-fixture.mjs
+2026-06-04T09:52:12.0560198Z ok 18 - test/shared-site-fixture.mjs
+2026-06-04T09:52:12.0560925Z   ---
+2026-06-04T09:52:12.0561504Z   duration_ms: 47.43682
+2026-06-04T09:52:12.0562168Z   type: 'test'
+2026-06-04T09:52:12.0562793Z   ...
+2026-06-04T09:52:12.0563969Z # Subtest: src boundary entry points exist and re-export expected modules
+2026-06-04T09:52:12.0565245Z ok 82 - src boundary entry points exist and re-export expected modules
+2026-06-04T09:52:12.0566115Z   ---
+2026-06-04T09:52:12.0566741Z   duration_ms: 1.254645
+2026-06-04T09:52:12.0567373Z   type: 'test'
+2026-06-04T09:52:12.0567987Z   ...
+2026-06-04T09:52:12.0569012Z # Subtest: syncTrainingCore aggregates archive markdown and thought sync results
+2026-06-04T09:52:12.0570480Z ok 83 - syncTrainingCore aggregates archive markdown and thought sync results
+2026-06-04T09:52:12.0571542Z   ---
+2026-06-04T09:52:12.0572130Z   duration_ms: 2.71235
+2026-06-04T09:52:12.0572773Z   type: 'test'
+2026-06-04T09:52:12.0573319Z   ...
+2026-06-04T09:52:12.0574543Z # Subtest: syncTrainingCore keeps running when one sync phase defers
+2026-06-04T09:52:12.0575838Z ok 84 - syncTrainingCore keeps running when one sync phase defers
+2026-06-04T09:52:12.0576789Z   ---
+2026-06-04T09:52:12.0577439Z   duration_ms: 0.688422
+2026-06-04T09:52:12.0578175Z   type: 'test'
+2026-06-04T09:52:12.0578815Z   ...
+2026-06-04T09:52:12.0579891Z # Subtest: syncTrainingCore reports skipped when every phase is skipped or unchanged
+2026-06-04T09:52:12.0581444Z ok 85 - syncTrainingCore reports skipped when every phase is skipped or unchanged
+2026-06-04T09:52:12.0582500Z   ---
+2026-06-04T09:52:12.0583146Z   duration_ms: 0.318388
+2026-06-04T09:52:12.0584098Z   type: 'test'
+2026-06-04T09:52:12.0584734Z   ...
+2026-06-04T09:52:12.0585585Z # Subtest: syncTrainingCore can run a single requested phase
+2026-06-04T09:52:12.0586643Z ok 86 - syncTrainingCore can run a single requested phase
+2026-06-04T09:52:12.0587383Z   ---
+2026-06-04T09:52:12.0593688Z   duration_ms: 0.390172
+2026-06-04T09:52:12.0594512Z   type: 'test'
+2026-06-04T09:52:12.0595127Z   ...
+2026-06-04T09:52:12.0596046Z # Subtest: syncTrainingCore reuses one client for archive and markdown phases
+2026-06-04T09:52:12.0597928Z ok 87 - syncTrainingCore reuses one client for archive and markdown phases
+2026-06-04T09:52:12.0598751Z   ---
+2026-06-04T09:52:12.0599114Z   duration_ms: 14.942385
+2026-06-04T09:52:12.0599541Z   type: 'test'
+2026-06-04T09:52:12.0599924Z   ...
+2026-06-04T09:52:12.0600800Z # Subtest: syncTrainingCore defers phases when closing shared client fails
+2026-06-04T09:52:12.0601722Z ok 88 - syncTrainingCore defers phases when closing shared client fails
+2026-06-04T09:52:12.0602154Z   ---
+2026-06-04T09:52:12.0602373Z   duration_ms: 0.546656
+2026-06-04T09:52:12.0602625Z   type: 'test'
+2026-06-04T09:52:12.0602845Z   ...
+2026-06-04T09:52:12.1184960Z # Subtest: telegram ai agent searches records for history search questions
+2026-06-04T09:52:12.1205116Z ok 89 - telegram ai agent searches records for history search questions
+2026-06-04T09:52:12.1224414Z   ---
+2026-06-04T09:52:12.1256066Z   duration_ms: 3.115387
+2026-06-04T09:52:12.1280078Z   type: 'test'
+2026-06-04T09:52:12.1301583Z   ...
+2026-06-04T09:52:12.1303173Z # Subtest: telegram ai agent checks runtime status for sync health questions
+2026-06-04T09:52:12.1305847Z ok 90 - telegram ai agent checks runtime status for sync health questions
+2026-06-04T09:52:12.1306883Z   ---
+2026-06-04T09:52:12.1307475Z   duration_ms: 0.800262
+2026-06-04T09:52:12.1308106Z   type: 'test'
+2026-06-04T09:52:12.1308668Z   ...
+2026-06-04T09:52:12.1376510Z # Subtest: handleTelegramWebhook dispatches non-album telegram updates to GitHub immediately
+2026-06-04T09:52:12.1388339Z ok 91 - handleTelegramWebhook dispatches non-album telegram updates to GitHub immediately
+2026-06-04T09:52:12.1389681Z   ---
+2026-06-04T09:52:12.1390304Z   duration_ms: 42.525737
+2026-06-04T09:52:12.1391000Z   type: 'test'
+2026-06-04T09:52:12.1391624Z   ...
+2026-06-04T09:52:12.1392877Z # Subtest: handleTelegramWebhook falls back to the documented repository when owner and repo are omitted
+2026-06-04T09:52:12.1397201Z ok 92 - handleTelegramWebhook falls back to the documented repository when owner and repo are omitted
+2026-06-04T09:52:12.1398377Z   ---
+2026-06-04T09:52:12.1399017Z   duration_ms: 0.766007
+2026-06-04T09:52:12.1399664Z   type: 'test'
+2026-06-04T09:52:12.1400281Z   ...
+2026-06-04T09:52:12.1401320Z # Subtest: handleTelegramWebhook dispatches with a configured GitHub event type
+2026-06-04T09:52:12.1402803Z ok 93 - handleTelegramWebhook dispatches with a configured GitHub event type
+2026-06-04T09:52:12.1403995Z   ---
+2026-06-04T09:52:12.1404552Z   duration_ms: 0.827723
+2026-06-04T09:52:12.1405164Z   type: 'test'
+2026-06-04T09:52:12.1405705Z   ...
+2026-06-04T09:52:12.1406688Z # Subtest: handleTelegramWebhook notifies Telegram when the GitHub token is missing
+2026-06-04T09:52:12.1408138Z ok 94 - handleTelegramWebhook notifies Telegram when the GitHub token is missing
+2026-06-04T09:52:12.1416732Z   ---
+2026-06-04T09:52:12.1454424Z   duration_ms: 1.616133
+2026-06-04T09:52:12.1484356Z   type: 'test'
+2026-06-04T09:52:12.1494422Z   ...
+2026-06-04T09:52:12.1495617Z # Subtest: handleTelegramWebhook notifies Telegram when GitHub dispatch fails
+2026-06-04T09:52:12.1497072Z ok 95 - handleTelegramWebhook notifies Telegram when GitHub dispatch fails
+2026-06-04T09:52:12.1498003Z   ---
+2026-06-04T09:52:12.1498538Z   duration_ms: 2.212953
+2026-06-04T09:52:12.1499121Z   type: 'test'
+2026-06-04T09:52:12.1499649Z   ...
+2026-06-04T09:52:12.1500708Z # Subtest: handleTelegramWebhook replies to help messages without dispatching GitHub Actions
+2026-06-04T09:52:12.1502245Z ok 96 - handleTelegramWebhook replies to help messages without dispatching GitHub Actions
+2026-06-04T09:52:12.1503281Z   ---
+2026-06-04T09:52:12.1504129Z   duration_ms: 1.652601
+2026-06-04T09:52:12.1504777Z   type: 'test'
+2026-06-04T09:52:12.1505324Z   ...
+2026-06-04T09:52:12.1506302Z # Subtest: handleTelegramWebhook can reply to help messages without a GitHub token
+2026-06-04T09:52:12.1507698Z ok 97 - handleTelegramWebhook can reply to help messages without a GitHub token
+2026-06-04T09:52:12.1508626Z   ---
+2026-06-04T09:52:12.1509140Z   duration_ms: 1.676997
+2026-06-04T09:52:12.1509710Z   type: 'test'
+2026-06-04T09:52:12.1510248Z   ...
+2026-06-04T09:52:12.1511524Z # Subtest: handleTelegramWebhook treats /帮助 and bare help as local help commands
+2026-06-04T09:52:12.1513031Z ok 98 - handleTelegramWebhook treats /帮助 and bare help as local help commands
+2026-06-04T09:52:12.1514253Z   ---
+2026-06-04T09:52:12.1514768Z   duration_ms: 2.226909
+2026-06-04T09:52:12.1515340Z   type: 'test'
+2026-06-04T09:52:12.1515860Z   ...
+2026-06-04T09:52:12.1517002Z # Subtest: handleTelegramWebhook buffers album updates and dispatches them together after the alarm fires
+2026-06-04T09:52:12.1518789Z ok 99 - handleTelegramWebhook buffers album updates and dispatches them together after the alarm fires
+2026-06-04T09:52:12.1519888Z   ---
+2026-06-04T09:52:12.1520407Z   duration_ms: 3.462287
+2026-06-04T09:52:12.1520985Z   type: 'test'
+2026-06-04T09:52:12.1521509Z   ...
+2026-06-04T09:52:12.1522520Z # Subtest: TelegramAlbumBuffer deduplicates repeated updates inside the same album batch
+2026-06-04T09:52:12.1524678Z ok 100 - TelegramAlbumBuffer deduplicates repeated updates inside the same album batch
+2026-06-04T09:52:12.1525891Z   ---
+2026-06-04T09:52:12.1526444Z   duration_ms: 1.720108
+2026-06-04T09:52:12.1527161Z   type: 'test'
+2026-06-04T09:52:12.1527695Z   ...
+2026-06-04T09:52:12.1528862Z # Subtest: TelegramAlbumBuffer dispatches with a configured GitHub event type after the alarm fires
+2026-06-04T09:52:12.1530499Z ok 101 - TelegramAlbumBuffer dispatches with a configured GitHub event type after the alarm fires
+2026-06-04T09:52:12.1531517Z   ---
+2026-06-04T09:52:12.1532028Z   duration_ms: 0.95375
+2026-06-04T09:52:12.1532593Z   type: 'test'
+2026-06-04T09:52:12.1533140Z   ...
+2026-06-04T09:52:12.1534356Z # Subtest: handleTelegramWebhook rejects requests with the wrong Telegram secret
+2026-06-04T09:52:12.1535678Z ok 102 - handleTelegramWebhook rejects requests with the wrong Telegram secret
+2026-06-04T09:52:12.1536534Z   ---
+2026-06-04T09:52:12.1537037Z   duration_ms: 0.697739
+2026-06-04T09:52:12.1537599Z   type: 'test'
+2026-06-04T09:52:12.1538085Z   ...
+2026-06-04T09:52:12.1857897Z # Subtest: telegram sync notifier reads the result file and sends the deferred success message
+2026-06-04T09:52:12.1863361Z ok 103 - telegram sync notifier reads the result file and sends the deferred success message
+2026-06-04T09:52:12.1864826Z   ---
+2026-06-04T09:52:12.1865460Z   duration_ms: 9.87906
+2026-06-04T09:52:12.1866132Z   type: 'test'
+2026-06-04T09:52:12.1867092Z   ...
+2026-06-04T09:52:12.1890674Z # Subtest: telegram sync notifier passes the bot token to the transport sender
+2026-06-04T09:52:12.1892262Z ok 104 - telegram sync notifier passes the bot token to the transport sender
+2026-06-04T09:52:12.1893765Z   ---
+2026-06-04T09:52:12.1894405Z   duration_ms: 2.591754
+2026-06-04T09:52:12.1895097Z   type: 'test'
+2026-06-04T09:52:12.1895998Z   ...
+2026-06-04T09:52:12.1927238Z # Subtest: telegram sync notifier reports partial failures instead of success for stored image albums
+2026-06-04T09:52:12.1937363Z ok 105 - telegram sync notifier reports partial failures instead of success for stored image albums
+2026-06-04T09:52:12.1964296Z   ---
+2026-06-04T09:52:12.1994348Z   duration_ms: 3.331312
+2026-06-04T09:52:12.1995317Z   type: 'test'
+2026-06-04T09:52:12.2012598Z   ...
+2026-06-04T09:52:12.4415275Z # Subtest: telegram sync entrypoint exits cleanly in webhook mode without queued work
+2026-06-04T09:52:12.4456702Z ok 106 - telegram sync entrypoint exits cleanly in webhook mode without queued work
+2026-06-04T09:52:12.4457899Z   ---
+2026-06-04T09:52:12.4459188Z   duration_ms: 150.447169
+2026-06-04T09:52:12.4459797Z   type: 'test'
+2026-06-04T09:52:12.4460474Z   ...
+2026-06-04T09:52:12.5996672Z # Subtest: telegram sync entrypoint ignores empty repository dispatch payloads in webhook mode
+2026-06-04T09:52:12.6025860Z ok 107 - telegram sync entrypoint ignores empty repository dispatch payloads in webhook mode
+2026-06-04T09:52:12.6046522Z   ---
+2026-06-04T09:52:12.6064740Z   duration_ms: 176.79025
+2026-06-04T09:52:12.6105192Z   type: 'test'
+2026-06-04T09:52:12.6107519Z   ...
+2026-06-04T09:52:12.6108561Z # Subtest: does not persist telegram artifacts when no updates were fetched and nothing changed
+2026-06-04T09:52:12.6110082Z ok 108 - does not persist telegram artifacts when no updates were fetched and nothing changed
+2026-06-04T09:52:12.6110937Z   ---
+2026-06-04T09:52:12.6111311Z   duration_ms: 0.314951
+2026-06-04T09:52:12.6111754Z   type: 'test'
+2026-06-04T09:52:12.6112132Z   ...
+2026-06-04T09:52:12.6112966Z # Subtest: persists telegram artifacts when new updates advance the processed offset
+2026-06-04T09:52:12.6114432Z ok 109 - persists telegram artifacts when new updates advance the processed offset
+2026-06-04T09:52:12.6115204Z   ---
+2026-06-04T09:52:12.6115593Z   duration_ms: 0.213431
+2026-06-04T09:52:12.6116017Z   type: 'test'
+2026-06-04T09:52:12.6116389Z   ...
+2026-06-04T09:52:12.6117428Z # Subtest: loadRecognitionSystemPrompt reads the versioned Telegram image prompt
+2026-06-04T09:52:12.6118934Z ok 110 - loadRecognitionSystemPrompt reads the versioned Telegram image prompt
+2026-06-04T09:52:12.6120015Z   ---
+2026-06-04T09:52:12.6121369Z   duration_ms: 6.685834
+2026-06-04T09:52:12.6122131Z   type: 'test'
+2026-06-04T09:52:12.6122794Z   ...
+2026-06-04T09:52:12.6138377Z # Subtest: loadRecognitionSystemPrompt can be overridden for prompt experiments
+2026-06-04T09:52:12.6142557Z ok 111 - loadRecognitionSystemPrompt can be overridden for prompt experiments
+2026-06-04T09:52:12.6143944Z   ---
+2026-06-04T09:52:12.6144575Z   duration_ms: 3.938754
+2026-06-04T09:52:12.6145174Z   type: 'test'
+2026-06-04T09:52:12.6145790Z   ...
+2026-06-04T09:52:12.6146850Z # Subtest: recognition cache key changes with prompt schema and model versions
+2026-06-04T09:52:12.6148382Z ok 112 - recognition cache key changes with prompt schema and model versions
+2026-06-04T09:52:12.6149472Z   ---
+2026-06-04T09:52:12.6150170Z   duration_ms: 0.40493
+2026-06-04T09:52:12.6150914Z   type: 'test'
+2026-06-04T09:52:12.6151604Z   ...
+2026-06-04T09:52:12.6242934Z # Subtest: runTelegramSync persists ready batches to the database and exports derived markdown
+2026-06-04T09:52:12.6245440Z ok 113 - runTelegramSync persists ready batches to the database and exports derived markdown
+2026-06-04T09:52:12.6246929Z   ---
+2026-06-04T09:52:12.6247653Z   duration_ms: 12.544178
+2026-06-04T09:52:12.6248483Z   type: 'test'
+2026-06-04T09:52:12.6249174Z   ...
+2026-06-04T09:52:12.6471169Z # Subtest: runTelegramSync writes the ready batch back into markdown when the rebuilt database snapshot misses the new archived date
+2026-06-04T09:52:12.6474425Z ok 114 - runTelegramSync writes the ready batch back into markdown when the rebuilt database snapshot misses the new archived date
+2026-06-04T09:52:12.6476055Z   ---
+2026-06-04T09:52:12.6476712Z   duration_ms: 21.091732
+2026-06-04T09:52:12.6477453Z   type: 'test'
+2026-06-04T09:52:12.6478121Z   ...
+2026-06-04T09:52:12.6514929Z # [telegram-sync] database snapshot is empty or missing measurements; rebuilding markdown from persisted batches
+2026-06-04T09:52:12.6528218Z # Subtest: runTelegramSync falls back to markdown rebuild when database snapshot lacks measurements after storing a batch
+2026-06-04T09:52:12.6530731Z ok 115 - runTelegramSync falls back to markdown rebuild when database snapshot lacks measurements after storing a batch
+2026-06-04T09:52:12.6532244Z   ---
+2026-06-04T09:52:12.6532910Z   duration_ms: 7.139198
+2026-06-04T09:52:12.6533819Z   type: 'test'
+2026-06-04T09:52:12.6534470Z   ...
+2026-06-04T09:52:12.6564841Z # [telegram-sync] fallback to markdown for album-1 (2026-05-09): database unavailable
+2026-06-04T09:52:12.6630540Z # Subtest: runTelegramSync falls back to markdown when database persistence fails
+2026-06-04T09:52:12.6638419Z ok 116 - runTelegramSync falls back to markdown when database persistence fails
+2026-06-04T09:52:12.6639044Z   ---
+2026-06-04T09:52:12.6639462Z   duration_ms: 10.539499
+2026-06-04T09:52:12.6640197Z   type: 'test'
+2026-06-04T09:52:12.6640755Z   ...
+2026-06-04T09:52:12.6727283Z # Subtest: runTelegramSync skips undated batches without persisting fallback or markdown writes
+2026-06-04T09:52:12.6729472Z ok 117 - runTelegramSync skips undated batches without persisting fallback or markdown writes
+2026-06-04T09:52:12.6730710Z   ---
+2026-06-04T09:52:12.6731385Z   duration_ms: 5.843586
+2026-06-04T09:52:12.6732042Z   type: 'test'
+2026-06-04T09:52:12.6732647Z   ...
+2026-06-04T09:52:12.6839554Z # Subtest: runTelegramSync skips conflicting-date batches and continues processing ready batches
+2026-06-04T09:52:12.6840717Z ok 118 - runTelegramSync skips conflicting-date batches and continues processing ready batches
+2026-06-04T09:52:12.6841423Z   ---
+2026-06-04T09:52:12.6841874Z   duration_ms: 10.217164
+2026-06-04T09:52:12.6842276Z   type: 'test'
+2026-06-04T09:52:12.6842643Z   ...
+2026-06-04T09:52:12.6843299Z # Subtest: buildTelegramSyncReport exposes fallback and archived date details for logs
+2026-06-04T09:52:12.6844460Z ok 119 - buildTelegramSyncReport exposes fallback and archived date details for logs
+2026-06-04T09:52:12.6845072Z   ---
+2026-06-04T09:52:12.6845434Z   duration_ms: 1.388315
+2026-06-04T09:52:12.6846377Z   type: 'test'
+2026-06-04T09:52:12.6847578Z   ...
+2026-06-04T09:52:12.6848497Z # Subtest: buildTelegramSyncReport exposes normalized task status and identifiers for audit
+2026-06-04T09:52:12.6849510Z ok 120 - buildTelegramSyncReport exposes normalized task status and identifiers for audit
+2026-06-04T09:52:12.6850157Z   ---
+2026-06-04T09:52:12.6850513Z   duration_ms: 0.334608
+2026-06-04T09:52:12.6850902Z   type: 'test'
+2026-06-04T09:52:12.6851321Z   ...
+2026-06-04T09:52:12.6852782Z # Subtest: buildTelegramSyncReport keeps partial failure visible when failed images are queued
+2026-06-04T09:52:12.6856230Z ok 121 - buildTelegramSyncReport keeps partial failure visible when failed images are queued
+2026-06-04T09:52:12.6857072Z   ---
+2026-06-04T09:52:12.6859854Z   duration_ms: 0.234871
+2026-06-04T09:52:12.6860487Z   type: 'test'
+2026-06-04T09:52:12.6861064Z   ...
+2026-06-04T09:52:12.6863738Z # Subtest: buildTelegramSyncReport exposes failure disposition for retry and manual handling
+2026-06-04T09:52:12.6866670Z ok 122 - buildTelegramSyncReport exposes failure disposition for retry and manual handling
+2026-06-04T09:52:12.6867435Z   ---
+2026-06-04T09:52:12.6867971Z   duration_ms: 0.35661
+2026-06-04T09:52:12.6868382Z   type: 'test'
+2026-06-04T09:52:12.6868742Z   ...
+2026-06-04T09:52:12.6875122Z # Subtest: buildTelegramSyncReport exposes the canonical sync task statuses
+2026-06-04T09:52:12.6883353Z ok 123 - buildTelegramSyncReport exposes the canonical sync task statuses
+2026-06-04T09:52:12.6884148Z   ---
+2026-06-04T09:52:12.6884725Z   duration_ms: 0.62914
+2026-06-04T09:52:12.6885282Z   type: 'test'
+2026-06-04T09:52:12.6885657Z   ...
+2026-06-04T09:52:12.6926817Z # Subtest: runTelegramSync replays pending fallback batches into the database before new updates
+2026-06-04T09:52:12.6934050Z ok 124 - runTelegramSync replays pending fallback batches into the database before new updates
+2026-06-04T09:52:12.6935130Z   ---
+2026-06-04T09:52:12.6935503Z   duration_ms: 10.354272
+2026-06-04T09:52:12.6935908Z   type: 'test'
+2026-06-04T09:52:12.6936270Z   ...
+2026-06-04T09:52:12.6992424Z # Subtest: runTelegramSync processes updates from repository dispatch payload without polling Telegram
+2026-06-04T09:52:12.6995110Z ok 125 - runTelegramSync processes updates from repository dispatch payload without polling Telegram
+2026-06-04T09:52:12.6996121Z   ---
+2026-06-04T09:52:12.6996504Z   duration_ms: 3.779553
+2026-06-04T09:52:12.6996933Z   type: 'test'
+2026-06-04T09:52:12.6997325Z   ...
+2026-06-04T09:52:12.6998514Z # [telegram-sync] could not read last processed update id: timeout expired; continuing with repository dispatch payload
+2026-06-04T09:52:12.7045161Z # Subtest: runTelegramSync processes repository dispatch updates when database offset read times out
+2026-06-04T09:52:12.7047172Z ok 126 - runTelegramSync processes repository dispatch updates when database offset read times out
+2026-06-04T09:52:12.7048688Z   ---
+2026-06-04T09:52:12.7049315Z   duration_ms: 7.605634
+2026-06-04T09:52:12.7050004Z   type: 'test'
+2026-06-04T09:52:12.7050615Z   ...
+2026-06-04T09:52:12.7080639Z # Subtest: runTelegramSync uses document filename date when recognition has no image date
+2026-06-04T09:52:12.7083804Z ok 127 - runTelegramSync uses document filename date when recognition has no image date
+2026-06-04T09:52:12.7084776Z   ---
+2026-06-04T09:52:12.7085428Z   duration_ms: 3.889469
+2026-06-04T09:52:12.7086045Z   type: 'test'
+2026-06-04T09:52:12.7086416Z   ...
+2026-06-04T09:52:12.7114874Z # Subtest: runTelegramSync skips an undated single nutrition screenshot without a filename date
+2026-06-04T09:52:12.7116535Z ok 128 - runTelegramSync skips an undated single nutrition screenshot without a filename date
+2026-06-04T09:52:12.7117569Z   ---
+2026-06-04T09:52:12.7118088Z   duration_ms: 2.957099
+2026-06-04T09:52:12.7118681Z   type: 'test'
+2026-06-04T09:52:12.7126001Z   ...
+2026-06-04T09:52:12.7149964Z # Subtest: runTelegramSync skips polling when webhook mode is enabled without dispatch payload
+2026-06-04T09:52:12.7152515Z ok 129 - runTelegramSync skips polling when webhook mode is enabled without dispatch payload
+2026-06-04T09:52:12.7159933Z   ---
+2026-06-04T09:52:12.7160546Z   duration_ms: 2.430621
+2026-06-04T09:52:12.7161313Z   type: 'test'
+2026-06-04T09:52:12.7161965Z   ...
+2026-06-04T09:52:12.9673952Z # Subtest: runTelegramSync writes a /thought telegram message into source/_posts and persists ingest only
+2026-06-04T09:52:12.9676118Z ok 130 - runTelegramSync writes a /thought telegram message into source/_posts and persists ingest only
+2026-06-04T09:52:12.9677536Z   ---
+2026-06-04T09:52:12.9678271Z   duration_ms: 253.150364
+2026-06-04T09:52:12.9679185Z   type: 'test'
+2026-06-04T09:52:12.9679876Z   ...
+2026-06-04T09:52:12.9729490Z # Subtest: runTelegramSync writes a /随想 image caption into source/_posts with downloaded photos
+2026-06-04T09:52:12.9731554Z ok 131 - runTelegramSync writes a /随想 image caption into source/_posts with downloaded photos
+2026-06-04T09:52:12.9732766Z   ---
+2026-06-04T09:52:12.9733361Z   duration_ms: 5.505489
+2026-06-04T09:52:12.9734307Z   type: 'test'
+2026-06-04T09:52:12.9734927Z   ...
+2026-06-04T09:52:12.9781650Z # Subtest: runTelegramSync writes a module-scoped /随想 caption into source/_posts with module metadata
+2026-06-04T09:52:12.9784276Z ok 132 - runTelegramSync writes a module-scoped /随想 caption into source/_posts with module metadata
+2026-06-04T09:52:12.9785614Z   ---
+2026-06-04T09:52:12.9786322Z   duration_ms: 5.17429
+2026-06-04T09:52:12.9787030Z   type: 'test'
+2026-06-04T09:52:12.9787656Z   ...
+2026-06-04T09:52:12.9821874Z # Subtest: runTelegramSync writes a body feedback /随想 caption into source/_posts with module metadata
+2026-06-04T09:52:12.9828665Z ok 133 - runTelegramSync writes a body feedback /随想 caption into source/_posts with module metadata
+2026-06-04T09:52:12.9829890Z   ---
+2026-06-04T09:52:12.9839358Z   duration_ms: 4.411579
+2026-06-04T09:52:12.9839925Z   type: 'test'
+2026-06-04T09:52:12.9840514Z   ...
+2026-06-04T09:52:12.9888017Z # Subtest: runTelegramSync writes a /thought album caption as one thought post with all photos
+2026-06-04T09:52:12.9890403Z ok 134 - runTelegramSync writes a /thought album caption as one thought post with all photos
+2026-06-04T09:52:12.9891583Z   ---
+2026-06-04T09:52:12.9892330Z   duration_ms: 6.162605
+2026-06-04T09:52:12.9893127Z   type: 'test'
+2026-06-04T09:52:12.9894134Z   ...
+2026-06-04T09:52:12.9930811Z # Subtest: runTelegramSync treats an existing thought post as duplicate and does not overwrite it
+2026-06-04T09:52:12.9932894Z ok 135 - runTelegramSync treats an existing thought post as duplicate and does not overwrite it
+2026-06-04T09:52:12.9934492Z   ---
+2026-06-04T09:52:12.9936157Z   duration_ms: 4.569384
+2026-06-04T09:52:12.9937716Z   type: 'test'
+2026-06-04T09:52:12.9938532Z   ...
+2026-06-04T09:52:13.0045511Z # Subtest: runTelegramSync updates an existing telegram thought when the original message is edited
+2026-06-04T09:52:13.0047864Z ok 136 - runTelegramSync updates an existing telegram thought when the original message is edited
+2026-06-04T09:52:13.0049331Z   ---
+2026-06-04T09:52:13.0050077Z   duration_ms: 11.220237
+2026-06-04T09:52:13.0050655Z   type: 'test'
+2026-06-04T09:52:13.0050926Z   ...
+2026-06-04T09:52:13.0104751Z # Subtest: runTelegramSync keeps scanning same-id thought posts until the chat id matches
+2026-06-04T09:52:13.0106807Z ok 137 - runTelegramSync keeps scanning same-id thought posts until the chat id matches
+2026-06-04T09:52:13.0108748Z   ---
+2026-06-04T09:52:13.0109491Z   duration_ms: 5.977938
+2026-06-04T09:52:13.0110254Z   type: 'test'
+2026-06-04T09:52:13.0110674Z   ...
+2026-06-04T09:52:13.0161312Z # Subtest: runTelegramSync updates an existing telegram thought when a reply-based revision targets it
+2026-06-04T09:52:13.0163209Z ok 138 - runTelegramSync updates an existing telegram thought when a reply-based revision targets it
+2026-06-04T09:52:13.0164620Z   ---
+2026-06-04T09:52:13.0165181Z   duration_ms: 5.414942
+2026-06-04T09:52:13.0165742Z   type: 'test'
+2026-06-04T09:52:13.0166242Z   ...
+2026-06-04T09:52:13.0289934Z # Subtest: runTelegramSync updates an existing telegram thought by explicit id and replaces photos
+2026-06-04T09:52:13.0292022Z ok 139 - runTelegramSync updates an existing telegram thought by explicit id and replaces photos
+2026-06-04T09:52:13.0293115Z   ---
+2026-06-04T09:52:13.0293903Z   duration_ms: 12.460945
+2026-06-04T09:52:13.0294532Z   type: 'test'
+2026-06-04T09:52:13.0295124Z   ...
+2026-06-04T09:52:13.0336920Z # Subtest: runTelegramSync deletes a telegram thought and its photos when receiving a reply delete command
+2026-06-04T09:52:13.0338702Z ok 140 - runTelegramSync deletes a telegram thought and its photos when receiving a reply delete command
+2026-06-04T09:52:13.0339913Z   ---
+2026-06-04T09:52:13.0340599Z   duration_ms: 5.184631
+2026-06-04T09:52:13.0341488Z   type: 'test'
+2026-06-04T09:52:13.0341947Z   ...
+2026-06-04T09:52:13.0379499Z # Subtest: runTelegramSync moves a telegram thought to another module by reply command
+2026-06-04T09:52:13.0380843Z ok 141 - runTelegramSync moves a telegram thought to another module by reply command
+2026-06-04T09:52:13.0381618Z   ---
+2026-06-04T09:52:13.0382026Z   duration_ms: 4.210031
+2026-06-04T09:52:13.0382441Z   type: 'test'
+2026-06-04T09:52:13.0382803Z   ...
+2026-06-04T09:52:13.0417071Z # Subtest: runTelegramSync moves a telegram thought to another module by explicit id
+2026-06-04T09:52:13.0418484Z ok 142 - runTelegramSync moves a telegram thought to another module by explicit id
+2026-06-04T09:52:13.0419220Z   ---
+2026-06-04T09:52:13.0419458Z   duration_ms: 3.781116
+2026-06-04T09:52:13.0419725Z   type: 'test'
+2026-06-04T09:52:13.0419959Z   ...
+2026-06-04T09:52:13.0461271Z # Subtest: runTelegramSync treats /随想 id module as a move instead of creating a new thought
+2026-06-04T09:52:13.0462787Z ok 143 - runTelegramSync treats /随想 id module as a move instead of creating a new thought
+2026-06-04T09:52:13.0463986Z   ---
+2026-06-04T09:52:13.0464411Z   duration_ms: 4.274283
+2026-06-04T09:52:13.0464896Z   type: 'test'
+2026-06-04T09:52:13.0465305Z   ...
+2026-06-04T09:52:13.0495726Z # Subtest: runTelegramSync keeps thought posts when database persistence fails and queues replay
+2026-06-04T09:52:13.0497149Z ok 144 - runTelegramSync keeps thought posts when database persistence fails and queues replay
+2026-06-04T09:52:13.0497965Z   ---
+2026-06-04T09:52:13.0498326Z   duration_ms: 3.523382
+2026-06-04T09:52:13.0498755Z   type: 'test'
+2026-06-04T09:52:13.0499110Z   ...
+2026-06-04T09:52:13.0549556Z # Subtest: runTelegramSync replays pending thought batches without rewriting training markdown
+2026-06-04T09:52:13.0551498Z ok 145 - runTelegramSync replays pending thought batches without rewriting training markdown
+2026-06-04T09:52:13.0552314Z   ---
+2026-06-04T09:52:13.0552545Z   duration_ms: 5.17409
+2026-06-04T09:52:13.0552791Z   type: 'test'
+2026-06-04T09:52:13.0553014Z   ...
+2026-06-04T09:52:13.0571787Z # Subtest: runTelegramSync replies to /analysis without image recognition or file writes
+2026-06-04T09:52:13.0573286Z ok 146 - runTelegramSync replies to /analysis without image recognition or file writes
+2026-06-04T09:52:13.0574458Z   ---
+2026-06-04T09:52:13.0574925Z   duration_ms: 2.335953
+2026-06-04T09:52:13.0575308Z   type: 'test'
+2026-06-04T09:52:13.0575711Z   ...
+2026-06-04T09:52:13.0585494Z # Subtest: runTelegramSync replies with a short failure message when analysis generation fails
+2026-06-04T09:52:13.0586769Z ok 147 - runTelegramSync replies with a short failure message when analysis generation fails
+2026-06-04T09:52:13.0587603Z   ---
+2026-06-04T09:52:13.0588017Z   duration_ms: 1.396
+2026-06-04T09:52:13.0588462Z   type: 'test'
+2026-06-04T09:52:13.0588866Z   ...
+2026-06-04T09:52:13.0598620Z # Subtest: runTelegramSync ignores unauthorized /analysis commands without generating replies
+2026-06-04T09:52:13.0599717Z ok 148 - runTelegramSync ignores unauthorized /analysis commands without generating replies
+2026-06-04T09:52:13.0600643Z   ---
+2026-06-04T09:52:13.0601069Z   duration_ms: 1.281796
+2026-06-04T09:52:13.0601508Z   type: 'test'
+2026-06-04T09:52:13.0601909Z   ...
+2026-06-04T09:52:13.0612964Z # Subtest: telegram action monitor reports the failed workflow stage to the original telegram message
+2026-06-04T09:52:13.0614888Z ok 149 - telegram action monitor reports the failed workflow stage to the original telegram message
+2026-06-04T09:52:13.0615880Z   ---
+2026-06-04T09:52:13.0616326Z   duration_ms: 1.426938
+2026-06-04T09:52:13.0616788Z   type: 'test'
+2026-06-04T09:52:13.0617189Z   ...
+2026-06-04T09:52:13.0624694Z # Subtest: telegram action monitor reports Cloudflare Pages deploy failures
+2026-06-04T09:52:13.0625927Z ok 150 - telegram action monitor reports Cloudflare Pages deploy failures
+2026-06-04T09:52:13.0626736Z   ---
+2026-06-04T09:52:13.0627139Z   duration_ms: 1.143165
+2026-06-04T09:52:13.0627603Z   type: 'test'
+2026-06-04T09:52:13.0628044Z   ...
+2026-06-04T09:52:13.0642385Z # Subtest: runTelegramSync replies to /ai through the telegram ai agent without file writes
+2026-06-04T09:52:13.0644090Z ok 151 - runTelegramSync replies to /ai through the telegram ai agent without file writes
+2026-06-04T09:52:13.0644888Z   ---
+2026-06-04T09:52:13.0645308Z   duration_ms: 1.727001
+2026-06-04T09:52:13.0645767Z   type: 'test'
+2026-06-04T09:52:13.0646192Z   ...
+2026-06-04T09:52:13.0654333Z # Subtest: runTelegramSync ignores unauthorized /ai commands without invoking the agent
+2026-06-04T09:52:13.0655946Z ok 152 - runTelegramSync ignores unauthorized /ai commands without invoking the agent
+2026-06-04T09:52:13.0656707Z   ---
+2026-06-04T09:52:13.0657130Z   duration_ms: 1.141222
+2026-06-04T09:52:13.0657553Z   type: 'test'
+2026-06-04T09:52:13.0657965Z   ...
+2026-06-04T09:52:13.0670845Z # Subtest: runTelegramSync replies to help commands without image recognition or persistence
+2026-06-04T09:52:13.0672286Z ok 153 - runTelegramSync replies to help commands without image recognition or persistence
+2026-06-04T09:52:13.0673062Z   ---
+2026-06-04T09:52:13.0673709Z   duration_ms: 1.601916
+2026-06-04T09:52:13.0674165Z   type: 'test'
+2026-06-04T09:52:13.0674574Z   ...
+2026-06-04T09:52:13.0890467Z # [telegram-sync] AI recognition request failed with HTTP 502; retrying (1/3)
+2026-06-04T09:52:13.4439447Z # Subtest: runTelegramSync retries transient AI recognition failures and continues syncing
+2026-06-04T09:52:13.4440933Z ok 154 - runTelegramSync retries transient AI recognition failures and continues syncing
+2026-06-04T09:52:13.4441493Z   ---
+2026-06-04T09:52:13.4441728Z   duration_ms: 376.405458
+2026-06-04T09:52:13.4441990Z   type: 'test'
+2026-06-04T09:52:13.4442209Z   ...
+2026-06-04T09:52:13.4548882Z # Subtest: runTelegramSync falls back to inline image data when AI rejects a Telegram file URL
+2026-06-04T09:52:13.4554978Z ok 155 - runTelegramSync falls back to inline image data when AI rejects a Telegram file URL
+2026-06-04T09:52:13.4556150Z   ---
+2026-06-04T09:52:13.4557350Z   duration_ms: 6.078511
+2026-06-04T09:52:13.4557874Z   type: 'test'
+2026-06-04T09:52:13.4558295Z   ...
+2026-06-04T09:52:13.4684395Z # Subtest: runTelegramSync retries invalid JSON recognition with inline image data and stores 2026-05-31 nutrition
+2026-06-04T09:52:13.4686209Z ok 156 - runTelegramSync retries invalid JSON recognition with inline image data and stores 2026-05-31 nutrition
+2026-06-04T09:52:13.4706133Z   ---
+2026-06-04T09:52:13.4718442Z   duration_ms: 15.068604
+2026-06-04T09:52:13.4718903Z   type: 'test'
+2026-06-04T09:52:13.4719262Z   ...
+2026-06-04T09:52:13.4781867Z # Subtest: runTelegramSync retries recognition with json_object when json_schema response format is rejected
+2026-06-04T09:52:13.4783151Z ok 157 - runTelegramSync retries recognition with json_object when json_schema response format is rejected
+2026-06-04T09:52:13.4784014Z   ---
+2026-06-04T09:52:13.4784249Z   duration_ms: 12.742023
+2026-06-04T09:52:13.4784511Z   type: 'test'
+2026-06-04T09:52:13.4784738Z   ...
+2026-06-04T09:52:13.4812916Z # Subtest: runTelegramSync normalizes object recognition details before batch analysis
+2026-06-04T09:52:13.4814475Z ok 158 - runTelegramSync normalizes object recognition details before batch analysis
+2026-06-04T09:52:13.4815298Z   ---
+2026-06-04T09:52:13.4815664Z   duration_ms: 3.515254
+2026-06-04T09:52:13.4816391Z   type: 'test'
+2026-06-04T09:52:13.4816941Z   ...
+2026-06-04T09:52:13.4849354Z # Subtest: runTelegramSync normalizes null recognition details without dropping workout activities
+2026-06-04T09:52:13.4850853Z ok 159 - runTelegramSync normalizes null recognition details without dropping workout activities
+2026-06-04T09:52:13.4851713Z   ---
+2026-06-04T09:52:13.4852078Z   duration_ms: 3.615625
+2026-06-04T09:52:13.4852489Z   type: 'test'
+2026-06-04T09:52:13.4852854Z   ...
+2026-06-04T09:52:13.4871855Z # [telegram-sync] image recognition failed for 802: AI recognition returned empty content
+2026-06-04T09:52:13.4879010Z # Subtest: runTelegramSync skips malformed recognition responses after logging the recognition failure
+2026-06-04T09:52:13.4880415Z ok 160 - runTelegramSync skips malformed recognition responses after logging the recognition failure
+2026-06-04T09:52:13.4881448Z   ---
+2026-06-04T09:52:13.4882059Z   duration_ms: 2.959674
+2026-06-04T09:52:13.4882435Z   type: 'test'
+2026-06-04T09:52:13.4882673Z   ...
+2026-06-04T09:52:13.4919060Z # Subtest: runTelegramSync sends Telegram result notification after storing an image batch
+2026-06-04T09:52:13.4920359Z ok 161 - runTelegramSync sends Telegram result notification after storing an image batch
+2026-06-04T09:52:13.4921174Z   ---
+2026-06-04T09:52:13.4921544Z   duration_ms: 3.756297
+2026-06-04T09:52:13.4921968Z   type: 'test'
+2026-06-04T09:52:13.4922332Z   ...
+2026-06-04T09:52:13.4947046Z # Subtest: runTelegramSync sends Telegram result notification after writing a thought
+2026-06-04T09:52:13.4948616Z ok 162 - runTelegramSync sends Telegram result notification after writing a thought
+2026-06-04T09:52:13.4949766Z   ---
+2026-06-04T09:52:13.4950229Z   duration_ms: 2.876769
+2026-06-04T09:52:13.4950749Z   type: 'test'
+2026-06-04T09:52:13.4951197Z   ...
+2026-06-04T09:52:13.4984864Z # Subtest: runTelegramSync defers Telegram success notification until the action finishes
+2026-06-04T09:52:13.4986359Z ok 163 - runTelegramSync defers Telegram success notification until the action finishes
+2026-06-04T09:52:13.4987327Z   ---
+2026-06-04T09:52:13.4987762Z   duration_ms: 3.721655
+2026-06-04T09:52:13.4988255Z   type: 'test'
+2026-06-04T09:52:13.4988697Z   ...
+2026-06-04T09:52:13.5013120Z # Subtest: runTelegramSync explains thought database fallback in Telegram notification
+2026-06-04T09:52:13.5014783Z ok 164 - runTelegramSync explains thought database fallback in Telegram notification
+2026-06-04T09:52:13.5015744Z   ---
+2026-06-04T09:52:13.5016134Z   duration_ms: 2.929057
+2026-06-04T09:52:13.5016635Z   type: 'test'
+2026-06-04T09:52:13.5017054Z   ...
+2026-06-04T09:52:13.5022717Z # [telegram-sync] image recognition failed for single-905: AI recognition failed with HTTP 429: rate limit
+2026-06-04T09:52:13.5029482Z # Subtest: runTelegramSync preserves image recognition failure reason in report and notification
+2026-06-04T09:52:13.5031119Z ok 165 - runTelegramSync preserves image recognition failure reason in report and notification
+2026-06-04T09:52:13.5032147Z   ---
+2026-06-04T09:52:13.5032646Z   duration_ms: 1.508561
+2026-06-04T09:52:13.5033147Z   type: 'test'
+2026-06-04T09:52:13.5033808Z   ...
+2026-06-04T09:52:13.5044388Z # Subtest: runTelegramSync queues image batches when AI recognition fails before any image can be stored
+2026-06-04T09:52:13.5046077Z ok 166 - runTelegramSync queues image batches when AI recognition fails before any image can be stored
+2026-06-04T09:52:13.5047156Z   ---
+2026-06-04T09:52:13.5047586Z   duration_ms: 1.480739
+2026-06-04T09:52:13.5048065Z   type: 'test'
+2026-06-04T09:52:13.5048480Z   ...
+2026-06-04T09:52:13.5063337Z # Subtest: runTelegramSync replays pending recognition batches and marks them resolved after storage
+2026-06-04T09:52:13.5065433Z ok 167 - runTelegramSync replays pending recognition batches and marks them resolved after storage
+2026-06-04T09:52:13.5066404Z   ---
+2026-06-04T09:52:13.5066779Z   duration_ms: 1.837558
+2026-06-04T09:52:13.5067233Z   type: 'test'
+2026-06-04T09:52:13.5067606Z   ...
+2026-06-04T09:52:13.5087821Z # Subtest: runTelegramSync uses the normalized runtime env for first-time and replayed image recognition
+2026-06-04T09:52:13.5089832Z ok 168 - runTelegramSync uses the normalized runtime env for first-time and replayed image recognition
+2026-06-04T09:52:13.5090840Z   ---
+2026-06-04T09:52:13.5091255Z   duration_ms: 2.277424
+2026-06-04T09:52:13.5091744Z   type: 'test'
+2026-06-04T09:52:13.5092154Z   ...
+2026-06-04T09:52:13.5097615Z # [telegram-sync] pending image recognition failed for single-383: telegram_training_image returned invalid JSON
+2026-06-04T09:52:13.5102392Z # Subtest: runTelegramSync keeps pending recognition batches queued when replay still fails
+2026-06-04T09:52:13.5104101Z ok 169 - runTelegramSync keeps pending recognition batches queued when replay still fails
+2026-06-04T09:52:13.5104978Z   ---
+2026-06-04T09:52:13.5105407Z   duration_ms: 1.519432
+2026-06-04T09:52:13.5105890Z   type: 'test'
+2026-06-04T09:52:13.5106305Z   ...
+2026-06-04T09:52:13.5123838Z # Subtest: runTelegramSync marks ready image albums with failed photos as partial failures in reports and notifications
+2026-06-04T09:52:13.5125755Z ok 170 - runTelegramSync marks ready image albums with failed photos as partial failures in reports and notifications
+2026-06-04T09:52:13.5126866Z   ---
+2026-06-04T09:52:13.5127292Z   duration_ms: 2.178087
+2026-06-04T09:52:13.5127759Z   type: 'test'
+2026-06-04T09:52:13.5128185Z   ...
+2026-06-04T09:52:13.5136504Z # Subtest: runTelegramSync sends Telegram result notification when an image batch is skipped
+2026-06-04T09:52:13.5138054Z ok 171 - runTelegramSync sends Telegram result notification when an image batch is skipped
+2026-06-04T09:52:13.5139015Z   ---
+2026-06-04T09:52:13.5139437Z   duration_ms: 1.227234
+2026-06-04T09:52:13.5139895Z   type: 'test'
+2026-06-04T09:52:13.5140313Z   ...
+2026-06-04T09:52:13.5156468Z # Subtest: runTelegramSync queues partial failure ready batches for pending recognition
+2026-06-04T09:52:13.5157927Z ok 172 - runTelegramSync queues partial failure ready batches for pending recognition
+2026-06-04T09:52:13.5158849Z   ---
+2026-06-04T09:52:13.5159302Z   duration_ms: 1.916317
+2026-06-04T09:52:13.5159809Z   type: 'test'
+2026-06-04T09:52:13.5160254Z   ...
+2026-06-04T09:52:13.5175636Z # Subtest: runTelegramSync report includes image counts for pending replay batches
+2026-06-04T09:52:13.5176979Z ok 173 - runTelegramSync report includes image counts for pending replay batches
+2026-06-04T09:52:13.5177820Z   ---
+2026-06-04T09:52:13.5178237Z   duration_ms: 2.052291
+2026-06-04T09:52:13.5178714Z   type: 'test'
+2026-06-04T09:52:13.5179124Z   ...
+2026-06-04T09:52:13.5307947Z # Subtest: groups album document images and applies filename date when screenshots are undated
+2026-06-04T09:52:13.5309189Z ok 174 - groups album document images and applies filename date when screenshots are undated
+2026-06-04T09:52:13.5309879Z   ---
+2026-06-04T09:52:13.5310200Z   duration_ms: 15.643077
+2026-06-04T09:52:13.5310564Z   type: 'test'
+2026-06-04T09:52:13.5310876Z   ...
+2026-06-04T09:52:13.5312921Z # Subtest: parseWeightKg converts jin values to kilograms with precision
+2026-06-04T09:52:13.5314761Z ok 175 - parseWeightKg converts jin values to kilograms with precision
+2026-06-04T09:52:13.5315678Z   ---
+2026-06-04T09:52:13.5316159Z   duration_ms: 0.588043
+2026-06-04T09:52:13.5316717Z   type: 'test'
+2026-06-04T09:52:13.5317197Z   ...
+2026-06-04T09:52:13.5318252Z # Subtest: uses meal calories as nutrition total when recognition omits totalCalories
+2026-06-04T09:52:13.5319862Z ok 176 - uses meal calories as nutrition total when recognition omits totalCalories
+2026-06-04T09:52:13.5320855Z   ---
+2026-06-04T09:52:13.5321321Z   duration_ms: 0.659308
+2026-06-04T09:52:13.5321869Z   type: 'test'
+2026-06-04T09:52:13.5322341Z   ...
+2026-06-04T09:52:13.5323696Z # Subtest: sleep screenshots are archived by bedtime date and keep Huawei sleep health metrics
+2026-06-04T09:52:13.5325390Z ok 177 - sleep screenshots are archived by bedtime date and keep Huawei sleep health metrics
+2026-06-04T09:52:13.5326160Z   ---
+2026-06-04T09:52:13.5326551Z   duration_ms: 1.497992
+2026-06-04T09:52:13.5327542Z   type: 'test'
+2026-06-04T09:52:13.5327901Z   ...
+2026-06-04T09:52:13.5328849Z # Subtest: groups /thought and /随想 messages into thought batches and ignores normal text
+2026-06-04T09:52:13.5329642Z ok 178 - groups /thought and /随想 messages into thought batches and ignores normal text
+2026-06-04T09:52:13.5330083Z   ---
+2026-06-04T09:52:13.5330296Z   duration_ms: 1.784368
+2026-06-04T09:52:13.5330543Z   type: 'test'
+2026-06-04T09:52:13.5330752Z   ...
+2026-06-04T09:52:13.5331225Z # Subtest: groups module-scoped thought commands into module-specific thought batches
+2026-06-04T09:52:13.5331921Z ok 179 - groups module-scoped thought commands into module-specific thought batches
+2026-06-04T09:52:13.5332351Z   ---
+2026-06-04T09:52:13.5332575Z   duration_ms: 0.65522
+2026-06-04T09:52:13.5332820Z   type: 'test'
+2026-06-04T09:52:13.5333022Z   ...
+2026-06-04T09:52:13.5333954Z # Subtest: groups thought captions with images and albums without treating them as training screenshots
+2026-06-04T09:52:13.5335134Z ok 180 - groups thought captions with images and albums without treating them as training screenshots
+2026-06-04T09:52:13.5335941Z   ---
+2026-06-04T09:52:13.5336165Z   duration_ms: 0.627287
+2026-06-04T09:52:13.5336406Z   type: 'test'
+2026-06-04T09:52:13.5336622Z   ...
+2026-06-04T09:52:13.5336982Z # Subtest: groups /analysis text messages into analysis batches
+2026-06-04T09:52:13.5337495Z ok 181 - groups /analysis text messages into analysis batches
+2026-06-04T09:52:13.5337831Z   ---
+2026-06-04T09:52:13.5338035Z   duration_ms: 0.486763
+2026-06-04T09:52:13.5338275Z   type: 'test'
+2026-06-04T09:52:13.5338488Z   ...
+2026-06-04T09:52:13.5338811Z # Subtest: groups /ai text messages into ai agent batches
+2026-06-04T09:52:13.5339271Z ok 182 - groups /ai text messages into ai agent batches
+2026-06-04T09:52:13.5339592Z   ---
+2026-06-04T09:52:13.5339807Z   duration_ms: 0.803007
+2026-06-04T09:52:13.5340050Z   type: 'test'
+2026-06-04T09:52:13.5340256Z   ...
+2026-06-04T09:52:13.5340734Z # Subtest: groups supported Telegram command aliases without changing routed batch shape
+2026-06-04T09:52:13.5341454Z ok 183 - groups supported Telegram command aliases without changing routed batch shape
+2026-06-04T09:52:13.5341891Z   ---
+2026-06-04T09:52:13.5342107Z   duration_ms: 7.456411
+2026-06-04T09:52:13.5342342Z   type: 'test'
+2026-06-04T09:52:13.5342558Z   ...
+2026-06-04T09:52:13.5343132Z # Subtest: groups edited thought messages into thought_edit batches when the message is already a known thought
+2026-06-04T09:52:13.5344934Z ok 184 - groups edited thought messages into thought_edit batches when the message is already a known thought
+2026-06-04T09:52:13.5345830Z   ---
+2026-06-04T09:52:13.5346202Z   duration_ms: 0.746521
+2026-06-04T09:52:13.5346487Z   type: 'test'
+2026-06-04T09:52:13.5346702Z   ...
+2026-06-04T09:52:13.5347671Z # Subtest: groups edited thought messages with a module token into thought_edit batches for module updates
+2026-06-04T09:52:13.5349069Z ok 185 - groups edited thought messages with a module token into thought_edit batches for module updates
+2026-06-04T09:52:13.5349574Z   ---
+2026-06-04T09:52:13.5349783Z   duration_ms: 0.497033
+2026-06-04T09:52:13.5350025Z   type: 'test'
+2026-06-04T09:52:13.5350231Z   ...
+2026-06-04T09:52:13.5350791Z # Subtest: groups reply-based thought revisions into thought_edit batches when replying to a known thought
+2026-06-04T09:52:13.5351633Z ok 186 - groups reply-based thought revisions into thought_edit batches when replying to a known thought
+2026-06-04T09:52:13.5352130Z   ---
+2026-06-04T09:52:13.5352341Z   duration_ms: 0.462849
+2026-06-04T09:52:13.5352582Z   type: 'test'
+2026-06-04T09:52:13.5352787Z   ...
+2026-06-04T09:52:13.5353225Z # Subtest: groups explicit thought edit commands by target message id
+2026-06-04T09:52:13.5354282Z ok 187 - groups explicit thought edit commands by target message id
+2026-06-04T09:52:13.5354928Z   ---
+2026-06-04T09:52:13.5355226Z   duration_ms: 0.368792
+2026-06-04T09:52:13.5355466Z   type: 'test'
+2026-06-04T09:52:13.5355679Z   ...
+2026-06-04T09:52:13.5356509Z # Subtest: groups explicit thought edit captions with images as photo replacement edits
+2026-06-04T09:52:13.5357212Z ok 188 - groups explicit thought edit captions with images as photo replacement edits
+2026-06-04T09:52:13.5357644Z   ---
+2026-06-04T09:52:13.5357848Z   duration_ms: 0.345178
+2026-06-04T09:52:13.5358088Z   type: 'test'
+2026-06-04T09:52:13.5358301Z   ...
+2026-06-04T09:52:13.5358733Z # Subtest: groups thought delete commands by reply target and explicit message id
+2026-06-04T09:52:13.5359386Z ok 189 - groups thought delete commands by reply target and explicit message id
+2026-06-04T09:52:13.5359797Z   ---
+2026-06-04T09:52:13.5360000Z   duration_ms: 0.474491
+2026-06-04T09:52:13.5360237Z   type: 'test'
+2026-06-04T09:52:13.5360439Z   ...
+2026-06-04T09:52:13.5360865Z # Subtest: groups thought move commands by reply target and explicit message id
+2026-06-04T09:52:13.5361503Z ok 190 - groups thought move commands by reply target and explicit message id
+2026-06-04T09:52:13.5361911Z   ---
+2026-06-04T09:52:13.5362142Z   duration_ms: 0.380314
+2026-06-04T09:52:13.5362388Z   type: 'test'
+2026-06-04T09:52:13.5362610Z   ...
+2026-06-04T09:52:13.5363174Z # Subtest: groups legacy /随想 id module messages as thought move commands
+2026-06-04T09:52:13.5364232Z ok 191 - groups legacy /随想 id module messages as thought move commands
+2026-06-04T09:52:13.5364712Z   ---
+2026-06-04T09:52:13.5364931Z   duration_ms: 0.40444
+2026-06-04T09:52:13.5365167Z   type: 'test'
+2026-06-04T09:52:13.5365379Z   ...
+2026-06-04T09:52:13.5365745Z # Subtest: skips thought move commands without a target module
+2026-06-04T09:52:13.5366261Z ok 192 - skips thought move commands without a target module
+2026-06-04T09:52:13.5366601Z   ---
+2026-06-04T09:52:13.5366814Z   duration_ms: 0.386986
+2026-06-04T09:52:13.5367058Z   type: 'test'
+2026-06-04T09:52:13.5367265Z   ...
+2026-06-04T09:52:13.5367636Z # Subtest: analyzes /analysis batches into ready analysis entries
+2026-06-04T09:52:13.5368158Z ok 193 - analyzes /analysis batches into ready analysis entries
+2026-06-04T09:52:13.5368526Z   ---
+2026-06-04T09:52:13.5368741Z   duration_ms: 0.354495
+2026-06-04T09:52:13.5368975Z   type: 'test'
+2026-06-04T09:52:13.5369189Z   ...
+2026-06-04T09:52:13.5369542Z # Subtest: analyzes /thought batches into ready thought entries
+2026-06-04T09:52:13.5370037Z ok 194 - analyzes /thought batches into ready thought entries
+2026-06-04T09:52:13.5370380Z   ---
+2026-06-04T09:52:13.5370586Z   duration_ms: 0.468159
+2026-06-04T09:52:13.5370817Z   type: 'test'
+2026-06-04T09:52:13.5371027Z   ...
+2026-06-04T09:52:13.5371385Z # Subtest: skips /thought batches when the command body is empty
+2026-06-04T09:52:13.5371903Z ok 195 - skips /thought batches when the command body is empty
+2026-06-04T09:52:13.5372252Z   ---
+2026-06-04T09:52:13.5372460Z   duration_ms: 0.369143
+2026-06-04T09:52:13.5372719Z   type: 'test'
+2026-06-04T09:52:13.5380413Z   ...
+2026-06-04T09:52:13.5381356Z # Subtest: skips writeback when a batch has conflicting detected dates without caption override
+2026-06-04T09:52:13.5382734Z ok 196 - skips writeback when a batch has conflicting detected dates without caption override
+2026-06-04T09:52:13.5383913Z   ---
+2026-06-04T09:52:13.5384274Z   duration_ms: 0.402936
+2026-06-04T09:52:13.5384694Z   type: 'test'
+2026-06-04T09:52:13.5385059Z   ...
+2026-06-04T09:52:13.5385806Z # Subtest: writes measurement workout and nutrition into markdown idempotently
+2026-06-04T09:52:13.5386936Z ok 197 - writes measurement workout and nutrition into markdown idempotently
+2026-06-04T09:52:13.5387688Z   ---
+2026-06-04T09:52:13.5388044Z   duration_ms: 14.00376
+2026-06-04T09:52:13.5388464Z   type: 'test'
+2026-06-04T09:52:13.5388821Z   ...
+2026-06-04T09:52:13.5389440Z # Subtest: writes sleep into an existing markdown date section
+2026-06-04T09:52:13.5390312Z ok 198 - writes sleep into an existing markdown date section
+2026-06-04T09:52:13.5390892Z   ---
+2026-06-04T09:52:13.5391245Z   duration_ms: 1.413252
+2026-06-04T09:52:13.5391645Z   type: 'test'
+2026-06-04T09:52:13.5392027Z   ...
+2026-06-04T09:52:13.5393322Z # Subtest: processes only allowed chats and advances state to the highest processed update id
+2026-06-04T09:52:13.5394866Z ok 199 - processes only allowed chats and advances state to the highest processed update id
+2026-06-04T09:52:13.5395664Z   ---
+2026-06-04T09:52:13.5396020Z   duration_ms: 1.717663
+2026-06-04T09:52:13.5396423Z   type: 'test'
+2026-06-04T09:52:13.5396776Z   ...
+2026-06-04T09:52:13.5397762Z # Subtest: normalizes detected month-day using the telegram message year when AI returns an impossible year
+2026-06-04T09:52:13.5399273Z ok 200 - normalizes detected month-day using the telegram message year when AI returns an impossible year
+2026-06-04T09:52:13.5400151Z   ---
+2026-06-04T09:52:13.5400499Z   duration_ms: 0.44701
+2026-06-04T09:52:13.5400910Z   type: 'test'
+2026-06-04T09:52:13.5401260Z   ...
+2026-06-04T09:52:13.5402233Z # Subtest: uses the explicit year from the screenshot when a valid four-digit year is present
+2026-06-04T09:52:13.5403703Z ok 201 - uses the explicit year from the screenshot when a valid four-digit year is present
+2026-06-04T09:52:13.5404499Z   ---
+2026-06-04T09:52:13.5404862Z   duration_ms: 0.434205
+2026-06-04T09:52:13.5405276Z   type: 'test'
+2026-06-04T09:52:13.5405628Z   ...
+2026-06-04T09:52:13.5406701Z # Subtest: falls back to the telegram message year when OCR returns an invalid full date but the image only shows month-day
+2026-06-04T09:52:13.5408380Z ok 202 - falls back to the telegram message year when OCR returns an invalid full date but the image only shows month-day
+2026-06-04T09:52:13.5409305Z   ---
+2026-06-04T09:52:13.5409662Z   duration_ms: 0.478899
+2026-06-04T09:52:13.5410066Z   type: 'test'
+2026-06-04T09:52:13.5410434Z   ...
+2026-06-04T09:52:13.5411272Z # Subtest: rejects impossible full dates instead of treating them as reliable archive dates
+2026-06-04T09:52:13.5412525Z ok 203 - rejects impossible full dates instead of treating them as reliable archive dates
+2026-06-04T09:52:13.5413291Z   ---
+2026-06-04T09:52:13.5413863Z   duration_ms: 0.404609
+2026-06-04T09:52:13.5414292Z   type: 'test'
+2026-06-04T09:52:13.5414648Z   ...
+2026-06-04T09:52:13.5415613Z # Subtest: fills missing measurement date from telegram message year when month-day is visible in evidence
+2026-06-04T09:52:13.5417093Z ok 204 - fills missing measurement date from telegram message year when month-day is visible in evidence
+2026-06-04T09:52:13.5417956Z   ---
+2026-06-04T09:52:13.5418301Z   duration_ms: 0.403026
+2026-06-04T09:52:13.5418705Z   type: 'test'
+2026-06-04T09:52:13.5419050Z   ...
+2026-06-04T09:52:13.5419860Z # Subtest: uses measurement measuredAt as fallback archived date for a multi-image album
+2026-06-04T09:52:13.5421086Z ok 205 - uses measurement measuredAt as fallback archived date for a multi-image album
+2026-06-04T09:52:13.5421829Z   ---
+2026-06-04T09:52:13.5422172Z   duration_ms: 0.580599
+2026-06-04T09:52:13.5422574Z   type: 'test'
+2026-06-04T09:52:13.5422920Z   ...
+2026-06-04T09:52:13.5423791Z # Subtest: skips a multi-image album when every image lacks a reliable date
+2026-06-04T09:52:13.5424829Z ok 206 - skips a multi-image album when every image lacks a reliable date
+2026-06-04T09:52:13.5425487Z   ---
+2026-06-04T09:52:13.5425837Z   duration_ms: 0.383179
+2026-06-04T09:52:13.5426228Z   type: 'test'
+2026-06-04T09:52:13.5426581Z   ...
+2026-06-04T09:52:13.5427258Z # Subtest: skips a multi-image album when reliable detected dates conflict
+2026-06-04T09:52:13.5428270Z ok 207 - skips a multi-image album when reliable detected dates conflict
+2026-06-04T09:52:13.5428923Z   ---
+2026-06-04T09:52:13.5429265Z   duration_ms: 0.481313
+2026-06-04T09:52:13.5429668Z   type: 'test'
+2026-06-04T09:52:13.5430022Z   ...
+2026-06-04T09:52:13.5430892Z # Subtest: merges into existing 2026-05-06 blocks without duplicating headings or null timestamps
+2026-06-04T09:52:13.5432226Z ok 208 - merges into existing 2026-05-06 blocks without duplicating headings or null timestamps
+2026-06-04T09:52:13.5432864Z   ---
+2026-06-04T09:52:13.5433082Z   duration_ms: 0.903787
+2026-06-04T09:52:13.5433328Z   type: 'test'
+2026-06-04T09:52:13.5434063Z   ...
+2026-06-04T09:52:13.5434656Z # Subtest: skips an album when workout and next-morning measurement dates conflict
+2026-06-04T09:52:13.5435329Z ok 209 - skips an album when workout and next-morning measurement dates conflict
+2026-06-04T09:52:13.5435728Z   ---
+2026-06-04T09:52:13.5435945Z   duration_ms: 0.387958
+2026-06-04T09:52:13.5436185Z   type: 'test'
+2026-06-04T09:52:13.5436402Z   ...
+2026-06-04T09:52:13.5436851Z # Subtest: applies the only dated screenshot date to undated images in the same album
+2026-06-04T09:52:13.5437508Z ok 210 - applies the only dated screenshot date to undated images in the same album
+2026-06-04T09:52:13.5437921Z   ---
+2026-06-04T09:52:13.5438129Z   duration_ms: 0.448312
+2026-06-04T09:52:13.5438371Z   type: 'test'
+2026-06-04T09:52:13.5438584Z   ...
+2026-06-04T09:52:13.5439008Z # Subtest: uses a filename date from any position when screenshots are undated
+2026-06-04T09:52:13.5439628Z ok 211 - uses a filename date from any position when screenshots are undated
+2026-06-04T09:52:13.5440162Z   ---
+2026-06-04T09:52:13.5440549Z   duration_ms: 0.430929
+2026-06-04T09:52:13.5440988Z   type: 'test'
+2026-06-04T09:52:13.5441313Z   ...
+2026-06-04T09:52:13.5442257Z # Subtest: accepts a visible gallery filename date from image evidence when Telegram photo has no filename
+2026-06-04T09:52:13.5443867Z ok 212 - accepts a visible gallery filename date from image evidence when Telegram photo has no filename
+2026-06-04T09:52:13.5444384Z   ---
+2026-06-04T09:52:13.5444606Z   duration_ms: 0.299622
+2026-06-04T09:52:13.5444859Z   type: 'test'
+2026-06-04T09:52:13.5445074Z   ...
+2026-06-04T09:52:13.5445847Z # Subtest: uses filename month-day with telegram message year when screenshots are undated
+2026-06-04T09:52:13.5446781Z ok 213 - uses filename month-day with telegram message year when screenshots are undated
+2026-06-04T09:52:13.5447232Z   ---
+2026-06-04T09:52:13.5447453Z   duration_ms: 0.398348
+2026-06-04T09:52:13.5447702Z   type: 'test'
+2026-06-04T09:52:13.5447922Z   ...
+2026-06-04T09:52:13.5448321Z # Subtest: skips undated screenshots when filename dates conflict
+2026-06-04T09:52:13.5448862Z ok 214 - skips undated screenshots when filename dates conflict
+2026-06-04T09:52:13.5449221Z   ---
+2026-06-04T09:52:13.5449437Z   duration_ms: 0.420378
+2026-06-04T09:52:13.5449687Z   type: 'test'
+2026-06-04T09:52:13.5449906Z   ...
+2026-06-04T09:52:13.5450333Z # Subtest: uses image date over conflicting filename date and records a warning
+2026-06-04T09:52:13.5451009Z ok 215 - uses image date over conflicting filename date and records a warning
+2026-06-04T09:52:13.5451448Z   ---
+2026-06-04T09:52:13.5451689Z   duration_ms: 0.427403
+2026-06-04T09:52:13.5451953Z   type: 'test'
+2026-06-04T09:52:13.5452186Z   ...
+2026-06-04T09:52:13.5452730Z # Subtest: merges same-day workout updates without dropping prior activity or nutrition blocks
+2026-06-04T09:52:13.5453821Z ok 216 - merges same-day workout updates without dropping prior activity or nutrition blocks
+2026-06-04T09:52:13.5454334Z   ---
+2026-06-04T09:52:13.5454584Z   duration_ms: 0.465814
+2026-06-04T09:52:13.5454830Z   type: 'test'
+2026-06-04T09:52:13.5455071Z   ...
+2026-06-04T09:52:13.5455636Z # Subtest: merges same-day overview and measurement without dropping activity details or nutrition
+2026-06-04T09:52:13.5456477Z ok 217 - merges same-day overview and measurement without dropping activity details or nutrition
+2026-06-04T09:52:13.5456967Z   ---
+2026-06-04T09:52:13.5457201Z   duration_ms: 2.770329
+2026-06-04T09:52:13.5457438Z   type: 'test'
+2026-06-04T09:52:13.5457673Z   ...
+2026-06-04T09:52:13.5458130Z # Subtest: merges legacy same-day screenshot blocks without duplicating headings
+2026-06-04T09:52:13.5458839Z ok 218 - merges legacy same-day screenshot blocks without duplicating headings
+2026-06-04T09:52:13.5459277Z   ---
+2026-06-04T09:52:13.5459509Z   duration_ms: 0.794151
+2026-06-04T09:52:13.5459776Z   type: 'test'
+2026-06-04T09:52:13.5459988Z   ...
+2026-06-04T09:52:13.5460482Z # Subtest: merges 2026-05-29 overview workout details and nutrition into one day
+2026-06-04T09:52:13.5461491Z ok 219 - merges 2026-05-29 overview workout details and nutrition into one day
+2026-06-04T09:52:13.5461931Z   ---
+2026-06-04T09:52:13.5462165Z   duration_ms: 1.322088
+2026-06-04T09:52:13.5462428Z   type: 'test'
+2026-06-04T09:52:13.5462646Z   ...
+2026-06-04T09:52:13.5463158Z # Subtest: merges a daily activity overview screenshot into the same workout block
+2026-06-04T09:52:13.5464004Z ok 220 - merges a daily activity overview screenshot into the same workout block
+2026-06-04T09:52:13.5464434Z   ---
+2026-06-04T09:52:13.5464668Z   duration_ms: 0.718709
+2026-06-04T09:52:13.5464923Z   type: 'test'
+2026-06-04T09:52:13.5465154Z   ...
+2026-06-04T09:52:13.5465691Z # Subtest: reports sourceImageCount recognizedImageCount and failedImageCount for image batches
+2026-06-04T09:52:13.5466542Z ok 221 - reports sourceImageCount recognizedImageCount and failedImageCount for image batches
+2026-06-04T09:52:13.5467035Z   ---
+2026-06-04T09:52:13.5467259Z   duration_ms: 0.460555
+2026-06-04T09:52:13.5467527Z   type: 'test'
+2026-06-04T09:52:13.5467744Z   ...
+2026-06-04T09:52:13.5468109Z # Subtest: reports dateSources with per-image date evidence
+2026-06-04T09:52:13.5468642Z ok 222 - reports dateSources with per-image date evidence
+2026-06-04T09:52:13.5469029Z   ---
+2026-06-04T09:52:13.5469263Z   duration_ms: 0.362701
+2026-06-04T09:52:13.5469524Z   type: 'test'
+2026-06-04T09:52:13.5469752Z   ...
+2026-06-04T09:52:13.5470274Z # Subtest: overview screenshot only writes dailyWorkoutSummary and does not produce activities
+2026-06-04T09:52:13.5471082Z ok 223 - overview screenshot only writes dailyWorkoutSummary and does not produce activities
+2026-06-04T09:52:13.5471559Z   ---
+2026-06-04T09:52:13.5471791Z   duration_ms: 0.304431
+2026-06-04T09:52:13.5472043Z   type: 'test'
+2026-06-04T09:52:13.5472263Z   ...
+2026-06-04T09:52:13.5472837Z # Subtest: training detail screenshot only writes activities and does not produce dailyWorkoutSummary
+2026-06-04T09:52:13.5474048Z ok 224 - training detail screenshot only writes activities and does not produce dailyWorkoutSummary
+2026-06-04T09:52:13.5474575Z   ---
+2026-06-04T09:52:13.5474797Z   duration_ms: 0.471725
+2026-06-04T09:52:13.5475044Z   type: 'test'
+2026-06-04T09:52:13.5475293Z   ...
+2026-06-04T09:52:13.5475871Z # Subtest: skips single nutrition image sent as photo without filename date and warns about photo sending
+2026-06-04T09:52:13.5476725Z ok 225 - skips single nutrition image sent as photo without filename date and warns about photo sending
+2026-06-04T09:52:13.5477539Z   ---
+2026-06-04T09:52:13.5478020Z   duration_ms: 0.233638
+2026-06-04T09:52:13.5478530Z   type: 'test'
+2026-06-04T09:52:13.5478931Z   ...
+2026-06-04T09:52:13.5479796Z # Subtest: skips single measurement image sent as photo without filename date and warns about photo sending
+2026-06-04T09:52:13.5480680Z ok 226 - skips single measurement image sent as photo without filename date and warns about photo sending
+2026-06-04T09:52:13.5481174Z   ---
+2026-06-04T09:52:13.5481392Z   duration_ms: 0.227748
+2026-06-04T09:52:13.5481651Z   type: 'test'
+2026-06-04T09:52:13.5481864Z   ...
+2026-06-04T09:52:13.5482345Z # Subtest: uses filename date for single nutrition image sent as document without image date
+2026-06-04T09:52:13.5483060Z ok 227 - uses filename date for single nutrition image sent as document without image date
+2026-06-04T09:52:13.5483758Z   ---
+2026-06-04T09:52:13.5483982Z   duration_ms: 0.334457
+2026-06-04T09:52:13.5484226Z   type: 'test'
+2026-06-04T09:52:13.5484450Z   ...
+2026-06-04T09:52:13.5484952Z # Subtest: uses filename date for single measurement image sent as document without image date
+2026-06-04T09:52:13.5485687Z ok 228 - uses filename date for single measurement image sent as document without image date
+2026-06-04T09:52:13.5486136Z   ---
+2026-06-04T09:52:13.5486352Z   duration_ms: 0.279324
+2026-06-04T09:52:13.5486591Z   type: 'test'
+2026-06-04T09:52:13.5486809Z   ...
+2026-06-04T09:52:13.5487659Z # Subtest: measurement jin values are converted to kg: 142.2斤→71.1kg, 60.0斤→30.0kg, 5.8斤→2.9kg, 109.6斤→54.8kg
+2026-06-04T09:52:13.5488906Z ok 229 - measurement jin values are converted to kg: 142.2斤→71.1kg, 60.0斤→30.0kg, 5.8斤→2.9kg, 109.6斤→54.8kg
+2026-06-04T09:52:13.5489401Z   ---
+2026-06-04T09:52:13.5489615Z   duration_ms: 0.125676
+2026-06-04T09:52:13.5489861Z   type: 'test'
+2026-06-04T09:52:13.5490069Z   ...
+2026-06-04T09:52:13.5490593Z # Subtest: single training image with month-day only produces year-completion uncertainty warning
+2026-06-04T09:52:13.5491376Z ok 230 - single training image with month-day only produces year-completion uncertainty warning
+2026-06-04T09:52:13.5491847Z   ---
+2026-06-04T09:52:13.5492059Z   duration_ms: 0.232767
+2026-06-04T09:52:13.5492301Z   type: 'test'
+2026-06-04T09:52:13.5492513Z   ...
+2026-06-04T09:52:13.5493229Z # Subtest: two images with different dates where overview has full date and training has conflicting month-day after year completion causes skip
+2026-06-04T09:52:13.5494664Z ok 231 - two images with different dates where overview has full date and training has conflicting month-day after year completion causes skip
+2026-06-04T09:52:13.5495315Z   ---
+2026-06-04T09:52:13.5495531Z   duration_ms: 0.697138
+2026-06-04T09:52:13.5495767Z   type: 'test'
+2026-06-04T09:52:13.5495985Z   ...
+2026-06-04T09:52:13.5496500Z # Subtest: ready batch with partial recognition failure has partialFailure flag and proper counts
+2026-06-04T09:52:13.5497289Z ok 232 - ready batch with partial recognition failure has partialFailure flag and proper counts
+2026-06-04T09:52:13.5497780Z   ---
+2026-06-04T09:52:13.5497998Z   duration_ms: 0.240732
+2026-06-04T09:52:13.5498241Z   type: 'test'
+2026-06-04T09:52:13.5498460Z   ...
+2026-06-04T09:52:13.5498960Z # Subtest: runs async work with a bounded concurrency limit while preserving result order
+2026-06-04T09:52:13.5499677Z ok 233 - runs async work with a bounded concurrency limit while preserving result order
+2026-06-04T09:52:13.5500116Z   ---
+2026-06-04T09:52:13.5500326Z   duration_ms: 62.893564
+2026-06-04T09:52:13.5500578Z   type: 'test'
+2026-06-04T09:52:13.5500797Z   ...
+2026-06-04T09:52:13.5501298Z # Subtest: buildTelegramWebhookConfig trims required env values and keeps safe defaults
+2026-06-04T09:52:13.5502016Z ok 234 - buildTelegramWebhookConfig trims required env values and keeps safe defaults
+2026-06-04T09:52:13.5502478Z   ---
+2026-06-04T09:52:13.5502689Z   duration_ms: 2.155215
+2026-06-04T09:52:13.5503074Z   type: 'test'
+2026-06-04T09:52:13.5503290Z   ...
+2026-06-04T09:52:13.5503936Z # Subtest: buildTelegramWebhookConfig rejects missing required env values
+2026-06-04T09:52:13.5504594Z ok 235 - buildTelegramWebhookConfig rejects missing required env values
+2026-06-04T09:52:13.5505276Z   ---
+2026-06-04T09:52:13.5505616Z   duration_ms: 0.671991
+2026-06-04T09:52:13.5506013Z   type: 'test'
+2026-06-04T09:52:13.5506367Z   ...
+2026-06-04T09:52:13.5507144Z # Subtest: setTelegramWebhook posts expected payload without exposing token in result
+2026-06-04T09:52:13.5508403Z ok 236 - setTelegramWebhook posts expected payload without exposing token in result
+2026-06-04T09:52:13.5509233Z   ---
+2026-06-04T09:52:13.5509633Z   duration_ms: 33.096321
+2026-06-04T09:52:13.5510099Z   type: 'test'
+2026-06-04T09:52:13.5510490Z   ...
+2026-06-04T09:52:13.5511351Z # Subtest: setTelegramWebhook throws with Telegram description when API rejects request
+2026-06-04T09:52:13.5512662Z ok 237 - setTelegramWebhook throws with Telegram description when API rejects request
+2026-06-04T09:52:13.5513794Z   ---
+2026-06-04T09:52:13.5514209Z   duration_ms: 0.802256
+2026-06-04T09:52:13.5514660Z   type: 'test'
+2026-06-04T09:52:13.5515066Z   ...
+2026-06-04T09:52:13.5515434Z 1..0
+2026-06-04T09:52:13.5515957Z # Subtest: test/thoughts-page.test.mjs
+2026-06-04T09:52:13.5516629Z ok 27 - test/thoughts-page.test.mjs
+2026-06-04T09:52:13.5517166Z   ---
+2026-06-04T09:52:13.5517564Z   duration_ms: 63.891064
+2026-06-04T09:52:13.5518004Z   type: 'test'
+2026-06-04T09:52:13.5518408Z   ...
+2026-06-04T09:52:13.5519231Z # Subtest: inferTrainingAnalysisFocus respects explicit recent-week requests
+2026-06-04T09:52:13.5521038Z ok 239 - inferTrainingAnalysisFocus respects explicit recent-week requests
+2026-06-04T09:52:13.5521823Z   ---
+2026-06-04T09:52:13.5522199Z   duration_ms: 1.872844
+2026-06-04T09:52:13.5522615Z   type: 'test'
+2026-06-04T09:52:13.5523007Z   ...
+2026-06-04T09:52:13.5524137Z # Subtest: inferTrainingAnalysisFocus uses 30-day data only when requested
+2026-06-04T09:52:13.5525337Z ok 240 - inferTrainingAnalysisFocus uses 30-day data only when requested
+2026-06-04T09:52:13.5526064Z   ---
+2026-06-04T09:52:13.5526443Z   duration_ms: 0.519144
+2026-06-04T09:52:13.5526885Z   type: 'test'
+2026-06-04T09:52:13.5527296Z   ...
+2026-06-04T09:52:13.5528316Z # Subtest: inferTrainingAnalysisFocus classifies pain and discomfort questions for symptom triage
+2026-06-04T09:52:13.5529740Z ok 241 - inferTrainingAnalysisFocus classifies pain and discomfort questions for symptom triage
+2026-06-04T09:52:13.5530546Z   ---
+2026-06-04T09:52:13.5530881Z   duration_ms: 0.203191
+2026-06-04T09:52:13.5531275Z   type: 'test'
+2026-06-04T09:52:13.5531680Z   ...
+2026-06-04T09:52:13.5532533Z # Subtest: inferTrainingAnalysisFocus keeps near-term training questions on training plan mode
+2026-06-04T09:52:13.5534395Z ok 242 - inferTrainingAnalysisFocus keeps near-term training questions on training plan mode
+2026-06-04T09:52:13.5534985Z   ---
+2026-06-04T09:52:13.5535208Z   duration_ms: 0.211657
+2026-06-04T09:52:13.5535632Z   type: 'test'
+2026-06-04T09:52:13.5535878Z   ...
+2026-06-04T09:52:13.5536411Z # Subtest: inferTrainingAnalysisFocus does not treat body-part training plans as pain triage
+2026-06-04T09:52:13.5537324Z ok 243 - inferTrainingAnalysisFocus does not treat body-part training plans as pain triage
+2026-06-04T09:52:13.5537926Z   ---
+2026-06-04T09:52:13.5538146Z   duration_ms: 0.253927
+2026-06-04T09:52:13.5538390Z   type: 'test'
+2026-06-04T09:52:13.5538604Z   ...
+2026-06-04T09:52:13.5539064Z # Subtest: inferTrainingAnalysisFocus recognizes soreness with a body-part context
+2026-06-04T09:52:13.5539761Z ok 244 - inferTrainingAnalysisFocus recognizes soreness with a body-part context
+2026-06-04T09:52:13.5540189Z   ---
+2026-06-04T09:52:13.5540393Z   duration_ms: 0.153027
+2026-06-04T09:52:13.5540638Z   type: 'test'
+2026-06-04T09:52:13.5540845Z   ...
+2026-06-04T09:52:13.5541374Z # Subtest: inferTrainingAnalysisFocus classifies nutrition questions without training plan mode
+2026-06-04T09:52:13.5542184Z ok 245 - inferTrainingAnalysisFocus classifies nutrition questions without training plan mode
+2026-06-04T09:52:13.5542654Z   ---
+2026-06-04T09:52:13.5542868Z   duration_ms: 0.201949
+2026-06-04T09:52:13.5543107Z   type: 'test'
+2026-06-04T09:52:13.5543317Z   ...
+2026-06-04T09:52:13.5544079Z # Subtest: inferTrainingAnalysisFocus keeps mixed time-window requests explicit
+2026-06-04T09:52:13.5544767Z ok 246 - inferTrainingAnalysisFocus keeps mixed time-window requests explicit
+2026-06-04T09:52:13.5545197Z   ---
+2026-06-04T09:52:13.5545415Z   duration_ms: 0.1969
+2026-06-04T09:52:13.5545655Z   type: 'test'
+2026-06-04T09:52:13.5545872Z   ...
+2026-06-04T09:52:13.5546409Z # Subtest: inferTrainingAnalysisFocus prioritizes nutrition intent over body composition terms
+2026-06-04T09:52:13.5547194Z ok 247 - inferTrainingAnalysisFocus prioritizes nutrition intent over body composition terms
+2026-06-04T09:52:13.5547693Z   ---
+2026-06-04T09:52:13.5547904Z   duration_ms: 0.404559
+2026-06-04T09:52:13.5548151Z   type: 'test'
+2026-06-04T09:52:13.5548367Z   ...
+2026-06-04T09:52:13.5548865Z # Subtest: inferTrainingAnalysisFocus prioritizes discomfort intent over recovery wording
+2026-06-04T09:52:13.5549609Z ok 248 - inferTrainingAnalysisFocus prioritizes discomfort intent over recovery wording
+2026-06-04T09:52:13.5550075Z   ---
+2026-06-04T09:52:13.5550282Z   duration_ms: 0.40525
+2026-06-04T09:52:13.5550526Z   type: 'test'
+2026-06-04T09:52:13.5550733Z   ...
+2026-06-04T09:52:13.5551179Z # Subtest: normalizeTrainingGoal defaults to muscle gain and belly-fat reduction
+2026-06-04T09:52:13.5551835Z ok 249 - normalizeTrainingGoal defaults to muscle gain and belly-fat reduction
+2026-06-04T09:52:13.5552452Z   ---
+2026-06-04T09:52:13.5552776Z   duration_ms: 0.366668
+2026-06-04T09:52:13.5553021Z   type: 'test'
+2026-06-04T09:52:13.5553276Z   ...
+2026-06-04T09:52:13.5554010Z # Subtest: generateTrainingAnalysisReply sends time-window constraints to the model
+2026-06-04T09:52:13.5554709Z ok 250 - generateTrainingAnalysisReply sends time-window constraints to the model
+2026-06-04T09:52:13.5555137Z   ---
+2026-06-04T09:52:13.5555383Z   duration_ms: 38.080574
+2026-06-04T09:52:13.5555633Z   type: 'test'
+2026-06-04T09:52:13.5555849Z   ...
+2026-06-04T09:52:13.5556401Z # Subtest: generateTrainingAnalysisReply sends pain intent with recent load and latest workout details
+2026-06-04T09:52:13.5557255Z ok 251 - generateTrainingAnalysisReply sends pain intent with recent load and latest workout details
+2026-06-04T09:52:13.5557754Z   ---
+2026-06-04T09:52:13.5557959Z   duration_ms: 3.993354
+2026-06-04T09:52:13.5558204Z   type: 'test'
+2026-06-04T09:52:13.5558422Z   ...
+2026-06-04T09:52:13.5559008Z # Subtest: generateTrainingAnalysisReply falls back to markdown snapshot when database snapshot is incomplete
+2026-06-04T09:52:13.5559921Z ok 252 - generateTrainingAnalysisReply falls back to markdown snapshot when database snapshot is incomplete
+2026-06-04T09:52:13.5560450Z   ---
+2026-06-04T09:52:13.5560667Z   duration_ms: 4.009805
+2026-06-04T09:52:13.5560913Z   type: 'test'
+2026-06-04T09:52:13.5561118Z   ...
+2026-06-04T09:52:13.5561507Z # [training-analysis] request failed with HTTP 502; retrying (1/3)
+2026-06-04T09:52:13.5562094Z # Subtest: generateTrainingAnalysisReply retries transient 502 responses
+2026-06-04T09:52:13.5562704Z ok 253 - generateTrainingAnalysisReply retries transient 502 responses
+2026-06-04T09:52:13.5563091Z   ---
+2026-06-04T09:52:13.5563304Z   duration_ms: 5.223543
+2026-06-04T09:52:13.5563800Z   type: 'test'
+2026-06-04T09:52:13.5564121Z   ...
+2026-06-04T09:52:13.5564558Z # [training-analysis] request failed with HTTP 502; retrying (1/3)
+2026-06-04T09:52:13.5565131Z # [training-analysis] request failed with HTTP 502; retrying (2/3)
+2026-06-04T09:52:13.5565838Z # Subtest: generateTrainingAnalysisReply preserves the final HTTP error after retry exhaustion
+2026-06-04T09:52:13.5566623Z ok 254 - generateTrainingAnalysisReply preserves the final HTTP error after retry exhaustion
+2026-06-04T09:52:13.5567097Z   ---
+2026-06-04T09:52:13.5567304Z   duration_ms: 6.215494
+2026-06-04T09:52:13.5567551Z   type: 'test'
+2026-06-04T09:52:13.5567769Z   ...
+2026-06-04T09:52:13.5568222Z # Subtest: generateTrainingAnalysisReply does not retry non-retryable HTTP errors
+2026-06-04T09:52:13.5568910Z ok 255 - generateTrainingAnalysisReply does not retry non-retryable HTTP errors
+2026-06-04T09:52:13.5569343Z   ---
+2026-06-04T09:52:13.5569550Z   duration_ms: 1.734885
+2026-06-04T09:52:13.5569793Z   type: 'test'
+2026-06-04T09:52:13.5570003Z   ...
+2026-06-04T09:52:13.5570393Z # [training-analysis] request failed: socket hang up; retrying (1/3)
+2026-06-04T09:52:13.5570998Z # Subtest: generateTrainingAnalysisReply retries transient network errors
+2026-06-04T09:52:13.5571613Z ok 256 - generateTrainingAnalysisReply retries transient network errors
+2026-06-04T09:52:13.5572053Z   ---
+2026-06-04T09:52:13.5572267Z   duration_ms: 3.419327
+2026-06-04T09:52:13.5572513Z   type: 'test'
+2026-06-04T09:52:13.5572732Z   ...
+2026-06-04T09:52:13.5573177Z # Subtest: loadTrainingAnalysisPrompt reads the compiled prompt by default
+2026-06-04T09:52:13.5574286Z ok 257 - loadTrainingAnalysisPrompt reads the compiled prompt by default
+2026-06-04T09:52:13.5574959Z   ---
+2026-06-04T09:52:13.5575305Z   duration_ms: 1.058426
+2026-06-04T09:52:13.5575709Z   type: 'test'
+2026-06-04T09:52:13.5576061Z   ...
+2026-06-04T09:52:13.5576688Z # Subtest: analysis prompt metadata header is stripped at runtime
+2026-06-04T09:52:13.5577625Z ok 258 - analysis prompt metadata header is stripped at runtime
+2026-06-04T09:52:13.5578226Z   ---
+2026-06-04T09:52:13.5578584Z   duration_ms: 0.150673
+2026-06-04T09:52:13.5578969Z   type: 'test'
+2026-06-04T09:52:13.5579193Z   ...
+2026-06-04T09:52:13.5579774Z # Subtest: buildTrainingAnalysisSummary exposes richer data signals
+2026-06-04T09:52:13.5580449Z ok 259 - buildTrainingAnalysisSummary exposes richer data signals
+2026-06-04T09:52:13.5580834Z   ---
+2026-06-04T09:52:13.5581048Z   duration_ms: 1.322793
+2026-06-04T09:52:13.5581285Z   type: 'test'
+2026-06-04T09:52:13.5581496Z   ...
+2026-06-04T09:52:13.5581966Z # Subtest: buildTrainingAnalysisSummary exposes recent body feedback with date context
+2026-06-04T09:52:13.5582682Z ok 260 - buildTrainingAnalysisSummary exposes recent body feedback with date context
+2026-06-04T09:52:13.5583122Z   ---
+2026-06-04T09:52:13.5583325Z   duration_ms: 0.766378
+2026-06-04T09:52:13.5583976Z   type: 'test'
+2026-06-04T09:52:13.5584294Z   ...
+2026-06-04T09:52:13.5584815Z # Subtest: buildTrainingAnalysisSummary marks muscle loss risk when weight and muscle both fall
+2026-06-04T09:52:13.5585601Z ok 261 - buildTrainingAnalysisSummary marks muscle loss risk when weight and muscle both fall
+2026-06-04T09:52:13.5586064Z   ---
+2026-06-04T09:52:13.5586288Z   duration_ms: 0.371688
+2026-06-04T09:52:13.5586529Z   type: 'test'
+2026-06-04T09:52:13.5586736Z   ...
+2026-06-04T09:52:13.5587194Z # Subtest: buildTrainingAnalysisSummary marks recovery pressure on sustained load
+2026-06-04T09:52:13.5587876Z ok 262 - buildTrainingAnalysisSummary marks recovery pressure on sustained load
+2026-06-04T09:52:13.5588304Z   ---
+2026-06-04T09:52:13.5588517Z   duration_ms: 0.990258
+2026-06-04T09:52:13.5588750Z   type: 'test'
+2026-06-04T09:52:13.5588965Z   ...
+2026-06-04T09:52:13.5589398Z # Subtest: persistTrainingArchive skips when database sync is disabled
+2026-06-04T09:52:13.5589975Z ok 263 - persistTrainingArchive skips when database sync is disabled
+2026-06-04T09:52:13.5590358Z   ---
+2026-06-04T09:52:13.5590560Z   duration_ms: 3.400322
+2026-06-04T09:52:13.5590798Z   type: 'test'
+2026-06-04T09:52:13.5591013Z   ...
+2026-06-04T09:52:13.5591451Z # Subtest: persistTrainingArchive writes snapshot and run rows in one transaction
+2026-06-04T09:52:13.5592125Z ok 264 - persistTrainingArchive writes snapshot and run rows in one transaction
+2026-06-04T09:52:13.5592540Z   ---
+2026-06-04T09:52:13.5592758Z   duration_ms: 2.535618
+2026-06-04T09:52:13.5592997Z   type: 'test'
+2026-06-04T09:52:13.5593201Z   ...
+2026-06-04T09:52:13.5594100Z # Subtest: persistTrainingArchive writes activity and meal rows when parsed data contains them
+2026-06-04T09:52:13.5594892Z ok 265 - persistTrainingArchive writes activity and meal rows when parsed data contains them
+2026-06-04T09:52:13.5595355Z   ---
+2026-06-04T09:52:13.5595572Z   duration_ms: 1.42792
+2026-06-04T09:52:13.5595811Z   type: 'test'
+2026-06-04T09:52:13.5596029Z   ...
+2026-06-04T09:52:13.5596443Z # Subtest: generateTrainingData keeps main outputs when archive sync fails
+2026-06-04T09:52:13.5597045Z ok 266 - generateTrainingData keeps main outputs when archive sync fails
+2026-06-04T09:52:13.5597436Z   ---
+2026-06-04T09:52:13.5597655Z   duration_ms: 23.264256
+2026-06-04T09:52:13.5597899Z   type: 'test'
+2026-06-04T09:52:13.5598113Z   ...
+2026-06-04T09:52:13.5598566Z # Subtest: generateTrainingData can write outputs from the shared snapshot builder
+2026-06-04T09:52:13.5599233Z ok 267 - generateTrainingData can write outputs from the shared snapshot builder
+2026-06-04T09:52:13.5599651Z   ---
+2026-06-04T09:52:13.5599857Z   duration_ms: 7.314146
+2026-06-04T09:52:13.5600101Z   type: 'test'
+2026-06-04T09:52:13.5600309Z   ...
+2026-06-04T09:52:13.5600813Z # Subtest: generateTrainingData falls back to markdown when database snapshot lacks measurements
+2026-06-04T09:52:13.5601591Z ok 268 - generateTrainingData falls back to markdown when database snapshot lacks measurements
+2026-06-04T09:52:13.5602047Z   ---
+2026-06-04T09:52:13.5602256Z   duration_ms: 5.267175
+2026-06-04T09:52:13.5602497Z   type: 'test'
+2026-06-04T09:52:13.5602705Z   ...
+2026-06-04T09:52:13.5603190Z # Subtest: generateTrainingData falls back to markdown when database snapshot is unavailable
+2026-06-04T09:52:13.5604170Z ok 269 - generateTrainingData falls back to markdown when database snapshot is unavailable
+2026-06-04T09:52:13.5604922Z   ---
+2026-06-04T09:52:13.5605151Z   duration_ms: 6.187071
+2026-06-04T09:52:13.5605401Z   type: 'test'
+2026-06-04T09:52:13.5605618Z   ...
+2026-06-04T09:52:13.5606188Z # Subtest: generateTrainingData does not hide incomplete database snapshots when database is not configured
+2026-06-04T09:52:13.5607054Z ok 270 - generateTrainingData does not hide incomplete database snapshots when database is not configured
+2026-06-04T09:52:13.5607564Z   ---
+2026-06-04T09:52:13.5607774Z   duration_ms: 2.410323
+2026-06-04T09:52:13.5608022Z   type: 'test'
+2026-06-04T09:52:13.5608241Z   ...
+2026-06-04T09:52:13.5608760Z # Subtest: appendTrainingArchiveFailureLog writes ndjson entries to the configured runtime path
+2026-06-04T09:52:13.5609557Z ok 271 - appendTrainingArchiveFailureLog writes ndjson entries to the configured runtime path
+2026-06-04T09:52:13.5610036Z   ---
+2026-06-04T09:52:13.5610241Z   duration_ms: 4.695472
+2026-06-04T09:52:13.5610480Z   type: 'test'
+2026-06-04T09:52:13.5610697Z   ...
+2026-06-04T09:52:13.5611042Z # Subtest: pgsql init schema lives under sql directory
+2026-06-04T09:52:13.5611492Z ok 272 - pgsql init schema lives under sql directory
+2026-06-04T09:52:13.5611804Z   ---
+2026-06-04T09:52:13.5612016Z   duration_ms: 2.436132
+2026-06-04T09:52:13.5612250Z   type: 'test'
+2026-06-04T09:52:13.5612465Z   ...
+2026-06-04T09:52:13.5613009Z # Subtest: readTrainingSnapshotFromDatabaseClient normalizes archived dates before grouping rows
+2026-06-04T09:52:13.5614208Z ok 273 - readTrainingSnapshotFromDatabaseClient normalizes archived dates before grouping rows
+2026-06-04T09:52:13.5614710Z   ---
+2026-06-04T09:52:13.5614929Z   duration_ms: 315.527235
+2026-06-04T09:52:13.5615181Z   type: 'test'
+2026-06-04T09:52:13.5615398Z   ...
+2026-06-04T09:52:13.5615847Z # Subtest: readTrainingSnapshotFromDatabase can limit daily rows by date window
+2026-06-04T09:52:13.5616524Z ok 274 - readTrainingSnapshotFromDatabase can limit daily rows by date window
+2026-06-04T09:52:13.5616950Z   ---
+2026-06-04T09:52:13.5617167Z   duration_ms: 4.188981
+2026-06-04T09:52:13.5617411Z   type: 'test'
+2026-06-04T09:52:13.5617618Z   ...
+2026-06-04T09:52:13.5618136Z # Subtest: readTrainingSnapshotFromDatabaseClient includes core sleep rows in sleep summaries
+2026-06-04T09:52:13.5618949Z ok 275 - readTrainingSnapshotFromDatabaseClient includes core sleep rows in sleep summaries
+2026-06-04T09:52:13.5619421Z   ---
+2026-06-04T09:52:13.5619634Z   duration_ms: 0.773983
+2026-06-04T09:52:13.5619878Z   type: 'test'
+2026-06-04T09:52:13.5620084Z   ...
+2026-06-04T09:52:13.5620603Z # Subtest: readArchiveTrainingSnapshotFromDatabaseClient reads schema-defined archive columns
+2026-06-04T09:52:13.5621403Z ok 276 - readArchiveTrainingSnapshotFromDatabaseClient reads schema-defined archive columns
+2026-06-04T09:52:13.5621893Z   ---
+2026-06-04T09:52:13.5622107Z   duration_ms: 4.349752
+2026-06-04T09:52:13.5622340Z   type: 'test'
+2026-06-04T09:52:13.5622554Z   ...
+2026-06-04T09:52:13.5623020Z # Subtest: persistNormalizedBatch writes ingest and core records in one transaction
+2026-06-04T09:52:13.5624116Z ok 277 - persistNormalizedBatch writes ingest and core records in one transaction
+2026-06-04T09:52:13.5624718Z   ---
+2026-06-04T09:52:13.5624938Z   duration_ms: 7.34282
+2026-06-04T09:52:13.5625184Z   type: 'test'
+2026-06-04T09:52:13.5625401Z   ...
+2026-06-04T09:52:13.5625815Z # Subtest: persistNormalizedBatch stores sleep payload in core sleep rows
+2026-06-04T09:52:13.5626432Z ok 278 - persistNormalizedBatch stores sleep payload in core sleep rows
+2026-06-04T09:52:13.5626827Z   ---
+2026-06-04T09:52:13.5627036Z   duration_ms: 2.273377
+2026-06-04T09:52:13.5627284Z   type: 'test'
+2026-06-04T09:52:13.5627493Z   ...
+2026-06-04T09:52:13.5628004Z # Subtest: persistNormalizedBatch merges an existing core day using only schema-defined columns
+2026-06-04T09:52:13.5628789Z ok 279 - persistNormalizedBatch merges an existing core day using only schema-defined columns
+2026-06-04T09:52:13.5629252Z   ---
+2026-06-04T09:52:13.5629467Z   duration_ms: 1.616785
+2026-06-04T09:52:13.5629979Z   type: 'test'
+2026-06-04T09:52:13.5630203Z   ...
+2026-06-04T09:52:13.5630779Z # Subtest: backfillCoreSleepFromIngestBatchesClient repairs stored sleep batches missing core sleep rows
+2026-06-04T09:52:13.5631657Z ok 280 - backfillCoreSleepFromIngestBatchesClient repairs stored sleep batches missing core sleep rows
+2026-06-04T09:52:13.5632177Z   ---
+2026-06-04T09:52:13.5632389Z   duration_ms: 1.735607
+2026-06-04T09:52:13.5632626Z   type: 'test'
+2026-06-04T09:52:13.5632841Z   ...
+2026-06-04T09:52:13.5633267Z # Subtest: pending recognition store reads, queues, and resolves database rows
+2026-06-04T09:52:13.5634146Z ok 281 - pending recognition store reads, queues, and resolves database rows
+2026-06-04T09:52:13.5634564Z   ---
+2026-06-04T09:52:13.5634770Z   duration_ms: 2.082128
+2026-06-04T09:52:13.5635013Z   type: 'test'
+2026-06-04T09:52:13.5635309Z   ...
+2026-06-04T09:52:13.5635862Z # Subtest: persistNormalizedBatch can merge an existing core day without failing on body feedback reads
+2026-06-04T09:52:13.5636705Z ok 282 - persistNormalizedBatch can merge an existing core day without failing on body feedback reads
+2026-06-04T09:52:13.5637191Z   ---
+2026-06-04T09:52:13.5637404Z   duration_ms: 2.000194
+2026-06-04T09:52:13.5637641Z   type: 'test'
+2026-06-04T09:52:13.5637852Z   ...
+2026-06-04T09:52:13.5638314Z # Subtest: persistNormalizedBatch rolls back the transaction when a core write fails
+2026-06-04T09:52:13.5639006Z ok 283 - persistNormalizedBatch rolls back the transaction when a core write fails
+2026-06-04T09:52:13.5639441Z   ---
+2026-06-04T09:52:13.5639653Z   duration_ms: 1.829824
+2026-06-04T09:52:13.5639887Z   type: 'test'
+2026-06-04T09:52:13.5640099Z   ...
+2026-06-04T09:52:13.5640601Z # Subtest: persistNormalizedBatch returns unchanged and rolls back when payload hash matches
+2026-06-04T09:52:13.5641351Z ok 284 - persistNormalizedBatch returns unchanged and rolls back when payload hash matches
+2026-06-04T09:52:13.5641809Z   ---
+2026-06-04T09:52:13.5642017Z   duration_ms: 0.894399
+2026-06-04T09:52:13.5642259Z   type: 'test'
+2026-06-04T09:52:13.5642470Z   ...
+2026-06-04T09:52:13.5642998Z # Subtest: persistNormalizedBatch mirrors thought create, edit, and delete batches into core.thought
+2026-06-04T09:52:13.5644138Z ok 285 - persistNormalizedBatch mirrors thought create, edit, and delete batches into core.thought
+2026-06-04T09:52:13.5644638Z   ---
+2026-06-04T09:52:13.5644847Z   duration_ms: 2.50418
+2026-06-04T09:52:13.5645092Z   type: 'test'
+2026-06-04T09:52:13.5645304Z   ...
+2026-06-04T09:52:13.5645792Z # Subtest: getLastProcessedTelegramUpdateId reads the max update id from ingest records
+2026-06-04T09:52:13.5646526Z ok 286 - getLastProcessedTelegramUpdateId reads the max update id from ingest records
+2026-06-04T09:52:13.5646984Z   ---
+2026-06-04T09:52:13.5647214Z   duration_ms: 1.277708
+2026-06-04T09:52:13.5647468Z   type: 'test'
+2026-06-04T09:52:13.5647682Z   ...
+2026-06-04T09:52:13.5648192Z # Subtest: backfillCoreFromLatestArchiveSnapshot writes only archive dates missing from core
+2026-06-04T09:52:13.5648972Z ok 287 - backfillCoreFromLatestArchiveSnapshot writes only archive dates missing from core
+2026-06-04T09:52:13.5649448Z   ---
+2026-06-04T09:52:13.5649661Z   duration_ms: 1.579094
+2026-06-04T09:52:13.5649897Z   type: 'test'
+2026-06-04T09:52:13.5657248Z   ...
+2026-06-04T09:52:13.5657809Z # Subtest: backfillCoreFromLatestArchiveSnapshot reads archive and core through one client
+2026-06-04T09:52:13.5658633Z ok 288 - backfillCoreFromLatestArchiveSnapshot reads archive and core through one client
+2026-06-04T09:52:13.5659109Z   ---
+2026-06-04T09:52:13.5659333Z   duration_ms: 0.705273
+2026-06-04T09:52:13.5659584Z   type: 'test'
+2026-06-04T09:52:13.5659809Z   ...
+2026-06-04T09:52:13.5660311Z # Subtest: persistTrainingSnapshotToCore replaces multiple days with batched core writes
+2026-06-04T09:52:13.5661056Z ok 289 - persistTrainingSnapshotToCore replaces multiple days with batched core writes
+2026-06-04T09:52:13.5661512Z   ---
+2026-06-04T09:52:13.5661729Z   duration_ms: 1.331919
+2026-06-04T09:52:13.5662181Z   type: 'test'
+2026-06-04T09:52:13.5662510Z   ...
+2026-06-04T09:52:13.5663041Z # Subtest: importTrainingMarkdownToDatabase returns unchanged when core already matches markdown
+2026-06-04T09:52:13.5664217Z ok 290 - importTrainingMarkdownToDatabase returns unchanged when core already matches markdown
+2026-06-04T09:52:13.5664715Z   ---
+2026-06-04T09:52:13.5664929Z   duration_ms: 3.987493
+2026-06-04T09:52:13.5665180Z   type: 'test'
+2026-06-04T09:52:13.5665395Z   ...
+2026-06-04T09:52:13.5665910Z # Subtest: exportTrainingMarkdown renders a readable markdown view from the canonical snapshot
+2026-06-04T09:52:13.5666685Z ok 291 - exportTrainingMarkdown renders a readable markdown view from the canonical snapshot
+2026-06-04T09:52:13.5667148Z   ---
+2026-06-04T09:52:13.5667367Z   duration_ms: 0.569929
+2026-06-04T09:52:13.5667615Z   type: 'test'
+2026-06-04T09:52:13.5667828Z   ...
+2026-06-04T09:52:13.5668288Z # Subtest: training maintenance inspect is read-only and reports runtime queue counts
+2026-06-04T09:52:13.5668991Z ok 292 - training maintenance inspect is read-only and reports runtime queue counts
+2026-06-04T09:52:13.5669413Z   ---
+2026-06-04T09:52:13.5669623Z   duration_ms: 8.258158
+2026-06-04T09:52:13.5669863Z   type: 'test'
+2026-06-04T09:52:13.5670082Z   ...
+2026-06-04T09:52:13.5670471Z # Subtest: training maintenance sync delegates to syncTrainingCore
+2026-06-04T09:52:13.5671010Z ok 293 - training maintenance sync delegates to syncTrainingCore
+2026-06-04T09:52:13.5671386Z   ---
+2026-06-04T09:52:13.5671601Z   duration_ms: 1.042286
+2026-06-04T09:52:13.5671852Z   type: 'test'
+2026-06-04T09:52:13.5672070Z   ...
+2026-06-04T09:52:13.5672595Z # Subtest: training maintenance sync can run one legacy database phase through the unified entrypoint
+2026-06-04T09:52:13.5673606Z ok 294 - training maintenance sync can run one legacy database phase through the unified entrypoint
+2026-06-04T09:52:13.5674119Z   ---
+2026-06-04T09:52:13.5674331Z   duration_ms: 0.288171
+2026-06-04T09:52:13.5674584Z   type: 'test'
+2026-06-04T09:52:13.5674802Z   ...
+2026-06-04T09:52:13.5675245Z # Subtest: training maintenance sync can run the ingest repair phase directly
+2026-06-04T09:52:13.5675884Z ok 295 - training maintenance sync can run the ingest repair phase directly
+2026-06-04T09:52:13.5676280Z   ---
+2026-06-04T09:52:13.5676497Z   duration_ms: 0.308639
+2026-06-04T09:52:13.5676743Z   type: 'test'
+2026-06-04T09:52:13.5676966Z   ...
+2026-06-04T09:52:13.5677482Z # Subtest: training maintenance export delegates markdown export through the unified entrypoint
+2026-06-04T09:52:13.5678302Z ok 296 - training maintenance export delegates markdown export through the unified entrypoint
+2026-06-04T09:52:13.5678765Z   ---
+2026-06-04T09:52:13.5678972Z   duration_ms: 0.329679
+2026-06-04T09:52:13.5679223Z   type: 'test'
+2026-06-04T09:52:13.5679436Z   ...
+2026-06-04T09:52:13.5679932Z # Subtest: training maintenance migrate requires dry-run or confirm before write-capable work
+2026-06-04T09:52:13.5680690Z ok 297 - training maintenance migrate requires dry-run or confirm before write-capable work
+2026-06-04T09:52:13.5681147Z   ---
+2026-06-04T09:52:13.5681357Z   duration_ms: 0.258916
+2026-06-04T09:52:13.5681599Z   type: 'test'
+2026-06-04T09:52:13.5681808Z   ...
+2026-06-04T09:52:13.5682229Z # Subtest: training maintenance migrate supports dry-run without running sync
+2026-06-04T09:52:13.5682841Z ok 298 - training maintenance migrate supports dry-run without running sync
+2026-06-04T09:52:13.5683237Z   ---
+2026-06-04T09:52:13.5683744Z   duration_ms: 0.267672
+2026-06-04T09:52:13.5683998Z   type: 'test'
+2026-06-04T09:52:13.5684216Z   ...
+2026-06-04T09:52:13.5684612Z # Subtest: training maintenance migrate runs only with explicit confirm
+2026-06-04T09:52:13.5685182Z ok 299 - training maintenance migrate runs only with explicit confirm
+2026-06-04T09:52:13.5685555Z   ---
+2026-06-04T09:52:13.5685763Z   duration_ms: 0.268544
+2026-06-04T09:52:13.5686004Z   type: 'test'
+2026-06-04T09:52:13.5686219Z   ...
+2026-06-04T09:52:13.5686596Z # Subtest: package exposes explicit maintenance command boundaries
+2026-06-04T09:52:13.5687387Z ok 300 - package exposes explicit maintenance command boundaries
+2026-06-04T09:52:13.5687741Z   ---
+2026-06-04T09:52:13.5687955Z   duration_ms: 4.553836
+2026-06-04T09:52:13.5688204Z   type: 'test'
+2026-06-04T09:52:13.5688416Z   ...
+2026-06-04T09:52:13.5688830Z # Subtest: v8 maintenance guide documents inspect sync and migrate commands
+2026-06-04T09:52:13.5689420Z ok 301 - v8 maintenance guide documents inspect sync and migrate commands
+2026-06-04T09:52:13.5689817Z   ---
+2026-06-04T09:52:13.5690034Z   duration_ms: 1.266227
+2026-06-04T09:52:13.5690274Z   type: 'test'
+2026-06-04T09:52:13.5690493Z   ...
+2026-06-04T09:52:13.5690924Z # Subtest: v8 overview links the maintenance guide and current CI/test controls
+2026-06-04T09:52:13.5691548Z ok 302 - v8 overview links the maintenance guide and current CI/test controls
+2026-06-04T09:52:13.5691947Z   ---
+2026-06-04T09:52:13.5692154Z   duration_ms: 1.53989
+2026-06-04T09:52:13.5692396Z   type: 'test'
+2026-06-04T09:52:13.5692616Z   ...
+2026-06-04T09:52:13.5693068Z # Subtest: v8 overview documents the local document index and historical replacements
+2026-06-04T09:52:13.5694025Z ok 303 - v8 overview documents the local document index and historical replacements
+2026-06-04T09:52:13.5694458Z   ---
+2026-06-04T09:52:13.5694669Z   duration_ms: 0.811533
+2026-06-04T09:52:13.5694914Z   type: 'test'
+2026-06-04T09:52:13.5695123Z   ...
+2026-06-04T09:52:13.5695504Z # Subtest: parses next-morning measurement into the archived day
+2026-06-04T09:52:13.5696033Z ok 304 - parses next-morning measurement into the archived day
+2026-06-04T09:52:13.5696381Z   ---
+2026-06-04T09:52:13.5696595Z   duration_ms: 5.571125
+2026-06-04T09:52:13.5696832Z   type: 'test'
+2026-06-04T09:52:13.5697047Z   ...
+2026-06-04T09:52:13.5697453Z # Subtest: aggregates daily workout and nutrition totals for the dashboard
+2026-06-04T09:52:13.5698038Z ok 305 - aggregates daily workout and nutrition totals for the dashboard
+2026-06-04T09:52:13.5698421Z   ---
+2026-06-04T09:52:13.5698636Z   duration_ms: 0.720492
+2026-06-04T09:52:13.5698880Z   type: 'test'
+2026-06-04T09:52:13.5699095Z   ...
+2026-06-04T09:52:13.5699453Z # Subtest: builds chart series from archived daily measurements
+2026-06-04T09:52:13.5699960Z ok 306 - builds chart series from archived daily measurements
+2026-06-04T09:52:13.5700340Z   ---
+2026-06-04T09:52:13.5700545Z   duration_ms: 1.357427
+2026-06-04T09:52:13.5700785Z   type: 'test'
+2026-06-04T09:52:13.5700995Z   ...
+2026-06-04T09:52:13.5701517Z # Subtest: parses telegram-written workout and nutrition formats into dashboard-friendly summaries
+2026-06-04T09:52:13.5702305Z ok 307 - parses telegram-written workout and nutrition formats into dashboard-friendly summaries
+2026-06-04T09:52:13.5702779Z   ---
+2026-06-04T09:52:13.5702996Z   duration_ms: 0.568246
+2026-06-04T09:52:13.5703272Z   type: 'test'
+2026-06-04T09:52:13.5703731Z   ...
+2026-06-04T09:52:13.5704195Z # Subtest: normalizes English activity type tokens before building dashboard tags
+2026-06-04T09:52:13.5704921Z ok 308 - normalizes English activity type tokens before building dashboard tags
+2026-06-04T09:52:13.5705359Z   ---
+2026-06-04T09:52:13.5705574Z   duration_ms: 0.263785
+2026-06-04T09:52:13.5705814Z   type: 'test'
+2026-06-04T09:52:13.5706030Z   ...
+2026-06-04T09:52:13.5706586Z # Subtest: uses daily activity overview screenshots to override training calories and expose workout duration
+2026-06-04T09:52:13.5707462Z ok 309 - uses daily activity overview screenshots to override training calories and expose workout duration
+2026-06-04T09:52:13.5707963Z   ---
+2026-06-04T09:52:13.5708167Z   duration_ms: 0.454963
+2026-06-04T09:52:13.5708407Z   type: 'test'
+2026-06-04T09:52:13.5708621Z   ...
+2026-06-04T09:52:13.5709039Z # Subtest: buildTrainingSnapshot reads the canonical snapshot from markdown
+2026-06-04T09:52:13.5709656Z ok 310 - buildTrainingSnapshot reads the canonical snapshot from markdown
+2026-06-04T09:52:13.5710043Z   ---
+2026-06-04T09:52:13.5710262Z   duration_ms: 14.750642
+2026-06-04T09:52:13.5710513Z   type: 'test'
+2026-06-04T09:52:13.5710994Z   ...
+2026-06-04T09:52:13.5711452Z # Subtest: buildTrainingSnapshot can hydrate the canonical snapshot from core tables
+2026-06-04T09:52:13.5712142Z ok 311 - buildTrainingSnapshot can hydrate the canonical snapshot from core tables
+2026-06-04T09:52:13.5712568Z   ---
+2026-06-04T09:52:13.5712786Z   duration_ms: 55.757909
+2026-06-04T09:52:13.5713040Z   type: 'test'
+2026-06-04T09:52:13.5713262Z   ...
+2026-06-04T09:52:13.5714047Z # Subtest: buildTrainingSnapshot starts database reads in parallel with independent clients
+2026-06-04T09:52:13.5714813Z ok 312 - buildTrainingSnapshot starts database reads in parallel with independent clients
+2026-06-04T09:52:13.5715269Z   ---
+2026-06-04T09:52:13.5715483Z   duration_ms: 6.037703
+2026-06-04T09:52:13.5715725Z   type: 'test'
+2026-06-04T09:52:13.5715944Z   ...
+2026-06-04T09:52:13.5716419Z # Subtest: buildTrainingSnapshot throws when database snapshot is empty in database mode
+2026-06-04T09:52:13.5717134Z ok 313 - buildTrainingSnapshot throws when database snapshot is empty in database mode
+2026-06-04T09:52:13.5717580Z   ---
+2026-06-04T09:52:13.5717793Z   duration_ms: 4.725766
+2026-06-04T09:52:13.5718028Z   type: 'test'
+2026-06-04T09:52:13.5718241Z   ...
+2026-06-04T09:52:13.5718756Z # Subtest: buildTrainingSnapshot throws when database snapshot lacks measurements in database mode
+2026-06-04T09:52:13.5719553Z ok 314 - buildTrainingSnapshot throws when database snapshot lacks measurements in database mode
+2026-06-04T09:52:13.5720029Z   ---
+2026-06-04T09:52:13.5720235Z   duration_ms: 2.262255
+2026-06-04T09:52:13.5720478Z   type: 'test'
+2026-06-04T09:52:13.5720686Z   ...
+2026-06-04T09:52:13.5721129Z # Subtest: buildTrainingSnapshot throws when database read fails in database mode
+2026-06-04T09:52:13.5721793Z ok 315 - buildTrainingSnapshot throws when database read fails in database mode
+2026-06-04T09:52:13.5722204Z   ---
+2026-06-04T09:52:13.5722412Z   duration_ms: 2.338188
+2026-06-04T09:52:13.5722655Z   type: 'test'
+2026-06-04T09:52:13.5722865Z   ...
+2026-06-04T09:52:13.5723275Z # Subtest: buildTrainingSnapshot can return a filtered database window
+2026-06-04T09:52:13.5724099Z ok 316 - buildTrainingSnapshot can return a filtered database window
+2026-06-04T09:52:13.5724479Z   ---
+2026-06-04T09:52:13.5724698Z   duration_ms: 3.582937
+2026-06-04T09:52:13.5724937Z   type: 'test'
+2026-06-04T09:52:13.5725157Z   ...
+2026-06-04T09:52:13.5725353Z 1..316
+2026-06-04T09:52:13.5725562Z # tests 316
+2026-06-04T09:52:13.5725773Z # suites 0
+2026-06-04T09:52:13.5725978Z # pass 316
+2026-06-04T09:52:13.5726188Z # fail 0
+2026-06-04T09:52:13.5726392Z # cancelled 0
+2026-06-04T09:52:13.5726611Z # skipped 0
+2026-06-04T09:52:13.5726815Z # todo 0
+2026-06-04T09:52:13.5727042Z # duration_ms 2430.751792
+2026-06-04T09:52:13.5748746Z ##[group]Run npm run build
+2026-06-04T09:52:13.5749034Z [36;1mnpm run build[0m
+2026-06-04T09:52:13.5775214Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-06-04T09:52:13.5775588Z env:
+2026-06-04T09:52:13.5775812Z   TRAINING_DB_ENABLED: true
+2026-06-04T09:52:13.5776456Z   TRAINING_DB_URL: ***
+2026-06-04T09:52:13.5776713Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-04T09:52:13.5777022Z   TRAINING_DB_APP_NAME: training-records-dev
+2026-06-04T09:52:13.5777350Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-04T09:52:13.5777639Z   GITHUB_ACTOR: soulgo
+2026-06-04T09:52:13.5777875Z   GITHUB_ACTIONS: true
+2026-06-04T09:52:13.5778109Z ##[endgroup]
+2026-06-04T09:52:13.6800478Z 
+2026-06-04T09:52:13.6801587Z > training-records-dashboard@1.2.3 build
+2026-06-04T09:52:13.6802909Z > npm run build:data && npm run build:site
+2026-06-04T09:52:13.6803924Z 
+2026-06-04T09:52:13.7841127Z 
+2026-06-04T09:52:13.7842040Z > training-records-dashboard@1.2.3 build:data
+2026-06-04T09:52:13.7842859Z > node tools/generate-training-data.mjs
+2026-06-04T09:52:13.7843187Z 
+2026-06-04T09:52:17.6946096Z Generated source/_data/training.json
+2026-06-04T09:52:17.6946822Z Generated source/_data/dashboardView.json
+2026-06-04T09:52:17.6947495Z Generated 训练数据解析.md
+2026-06-04T09:53:41.9382607Z 
+2026-06-04T09:53:41.9383801Z > training-records-dashboard@1.2.3 build:site
+2026-06-04T09:53:41.9384426Z > node tools/run-hexo-command.mjs generate
+2026-06-04T09:53:41.9384721Z 
+2026-06-04T09:53:42.1668572Z [32mINFO [39m Validating config
+2026-06-04T09:53:42.3047982Z [32mINFO [39m Start processing
+2026-06-04T09:53:42.4075727Z [32mINFO [39m Files loaded in [36m141 ms[39m
+2026-06-04T09:53:42.6851022Z [32mINFO [39m Generated: [35mbody-feedback/index.html[39m
+2026-06-04T09:53:42.6858534Z [32mINFO [39m Generated: [35mabout/index.html[39m
+2026-06-04T09:53:42.6859336Z [32mINFO [39m Generated: [35mmisc/index.html[39m
+2026-06-04T09:53:42.6860345Z [32mINFO [39m Generated: [35mthoughts/index.html[39m
+2026-06-04T09:53:42.6861236Z [32mINFO [39m Generated: [35mindex.html[39m
+2026-06-04T09:53:42.6862227Z [32mINFO [39m Generated: [35mimages/apple-touch-icon.png[39m
+2026-06-04T09:53:42.6866432Z [32mINFO [39m Generated: [35m404.html[39m
+2026-06-04T09:53:42.6867673Z [32mINFO [39m Generated: [35mCNAME[39m
+2026-06-04T09:53:42.6868903Z [32mINFO [39m Generated: [35mimages/favicon.ico[39m
+2026-06-04T09:53:42.6882110Z [32mINFO [39m Generated: [35mimages/favicon-192x192.png[39m
+2026-06-04T09:53:42.6883199Z [32mINFO [39m Generated: [35mcss/style.css[39m
+2026-06-04T09:53:42.6884531Z [32mINFO [39m Generated: [35mjs/training-dashboard.js[39m
+2026-06-04T09:53:42.6885223Z [32mINFO [39m Generated: [35mcss/training-dashboard.css[39m
+2026-06-04T09:53:42.6885821Z [32mINFO [39m Generated: [35mcss/thoughts.css[39m
+2026-06-04T09:53:42.6886356Z [32mINFO [39m Generated: [35mjs/main.js[39m
+2026-06-04T09:53:42.6886919Z [32mINFO [39m Generated: [35mimages/logo.png[39m
+2026-06-04T09:53:42.6968301Z [32mINFO [39m Generated: [35mthoughts/2026/06/02/2026-06-02-telegram-thought-4/index.html[39m
+2026-06-04T09:53:42.6969235Z [32mINFO [39m Generated: [35mthoughts/2026/05/27/2026-05-27-telegram-thought-300/index.html[39m
+2026-06-04T09:53:42.6973358Z [32mINFO [39m Generated: [35mthoughts/2026/05/24/2026-05-24-telegram-thought-210/index.html[39m
+2026-06-04T09:53:42.6975178Z [32mINFO [39m Generated: [35mthoughts/2026/05/26/2026-05-26-telegram-thought-288/index.html[39m
+2026-06-04T09:53:42.6976078Z [32mINFO [39m Generated: [35mthoughts/2026/05/25/2026-05-25-telegram-thought-250/index.html[39m
+2026-06-04T09:53:42.6976930Z [32mINFO [39m Generated: [35mthoughts/2026/05/22/2026-05-22-telegram-thought-186/index.html[39m
+2026-06-04T09:53:42.6977787Z [32mINFO [39m Generated: [35mthoughts/2026/05/21/2026-05-21-telegram-thought-168/index.html[39m
+2026-06-04T09:53:42.6978597Z [32mINFO [39m Generated: [35mthoughts/2026/05/19/2026-05-19-telegram-thought-152/index.html[39m
+2026-06-04T09:53:42.6979405Z [32mINFO [39m Generated: [35mthoughts/2026/05/17/2026-05-17-telegram-thought-126/index.html[39m
+2026-06-04T09:53:42.6980227Z [32mINFO [39m Generated: [35mimages/thoughts/2026/05/2026-05-21-telegram-thought-168-1.jpg[39m
+2026-06-04T09:53:42.6982582Z [32mINFO [39m Generated: [35mthoughts/2026/05/26/2026-05-26-telegram-thought-273/index.html[39m
+2026-06-04T09:53:42.6984595Z [32mINFO [39m Generated: [35mthoughts/2026/05/27/2026-05-27-telegram-thought-295/index.html[39m
+2026-06-04T09:53:42.6985981Z [32mINFO [39m Generated: [35mthoughts/2026/05/09/2026-05-09-post-workout-glute-pain/index.html[39m
+2026-06-04T09:53:42.6987729Z [32mINFO [39m Generated: [35mthoughts/2026/05/26/2026-05-26-telegram-thought-264/index.html[39m
+2026-06-04T09:53:42.6989264Z [32mINFO [39m Generated: [35mthoughts/2026/05/15/2026-05-15-telegram-thought-112/index.html[39m
+2026-06-04T09:53:42.6990842Z [32mINFO [39m Generated: [35mthoughts/2026/05/22/2026-05-22-telegram-thought-175/index.html[39m
+2026-06-04T09:53:42.6992479Z [32mINFO [39m Generated: [35mimages/thoughts/2026/05/2026-05-17-telegram-thought-126-1.jpg[39m
+2026-06-04T09:53:42.6994423Z [32mINFO [39m Generated: [35mthoughts/2026/05/21/2026-05-21-telegram-thought-172/index.html[39m
+2026-06-04T09:53:42.6996368Z [32mINFO [39m Generated: [35mthoughts/2026/05/18/2026-05-18-telegram-thought-134/index.html[39m
+2026-06-04T09:53:42.6998327Z [32mINFO [39m Generated: [35mthoughts/2026/05/18/2026-05-18-telegram-thought-135/index.html[39m
+2026-06-04T09:53:42.6999768Z [32mINFO [39m Generated: [35mlib/meslo-LG/MesloLGS-Regular.ttf[39m
+2026-06-04T09:53:42.7000827Z [32mINFO [39m 37 files generated in [36m291 ms[39m
+2026-06-04T09:53:42.7304678Z ##[group]Run test -s public/index.html
+2026-06-04T09:53:42.7305046Z [36;1mtest -s public/index.html[0m
+2026-06-04T09:53:42.7330760Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-06-04T09:53:42.7331131Z env:
+2026-06-04T09:53:42.7331345Z   TRAINING_DB_ENABLED: true
+2026-06-04T09:53:42.7331989Z   TRAINING_DB_URL: ***
+2026-06-04T09:53:42.7332252Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-04T09:53:42.7332550Z   TRAINING_DB_APP_NAME: training-records-dev
+2026-06-04T09:53:42.7332884Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-04T09:53:42.7333164Z ##[endgroup]
+2026-06-04T09:53:42.7435489Z ##[group]Run rm -f public/CNAME
+2026-06-04T09:53:42.7435826Z [36;1mrm -f public/CNAME[0m
+2026-06-04T09:53:42.7460830Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-06-04T09:53:42.7461192Z env:
+2026-06-04T09:53:42.7461407Z   TRAINING_DB_ENABLED: true
+2026-06-04T09:53:42.7462044Z   TRAINING_DB_URL: ***
+2026-06-04T09:53:42.7462298Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-04T09:53:42.7462603Z   TRAINING_DB_APP_NAME: training-records-dev
+2026-06-04T09:53:42.7462934Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-04T09:53:42.7463208Z ##[endgroup]
+2026-06-04T09:53:42.7585667Z ##[group]Run cloudflare/wrangler-action@v3
+2026-06-04T09:53:42.7585999Z with:
+2026-06-04T09:53:42.7586398Z   apiToken: ***
+2026-06-04T09:53:42.7586661Z   accountId: ***
+2026-06-04T09:53:42.7587027Z   command: pages deploy public --project-name training-records-dev --branch dev
+2026-06-04T09:53:42.7587460Z   quiet: false
+2026-06-04T09:53:42.7587669Z env:
+2026-06-04T09:53:42.7587882Z   TRAINING_DB_ENABLED: true
+2026-06-04T09:53:42.7588462Z   TRAINING_DB_URL: ***
+2026-06-04T09:53:42.7588716Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-04T09:53:42.7589023Z   TRAINING_DB_APP_NAME: training-records-dev
+2026-06-04T09:53:42.7589347Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-04T09:53:42.7589619Z ##[endgroup]
+2026-06-04T09:53:42.8591438Z ##[group]🔍 Checking for existing Wrangler installation
+2026-06-04T09:53:42.8635916Z [command]/opt/hostedtoolcache/node/22.22.3/x64/bin/npx --no-install wrangler --version
+2026-06-04T09:53:43.7642419Z npm error npx canceled due to missing packages and no YES option: ["wrangler@4.97.0"]
+2026-06-04T09:53:43.7647358Z npm error A complete log of this run can be found in: /home/runner/.npm/_logs/2026-06-04T09_53_42_921Z-debug-0.log
+2026-06-04T09:53:43.7808102Z ⚠️ Wrangler not found or version is incompatible. Installing...
+2026-06-04T09:53:43.7809102Z ##[endgroup]
+2026-06-04T09:53:43.7809891Z ##[group]📥 Installing Wrangler
+2026-06-04T09:53:43.7833225Z [command]/opt/hostedtoolcache/node/22.22.3/x64/bin/npm i wrangler@3.90.0
+2026-06-04T09:53:47.1584065Z npm warn deprecated rollup-plugin-inject@3.0.2: This package has been deprecated and is no longer maintained. Please use @rollup/plugin-inject.
+2026-06-04T09:53:47.1956472Z npm warn deprecated sourcemap-codec@1.4.8: Please use @jridgewell/sourcemap-codec instead
+2026-06-04T09:53:52.4874230Z 
+2026-06-04T09:53:52.4875116Z added 61 packages, and audited 298 packages in 9s
+2026-06-04T09:53:52.4876110Z 
+2026-06-04T09:53:52.4876554Z 39 packages are looking for funding
+2026-06-04T09:53:52.4877305Z   run `npm fund` for details
+2026-06-04T09:53:52.5461933Z 
+2026-06-04T09:53:52.5462733Z 4 vulnerabilities (2 moderate, 2 high)
+2026-06-04T09:53:52.5463084Z 
+2026-06-04T09:53:52.5463265Z To address all issues, run:
+2026-06-04T09:53:52.5464021Z   npm audit fix --force
+2026-06-04T09:53:52.5464411Z 
+2026-06-04T09:53:52.5464722Z Run `npm audit` for details.
+2026-06-04T09:53:52.5709138Z ✅ Wrangler installed
+2026-06-04T09:53:52.5709826Z ##[endgroup]
+2026-06-04T09:53:52.5732199Z [command]/opt/hostedtoolcache/node/22.22.3/x64/bin/npx --no-install wrangler --version
+2026-06-04T09:53:53.3203102Z 3.90.0
+2026-06-04T09:53:53.3647892Z ##[group]🚀 Running Wrangler Commands
+2026-06-04T09:53:53.3663862Z [command]/opt/hostedtoolcache/node/22.22.3/x64/bin/npx wrangler pages deploy public --project-name training-records-dev --branch dev
+2026-06-04T09:53:54.1302163Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mPages now has wrangler.toml support.[0m
+2026-06-04T09:53:54.1302879Z 
+2026-06-04T09:53:54.1304420Z   We detected a configuration file at /home/runner/work/training_records/training_records/wrangler.toml but it is missing the "pages_build_output_dir" field, required by Pages.
+2026-06-04T09:53:54.1305980Z   If you would like to use this configuration file to deploy your project, please use "pages_build_output_dir" to specify the directory of static files to upload.
+2026-06-04T09:53:54.1306870Z   Ignoring configuration file for now, and proceeding with project deploy.
+2026-06-04T09:53:54.1307223Z 
+2026-06-04T09:53:54.1307230Z 
+2026-06-04T09:53:54.3997762Z [33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mWarning: Your working directory is a git repo and has uncommitted changes[0m
+2026-06-04T09:53:54.3998891Z 
+2026-06-04T09:53:54.3999718Z   To silence this warning, pass in --commit-dirty=true
+2026-06-04T09:53:54.4000221Z 
+2026-06-04T09:53:54.4000231Z 
+2026-06-04T09:53:55.2004663Z Uploading... (35/36)
+2026-06-04T09:53:55.8108164Z Uploading... (36/36)
+2026-06-04T09:53:55.8109299Z ✨ Success! Uploaded 1 files (35 already uploaded) (0.85 sec)
+2026-06-04T09:53:55.8110136Z 
+2026-06-04T09:53:57.8407293Z 🌎 Deploying...
+2026-06-04T09:53:59.0720832Z ✨ Deployment complete! Take a peek over at https://6b89b599.training-records-dev.pages.dev
+2026-06-04T09:53:59.2024138Z ##[endgroup]
+2026-06-04T09:53:59.2025122Z 🏁 Wrangler Action completed
+2026-06-04T09:53:59.2177698Z Post job cleanup.
+2026-06-04T09:53:59.3595386Z Post job cleanup.
+2026-06-04T09:53:59.5176460Z Cache hit occurred on the primary key hexo-Linux-5a8f143f811ad43882d0c964d8156ef914d354e5813f029eed2e4cdf545b1853, not saving cache.
+2026-06-04T09:53:59.5308748Z Post job cleanup.
+2026-06-04T09:53:59.6965236Z Cache hit occurred on the primary key node-cache-Linux-x64-npm-f85f5f478d92e82aa9199e3517dd5cfe6ab65cd8ab3fd1c1fe339f6848502976, not saving cache.
+2026-06-04T09:53:59.7094096Z Post job cleanup.
+2026-06-04T09:53:59.8113784Z [command]/usr/bin/git version
+2026-06-04T09:53:59.8153928Z git version 2.54.0
+2026-06-04T09:53:59.8202216Z Temporarily overriding HOME='/home/runner/work/_temp/bf4aff91-06e6-4eee-bc50-1c82b722cc41' before making global git config changes
+2026-06-04T09:53:59.8204159Z Adding repository directory to the temporary git global config as a safe directory
+2026-06-04T09:53:59.8217842Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/training_records/training_records
+2026-06-04T09:53:59.8256189Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-06-04T09:53:59.8291242Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-06-04T09:53:59.8524475Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-06-04T09:53:59.8548500Z http.https://github.com/.extraheader
+2026-06-04T09:53:59.8563347Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-06-04T09:53:59.8597708Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-06-04T09:53:59.8836570Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-06-04T09:53:59.8863239Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-06-04T09:53:59.9209607Z Cleaning up orphan processes
+2026-06-04T09:53:59.9495139Z ##[warning]Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: actions/cache@v4, actions/checkout@v4, actions/setup-node@v4, cloudflare/wrangler-action@v3. Actions will be forced to run with Node.js 24 by default starting June 16th, 2026. Node.js 20 will be removed from the runner on September 16th, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

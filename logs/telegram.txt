@@ -1,0 +1,446 @@
+2026-06-08T23:28:48.0230041Z Current runner version: '2.334.0'
+2026-06-08T23:28:48.0254921Z ##[group]Runner Image Provisioner
+2026-06-08T23:28:48.0255953Z Hosted Compute Agent
+2026-06-08T23:28:48.0256682Z Version: 20260520.533
+2026-06-08T23:28:48.0257376Z Commit: 189110e25284a9812c124fd27b339e2fb4f2f9db
+2026-06-08T23:28:48.0258170Z Build Date: 2026-05-20T17:44:04Z
+2026-06-08T23:28:48.0258949Z Worker ID: {43621565-33e5-4b1d-9951-bd8adc066023}
+2026-06-08T23:28:48.0259750Z Azure Region: northcentralus
+2026-06-08T23:28:48.0260453Z ##[endgroup]
+2026-06-08T23:28:48.0263004Z ##[group]Operating System
+2026-06-08T23:28:48.0263856Z Ubuntu
+2026-06-08T23:28:48.0264424Z 24.04.4
+2026-06-08T23:28:48.0264957Z LTS
+2026-06-08T23:28:48.0265543Z ##[endgroup]
+2026-06-08T23:28:48.0266191Z ##[group]Runner Image
+2026-06-08T23:28:48.0266853Z Image: ubuntu-24.04
+2026-06-08T23:28:48.0267592Z Version: 20260525.161.1
+2026-06-08T23:28:48.0269099Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260525.161/images/ubuntu/Ubuntu2404-Readme.md
+2026-06-08T23:28:48.0270749Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260525.161
+2026-06-08T23:28:48.0271831Z ##[endgroup]
+2026-06-08T23:28:48.0273289Z ##[group]GITHUB_TOKEN Permissions
+2026-06-08T23:28:48.0275493Z Actions: write
+2026-06-08T23:28:48.0276330Z Contents: write
+2026-06-08T23:28:48.0276970Z Metadata: read
+2026-06-08T23:28:48.0277560Z ##[endgroup]
+2026-06-08T23:28:48.0279656Z Secret source: Actions
+2026-06-08T23:28:48.0280738Z Prepare workflow directory
+2026-06-08T23:28:48.0977298Z Prepare all required actions
+2026-06-08T23:28:48.1031994Z Getting action download info
+2026-06-08T23:28:48.4917636Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+2026-06-08T23:28:48.6289675Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+2026-06-08T23:28:48.8038454Z Complete job name: sync
+2026-06-08T23:28:48.8801898Z ##[group]Run actions/checkout@v4
+2026-06-08T23:28:48.8803479Z with:
+2026-06-08T23:28:48.8804061Z   ref: main
+2026-06-08T23:28:48.8804523Z   fetch-depth: 0
+2026-06-08T23:28:48.8805038Z   repository: soulgo/training_records
+2026-06-08T23:28:48.8809998Z   token: ***
+2026-06-08T23:28:48.8810477Z   ssh-strict: true
+2026-06-08T23:28:48.8810960Z   ssh-user: git
+2026-06-08T23:28:48.8811465Z   persist-credentials: true
+2026-06-08T23:28:48.8812010Z   clean: true
+2026-06-08T23:28:48.8812673Z   sparse-checkout-cone-mode: true
+2026-06-08T23:28:48.8813276Z   fetch-tags: false
+2026-06-08T23:28:48.8813776Z   show-progress: true
+2026-06-08T23:28:48.8814268Z   lfs: false
+2026-06-08T23:28:48.8814723Z   submodules: false
+2026-06-08T23:28:48.8815221Z   set-safe-directory: true
+2026-06-08T23:28:48.8816072Z env:
+2026-06-08T23:28:48.8816544Z   TRAINING_DB_ENABLED: true
+2026-06-08T23:28:48.8817621Z   TRAINING_DB_URL: ***
+2026-06-08T23:28:48.8818164Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-08T23:28:48.8818860Z   TRAINING_DB_APP_NAME: training-records-dashboard
+2026-06-08T23:28:48.8819556Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-08T23:28:48.8820145Z ##[endgroup]
+2026-06-08T23:28:48.9970277Z Syncing repository: soulgo/training_records
+2026-06-08T23:28:48.9974475Z ##[group]Getting Git version info
+2026-06-08T23:28:48.9976191Z Working directory is '/home/runner/work/training_records/training_records'
+2026-06-08T23:28:48.9978761Z [command]/usr/bin/git version
+2026-06-08T23:28:49.0115483Z git version 2.54.0
+2026-06-08T23:28:49.0144440Z ##[endgroup]
+2026-06-08T23:28:49.0167089Z Temporarily overriding HOME='/home/runner/work/_temp/49557ef4-e525-43d7-9bdb-a9f5d34a8a6f' before making global git config changes
+2026-06-08T23:28:49.0169553Z Adding repository directory to the temporary git global config as a safe directory
+2026-06-08T23:28:49.0172293Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/training_records/training_records
+2026-06-08T23:28:49.0227015Z Deleting the contents of '/home/runner/work/training_records/training_records'
+2026-06-08T23:28:49.0230604Z ##[group]Initializing the repository
+2026-06-08T23:28:49.0235262Z [command]/usr/bin/git init /home/runner/work/training_records/training_records
+2026-06-08T23:28:49.0360456Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-06-08T23:28:49.0362226Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-06-08T23:28:49.0363801Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-06-08T23:28:49.0364875Z hint: call:
+2026-06-08T23:28:49.0365744Z hint:
+2026-06-08T23:28:49.0366807Z hint: 	git config --global init.defaultBranch <name>
+2026-06-08T23:28:49.0368020Z hint:
+2026-06-08T23:28:49.0369230Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-06-08T23:28:49.0370529Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-06-08T23:28:49.0371351Z hint:
+2026-06-08T23:28:49.0371836Z hint: 	git branch -m <name>
+2026-06-08T23:28:49.0372358Z hint:
+2026-06-08T23:28:49.0373546Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-06-08T23:28:49.0374820Z Initialized empty Git repository in /home/runner/work/training_records/training_records/.git/
+2026-06-08T23:28:49.0395583Z [command]/usr/bin/git remote add origin https://github.com/soulgo/training_records
+2026-06-08T23:28:49.0435835Z ##[endgroup]
+2026-06-08T23:28:49.0437431Z ##[group]Disabling automatic garbage collection
+2026-06-08T23:28:49.0440832Z [command]/usr/bin/git config --local gc.auto 0
+2026-06-08T23:28:49.0473703Z ##[endgroup]
+2026-06-08T23:28:49.0475361Z ##[group]Setting up auth
+2026-06-08T23:28:49.0481664Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-06-08T23:28:49.0519856Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-06-08T23:28:49.0949432Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-06-08T23:28:49.0982800Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-06-08T23:28:49.1202237Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-06-08T23:28:49.1241977Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-06-08T23:28:49.1465120Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-06-08T23:28:49.1499076Z ##[endgroup]
+2026-06-08T23:28:49.1499970Z ##[group]Fetching the repository
+2026-06-08T23:28:49.1508103Z [command]/usr/bin/git -c protocol.version=2 fetch --prune --no-recurse-submodules origin +refs/heads/*:refs/remotes/origin/* +refs/tags/*:refs/tags/*
+2026-06-08T23:28:50.0136022Z From https://github.com/soulgo/training_records
+2026-06-08T23:28:50.0139134Z  * [new branch]      dev        -> origin/dev
+2026-06-08T23:28:50.0141547Z  * [new branch]      main       -> origin/main
+2026-06-08T23:28:50.0184727Z ##[endgroup]
+2026-06-08T23:28:50.0192039Z ##[group]Determining the checkout info
+2026-06-08T23:28:50.0272944Z [command]/usr/bin/git branch --list --remote origin/main
+2026-06-08T23:28:50.0274665Z   origin/main
+2026-06-08T23:28:50.0278317Z ##[endgroup]
+2026-06-08T23:28:50.0279372Z [command]/usr/bin/git sparse-checkout disable
+2026-06-08T23:28:50.0287014Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-06-08T23:28:50.0316998Z ##[group]Checking out the ref
+2026-06-08T23:28:50.0320649Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-06-08T23:28:50.0650675Z Switched to a new branch 'main'
+2026-06-08T23:28:50.0655091Z branch 'main' set up to track 'origin/main'.
+2026-06-08T23:28:50.0667833Z ##[endgroup]
+2026-06-08T23:28:50.0715185Z [command]/usr/bin/git log -1 --format=%H
+2026-06-08T23:28:50.0740683Z b29c8594773064c1fdabb62e41e8471c4504bc2b
+2026-06-08T23:28:50.1171009Z ##[group]Run actions/setup-node@v4
+2026-06-08T23:28:50.1172304Z with:
+2026-06-08T23:28:50.1173653Z   node-version: 22
+2026-06-08T23:28:50.1174820Z   cache: npm
+2026-06-08T23:28:50.1175760Z   always-auth: false
+2026-06-08T23:28:50.1176778Z   check-latest: false
+2026-06-08T23:28:50.1190495Z   token: ***
+2026-06-08T23:28:50.1191425Z env:
+2026-06-08T23:28:50.1192710Z   TRAINING_DB_ENABLED: true
+2026-06-08T23:28:50.1194963Z   TRAINING_DB_URL: ***
+2026-06-08T23:28:50.1196221Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-08T23:28:50.1197551Z   TRAINING_DB_APP_NAME: training-records-dashboard
+2026-06-08T23:28:50.1199181Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-08T23:28:50.1200417Z ##[endgroup]
+2026-06-08T23:28:50.3056166Z Found in cache @ /opt/hostedtoolcache/node/22.22.3/x64
+2026-06-08T23:28:50.3063857Z ##[group]Environment details
+2026-06-08T23:28:52.4863931Z node: v22.22.3
+2026-06-08T23:28:52.4864752Z npm: 10.9.8
+2026-06-08T23:28:52.4865337Z yarn: 1.22.22
+2026-06-08T23:28:52.4866663Z ##[endgroup]
+2026-06-08T23:28:52.4890751Z [command]/opt/hostedtoolcache/node/22.22.3/x64/bin/npm config get cache
+2026-06-08T23:28:52.7200271Z /home/runner/.npm
+2026-06-08T23:28:52.8715251Z Cache hit for: node-cache-Linux-x64-npm-4106ae46539011fcee58481adf2a8cedd09b8e3f58f003e482981fcf060bdf28
+2026-06-08T23:28:53.3386325Z Received 8497117 of 8497117 (100.0%), 21.7 MBs/sec
+2026-06-08T23:28:53.3387042Z Cache Size: ~8 MB (8497117 B)
+2026-06-08T23:28:53.3429912Z [command]/usr/bin/tar -xf /home/runner/work/_temp/5df5d261-95ba-4f34-b7a7-631ad6a0f0e2/cache.tzst -P -C /home/runner/work/training_records/training_records --use-compress-program unzstd
+2026-06-08T23:28:53.4018754Z Cache restored successfully
+2026-06-08T23:28:53.4029281Z Cache restored from key: node-cache-Linux-x64-npm-4106ae46539011fcee58481adf2a8cedd09b8e3f58f003e482981fcf060bdf28
+2026-06-08T23:28:53.4168678Z ##[group]Run npm ci
+2026-06-08T23:28:53.4169011Z [36;1mnpm ci[0m
+2026-06-08T23:28:53.4211522Z shell: /usr/bin/bash -e {0}
+2026-06-08T23:28:53.4211843Z env:
+2026-06-08T23:28:53.4212070Z   TRAINING_DB_ENABLED: true
+2026-06-08T23:28:53.4213291Z   TRAINING_DB_URL: ***
+2026-06-08T23:28:53.4213583Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-08T23:28:53.4213919Z   TRAINING_DB_APP_NAME: training-records-dashboard
+2026-06-08T23:28:53.4214271Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-08T23:28:53.4214558Z ##[endgroup]
+2026-06-08T23:28:55.3422236Z npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
+2026-06-08T23:28:55.4000529Z npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+2026-06-08T23:28:55.4033867Z npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+2026-06-08T23:28:55.4933915Z npm warn deprecated cuid@2.1.8: Cuid and other k-sortable and non-cryptographic ids (Ulid, ObjectId, KSUID, all UUIDs) are all insecure. Use @paralleldrive/cuid2 instead.
+2026-06-08T23:28:55.7395749Z npm warn deprecated moize@6.1.7: This library has been deprecated in favor of micro-memoize, which as-of version 5 incorporates most of the functionality that this library offers at nearly half the size and better speed.
+2026-06-08T23:28:56.9458780Z 
+2026-06-08T23:28:56.9459547Z added 236 packages, and audited 237 packages in 3s
+2026-06-08T23:28:56.9460241Z 
+2026-06-08T23:28:56.9460821Z 32 packages are looking for funding
+2026-06-08T23:28:56.9461535Z   run `npm fund` for details
+2026-06-08T23:28:56.9475741Z 
+2026-06-08T23:28:56.9476245Z found 0 vulnerabilities
+2026-06-08T23:28:57.0049948Z ##[group]Run npm run sync:telegram
+2026-06-08T23:28:57.0050484Z [36;1mnpm run sync:telegram[0m
+2026-06-08T23:28:57.0076700Z shell: /usr/bin/bash -e {0}
+2026-06-08T23:28:57.0076981Z env:
+2026-06-08T23:28:57.0077197Z   TRAINING_DB_ENABLED: true
+2026-06-08T23:28:57.0077995Z   TRAINING_DB_URL: ***
+2026-06-08T23:28:57.0078274Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-08T23:28:57.0078599Z   TRAINING_DB_APP_NAME: training-records-dashboard
+2026-06-08T23:28:57.0078960Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-08T23:28:57.0079395Z   TELEGRAM_BOT_TOKEN: ***
+2026-06-08T23:28:57.0079764Z   AI_API_KEY: ***
+2026-06-08T23:28:57.0080010Z   AI_PROVIDER: openai-compatible
+2026-06-08T23:28:57.0080326Z   AI_BASE_URL: https://www.packyapi.com/v1
+2026-06-08T23:28:57.0080645Z   AI_MODEL: gpt-5.4-mini
+2026-06-08T23:28:57.0080888Z   AI_TIMEOUT_MS: 
+2026-06-08T23:28:57.0081115Z   AI_CONCURRENCY: 
+2026-06-08T23:28:57.0081371Z   TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline
+2026-06-08T23:28:57.0081750Z   TELEGRAM_RECOGNITION_MODEL: 
+2026-06-08T23:28:57.0082038Z   TELEGRAM_RECOGNITION_CACHE_ENABLED: true
+2026-06-08T23:28:57.0082349Z   TRAINING_ANALYSIS_GOAL: 
+2026-06-08T23:28:57.0082972Z   TELEGRAM_ALLOWED_CHAT_IDS: 6314355239
+2026-06-08T23:28:57.0083381Z   TELEGRAM_POLL_LIMIT: 20
+2026-06-08T23:28:57.0083650Z   TELEGRAM_SYNC_TRANSPORT: webhook
+2026-06-08T23:28:57.0083943Z   TELEGRAM_SYNC_NOTIFY_STAGE: after_action
+2026-06-08T23:28:57.0084367Z   TELEGRAM_SYNC_RESULT_PATH: /home/runner/work/_temp/telegram-sync-result.json
+2026-06-08T23:28:57.0084790Z ##[endgroup]
+2026-06-08T23:28:57.1027084Z 
+2026-06-08T23:28:57.1028019Z > training-records-dashboard@1.2.4 sync:telegram
+2026-06-08T23:28:57.1028848Z > node tools/telegram-sync.mjs
+2026-06-08T23:28:57.1029209Z 
+2026-06-08T23:29:00.2049321Z [telegram-sync] could not read last processed update id: timeout expired; continuing with repository dispatch payload
+2026-06-08T23:29:03.2298720Z [telegram-sync] could not read pending recognition batches: timeout expired; continuing without replay queue
+2026-06-08T23:29:07.8272462Z [telegram-sync] image recognition failed for 503: timeout expired
+2026-06-08T23:29:07.8419670Z [telegram-sync] image recognition failed for 504: timeout expired
+2026-06-08T23:29:07.8995225Z [telegram-sync] image recognition failed for 502: timeout expired
+2026-06-08T23:29:11.5615713Z [telegram-sync] image recognition failed for 505: timeout expired
+2026-06-08T23:29:14.5655218Z [telegram-sync] failed to queue pending recognition for 14247690542716925: timeout expired
+2026-06-08T23:29:14.5669704Z [telegram-sync] timings {"resolveUpdates":2,"readOffset":3011,"readPendingFallback":0,"replayFallbackPersist":0,"writePendingFallback":1,"fetchUpdates":0,"readThoughtKeys":17,"groupUpdates":2,"readPendingRecognition":3005,"replayRecognition":0,"recognition":8332,"queueRecognition":3003,"total":17374}
+2026-06-08T23:29:14.5677170Z {
+2026-06-08T23:29:14.5677641Z   "changed": false,
+2026-06-08T23:29:14.5678123Z   "fallbackUsed": false,
+2026-06-08T23:29:14.5678648Z   "updatesFetched": 4,
+2026-06-08T23:29:14.5679194Z   "lastProcessedUpdateId": 520905720,
+2026-06-08T23:29:14.5679734Z   "readyBatches": 0,
+2026-06-08T23:29:14.5680156Z   "timingsMs": {
+2026-06-08T23:29:14.5680626Z     "resolveUpdates": 2,
+2026-06-08T23:29:14.5681169Z     "readOffset": 3011,
+2026-06-08T23:29:14.5681666Z     "readPendingFallback": 0,
+2026-06-08T23:29:14.5682249Z     "replayFallbackPersist": 0,
+2026-06-08T23:29:14.5683081Z     "writePendingFallback": 1,
+2026-06-08T23:29:14.5683640Z     "fetchUpdates": 0,
+2026-06-08T23:29:14.5684129Z     "readThoughtKeys": 17,
+2026-06-08T23:29:14.5684720Z     "groupUpdates": 2,
+2026-06-08T23:29:14.5685275Z     "readPendingRecognition": 3005,
+2026-06-08T23:29:14.5685872Z     "replayRecognition": 0,
+2026-06-08T23:29:14.5686454Z     "recognition": 8332,
+2026-06-08T23:29:14.5686949Z     "queueRecognition": 3003,
+2026-06-08T23:29:14.5687486Z     "total": 17374
+2026-06-08T23:29:14.5687912Z   },
+2026-06-08T23:29:14.5688308Z   "batches": [
+2026-06-08T23:29:14.5689123Z     {
+2026-06-08T23:29:14.5689577Z       "kind": "image",
+2026-06-08T23:29:14.5690371Z       "batchId": "14247690542716925",
+2026-06-08T23:29:14.5691082Z       "taskId": "telegram:image:14247690542716925",
+2026-06-08T23:29:14.5691830Z       "sourceType": "telegram_update",
+2026-06-08T23:29:14.5693005Z       "sourceId": "telegram:chat:6314355239:media_group:14247690542716925",
+2026-06-08T23:29:14.5694105Z       "taskStatus": "skipped",
+2026-06-08T23:29:14.5694706Z       "retryState": "none",
+2026-06-08T23:29:14.5695253Z       "retryCount": 0,
+2026-06-08T23:29:14.5695821Z       "messageIds": [
+2026-06-08T23:29:14.5696330Z         502,
+2026-06-08T23:29:14.5696771Z         503,
+2026-06-08T23:29:14.5697215Z         504,
+2026-06-08T23:29:14.5697652Z         505
+2026-06-08T23:29:14.5698084Z       ],
+2026-06-08T23:29:14.5698502Z       "updateIds": [
+2026-06-08T23:29:14.5699033Z         520905717,
+2026-06-08T23:29:14.5699520Z         520905718,
+2026-06-08T23:29:14.5699939Z         520905719,
+2026-06-08T23:29:14.5700388Z         520905720
+2026-06-08T23:29:14.5700795Z       ],
+2026-06-08T23:29:14.5701230Z       "status": "skipped",
+2026-06-08T23:29:14.5701761Z       "partialFailure": false,
+2026-06-08T23:29:14.5702803Z       "archivedDate": null,
+2026-06-08T23:29:14.5704617Z       "postPath": null,
+2026-06-08T23:29:14.5705213Z       "thoughtWriteStatus": null,
+2026-06-08T23:29:14.5705793Z       "persistenceStatus": null,
+2026-06-08T23:29:14.5706343Z       "persistenceError": null,
+2026-06-08T23:29:14.5706914Z       "failureCategory": "ai_service",
+2026-06-08T23:29:14.5707851Z       "failureReason": "timeout expired; timeout expired; timeout expired; timeout expired",
+2026-06-08T23:29:14.5708809Z       "failureDisposition": "auto_retry",
+2026-06-08T23:29:14.5709476Z       "recognitionPendingStatus": "failed",
+2026-06-08T23:29:14.5710193Z       "recognitionPendingError": "timeout expired",
+2026-06-08T23:29:14.5710829Z       "pendingReplay": false,
+2026-06-08T23:29:14.5711359Z       "sourceImageCount": 4,
+2026-06-08T23:29:14.5711943Z       "recognizedImageCount": 0,
+2026-06-08T23:29:14.5712849Z       "failedImageCount": 4,
+2026-06-08T23:29:14.5713357Z       "recognitionErrors": [
+2026-06-08T23:29:14.5713827Z         {
+2026-06-08T23:29:14.5714302Z           "messageId": 503,
+2026-06-08T23:29:14.5714843Z           "error": "timeout expired",
+2026-06-08T23:29:14.5715536Z           "failureCategory": "ai_service",
+2026-06-08T23:29:14.5716102Z           "summary": null
+2026-06-08T23:29:14.5716534Z         },
+2026-06-08T23:29:14.5716878Z         {
+2026-06-08T23:29:14.5717261Z           "messageId": 504,
+2026-06-08T23:29:14.5717772Z           "error": "timeout expired",
+2026-06-08T23:29:14.5718363Z           "failureCategory": "ai_service",
+2026-06-08T23:29:14.5718907Z           "summary": null
+2026-06-08T23:29:14.5719343Z         },
+2026-06-08T23:29:14.5719691Z         {
+2026-06-08T23:29:14.5720067Z           "messageId": 502,
+2026-06-08T23:29:14.5720597Z           "error": "timeout expired",
+2026-06-08T23:29:14.5721209Z           "failureCategory": "ai_service",
+2026-06-08T23:29:14.5721812Z           "summary": null
+2026-06-08T23:29:14.5722271Z         },
+2026-06-08T23:29:14.5722911Z         {
+2026-06-08T23:29:14.5723302Z           "messageId": 505,
+2026-06-08T23:29:14.5723823Z           "error": "timeout expired",
+2026-06-08T23:29:14.5724413Z           "failureCategory": "ai_service",
+2026-06-08T23:29:14.5724960Z           "summary": null
+2026-06-08T23:29:14.5725387Z         }
+2026-06-08T23:29:14.5725741Z       ],
+2026-06-08T23:29:14.5726100Z       "warnings": [
+2026-06-08T23:29:14.5727333Z         "该 Telegram 图片看起来是以 photo 形式发送，Bot API 通常不会保留原始文件名；若要依赖文件名日期回退，请改为以 document/文件 发送。"
+2026-06-08T23:29:14.5728144Z       ],
+2026-06-08T23:29:14.5728513Z       "issues": [
+2026-06-08T23:29:14.5729020Z         "missing recognition for message 502",
+2026-06-08T23:29:14.5729687Z         "missing recognition for message 503",
+2026-06-08T23:29:14.5730308Z         "missing recognition for message 504",
+2026-06-08T23:29:14.5731218Z         "missing recognition for message 505"
+2026-06-08T23:29:14.5731796Z       ],
+2026-06-08T23:29:14.5733859Z       "reason": "missing recognition for message 502; missing recognition for message 503; missing recognition for message 504; missing recognition for message 505; no reliable image or filename date",
+2026-06-08T23:29:14.5735522Z       "dateSources": [
+2026-06-08T23:29:14.5735968Z         {
+2026-06-08T23:29:14.5736354Z           "messageId": 502,
+2026-06-08T23:29:14.5736874Z           "detectedDate": null,
+2026-06-08T23:29:14.5737420Z           "dateEvidence": null,
+2026-06-08T23:29:14.5737902Z           "source": "none"
+2026-06-08T23:29:14.5738348Z         },
+2026-06-08T23:29:14.5738703Z         {
+2026-06-08T23:29:14.5739078Z           "messageId": 503,
+2026-06-08T23:29:14.5739644Z           "detectedDate": null,
+2026-06-08T23:29:14.5740219Z           "dateEvidence": null,
+2026-06-08T23:29:14.5740720Z           "source": "none"
+2026-06-08T23:29:14.5741184Z         },
+2026-06-08T23:29:14.5741576Z         {
+2026-06-08T23:29:14.5742006Z           "messageId": 504,
+2026-06-08T23:29:14.5742851Z           "detectedDate": null,
+2026-06-08T23:29:14.5743471Z           "dateEvidence": null,
+2026-06-08T23:29:14.5744015Z           "source": "none"
+2026-06-08T23:29:14.5744468Z         },
+2026-06-08T23:29:14.5744843Z         {
+2026-06-08T23:29:14.5745232Z           "messageId": 505,
+2026-06-08T23:29:14.5745766Z           "detectedDate": null,
+2026-06-08T23:29:14.5746321Z           "dateEvidence": null,
+2026-06-08T23:29:14.5746825Z           "source": "none"
+2026-06-08T23:29:14.5747288Z         }
+2026-06-08T23:29:14.5747672Z       ]
+2026-06-08T23:29:14.5748039Z     }
+2026-06-08T23:29:14.5748407Z   ]
+2026-06-08T23:29:14.5748768Z }
+2026-06-08T23:29:14.5855595Z ##[group]Run if [ -z "$(git status --porcelain -- 训练记录.md source/_posts source/images)" ]; then
+2026-06-08T23:29:14.5856323Z [36;1mif [ -z "$(git status --porcelain -- 训练记录.md source/_posts source/images)" ]; then[0m
+2026-06-08T23:29:14.5856838Z [36;1m  echo "repo_changed=false" >> "$GITHUB_OUTPUT"[0m
+2026-06-08T23:29:14.5857240Z [36;1m  echo "content_changed=false" >> "$GITHUB_OUTPUT"[0m
+2026-06-08T23:29:14.5857587Z [36;1melse[0m
+2026-06-08T23:29:14.5857867Z [36;1m  echo "repo_changed=true" >> "$GITHUB_OUTPUT"[0m
+2026-06-08T23:29:14.5858246Z [36;1m  echo "content_changed=true" >> "$GITHUB_OUTPUT"[0m
+2026-06-08T23:29:14.5858567Z [36;1mfi[0m
+2026-06-08T23:29:14.5858805Z [36;1mnode <<'NODE' >> "$GITHUB_OUTPUT"[0m
+2026-06-08T23:29:14.5859108Z [36;1mconst fs = require('fs');[0m
+2026-06-08T23:29:14.5859492Z [36;1mconst resultPath = process.env.TELEGRAM_SYNC_RESULT_PATH;[0m
+2026-06-08T23:29:14.5859908Z [36;1mlet readyStoredTrainingBatches = 0;[0m
+2026-06-08T23:29:14.5860253Z [36;1mtry {[0m
+2026-06-08T23:29:14.5860588Z [36;1m  const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));[0m
+2026-06-08T23:29:14.5861090Z [36;1m  const batches = result.batchResults ?? result.batches ?? [];[0m
+2026-06-08T23:29:14.5861569Z [36;1m  readyStoredTrainingBatches = batches.filter((batch) => {[0m
+2026-06-08T23:29:14.5861976Z [36;1m    const kind = batch.kind ?? 'image';[0m
+2026-06-08T23:29:14.5862478Z [36;1m    return kind === 'image' && batch.status === 'ready' && batch.persistenceStatus === 'stored';[0m
+2026-06-08T23:29:14.5863347Z [36;1m  }).length;[0m
+2026-06-08T23:29:14.5863587Z [36;1m} catch {}[0m
+2026-06-08T23:29:14.5863974Z [36;1mconsole.log(`readyStoredTrainingBatches=${readyStoredTrainingBatches}`);[0m
+2026-06-08T23:29:14.5864449Z [36;1mif (readyStoredTrainingBatches > 0) {[0m
+2026-06-08T23:29:14.5864815Z [36;1m  console.log('db_content_changed=true');[0m
+2026-06-08T23:29:14.5865129Z [36;1m} else {[0m
+2026-06-08T23:29:14.5865400Z [36;1m  console.log('db_content_changed=false');[0m
+2026-06-08T23:29:14.5865705Z [36;1m}[0m
+2026-06-08T23:29:14.5865910Z [36;1mNODE[0m
+2026-06-08T23:29:14.5891242Z shell: /usr/bin/bash -e {0}
+2026-06-08T23:29:14.5891511Z env:
+2026-06-08T23:29:14.5891727Z   TRAINING_DB_ENABLED: true
+2026-06-08T23:29:14.5892444Z   TRAINING_DB_URL: ***
+2026-06-08T23:29:14.5893012Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-08T23:29:14.5893511Z   TRAINING_DB_APP_NAME: training-records-dashboard
+2026-06-08T23:29:14.5893854Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-08T23:29:14.5894273Z   TELEGRAM_SYNC_RESULT_PATH: /home/runner/work/_temp/telegram-sync-result.json
+2026-06-08T23:29:14.5894690Z ##[endgroup]
+2026-06-08T23:29:14.6487964Z ##[group]Run node <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+2026-06-08T23:29:14.6488411Z [36;1mnode <<'NODE' >> "$GITHUB_STEP_SUMMARY"[0m
+2026-06-08T23:29:14.6488743Z [36;1mconst fs = require('fs');[0m
+2026-06-08T23:29:14.6489124Z [36;1mconst resultPath = process.env.TELEGRAM_SYNC_RESULT_PATH;[0m
+2026-06-08T23:29:14.6489511Z [36;1mlet result = {};[0m
+2026-06-08T23:29:14.6489758Z [36;1mtry {[0m
+2026-06-08T23:29:14.6490080Z [36;1m  result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));[0m
+2026-06-08T23:29:14.6490452Z [36;1m} catch {[0m
+2026-06-08T23:29:14.6490722Z [36;1m  console.log('## Telegram sync result');[0m
+2026-06-08T23:29:14.6491055Z [36;1m  console.log('');[0m
+2026-06-08T23:29:14.6491383Z [36;1m  console.log('Result file was not written.');[0m
+2026-06-08T23:29:14.6491719Z [36;1m  process.exit(0);[0m
+2026-06-08T23:29:14.6491979Z [36;1m}[0m
+2026-06-08T23:29:14.6492304Z [36;1mconst batches = result.batchResults ?? result.batches ?? [];[0m
+2026-06-08T23:29:14.6493082Z [36;1mconst timings = result.timingsMs ?? {};[0m
+2026-06-08T23:29:14.6493436Z [36;1mconsole.log('## Telegram sync result');[0m
+2026-06-08T23:29:14.6493750Z [36;1mconsole.log('');[0m
+2026-06-08T23:29:14.6494030Z [36;1mif (Object.keys(timings).length > 0) {[0m
+2026-06-08T23:29:14.6494357Z [36;1m  console.log('| stage | ms |');[0m
+2026-06-08T23:29:14.6494659Z [36;1m  console.log('| --- | ---: |');[0m
+2026-06-08T23:29:14.6495010Z [36;1m  for (const [stage, ms] of Object.entries(timings)) {[0m
+2026-06-08T23:29:14.6495388Z [36;1m    console.log(`| ${stage} | ${ms} |`);[0m
+2026-06-08T23:29:14.6495685Z [36;1m  }[0m
+2026-06-08T23:29:14.6495907Z [36;1m  console.log('');[0m
+2026-06-08T23:29:14.6496160Z [36;1m}[0m
+2026-06-08T23:29:14.6496721Z [36;1mconsole.log('| batchId | taskStatus | persistenceStatus | archivedDate | images | pending | failureDisposition | failed messageIds |');[0m
+2026-06-08T23:29:14.6497441Z [36;1mconsole.log('| --- | --- | --- | --- | --- | --- | --- | --- |');[0m
+2026-06-08T23:29:14.6497834Z [36;1mfor (const batch of batches) {[0m
+2026-06-08T23:29:14.6498187Z [36;1m  const failedIds = (batch.recognitionErrors ?? [])[0m
+2026-06-08T23:29:14.6498598Z [36;1m    .map((item) => item.messageId ?? item.message_id)[0m
+2026-06-08T23:29:14.6499020Z [36;1m    .filter((value) => value !== null && value !== undefined)[0m
+2026-06-08T23:29:14.6499414Z [36;1m    .join(', ');[0m
+2026-06-08T23:29:14.6499936Z [36;1m  const images = `${batch.sourceImageCount ?? 0}/${batch.recognizedImageCount ?? 0}/${batch.failedImageCount ?? 0}`;[0m
+2026-06-08T23:29:14.6500582Z [36;1m  const failureDisposition = batch.failureDisposition ??[0m
+2026-06-08T23:29:14.6501216Z [36;1m    (batch.recognitionPendingStatus === 'queued' || batch.persistenceStatus === 'pending_replay' ? 'auto_retry' :[0m
+2026-06-08T23:29:14.6501915Z [36;1m      (batch.status === 'skipped' || batch.status === 'ignored' ? 'skip' : 'none'));[0m
+2026-06-08T23:29:14.6503312Z [36;1m  console.log(`| ${batch.batchId ?? ''} | ${batch.taskStatus ?? batch.status ?? ''} | ${batch.persistenceStatus ?? ''} | ${batch.archivedDate ?? ''} | ${images} | ${batch.recognitionPendingStatus ?? ''} | ${failureDisposition} | ${failedIds} |`);[0m
+2026-06-08T23:29:14.6504243Z [36;1m}[0m
+2026-06-08T23:29:14.6504448Z [36;1mNODE[0m
+2026-06-08T23:29:14.6529802Z shell: /usr/bin/bash -e {0}
+2026-06-08T23:29:14.6530067Z env:
+2026-06-08T23:29:14.6530286Z   TRAINING_DB_ENABLED: true
+2026-06-08T23:29:14.6530897Z   TRAINING_DB_URL: ***
+2026-06-08T23:29:14.6531153Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-08T23:29:14.6531468Z   TRAINING_DB_APP_NAME: training-records-dashboard
+2026-06-08T23:29:14.6531813Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-08T23:29:14.6532387Z   TELEGRAM_SYNC_RESULT_PATH: /home/runner/work/_temp/telegram-sync-result.json
+2026-06-08T23:29:14.6533120Z ##[endgroup]
+2026-06-08T23:29:14.6927667Z ##[group]Run node tools/telegram-sync-notify.mjs
+2026-06-08T23:29:14.6928097Z [36;1mnode tools/telegram-sync-notify.mjs[0m
+2026-06-08T23:29:14.6955613Z shell: /usr/bin/bash -e {0}
+2026-06-08T23:29:14.6955894Z env:
+2026-06-08T23:29:14.6956108Z   TRAINING_DB_ENABLED: true
+2026-06-08T23:29:14.6956749Z   TRAINING_DB_URL: ***
+2026-06-08T23:29:14.6957017Z   TRAINING_DB_TIMEOUT_MS: 3000
+2026-06-08T23:29:14.6957332Z   TRAINING_DB_APP_NAME: training-records-dashboard
+2026-06-08T23:29:14.6957680Z   TRAINING_SNAPSHOT_SOURCE: database
+2026-06-08T23:29:14.6958073Z   TELEGRAM_BOT_TOKEN: ***
+2026-06-08T23:29:14.6958329Z   TELEGRAM_SYNC_NOTIFY: true
+2026-06-08T23:29:14.6958615Z   TELEGRAM_SYNC_NOTIFY_STAGE: after_action
+2026-06-08T23:29:14.6959036Z   TELEGRAM_SYNC_RESULT_PATH: /home/runner/work/_temp/telegram-sync-result.json
+2026-06-08T23:29:14.6959455Z ##[endgroup]
+2026-06-08T23:29:15.3225236Z {
+2026-06-08T23:29:15.3225767Z   "notified": true,
+2026-06-08T23:29:15.3226267Z   "sent": 1
+2026-06-08T23:29:15.3226741Z }
+2026-06-08T23:29:15.3383177Z Post job cleanup.
+2026-06-08T23:29:15.4956129Z Cache hit occurred on the primary key node-cache-Linux-x64-npm-4106ae46539011fcee58481adf2a8cedd09b8e3f58f003e482981fcf060bdf28, not saving cache.
+2026-06-08T23:29:15.5101453Z Post job cleanup.
+2026-06-08T23:29:15.6073303Z [command]/usr/bin/git version
+2026-06-08T23:29:15.6109687Z git version 2.54.0
+2026-06-08T23:29:15.6154710Z Temporarily overriding HOME='/home/runner/work/_temp/d61d2878-fc66-4d98-a0bf-50b8d5876e2b' before making global git config changes
+2026-06-08T23:29:15.6155908Z Adding repository directory to the temporary git global config as a safe directory
+2026-06-08T23:29:15.6167184Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/training_records/training_records
+2026-06-08T23:29:15.6200112Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-06-08T23:29:15.6231810Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-06-08T23:29:15.6468390Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-06-08T23:29:15.6495603Z http.https://github.com/.extraheader
+2026-06-08T23:29:15.6511186Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-06-08T23:29:15.6545147Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-06-08T23:29:15.6787249Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-06-08T23:29:15.6820531Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-06-08T23:29:15.7193658Z Cleaning up orphan processes
+2026-06-08T23:29:15.7498172Z ##[warning]Node.js 20 actions are deprecated. The following actions are running on Node.js 20 and may not work as expected: actions/checkout@v4, actions/setup-node@v4. Actions will be forced to run with Node.js 24 by default starting June 16th, 2026. Node.js 20 will be removed from the runner on September 16th, 2026. Please check if updated versions of these actions are available that support Node.js 24. To opt into Node.js 24 now, set the FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true environment variable on the runner or in your workflow file. Once Node.js 24 becomes the default, you can temporarily opt out by setting ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

@@ -7,10 +7,9 @@ db.json
 source/_data/training.json
 source/_data/dashboardView.json
 训练数据解析.md
+训练记录.md
 telegram/state.json
 telegram/process-log.ndjson
 telegram/inbox/
 .claude*
-.tmp*
-logs*
-runtime/*
+.tmp*

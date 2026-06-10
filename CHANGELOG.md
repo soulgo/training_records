@@ -17,19 +17,27 @@
 
 ### Changed
 
-- 六边形架构重构 v13.1 落地：B3 Step 2 SQL 提取全部完成（`writeCoreDays` / `readCoreDay` / `upsertArchiveParseSnapshot` 已迁移到 `src/adapters/postgres/core-day-repository.pg.mjs`），B4 read.mjs 内联 SQL 已委托到适配器（`getLastProcessedTelegramUpdateId` 迁移至 `src/adapters/postgres/telegram-batch-repository.pg.mjs`）。
-- `src/jobs/telegram-sync-job.mjs` 与 `src/app/use-cases/telegram-sync.use-case.mjs` 导出对齐：`buildTelegramSyncUseCaseReport` → `buildTelegramSyncReport`，`runTelegramSyncUseCase` → `runTelegramSync`。
+- 六边形架构重构 v13.1 全面落地：B3/B4/B9/B10/B11/B12 全部完成，374 测试通过。
+- B3 Step 2 SQL 提取全部完成（`writeCoreDays` / `readCoreDay` / `upsertArchiveParseSnapshot` 已迁移到 `src/adapters/postgres/core-day-repository.pg.mjs`）。
+- B4 read.mjs 内联 SQL 已委托到适配器（`getLastProcessedTelegramUpdateId` 迁移至 `src/adapters/postgres/telegram-batch-repository.pg.mjs`）。
+- B9 tools/ 目录对齐：4 对重复模块 diff 完成并薄化为 re-export（training-domain/parser/snapshot/dashboard-view），`tools/training-db-core.mjs` 改为从 `src/adapters/postgres/` 导入，`src/domain/training/training-snapshot.mjs` 移除对 tools/ 的反向引用，`tools/lib/fs-walk.mjs` 复制到 `src/shared/`。
+- B11 遗留代码清理：15 项全部完成——旧文件薄化为 re-export 或确立 canonical 位置，逻辑已迁移到 adapters/use-cases。
+- B12 测试验证：领域实体 5 tests、领域服务 6 tests、适配器 2 tests、Telegram Mock 4 tests，CI 已配置。
+- `src/jobs/telegram-sync-job.mjs` 与 `src/app/use-cases/telegram-sync.use-case.mjs` 导出对齐。
 - DI 容器 `src/infra/app-factory.mjs` 验证通过，无循环依赖；`src/infra/config.mjs` 统一配置校验就绪。
-- `docs/优化重构/数据统一与六边形架构重构_v13/实施checklist.md` 里程碑状态更新：B3/B4/B6/B10/B12 已确认完成，B9 部分完成。
+- 文档目录中文重命名：`re_v5`→`系统优化重构_v5`、`deploy_build_v7`→`构建性能优化_v7`、`telegram_sync_v6`→`图片识别优化_v6`。
+- `docs/系统架构/系统总览.md` 新增六边形架构章节，内部接口手册 CLI 入口更新为新 use-case 路径。
+- `docs/优化重构/数据统一与六边形架构重构_v13/实施checklist.md` 里程碑全部 ✅。
 
 ### Fixed
 
 - 修复 `src/jobs/telegram-sync-job.mjs` 导入不存在的导出导致 `pending-store.test.mjs` 和 `src-boundary.test.mjs` 失败。
-- 修复 `src/db/training/read.mjs` 和 `src/adapters/postgres/telegram-batch-repository.pg.mjs` 文件尾部 null 字节引发的语法错误。
+- 修复多个文件尾部 null 字节引发的语法错误。
 
 ### Added
 
-- `src/adapters/postgres/telegram-batch-repository.pg.mjs` 新增 `getLastProcessedTelegramUpdateId` 实例方法和独立函数，从 ingest.telegram_message 表查询最大 update_id。
+- `src/adapters/postgres/telegram-batch-repository.pg.mjs` 新增 `getLastProcessedTelegramUpdateId` 实例方法和独立函数。
+- `src/shared/fs-walk.mjs` 从 `tools/lib/` 迁移至 shared 层。
 
 ## [1.2.5] - 2026-06-08
 
@@ -343,21 +351,4 @@
 
 ### Added
 
-- 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
-- 支持从训练数据生成静态看板和日常记录概览。
-
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.2.2...HEAD
-[1.2.2]: https://github.com/soulgo/training_records/compare/v1.2.1...v1.2.2
-[1.2.1]: https://github.com/soulgo/training_records/compare/v1.2.0...v1.2.1
-[1.2.0]: https://github.com/soulgo/training_records/compare/v1.1.9...v1.2.0
-[1.1.9]: https://github.com/soulgo/training_records/compare/v1.1.8...v1.1.9
-[1.1.8]: https://github.com/soulgo/training_records/compare/v1.1.7...v1.1.8
-[1.1.7]: https://github.com/soulgo/training_records/compare/v1.1.6...v1.1.7
-[1.1.6]: https://github.com/soulgo/training_records/compare/v1.1.5...v1.1.6
-[1.1.5]: https://github.com/soulgo/training_records/compare/v1.1.4...v1.1.5
-[1.1.4]: https://github.com/soulgo/training_records/compare/v1.1.3...v1.1.4
-[1.1.3]: https://github.com/soulgo/training_records/compare/v1.1.2...v1.1.3
-[1.1.2]: https://github.com/soulgo/training_records/compare/v1.1.1...v1.1.2
-[1.1.1]: https://github.com/soulgo/training_records/compare/v1.1.0...v1.1.1
-[1.1.0]: https://github.com/soulgo/training_records/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/soulgo/training_records/releases/tag/v1.0.0
+- 初始版本：发布训练记录看板�

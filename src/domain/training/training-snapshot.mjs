@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import frontMatter from 'hexo-front-matter';
 
 import { parseTrainingRecord } from './training-parser.mjs';
-import { readTrainingSnapshotFromDatabase } from '../../../tools/training-db-core.mjs';
-import { readDirRecursive } from '../../../tools/lib/fs-walk.mjs';
+import { readTrainingSnapshotFromDatabase } from '../../db/training/read.mjs';
+import { readDirRecursive } from '../../shared/fs-walk.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..', '..', '..');
