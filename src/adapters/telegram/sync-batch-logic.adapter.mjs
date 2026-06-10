@@ -994,9 +994,9 @@ function normalizeNutrition(meals, totalCalories, details) {
     const existing = mealMap.get(mealName);
     const next = {
       name: mealName,
-      calories: Number(meal.calories ?? 0),
-      recommendedMin: Number(meal.recommendedMin),
-      recommendedMax: Number(meal.recommendedMax),
+      calories: Math.round(Number(meal.calories ?? 0)),
+      recommendedMin: Number.isFinite(Number(meal.recommendedMin)) ? Math.round(Number(meal.recommendedMin)) : null,
+      recommendedMax: Number.isFinite(Number(meal.recommendedMax)) ? Math.round(Number(meal.recommendedMax)) : null,
     };
     if (!existing) {
       mealMap.set(mealName, next);
@@ -1012,12 +1012,12 @@ function normalizeNutrition(meals, totalCalories, details) {
     .filter(Boolean)
     .map((meal) => ({
       ...meal,
-      calories: roundTo(meal.calories, 2),
+      calories: Math.round(meal.calories),
     }));
   const normalizedTotalCalories =
     totalCalories === null || totalCalories === undefined
       ? sumMealCalories(normalizedMeals)
-      : Number(totalCalories);
+      : Math.round(Number(totalCalories));
   return {
     meals: normalizedMeals,
     totalCalories: normalizedTotalCalories,
@@ -1030,7 +1030,7 @@ function sumMealCalories(meals) {
     return null;
   }
   const total = meals.reduce((sum, meal) => sum + Number(meal.calories ?? 0), 0);
-  return roundTo(total, 2);
+  return Math.round(total);
 }
 
 function calculateBatchConfidence(recognitions) {

@@ -13,6 +13,12 @@
 
 ## [Unreleased]
 
+## [1.2.7] - 2026-06-10
+
+### Fixed
+
+- 修复 AI 识别返回浮点卡路里值（如 `143.1`）导致 PostgreSQL `integer[]` 列写入失败（`invalid input syntax for type integer`）的问题。涉及 `normalizeNutrition` 中 `calories`/`recommendedMin`/`recommendedMax`、`sumMealCalories`、`summarizeActivities.trainingCalories` 以及 `normalizeBatchActivity.calories` 的取整处理。
+
 ## [1.2.6] - 2026-06-10
 
 ### Changed

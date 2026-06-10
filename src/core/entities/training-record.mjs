@@ -106,7 +106,7 @@ export function normalizeBatchActivity(activity) {
     detail,
     durationText,
     durationSeconds: durationText ? parseDurationSeconds(durationText) : 0,
-    calories: extractNumber(detail, /(?:总)?消耗\s*(\d+(?:\.\d+)?)\s*千卡/),
+    calories: (() => { const v = extractNumber(detail, /(?:总)?消耗\s*(\d+(?:\.\d+)?)\s*千卡/); return v != null ? Math.round(v) : null; })(),
     heartRate: extractNumber(detail, /(?:平均(?:心率)?|记录值|心率)\s*(\d+)\s*次\/分钟/),
     distanceKm: extractNumber(detail, /(\d+(?:\.\d+)?)\s*公里/),
     avgSpeedKmh: extractNumber(detail, /(?:均速|平均速度)\s*(\d+(?:\.\d+)?)\s*公里\/小时/),

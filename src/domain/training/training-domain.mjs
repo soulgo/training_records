@@ -239,10 +239,9 @@ export function summarizeActivities(activities, workoutDailySummary = null) {
   return {
     totalActivities: activities.length,
     totalDurationSeconds,
-    trainingCalories: roundTo(
-      workoutDailySummary?.activityCaloriesKcal ?? explicitTrainingCalories,
-      2,
-    ),
+    trainingCalories: Math.round(
+      workoutDailySummary?.activityCaloriesKcal ?? explicitTrainingCalories ?? 0,
+    ) || null,
     workoutDurationMinutes: workoutDailySummary?.workoutDurationMinutes ?? null,
     activeHours: workoutDailySummary?.activeHours ?? null,
     cyclingDistanceKm: roundTo(cyclingDistanceKm, 2),
