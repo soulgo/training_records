@@ -579,6 +579,30 @@ create table if not exists core.thought (
   updated_at timestamptz not null
 );
 
+-- Idempotent column additions for tables created before schema evolution
+alter table core.sleep add column if not exists total_sleep_minutes integer null;
+alter table core.sleep add column if not exists sleep_score integer null;
+alter table core.sleep add column if not exists sleep_score_percentile integer null;
+alter table core.sleep add column if not exists deep_sleep_continuity_score integer null;
+alter table core.sleep add column if not exists wake_count integer null;
+alter table core.sleep add column if not exists breathing_quality_score integer null;
+alter table core.sleep add column if not exists average_heart_rate_bpm integer null;
+alter table core.sleep add column if not exists hrv_ms integer null;
+alter table core.sleep add column if not exists average_spo2_pct numeric(10, 2) null;
+alter table core.sleep add column if not exists average_respiratory_rate numeric(10, 2) null;
+alter table core.sleep add column if not exists analysis_text text null;
+alter table core.sleep add column if not exists suggestion_text text null;
+
+alter table core.training_day add column if not exists sleep_total_minutes integer null;
+alter table core.training_day add column if not exists night_sleep_minutes integer null;
+alter table core.training_day add column if not exists nap_minutes integer null;
+alter table core.training_day add column if not exists sleep_start_time text null;
+alter table core.training_day add column if not exists sleep_end_time text null;
+alter table core.training_day add column if not exists deep_sleep_minutes integer null;
+alter table core.training_day add column if not exists light_sleep_minutes integer null;
+alter table core.training_day add column if not exists rem_sleep_minutes integer null;
+alter table core.training_day add column if not exists awake_minutes integer null;
+
 comment on table core.thought is '锻炼随想正文镜像表；图片仍保存在本地目录或后续对象存储，表内只保存引用';
 comment on column core.thought.telegram_message_id is '原 Telegram message_id，也是随想的稳定定位 ID';
 comment on column core.thought.body is '随想正文文本，不包含图片二进制';
