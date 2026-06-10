@@ -18,6 +18,8 @@
 12. [常见问题排查](问题排查/常见问题排查.md)
 13. [V10 数据库唯一事实源与 Markdown 备份方案](优化重构/数据库唯一事实源与 markdown 备份_v10/数据库唯一事实源与Markdown备份方案.md)
 14. [V11 落地 checklist](优化重构/Telegram同步PostgreSQL提速与OpenAI兼容API_v11/checklist.md)
+15. [V12 MCP 删除与数据库结构对齐](优化重构/MCP删除与数据库结构对齐_v12/README.md)
+16. [V13 数据统一与六边形架构重构](优化重构/数据统一与六边形架构重构_v13/README.md)
 
 ## 文档目录
 
@@ -44,5 +46,5 @@
 - Telegram 发送锻炼、体脂秤、饮食和睡眠图片的稳定链路，优先看 `训练系统/Telegram使用说明.md`、`训练系统/Telegram图片日期归档.md`、`训练系统/Telegram睡眠识别与入库说明.md`。
 - 修改图片识别字段、截图类型或日期口径时，先看 `训练系统/Telegram图片识别Prompt维护.md`，再同步 schema、数据库写入和测试。
 - 睡眠数据相关说明优先看 `训练系统/Telegram睡眠识别与入库说明.md`、`训练系统/训练记录生成与解析.md` 与数据库 schema。
-- V9 及更早的优化文档保留为历史方案和验收背景；涉及 Markdown fallback、目标日期 Markdown 合并等旧口径时，以 V10/V11 和长期维护文档为准。
+- V9 及更早的优化文档保留为历史方案和验收背景；涉及 Markdown fallback、目标日期 Markdown 合并等旧口径时，以 V10/V11/V12/V13 和长期维护文档为准。
 - `历史归档/` 下文档只保留背景和方案脉络，日常维护优先阅读其它目录。

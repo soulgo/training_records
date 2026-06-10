@@ -108,7 +108,7 @@
 | 总览文档与子文档内容一致 | 已完成 | `re_optimization_v8.md` 已建立子文档索引；`v8 overview documents the local document index and historical replacements` 覆盖 |
 | 部署、Telegram Sync、维护流程都能快速定位 | 已完成 | 部署与 Telegram 仍在分文档；维护流程新增 `maintenance_scripts.md` |
 | 新增规则已同步到文档 | 已完成 | 已将维护入口、dry-run/confirm 规则和 checklist 状态同步到 v8 目录 |
-| 旧文档若已过期，已标注替代关系 | 已完成 | v8 总览已标注 `deploy_build_v7`、`telegram_sync_v6`、`re_v5` 为历史参考及当前接续文档 |
+| 旧文档若已过期，已标注替代关系 | 已完成 | v8 总览已标注 `构建性能优化_v7`、`图片识别优化_v6`、`系统优化重构_v5` 为历史参考及当前接续文档 |
 | 目录结构清晰，后续查阅方便 | 已完成 | v8 总览列出 `re_optimization_v8.md`、`deploy_and_build.md`、`telegram_sync_refactor.md`、`maintenance_scripts.md`、`checklist.md` 的职责 |
 
 ---

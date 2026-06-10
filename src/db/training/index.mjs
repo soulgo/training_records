@@ -6,3 +6,4 @@ export * from './config.mjs';
 export * from './read.mjs';
 export * from './write.mjs';
 export * from './archive.mjs';
+export * from './consistency-check.mjs';

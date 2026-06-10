@@ -685,6 +685,9 @@ test('persistNormalizedBatch upserts sleep without deleting nutrition details', 
   assert.equal(calls.some(([sql]) => /insert into core\.meal/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal|sleep)/i.test(sql)), false);
   assert.match(trainingDayInsert[0], /existing_day/i);
+  assert.match(trainingDayInsert[0], /sleep_summary/i);
+  assert.match(trainingDayInsert[0], /sleep_total_minutes/i);
+  assert.match(trainingDayInsert[0], /sleep_start_time/i);
   assert.equal(trainingDayInsert[1][9], false);
   assert.equal(trainingDayInsert[1][10], false);
 });

@@ -29,7 +29,7 @@
 
 ### 2.1 部署流程过长，且存在重复工作
 
-从现有 `docs/优化重构/deploy_build_v7/deploy_build_optimization_v7.md`、`.github/workflows/deploy-pages.yml`、`.github/actions/site-build/action.yml`、`.github/workflows/telegram-sync.yml` 以及相关脚本结构看，deploy 流程目前仍有这些特征：
+从现有 `docs/优化重构/构建性能优化_v7/deploy_build_optimization_v7.md`、`.github/workflows/deploy-pages.yml`、`.github/actions/site-build/action.yml`、`.github/workflows/telegram-sync.yml` 以及相关脚本结构看，deploy 流程目前仍有这些特征：
 
 - 构建前可能执行数据库回填、对账、导出等步骤
 - Hexo 构建、缓存、测试、部署分散在多个 workflow / action 中
@@ -305,6 +305,6 @@ re_v8 的核心不是推倒重来，而是：
 
 旧版本文档保留为历史参考，不再作为当前实施入口：
 
-- `docs/优化重构/deploy_build_v7/deploy_build_optimization_v7.md`：部署构建方向已由本目录的 `deploy_and_build.md` 接续。
-- `docs/优化重构/telegram_sync_v6/telegram_sync_image_optimization.md`：Telegram 图片识别和补偿方向已由本目录的 `telegram_sync_refactor.md` 接续。
-- `docs/优化重构/re_v5/`：早期数据库事实源、检查清单和总览作为历史参考；当前状态以本目录总览与 `checklist.md` 为准。
+- `docs/优化重构/构建性能优化_v7/deploy_build_optimization_v7.md`：部署构建方向已由本目录的 `deploy_and_build.md` 接续。
+- `docs/优化重构/图片识别优化_v6/telegram_sync_image_optimization.md`：Telegram 图片识别和补偿方向已由本目录的 `telegram_sync_refactor.md` 接续。
+- `docs/优化重构/系统优化重构_v5/`：早期数据库事实源、检查清单和总览作为历史参考；当前状态以本目录总

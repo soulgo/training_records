@@ -197,10 +197,28 @@ CREATE TABLE "core"."training_day" (
   "active_hours" int4,
   "cycling_distance_km" numeric(10,2),
   "intake_calories" int4,
+  "sleep_total_minutes" int4,
+  "night_sleep_minutes" int4,
+  "nap_minutes" int4,
+  "sleep_start_time" text COLLATE "pg_catalog"."default",
+  "sleep_end_time" text COLLATE "pg_catalog"."default",
+  "deep_sleep_minutes" int4,
+  "light_sleep_minutes" int4,
+  "rem_sleep_minutes" int4,
+  "awake_minutes" int4,
   "nutrition_details_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
+COMMENT ON COLUMN "core"."training_day"."sleep_total_minutes" IS '当天总睡眠分钟数，从 core.sleep 聚合刷新';
+COMMENT ON COLUMN "core"."training_day"."night_sleep_minutes" IS '当天夜间睡眠分钟数，从 core.sleep 聚合刷新';
+COMMENT ON COLUMN "core"."training_day"."nap_minutes" IS '当天午睡或零星小睡分钟数，从 core.sleep 聚合刷新';
+COMMENT ON COLUMN "core"."training_day"."sleep_start_time" IS '当天最早入睡时间文本，从 core.sleep 聚合刷新';
+COMMENT ON COLUMN "core"."training_day"."sleep_end_time" IS '当天最晚醒来时间文本，从 core.sleep 聚合刷新';
+COMMENT ON COLUMN "core"."training_day"."deep_sleep_minutes" IS '当天深睡分钟数，从 core.sleep 聚合刷新';
+COMMENT ON COLUMN "core"."training_day"."light_sleep_minutes" IS '当天浅睡分钟数，从 core.sleep 聚合刷新';
+COMMENT ON COLUMN "core"."training_day"."rem_sleep_minutes" IS '当天 REM 睡眠分钟数，从 core.sleep 聚合刷新';
+COMMENT ON COLUMN "core"."training_day"."awake_minutes" IS '当天睡眠期间清醒分钟数，从 core.sleep 聚合刷新';
 
 -- ----------------------------
 -- Indexes structure for table activity

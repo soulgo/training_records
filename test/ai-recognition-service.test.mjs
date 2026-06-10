@@ -5,7 +5,7 @@ import {
   buildRecognitionCacheKey,
   isRecognitionCacheEnabled,
   recognizeTelegramImageMessage,
-} from '../src/ai/recognition-service.mjs';
+} from '../src/app/use-cases/image-recognition.use-case.mjs';
 
 const promptMetadata = {
   version: '2026-05-24',

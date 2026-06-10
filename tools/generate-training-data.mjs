@@ -7,10 +7,15 @@ import {
   persistTrainingArchive,
   resolveTrainingArchiveRuntimeContext,
 } from './training-db-archive.mjs';
-import { buildDashboardViewModel } from './dashboard-view.mjs';
 import { resolveTrainingCoreConfig } from './training-db-core.mjs';
 import { canFallbackToMarkdownSnapshot, canUseDatabaseFallback } from './lib/snapshot-fallback.mjs';
 import { buildTrainingSnapshot } from './training-snapshot.mjs';
+import {
+  BodyMetricGenerator,
+  DashboardGenerator,
+  HexoGeneratorAdapter,
+  TrainingDayGenerator,
+} from '../src/adapters/hexo/index.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..');
@@ -65,12 +70,17 @@ export async function generateTrainingData(options = {}) {
   }
 
   await mkdir(outputDir, { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(parsed, null, 2)}\n`, 'utf8');
-  await writeFile(
-    dashboardViewPath,
-    `${JSON.stringify(buildDashboardViewModel(parsed), null, 2)}\n`,
-    'utf8',
-  );
+  const hexoGenerator = new HexoGeneratorAdapter({
+    generators: [
+      new TrainingDayGenerator(),
+      new BodyMetricGenerator(),
+      new DashboardGenerator(),
+    ],
+    writeJson: async (relativePath, payload) => {
+      await writeFile(path.join(outputDir, relativePath), `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+    },
+  });
+  await hexoGenerator.generate({ snapshot: parsed });
   await writeFile(debugOutputPath, renderTrainingDebugMarkdown(parsed), 'utf8');
 
   stdout.write(`Generated ${toPosixRelativePath(rootDir, outputPath)}\n`);

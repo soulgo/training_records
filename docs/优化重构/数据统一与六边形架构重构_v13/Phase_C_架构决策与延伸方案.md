@@ -168,9 +168,9 @@ src/infra/
 
 更新 `docs/系统架构/`：
 
-- `系统架构图.drawio`：绘制六边形架构全景图
-- `模块依赖图.drawio`：更新为 Core / Adapters / App / Infra 四层依赖
-- `数据流图.drawio`：更新为单一 PostgreSQL 数据源
+- `系统架构图.drawio`：创建六边形架构全景图
+- `模块依赖图.drawio`：创建 Core / Adapters / App / Infra 四层依赖图
+- `数据流图.drawio`：创建单一 PostgreSQL 数据源数据流图
 - `系统总览.md`：更新架构描述，删除 MCP 相关内容
 - `内部接口手册.md`：更新所有 Port 接口文档
 

@@ -1,5 +1,4 @@
 // Telegram sync batch helpers.
-// P0 keeps these helpers compatible with tools/telegram-sync-lib.mjs.
 
 export {
   groupTelegramUpdates,
@@ -7,4 +6,4 @@ export {
   applyTelegramSyncToMarkdown,
   processTelegramUpdates,
   mapWithConcurrency,
-} from '../../tools/telegram-sync-lib.mjs';
+} from '../adapters/telegram/sync-batch.adapter.mjs';

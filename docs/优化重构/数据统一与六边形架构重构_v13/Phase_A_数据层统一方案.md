@@ -6,18 +6,20 @@
 
 ## A1. 残留碎片清理
 
-### 1.1 空文件清理
+### 1.1 `db.json` 与 `runtime/telegram-sync-pending.ndjson` 处理
 
 | 文件/目录 | 当前状态 | 动作 |
 | --- | --- | --- |
-| `db.json` | 0 字节空文件 | 删除，确认无代码引用 |
-| `runtime/telegram-sync-pending.ndjson` | 残留 NDJSON | 评估是否仍需，若不需要则删除 |
+| `db.json` | Hexo 数据库缓存文件（构建提速用），由 Hexo 自身管理 | **保留在 `.gitignore` 中**，不属于本次重构范围 |
+| `runtime/telegram-sync-pending.ndjson` | 残留 NDJSON 队列文件 | 确认写入路径已收敛到 `ingest.telegram_pending_batch` 表后删除 |
 
 **实施步骤**：
-1. 全局搜索 `db.json` 引用（`rg "db\.json"`），确认无读取/写入逻辑
-2. 全局搜索 `runtime/` 目录引用，确认 `telegram-sync-pending.ndjson` 是否仍在使用
-3. 若 `telegram-sync-pending.ndjson` 仍在作为 Telegram 同步队列使用，在 Phase B 中将其迁移到 PostgreSQL `ingest.telegram_pending_batch`
-4. 删除已确认无效的文件
+1. `db.json`：确认无训练系统代码直接引用（Hexo 自身管理），保留在 `.gitignore` 中即可
+2. `runtime/telegram-sync-pending.ndjson`：
+   - 全局搜索 `fs.appendFile`、`fs.writeFile` 写入该 NDJSON 的路径
+   - 确认 `src/jobs/pending-store.mjs` 已将写入逻辑收敛到 PostgreSQL `ingest.telegram_pending_batch` 表
+   - 若已全部收敛：删除 NDJSON 文件及对应读写逻辑
+   - 若仍有残留写入：先修复写入路径，再删除
 
 ### 1.2 `src/data/` 目录确认
 
@@ -61,6 +63,7 @@
 | 表 | 检查项 |
 | --- | --- |
 | `core.training_day` | 所有记录 `archived_date` 非空，格式正确 |
+| `core.training_day` | **注意**：当前 Schema 不包含睡眠汇总字段（`sleep_total_minutes`、`night_sleep_minutes`、`nap_minutes`、`sleep_start_time` 等）。这些字段仅存在于 `archive.training_day` 中。需先澄清：这些字段是否应通过 ALTER TABLE 补充到 `core.training_day`，还是通过 CTE/视图动态生成。|
 | `core.measurement` | `weight_kg`、`body_fat_pct` 等字段无异常值（如负数、过大值） |
 | `core.activity` | `activity_type` 在预期枚举范围内 |
 | `core.sleep` | `bedtime` < `wake_time`，`total_sleep_minutes` 为正 |
@@ -75,7 +78,7 @@
 
 ## A5. Phase A 完成标准
 
-- [ ] `db.json` 已删除，无代码引用
+- [ ] `db.json` 已确认无训练系统代码引用（Hexo 自身管理的缓存文件，保留在 `.gitignore`）
 - [ ] `runtime/` 中残留文件已评估并处理
 - [ ] 全局审计确认无 JSON/SQLite 写入路径
 - [ ] 数据一致性校验脚本通过

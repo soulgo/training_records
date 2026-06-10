@@ -6,7 +6,7 @@ import {
   AiSchemaError,
   extractAiResponseContent,
   parseAiJsonContent,
-} from '../src/ai/schema-validator.mjs';
+} from '../src/core/ai/schema-validator.mjs';
 import { buildRecognitionSchema } from '../tools/telegram-recognition-schema.mjs';
 
 test('extractAiResponseContent throws AiProviderError when content is empty', () => {

@@ -840,6 +840,7 @@ test('runTelegramSync does not run sleep backfill when pending recognition repla
 
 test('runTelegramSync queues database replay when image persistence fails', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-fallback-'));
+  const queuedPersistenceFailures = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -879,6 +880,10 @@ test('runTelegramSync queues database replay when image persistence fails', asyn
     persistNormalizedBatch: async () => {
       throw new Error('database unavailable');
     },
+    appendPendingRecognitionBatch: async (entry) => {
+      queuedPersistenceFailures.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
     exportTrainingMarkdown: () => {
       throw new Error('should not export from database on fallback');
     },
@@ -888,11 +893,12 @@ test('runTelegramSync queues database replay when image persistence fails', asyn
   assert.equal(result.fallbackUsed, false);
   assert.equal(result.batchResults[0].persistenceStatus, 'pending_replay');
   assert.equal(result.batchResults[0].persistenceError, 'database unavailable');
+  assert.equal(queuedPersistenceFailures.length, 1);
+  assert.equal(queuedPersistenceFailures[0].batch.batchId, 'album-1');
+  assert.equal(queuedPersistenceFailures[0].batch.archivedDate, '2026-05-09');
+  assert.equal(queuedPersistenceFailures[0].failureCategory, 'database');
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
-  assert.match(
-    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    /album-1/,
-  );
+  await assert.rejects(readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'), /ENOENT/);
 });
 
 test('runTelegramSync skips undated batches without persisting fallback or markdown writes', async () => {
@@ -991,10 +997,7 @@ test('runTelegramSync skips undated batches without persisting fallback or markd
   assert.deepEqual(persistedBatches, []);
   assert.equal(result.batchResults[0].status, 'skipped');
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'));
-  assert.equal(
-    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    '',
-  );
+  await assert.rejects(readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'), /ENOENT/);
 });
 
 test('runTelegramSync skips conflicting-date batches and continues processing ready batches', async () => {
@@ -1157,10 +1160,7 @@ test('runTelegramSync skips conflicting-date batches and continues processing re
   assert.match(result.batchResults[0].failureReason, /conflicting detected dates/);
   assert.equal(result.batchResults[1].status, 'ready');
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
-  assert.equal(
-    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    '',
-  );
+  await assert.rejects(readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'), /ENOENT/);
 });
 
 test('buildTelegramSyncReport exposes pending replay and archived date details for logs', () => {
@@ -2844,6 +2844,7 @@ telegram_chat_id: 42
 
 test('runTelegramSync keeps thought posts when database persistence fails and queues replay', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-fallback-'));
+  const queuedPersistenceFailures = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -2863,6 +2864,10 @@ test('runTelegramSync keeps thought posts when database persistence fails and qu
     persistNormalizedBatch: async () => {
       throw new Error('database unavailable');
     },
+    appendPendingRecognitionBatch: async (entry) => {
+      queuedPersistenceFailures.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
     buildTrainingSnapshot: async () => {
       throw new Error('buildTrainingSnapshot should not run for thought-only sync');
     },
@@ -2878,10 +2883,10 @@ test('runTelegramSync keeps thought posts when database persistence fails and qu
     readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-701.md'), 'utf8'),
     /ENOENT/,
   );
-  assert.match(
-    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    /thought-701/,
-  );
+  assert.equal(queuedPersistenceFailures.length, 1);
+  assert.equal(queuedPersistenceFailures[0].batch.batchId, 'thought-701');
+  assert.equal(queuedPersistenceFailures[0].failureCategory, 'database');
+  await assert.rejects(readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'), /ENOENT/);
 });
 
 test('runTelegramSync replays pending thought batches without rewriting training markdown', async () => {

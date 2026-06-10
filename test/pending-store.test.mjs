@@ -26,10 +26,10 @@ test('file pending store preserves ndjson format and deduplicates by batch id', 
   assert.equal(entries[0].error, 'second');
 });
 
-test('pending store factory keeps file as the default implementation', async () => {
+test('pending store factory requires an explicit file store selection for file queues', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'pending-store-default-'));
   const queuePath = path.join(dir, 'runtime', 'telegram-sync-pending.ndjson');
-  const store = createPendingStore({ queuePath });
+  const store = createPendingStore({ storeKind: 'file', queuePath });
 
   assert.equal(store.kind, 'file');
   await store.write([{ batch: { batchId: 'batch-2' }, failedAt: '2026-05-09T10:00:00.000Z', error: 'oops' }]);

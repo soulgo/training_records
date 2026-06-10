@@ -2,4 +2,4 @@ export {
   appendTrainingArchiveFailureLog,
   persistTrainingArchive,
   resolveTrainingArchiveRuntimeContext,
-} from '../src/db/training/archive.mjs';
+} from '../src/adapters/postgres/archive-repository.pg.mjs';

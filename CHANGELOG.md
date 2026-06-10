@@ -13,15 +13,23 @@
 
 ## [Unreleased]
 
-### Added
+## [1.2.6] - 2026-06-10
 
-- Telegram 图片识别新增备用 OpenAI-compatible AI 配置：`TELEGRAM_RECOGNITION_FALLBACK_API_KEY`、`TELEGRAM_RECOGNITION_FALLBACK_BASE_URL`、`TELEGRAM_RECOGNITION_FALLBACK_MODEL` 和 `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS`。主 AI 出现 timeout、HTTP 429/5xx、空内容或网络失败时，会自动切到备用 AI 重试。
-- GitHub Actions main/dev Telegram Sync workflow 新增备用 AI 配置透传，并补齐 GitHub + Cloudflare 配置清单和 AI Provider 文档。
+### Changed
+
+- 六边形架构重构 v13.1 落地：B3 Step 2 SQL 提取全部完成（`writeCoreDays` / `readCoreDay` / `upsertArchiveParseSnapshot` 已迁移到 `src/adapters/postgres/core-day-repository.pg.mjs`），B4 read.mjs 内联 SQL 已委托到适配器（`getLastProcessedTelegramUpdateId` 迁移至 `src/adapters/postgres/telegram-batch-repository.pg.mjs`）。
+- `src/jobs/telegram-sync-job.mjs` 与 `src/app/use-cases/telegram-sync.use-case.mjs` 导出对齐：`buildTelegramSyncUseCaseReport` → `buildTelegramSyncReport`，`runTelegramSyncUseCase` → `runTelegramSync`。
+- DI 容器 `src/infra/app-factory.mjs` 验证通过，无循环依赖；`src/infra/config.mjs` 统一配置校验就绪。
+- `docs/优化重构/数据统一与六边形架构重构_v13/实施checklist.md` 里程碑状态更新：B3/B4/B6/B10/B12 已确认完成，B9 部分完成。
 
 ### Fixed
 
-- 修复 Telegram 图片识别缓存读取 PostgreSQL 超时时被误归类为 AI 识别失败的问题。识别缓存查库失败现在会降级为 cache miss 并继续调用 AI。
-- 修复主 AI 返回空内容或包装后的 timeout 时只能进入 pending 队列的问题；配置备用 AI 后会先用备用 provider 进行当前批次识别重试。
+- 修复 `src/jobs/telegram-sync-job.mjs` 导入不存在的导出导致 `pending-store.test.mjs` 和 `src-boundary.test.mjs` 失败。
+- 修复 `src/db/training/read.mjs` 和 `src/adapters/postgres/telegram-batch-repository.pg.mjs` 文件尾部 null 字节引发的语法错误。
+
+### Added
+
+- `src/adapters/postgres/telegram-batch-repository.pg.mjs` 新增 `getLastProcessedTelegramUpdateId` 实例方法和独立函数，从 ingest.telegram_message 表查询最大 update_id。
 
 ## [1.2.5] - 2026-06-08
 
@@ -346,10 +354,4 @@
 [1.1.8]: https://github.com/soulgo/training_records/compare/v1.1.7...v1.1.8
 [1.1.7]: https://github.com/soulgo/training_records/compare/v1.1.6...v1.1.7
 [1.1.6]: https://github.com/soulgo/training_records/compare/v1.1.5...v1.1.6
-[1.1.5]: https://github.com/soulgo/training_records/compare/v1.1.4...v1.1.5
-[1.1.4]: https://github.com/soulgo/training_records/compare/v1.1.3...v1.1.4
-[1.1.3]: https://github.com/soulgo/training_records/compare/v1.1.2...v1.1.3
-[1.1.2]: https://github.com/soulgo/training_records/compare/v1.1.1...v1.1.2
-[1.1.1]: https://github.com/soulgo/training_records/compare/v1.1.0...v1.1.1
-[1.1.0]: https://github.com/soulgo/training_records/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/soulgo/training_records/releases/tag/v1.0.0
+[1.
