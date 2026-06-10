@@ -13,18 +13,18 @@ export async function insertCoreMeasurements(client, days, options, processedAtI
         sourceChannel: options.sourceChannel ?? 'telegram',
         sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
         measuredAt: measurement.measuredAt ?? null,
-        bodyScore: measurement.bodyScore ?? null,
+        bodyScore: measurement.bodyScore != null ? Math.round(Number(measurement.bodyScore)) : null,
         weightKg: measurement.weightKg ?? null,
         bmi: measurement.bmi ?? null,
         bodyFatPct: measurement.bodyFatPct ?? null,
         skeletalMuscleKg: measurement.skeletalMuscleKg ?? null,
         visceralFatLevel: measurement.visceralFatLevel ?? null,
-        basalMetabolismKcal: measurement.basalMetabolismKcal ?? null,
+        basalMetabolismKcal: measurement.basalMetabolismKcal != null ? Math.round(Number(measurement.basalMetabolismKcal)) : null,
         bodyWaterPct: measurement.bodyWaterPct ?? null,
         proteinPct: measurement.proteinPct ?? null,
         boneMassKg: measurement.boneMassKg ?? null,
         fatFreeMassKg: measurement.fatFreeMassKg ?? null,
-        bodyAge: measurement.bodyAge ?? null,
+        bodyAge: measurement.bodyAge != null ? Math.round(Number(measurement.bodyAge)) : null,
         bodyType: measurement.bodyType ?? null,
         updatedAt: processedAtIso,
       };
@@ -134,12 +134,12 @@ export async function insertCoreActivities(client, days, options, processedAtIso
       activityType: activity.type ?? '未知活动',
       rawType: activity.rawType ?? activity.type ?? null,
       detail: activity.detail ?? null,
-      calories: activity.calories ?? null,
-      heartRate: activity.heartRate ?? null,
+      calories: activity.calories != null ? Math.round(Number(activity.calories)) : null,
+      heartRate: activity.heartRate != null ? Math.round(Number(activity.heartRate)) : null,
       distanceKm: activity.distanceKm ?? null,
       avgSpeedKmh: activity.avgSpeedKmh ?? null,
       durationText: activity.durationText ?? null,
-      durationSeconds: activity.durationSeconds ?? null,
+      durationSeconds: activity.durationSeconds != null ? Math.round(Number(activity.durationSeconds)) : null,
       updatedAt: processedAtIso,
     })),
   );
@@ -229,9 +229,9 @@ export async function insertCoreMeals(client, days, options, processedAtIso) {
       sourceChannel: options.sourceChannel ?? 'telegram',
       sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
       mealName: meal.name ?? '未命名餐次',
-      calories: meal.calories ?? null,
-      recommendedMin: meal.recommendedMin ?? null,
-      recommendedMax: meal.recommendedMax ?? null,
+      calories: meal.calories != null ? Math.round(Number(meal.calories)) : null,
+      recommendedMin: meal.recommendedMin != null ? Math.round(Number(meal.recommendedMin)) : null,
+      recommendedMax: meal.recommendedMax != null ? Math.round(Number(meal.recommendedMax)) : null,
       updatedAt: processedAtIso,
     })),
   );
@@ -574,6 +574,12 @@ export async function insertArchiveSleep(client, days, options, processedAtIso) 
   );
 }
 
+function toInt(value) {
+  if (value == null) return null;
+  const num = Number(value);
+  return Number.isFinite(num) ? Math.round(num) : null;
+}
+
 function buildSleepRows(days, options, processedAtIso) {
   return days.flatMap((day) =>
     (day.sleep ?? []).map((sleep) => {
@@ -590,27 +596,27 @@ function buildSleepRows(days, options, processedAtIso) {
         sleepType,
         bedtime,
         wakeTime,
-        nightSleepMinutes: sleep.nightSleepMinutes ?? null,
-        totalSleepMinutes: sleep.totalSleepMinutes ?? null,
-        napMinutes: sleep.napMinutes ?? null,
-        deepSleepMinutes: sleep.deepSleepMinutes ?? null,
-        lightSleepMinutes: sleep.lightSleepMinutes ?? null,
-        remSleepMinutes: sleep.remSleepMinutes ?? null,
-        awakeMinutes: sleep.awakeMinutes ?? null,
+        nightSleepMinutes: toInt(sleep.nightSleepMinutes),
+        totalSleepMinutes: toInt(sleep.totalSleepMinutes),
+        napMinutes: toInt(sleep.napMinutes),
+        deepSleepMinutes: toInt(sleep.deepSleepMinutes),
+        lightSleepMinutes: toInt(sleep.lightSleepMinutes),
+        remSleepMinutes: toInt(sleep.remSleepMinutes),
+        awakeMinutes: toInt(sleep.awakeMinutes),
         sleepStageText: sleep.sleepStageText ?? null,
         sleepStageDetail: Array.isArray(sleep.sleepStageDetail)
           ? JSON.stringify(sleep.sleepStageDetail)
           : sleep.sleepStageDetail ?? null,
-        sleepScore: sleep.sleepScore ?? null,
-        sleepScorePercentile: sleep.sleepScorePercentile ?? null,
+        sleepScore: toInt(sleep.sleepScore),
+        sleepScorePercentile: toInt(sleep.sleepScorePercentile),
         deepSleepRatioPct: sleep.deepSleepRatioPct ?? null,
         lightSleepRatioPct: sleep.lightSleepRatioPct ?? null,
         remSleepRatioPct: sleep.remSleepRatioPct ?? null,
-        deepSleepContinuityScore: sleep.deepSleepContinuityScore ?? null,
-        wakeCount: sleep.wakeCount ?? null,
-        breathingQualityScore: sleep.breathingQualityScore ?? null,
-        averageHeartRateBpm: sleep.averageHeartRateBpm ?? null,
-        hrvMs: sleep.hrvMs ?? null,
+        deepSleepContinuityScore: toInt(sleep.deepSleepContinuityScore),
+        wakeCount: toInt(sleep.wakeCount),
+        breathingQualityScore: toInt(sleep.breathingQualityScore),
+        averageHeartRateBpm: toInt(sleep.averageHeartRateBpm),
+        hrvMs: toInt(sleep.hrvMs),
         averageSpo2Pct: sleep.averageSpo2Pct ?? null,
         averageRespiratoryRate: sleep.averageRespiratoryRate ?? null,
         analysisText: sleep.analysisText ?? null,

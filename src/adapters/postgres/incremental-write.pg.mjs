@@ -65,8 +65,13 @@ function buildTelegramImageBatchDay(batch) {
     activities: (batch.activities ?? []).map((activity) => normalizeBatchActivity(activity)),
     nutrition: hasNutritionPayload(batch.nutrition)
       ? {
-          meals: batch.nutrition.meals ?? [],
-          totalCalories: batch.nutrition.totalCalories ?? null,
+          meals: (batch.nutrition.meals ?? []).map((meal) => ({
+            ...meal,
+            calories: meal.calories != null ? Math.round(Number(meal.calories)) : null,
+            recommendedMin: meal.recommendedMin != null ? Math.round(Number(meal.recommendedMin)) : null,
+            recommendedMax: meal.recommendedMax != null ? Math.round(Number(meal.recommendedMax)) : null,
+          })),
+          totalCalories: batch.nutrition.totalCalories != null ? Math.round(Number(batch.nutrition.totalCalories)) : null,
           details: batch.nutrition.details ?? [],
         }
       : emptyNutrition(),
@@ -243,10 +248,10 @@ async function refreshCoreTrainingDaySummary(client, batch, processedAtIso) {
       archivedDate,
       batch.batchId,
       'telegram',
-      batch.workoutDailySummary?.activityCaloriesKcal ?? null,
-      batch.workoutDailySummary?.workoutDurationMinutes ?? null,
-      batch.workoutDailySummary?.activeHours ?? null,
-      hasBatchNutrition ? batch.nutrition.totalCalories ?? null : null,
+      batch.workoutDailySummary?.activityCaloriesKcal != null ? Math.round(Number(batch.workoutDailySummary.activityCaloriesKcal)) : null,
+      batch.workoutDailySummary?.workoutDurationMinutes != null ? Math.round(Number(batch.workoutDailySummary.workoutDurationMinutes)) : null,
+      batch.workoutDailySummary?.activeHours != null ? Math.round(Number(batch.workoutDailySummary.activeHours)) : null,
+      hasBatchNutrition ? (batch.nutrition.totalCalories != null ? Math.round(Number(batch.nutrition.totalCalories)) : null) : null,
       JSON.stringify(hasBatchNutrition && (batch.nutrition.details?.length ?? 0) > 0
         ? batch.nutrition.details
         : []),
