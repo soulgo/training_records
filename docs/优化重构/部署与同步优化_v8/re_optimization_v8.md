@@ -307,4 +307,4 @@ re_v8 的核心不是推倒重来，而是：
 
 - `docs/优化重构/构建性能优化_v7/deploy_build_optimization_v7.md`：部署构建方向已由本目录的 `deploy_and_build.md` 接续。
 - `docs/优化重构/图片识别优化_v6/telegram_sync_image_optimization.md`：Telegram 图片识别和补偿方向已由本目录的 `telegram_sync_refactor.md` 接续。
-- `docs/优化重构/系统优化重构_v5/`：早期数据库事实源、检查清单和总览作为历史参考；当前状态以本目录总
+- `docs/优化重构/系统优化重构_v5/`：早期数据库事实源、检查清单和总览作为历史参考；当前状态以本目录总览与 `checklist.md` 为准。
