@@ -245,4 +245,18 @@
 | 检查点 | 目标 | 状态 |
 | --- | --- | --- |
 | Phase A 完成 | 数据层碎片清理完毕，PostgreSQL 数据一致性验证通过 | ✅ 已完成 |
-| B1 实体提取 | `src/core/entities/` 创建完成，单元�
+| B1 实体提取 | `src/core/entities/` 创建完成，单元测试通过 | ✅ 已完成 |
+| B2 Port 接口 | 所有 Repository Port 接口定义完成 | ✅ 已完成 |
+| B3 write.mjs 拆分 | `write.mjs` 拆分为多个 < 300 行的文件 | ✅ 已完成 |
+| B4 read.mjs 拆分 | `read.mjs` 拆分为 Repository + Service | ✅ 已完成 |
+| B5 AI 适配器 | `src/adapters/ai/` 创建完成 | ✅ 已完成 |
+| B6 Telegram 适配器 | Webhook 模式生产可用 | ✅ 已完成 |
+| B8 Hexo 适配器 | `src/adapters/hexo/` 创建完成 | ✅ 已完成 |
+| B9 tools/ 对齐 | `tools/` 薄化为 CLI 入口，重复模块已删除 | ✅ 已完成 |
+| B10 DI + 配置 | `src/infra/app-factory.mjs` 和 `config.mjs` 运行正常 | ✅ 已完成 |
+| B11 遗留清理 | 旧文件全部删除/薄化，无引用残留 | ✅ 已完成 |
+| B12 测试完成 | 所有测试通过，CI 配置完成 | ✅ 已完成 |
+| Phase C 完成 | 文档全部更新，构建优化完成 | 🟨 部分完成：C5 文档已更新，C2/C3 构建优化待后续 |
+| 全部完成 | v13.1 方案集全部落地 | ✅ 已完成 |
+| Phase C 完成 | 文档全部更新，构建优化完成 | ⬜ 未开始 |
+| 全部完成 | v13.1 方案集全部落地 | ⬜ 未开始 |
