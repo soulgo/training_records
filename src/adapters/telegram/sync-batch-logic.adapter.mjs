@@ -549,6 +549,7 @@ export async function mapWithConcurrency(items, concurrency, mapper) {
 
 function normalizeTelegramMessage(update, message) {
   const documentImage = normalizeTelegramImageDocument(message.document);
+  const markdownDocument = normalizeTelegramMarkdownDocument(message.document);
   const photos = (message.photo ?? []).map((photo) => ({
     fileId: photo.file_id,
     fileUniqueId: photo.file_unique_id,
@@ -562,6 +563,7 @@ function normalizeTelegramMessage(update, message) {
   if (documentImage) {
     photos.push(documentImage);
   }
+  const markdownDocuments = markdownDocument ? [markdownDocument] : [];
 
   return {
     kind: 'message',
@@ -574,6 +576,7 @@ function normalizeTelegramMessage(update, message) {
     dateUnix: message.date ?? null,
     replyToMessageId: message.reply_to_message?.message_id ?? null,
     photos,
+    markdownDocuments,
   };
 }
 
@@ -760,6 +763,31 @@ function normalizeTelegramImageDocument(document) {
   };
 }
 
+function normalizeTelegramMarkdownDocument(document) {
+  if (!document?.file_id) {
+    return null;
+  }
+
+  const fileName = document.file_name?.trim() || '';
+  const mimeType = document.mime_type?.trim() || '';
+  const normalizedMimeType = mimeType.toLowerCase().split(';')[0].trim();
+  const hasMarkdownExtension = /\.(?:md|markdown)$/i.test(fileName);
+  const isMarkdownMimeType = normalizedMimeType === 'text/markdown' || normalizedMimeType === 'text/x-markdown';
+  const isPlainMarkdownFile = normalizedMimeType === 'text/plain' && hasMarkdownExtension;
+  if (!hasMarkdownExtension && !isMarkdownMimeType && !isPlainMarkdownFile) {
+    return null;
+  }
+
+  return {
+    fileId: document.file_id,
+    fileUniqueId: document.file_unique_id,
+    fileName: fileName || null,
+    mimeType: mimeType || null,
+    fileSize: document.file_size ?? null,
+    source: 'document',
+  };
+}
+
 function batchLikelyLostOriginalFilename(batch) {
   return (batch.messages ?? []).some((message) =>
     (message.photos ?? []).some((photo) => photo.source === 'photo' && !photo.fileName),
@@ -796,8 +824,9 @@ function analyzeThoughtBatch(batch) {
   const message = getThoughtSourceMessage(batch);
   const body = batch.thought?.body?.trim() ?? '';
   const thoughtModule = normalizeThoughtModule(batch.thought?.thoughtModule);
+  const hasMarkdownDocument = batchHasMarkdownDocuments(batch);
 
-  if (!body) {
+  if (!body && !hasMarkdownDocument) {
     return buildSkippedBatchResult(batch, {
       reason: 'empty thought body',
     });
@@ -821,6 +850,10 @@ function analyzeThoughtBatch(batch) {
       messageDateUnix: message?.dateUnix ?? null,
     },
   };
+}
+
+function batchHasMarkdownDocuments(batch) {
+  return (batch.messages ?? []).some((message) => (message.markdownDocuments?.length ?? 0) > 0);
 }
 
 function analyzeThoughtEditBatch(batch) {
@@ -1276,6 +1309,8 @@ function buildInboxEntry({ batch, recognitions, analyzed }) {
       photoFileIds: message.photos.map((photo) => photo.fileId),
       photoFileUniqueIds: message.photos.map((photo) => photo.fileUniqueId),
       photoFileNames: message.photos.map((photo) => photo.fileName).filter(Boolean),
+      markdownFileIds: (message.markdownDocuments ?? []).map((document) => document.fileId),
+      markdownFileNames: (message.markdownDocuments ?? []).map((document) => document.fileName).filter(Boolean),
     })),
     recognitions,
   };

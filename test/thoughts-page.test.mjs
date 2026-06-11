@@ -224,6 +224,59 @@ telegram_chat_id: 42
   });
 });
 
+test('thoughts page renders markdown document content from telegram thoughts', () => {
+  withSharedSiteFixture(() => {
+    const thoughtPostPath = path.join(rootDir, 'source', '_posts', '2026-05-14-telegram-thought-503.md');
+    const originalThoughtPost = readOptionalFile(thoughtPostPath);
+
+    try {
+      writeFileSync(
+        thoughtPostPath,
+        `---
+date: 2026-05-14 10:30:00
+tags:
+  - 训练
+  - 随想
+  - Telegram
+telegram_message_id: 503
+telegram_chat_id: 42
+---
+
+## Markdown 附件标题
+
+- 动作路线更稳定
+- 恢复节奏更清晰
+
+\`\`\`text
+RPE 7
+\`\`\`
+
+[训练记录链接](/training/)
+`,
+        'utf8',
+      );
+
+      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+
+      const thoughtsIndex = readFileSync(path.join(rootDir, 'public', 'thoughts', 'index.html'), 'utf8');
+
+      assert.match(thoughtsIndex, /<h2[^>]*>[\s\S]*Markdown 附件标题<\/h2>/);
+      assert.match(thoughtsIndex, /<li>动作路线更稳定<\/li>/);
+      assert.match(thoughtsIndex, /RPE 7/);
+      assert.match(thoughtsIndex, /href="\/training\/"/);
+    } finally {
+      restoreOptionalFile(thoughtPostPath, originalThoughtPost);
+    }
+  });
+});
+
 test('thoughts page and detail page render telegram thought photos', () => {
   withSharedSiteFixture(() => {
     const thoughtPostPath = path.join(rootDir, 'source', '_posts', '2026-05-14-telegram-thought-502.md');

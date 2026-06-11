@@ -13,6 +13,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Telegram `/随想` / `/thought` 新增 Markdown 文档附件正文能力：发送 `.md` 或 `.markdown` 文档并在 caption 写命令后，系统下载附件、按 UTF-8 去 BOM/trim，并把正文写入 `core.thought.body`；caption 仅用于命令和模块识别，附件正文优先，单个附件大小上限为 5MB。
+- 补充 Markdown 附件随想的分组、运行链路和页面渲染测试，覆盖模块-only caption、非 Markdown 文档跳过、空文件、下载失败、5MB 超限和大于 1MB 但不超过 5MB 的成功路径。
+
 ### Changed
 
 - 调整首页趋势分析卡片图例样式：图例固定在每张图表卡片右上角，多指标竖向排列且不再使用底色/边框，避免横向图例挤压左上角标题与副标题。

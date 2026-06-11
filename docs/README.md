@@ -44,6 +44,7 @@
 - `优化重构/` 下的方案、checklist 和 runbook 用于沉淀阶段性改造结论，不替代长期系统文档或源码事实。
 - V10/V11 以后，Telegram 图片正常成功路径以数据库增量 upsert 为主；`训练记录.md` 和 `source/_posts` 由 DB -> Markdown 备份派生，不作为成功路径的即时写入目标。
 - Telegram 发送锻炼、体脂秤、饮食和睡眠图片的稳定链路，优先看 `训练系统/Telegram使用说明.md`、`训练系统/Telegram图片日期归档.md`、`训练系统/Telegram睡眠识别与入库说明.md`。
+- Telegram `/随想` 支持纯文本、图片 caption 和 Markdown 文档附件；Markdown 附件正文最大 5MB，详情见 `训练系统/Telegram使用说明.md` 和 `训练系统/随想模块维护.md`。
 - 修改图片识别字段、截图类型或日期口径时，先看 `训练系统/Telegram图片识别Prompt维护.md`，再同步 schema、数据库写入和测试。
 - 睡眠数据相关说明优先看 `训练系统/Telegram睡眠识别与入库说明.md`、`训练系统/训练记录生成与解析.md` 与数据库 schema。
 - V9 及更早的优化文档保留为历史方案和验收背景；涉及 Markdown fallback、目标日期 Markdown 合并等旧口径时，以 V10/V11/V12/V13 和长期维护文档为准。

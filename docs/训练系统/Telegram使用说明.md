@@ -21,6 +21,7 @@
 
 - 普通图片消息会走截图识别
 - 但如果图片 caption 以 `/随想` 或 `/thought` 开头，这批图片会被当作“随想”，不会再走训练数据图片识别
+- 如果文档附件 caption 以 `/随想` 或 `/thought` 开头，并且附件是 `.md` / `.markdown` Markdown 文件，这条消息会被当作“Markdown 附件随想”
 - `/help`、`/帮助`、`help`、`帮助`、`命令`、`指令`、`使用说明` 会优先由 Cloudflare Worker 直接回复，不会触发 GitHub Actions；如果消息已经进入 Telegram Sync，也会直接回发帮助，不写数据库或文件
 
 ## 2. 帮助命令
@@ -141,6 +142,30 @@ Bot 会直接回发当前可用命令清单，包括截图、随想、编辑、�
 - 相册也支持
 - 相册 caption 会生成一条随想，并把这组图片一起挂到同一条随想下
 - 识别为随想后，这批图不会再进入训练数据图片 AI 识别
+
+### 4.4 Markdown 文档附件随想
+
+如果随想正文比较长，可以把 Markdown 文件作为 Telegram 文档附件发送，并在附件 caption 写命令：
+
+```text
+/随想
+/随想 杂七杂八
+/随想 身体反馈
+```
+
+支持的附件：
+
+- 文件名以 `.md` 或 `.markdown` 结尾
+- `text/markdown`、`text/x-markdown`
+- `text/plain` 且文件名是 `.md` 或 `.markdown`
+
+规则：
+
+- 系统会下载第一个 Markdown 附件，按 UTF-8 解码，去掉 UTF-8 BOM，并 trim 后写入 `core.thought.body`
+- caption 只用于识别命令和模块；如果 caption 同时写了正文和 Markdown 附件，页面正文以 Markdown 附件为准
+- 单个 Markdown 附件大小上限为 5MB；超限、空文件或下载失败都不会入库，Telegram 回复会带失败原因
+- Markdown 附件不会进入训练图片识别，也不会生成附件下载卡片
+- 页面仍由 DB -> Markdown 备份导出后通过 Hexo 渲染 Markdown 正文
 
 ## 5. 怎么找到随想 ID
 
@@ -285,6 +310,7 @@ Telegram 同步会尽量把失败原因直接回复到原消息：
 - 发训练数据截图时，尽量一批只发同一天的图，不要跨天混发
 - 想靠文件名日期回退时，用 Telegram `文件` 发送，不要用 `照片`
 - 想发“带图随想”时，记得把 `/随想` 或 `/thought` 写在 caption 开头
+- 想发长篇 Markdown 随想时，用 Telegram `文件` 发送 `.md` / `.markdown`，并把 `/随想` 或模块命令写在附件 caption 开头
 - 想精确修改某条随想时，优先用 `/随想编 <id> ...`
 - 想删除或移动，但一时找不到 id 时，直接回复原随想消息最省事
 - 如果正文开头正好是 `锻炼`、`杂七杂八` 或 `身体反馈`，系统可能把它当成模块名；这种场景建议把表达方式改一下，避免歧义

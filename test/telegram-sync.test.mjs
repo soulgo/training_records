@@ -6,6 +6,7 @@ import { parseWeightKg } from '../src/domain/training/training-domain.mjs';
 import {
   importTelegramCommandRegistry,
   importTelegramSyncLib,
+  telegramDocumentFile,
   telegramDocumentPhoto,
   telegramPhoto,
   telegramUpdate,
@@ -352,6 +353,95 @@ test('groups module-scoped thought commands into module-specific thought batches
   assert.equal(batches[1].thought.body, '今天腿练得很实');
   assert.equal(batches[2].thought.thoughtModule, 'body_feedback');
   assert.equal(batches[2].thought.body, '今天硬拉后右侧腰背有点刺痛');
+});
+
+test('groups markdown document captions into thought batches without image recognition payload', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    telegramUpdate(208, {
+      messageId: 18,
+      telegram: {
+        caption: '/随想',
+        document: telegramDocumentFile({
+          fileId: 'md-file-18',
+          fileUniqueId: 'md-uniq-18',
+          fileName: '训练随想.md',
+          mimeType: 'text/markdown',
+        }),
+      },
+    }),
+  ]);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought');
+  assert.equal(batches[0].thought.body, '');
+  assert.equal(batches[0].thought.thoughtModule, 'workout');
+  assert.deepEqual(batches[0].messages[0].photos, []);
+  assert.equal(batches[0].messages[0].markdownDocuments.length, 1);
+  assert.equal(batches[0].messages[0].markdownDocuments[0].fileId, 'md-file-18');
+  assert.equal(batches[0].messages[0].markdownDocuments[0].fileName, '训练随想.md');
+});
+
+test('groups text/plain markdown document captions into module-specific thought batches', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    telegramUpdate(209, {
+      messageId: 19,
+      telegram: {
+        caption: '/随想 杂七杂八',
+        document: telegramDocumentFile({
+          fileId: 'md-file-19',
+          fileUniqueId: 'md-uniq-19',
+          fileName: '杂项记录.markdown',
+          mimeType: 'text/plain',
+        }),
+      },
+    }),
+  ]);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought');
+  assert.equal(batches[0].thought.body, '');
+  assert.equal(batches[0].thought.thoughtModule, 'misc');
+  assert.equal(batches[0].messages[0].markdownDocuments.length, 1);
+  assert.equal(batches[0].messages[0].markdownDocuments[0].mimeType, 'text/plain');
+});
+
+test('skips non-markdown document thought captions without a body', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    telegramUpdate(210, {
+      messageId: 20,
+      telegram: {
+        caption: '/随想',
+        document: telegramDocumentFile({
+          fileId: 'pdf-file-20',
+          fileUniqueId: 'pdf-uniq-20',
+          fileName: '不是Markdown.pdf',
+          mimeType: 'application/pdf',
+        }),
+      },
+    }),
+  ]);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought');
+  assert.equal(batches[0].messages[0].markdownDocuments.length, 0);
+
+  const analyzed = lib.analyzeTelegramBatch(batches[0], []);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.equal(analyzed.reason, 'empty thought body');
 });
 
 test('groups thought captions with images and albums without treating them as training screenshots', async () => {

@@ -40,6 +40,22 @@ export function telegramDocumentPhoto({
   };
 }
 
+export function telegramDocumentFile({
+  fileId = 'file-a',
+  fileUniqueId = 'uniq-a',
+  fileName = '随想.md',
+  mimeType = 'text/markdown',
+  fileSize,
+} = {}) {
+  return {
+    file_id: fileId,
+    file_unique_id: fileUniqueId,
+    file_name: fileName,
+    mime_type: mimeType,
+    ...(fileSize == null ? {} : { file_size: fileSize }),
+  };
+}
+
 export function telegramPhoto({
   fileId = 'file-a',
   fileUniqueId = 'uniq-a',

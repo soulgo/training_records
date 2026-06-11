@@ -69,6 +69,7 @@ export {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..', '..', '..');
+const MAX_THOUGHT_MARKDOWN_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
 export async function main() {
   const result = await runTelegramSync();
@@ -821,8 +822,29 @@ async function handleThoughtSyncBatch({
   appendPendingPersistenceBatch,
   fetchTelegramFile,
 }) {
-  const thoughtWriteResult = await writeThoughtArtifact({
+  const preparedThoughtBatch = await prepareThoughtMarkdownBody({
     batch,
+    kind,
+    fetchTelegramFile,
+  });
+  if (preparedThoughtBatch.status === 'failed') {
+    return {
+      changed: false,
+      batchResult: {
+        ...batch,
+        status: 'skipped',
+        reason: preparedThoughtBatch.reason,
+        failureCategory: preparedThoughtBatch.failureCategory,
+        failureReason: preparedThoughtBatch.reason,
+        postPath: null,
+        thoughtWriteStatus: 'failed',
+        persistenceStatus: null,
+      },
+    };
+  }
+  const batchWithMarkdownBody = preparedThoughtBatch.batch;
+  const thoughtWriteResult = await writeThoughtArtifact({
+    batch: batchWithMarkdownBody,
     kind,
     thoughtsDir,
     activeRootDir,
@@ -830,7 +852,7 @@ async function handleThoughtSyncBatch({
     env,
   });
   const thoughtStorageBatch = attachThoughtStorageMetadata(
-    batch,
+    batchWithMarkdownBody,
     thoughtWriteResult,
     activeRootDir,
   );
@@ -875,6 +897,93 @@ async function handleThoughtSyncBatch({
       },
     };
   }
+}
+
+async function prepareThoughtMarkdownBody({ batch, kind, fetchTelegramFile }) {
+  if (kind !== 'thought') {
+    return { status: 'ready', batch };
+  }
+
+  const markdownDocument = findThoughtMarkdownDocument(batch);
+  if (!markdownDocument) {
+    return { status: 'ready', batch };
+  }
+
+  if (!fetchTelegramFile) {
+    return {
+      status: 'failed',
+      reason: 'Telegram markdown attachment download is not configured',
+      failureCategory: 'telegram_api',
+    };
+  }
+
+  if (
+    Number.isFinite(markdownDocument.fileSize) &&
+    markdownDocument.fileSize > MAX_THOUGHT_MARKDOWN_ATTACHMENT_BYTES
+  ) {
+    return {
+      status: 'failed',
+      reason: `markdown attachment too large: ${markdownDocument.fileSize} bytes`,
+      failureCategory: 'user_input',
+    };
+  }
+
+  try {
+    const file = await fetchTelegramFile(markdownDocument.fileId);
+    const data = file?.data;
+    if (!(data instanceof Uint8Array)) {
+      return {
+        status: 'failed',
+        reason: 'markdown attachment download returned no file data',
+        failureCategory: 'telegram_api',
+      };
+    }
+    if (data.byteLength > MAX_THOUGHT_MARKDOWN_ATTACHMENT_BYTES) {
+      return {
+        status: 'failed',
+        reason: `markdown attachment too large: ${data.byteLength} bytes`,
+        failureCategory: 'user_input',
+      };
+    }
+
+    const body = new TextDecoder('utf-8').decode(data).replace(/^\uFEFF/u, '').trim();
+    if (!body) {
+      return {
+        status: 'failed',
+        reason: 'empty markdown attachment',
+        failureCategory: 'user_input',
+      };
+    }
+
+    return {
+      status: 'ready',
+      batch: {
+        ...batch,
+        thought: {
+          ...batch.thought,
+          body,
+        },
+      },
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return {
+      status: 'failed',
+      reason: errorMessage,
+      failureCategory: classifyFailureCategory(errorMessage, { phase: 'telegram_file_download' }),
+    };
+  }
+}
+
+function findThoughtMarkdownDocument(batch) {
+  const sourceMessageId = batch.thought?.sourceMessageId ?? null;
+  const messages = [...(batch.messages ?? [])].sort((left, right) => left.messageId - right.messageId);
+  const sourceMessage = messages.find((message) => message.messageId === sourceMessageId);
+  return (
+    sourceMessage?.markdownDocuments?.[0] ??
+    messages.find((message) => (message.markdownDocuments?.length ?? 0) > 0)?.markdownDocuments?.[0] ??
+    null
+  );
 }
 
 async function writeThoughtArtifact({
