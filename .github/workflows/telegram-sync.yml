@@ -90,17 +90,17 @@ jobs:
           node <<'NODE' >> "$GITHUB_OUTPUT"
           const fs = require('fs');
           const resultPath = process.env.TELEGRAM_SYNC_RESULT_PATH;
-          let readyStoredTrainingBatches = 0;
+          let readyStoredContentBatches = 0;
           try {
             const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
             const batches = result.batchResults ?? result.batches ?? [];
-            readyStoredTrainingBatches = batches.filter((batch) => {
+            readyStoredContentBatches = batches.filter((batch) => {
               const kind = batch.kind ?? 'image';
-              return kind === 'image' && batch.status === 'ready' && batch.persistenceStatus === 'stored';
+              return ['image', 'thought'].includes(kind) && batch.status === 'ready' && batch.persistenceStatus === 'stored';
             }).length;
           } catch {}
-          console.log(`readyStoredTrainingBatches=${readyStoredTrainingBatches}`);
-          if (readyStoredTrainingBatches > 0) {
+          console.log(`readyStoredContentBatches=${readyStoredContentBatches}`);
+          if (readyStoredContentBatches > 0) {
             console.log('db_content_changed=true');
           } else {
             console.log('db_content_changed=false');

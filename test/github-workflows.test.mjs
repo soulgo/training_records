@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access, readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { constants } from 'node:fs';
+import { access, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 const rootDir = new URL('../', import.meta.url);
 
@@ -268,12 +271,48 @@ test('telegram-sync workflows keep database-only detection without blocking on p
     assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
     assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
     assert.match(workflow, /db_content_changed=true/);
-    assert.match(workflow, /readyStoredTrainingBatches/);
+    assert.match(workflow, /readyStoredContentBatches/);
     assert.match(workflow, /- name: Write Telegram sync summary/);
     assert.match(workflow, /- name: Notify Telegram sync result/);
     assert.match(workflow, /if: success\(\) && github\.event_name == 'repository_dispatch' && \(steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'\)/);
     assert.match(workflow, /strict_database_snapshot/);
     assert.doesNotMatch(workflow, /steps\.detect\.outputs\.db_content_changed == 'true'[\s\S]*uses:\s*\.\/\.github\/actions\/site-build/);
+  }
+});
+
+test('telegram-sync workflows treat stored thought batches as database content changes', async () => {
+  const workflows = [
+    await readWorkflow('.github/workflows/telegram-sync.yml'),
+    await readWorkflow('.github/workflows/telegram-sync-dev.yml'),
+  ];
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-workflow-detect-'));
+  const resultPath = path.join(tempRoot, 'telegram-sync-result.json');
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batches: [
+        {
+          kind: 'thought',
+          status: 'ready',
+          persistenceStatus: 'stored',
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  for (const workflow of workflows) {
+    const detectionScript = extractDatabaseContentDetectionScript(workflow);
+    const output = execFileSync(process.execPath, ['-e', detectionScript], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        TELEGRAM_SYNC_RESULT_PATH: resultPath,
+      },
+    });
+
+    assert.match(output, /db_content_changed=true/);
   }
 });
 
@@ -409,4 +448,10 @@ async function readWorkflow(relativePath) {
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractDatabaseContentDetectionScript(workflow) {
+  const match = workflow.match(/node <<'NODE' >> "\$GITHUB_OUTPUT"\n([\s\S]*?readyStored[\s\S]*?)\n\s*NODE/);
+  assert.ok(match, 'missing database content detection script');
+  return match[1];
 }
