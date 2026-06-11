@@ -100,6 +100,28 @@ test('dashboard chart script keeps full data while sparsifying x-axis labels and
   assert.doesNotMatch(script, /labels: \(charts\.intakeCalories \|\| \[\]\)\.map\(\(point\) => point\.date\.slice\(5\)\)/);
 });
 
+test('dashboard chart legends render as top-right labels without filled backgrounds', () => {
+  const script = readFileSync(path.join(rootDir, 'themes', 'cactus', 'source', 'js', 'training-dashboard.js'), 'utf8');
+  const styles = readFileSync(path.join(rootDir, 'themes', 'cactus', 'source', 'css', 'training-dashboard.styl'), 'utf8');
+  const legendItemStyles = styles.match(/\.chart-legend__item\n([\s\S]*?)(?=\n\.[^\s])/);
+
+  assert.match(script, /setAttribute\('aria-label', '图例：'/);
+  assert.match(script, /class="chart-legend__text"/);
+  assert.match(script, /class="chart-legend__unit"/);
+  assert.ok(legendItemStyles, 'expected chart legend item styles');
+  assert.match(styles, /\.chart-card[\s\S]*?position relative/);
+  assert.match(styles, /\.chart-heading > div:first-child > span:not\(\.dashboard-section__eyebrow\)/);
+  assert.doesNotMatch(styles, /\.chart-heading span\s*\n\s*display block/);
+  assert.doesNotMatch(styles, /padding-right min\(50%, 16rem\)/);
+  assert.match(styles, /\.chart-legend[\s\S]*?position absolute[\s\S]*?top 1\.08rem[\s\S]*?right 1rem/);
+  assert.match(styles, /\.chart-legend[\s\S]*?flex-direction column/);
+  assert.match(styles, /\.chart-legend__item[\s\S]*?justify-content flex-end/);
+  assert.match(legendItemStyles[1], /padding 0/);
+  assert.doesNotMatch(styles, /\.chart-legend__item[\s\S]*?background rgba\(248, 250, 252, 0\.72\)/);
+  assert.doesNotMatch(legendItemStyles[1], /background/);
+  assert.doesNotMatch(legendItemStyles[1], /border 1px solid/);
+});
+
 test('dashboard embeds daily overview pagination controls without changing the default latest 4-day view', { concurrency: false }, () => {
   withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);

@@ -123,12 +123,39 @@
         return;
       }
 
-      host.innerHTML = chart.data.datasets.map((dataset) => (
-        '<span class="chart-legend__item">' +
-          '<span class="chart-legend__swatch" style="--legend-color:' + dataset.borderColor + ';"></span>' +
-          '<span class="chart-legend__label">' + dataset.label + '</span>' +
-        '</span>'
-      )).join('');
+      const legends = chart.data.datasets.map((dataset) => splitLegendLabel(dataset.label));
+      host.setAttribute('role', 'list');
+      host.setAttribute('aria-label', '图例：' + legends.map((legend) => legend.raw).join('、'));
+      host.innerHTML = chart.data.datasets.map((dataset) => {
+        const legend = splitLegendLabel(dataset.label);
+        const color = String(dataset.borderColor || dataset.backgroundColor || 'currentColor');
+        const unit = legend.unit
+          ? '<span class="chart-legend__unit">' + escapeHtml(legend.unit) + '</span>'
+          : '';
+
+        return '<span class="chart-legend__item" role="listitem">' +
+          '<span class="chart-legend__swatch" style="--legend-color:' + color + ';" aria-hidden="true"></span>' +
+          '<span class="chart-legend__label">' +
+            '<span class="chart-legend__text">' + escapeHtml(legend.name) + '</span>' +
+            unit +
+          '</span>' +
+        '</span>';
+      }).join('');
+    }
+
+    function splitLegendLabel(label) {
+      const raw = String(label || '').trim();
+      const match = raw.match(/^(.+?)\s*(\([^)]*\))$/);
+
+      if (!match) {
+        return { raw, name: raw, unit: '' };
+      }
+
+      return {
+        raw,
+        name: match[1].trim(),
+        unit: match[2],
+      };
     }
 
     const weightChart = new Chart(document.getElementById('weight-chart'), {

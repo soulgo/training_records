@@ -13,6 +13,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 调整首页趋势分析卡片图例样式：图例固定在每张图表卡片右上角，多指标竖向排列且不再使用底色/边框，避免横向图例挤压左上角标题与副标题。
+
 ### Fixed
 
 - 补全 v1.2.7 修复的遗漏范围：`core-row-writer.pg.mjs` 中 `buildSleepRows` 的 14 个 `int4` 字段（`nightSleepMinutes`、`totalSleepMinutes`、`deepSleepMinutes`、`lightSleepMinutes`、`remSleepMinutes`、`awakeMinutes`、`napMinutes`、`sleepScore`、`sleepScorePercentile`、`deepSleepContinuityScore`、`wakeCount`、`breathingQualityScore`、`averageHeartRateBpm`、`hrvMs`）以及 `insertCoreMeasurements`/`insertCoreActivities`/`insertCoreMeals` 的整型字段，`incremental-write.pg.mjs` 的 nutrition 和 workout summary 参数，`archive-repository.pg.mjs` 的 sleep/activity/meal 整型字段，均补加 `Math.round(Number(...))` 取整保护，防止 AI 识别返回浮点值（如 `143.1`）触发 `invalid input syntax for type integer` 导致数据库写入失败和首页无数据显示。
