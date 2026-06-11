@@ -55,13 +55,22 @@
       return {
         responsive: true,
         maintainAspectRatio: false,
+        interaction: {
+          mode: 'nearest',
+          intersect: false,
+          axis: 'x',
+        },
+        hover: {
+          mode: 'nearest',
+          intersect: false,
+        },
         animation: {
           duration: 900,
           easing: 'easeOutQuart',
         },
         layout: {
           padding: {
-            top: 8,
+            top: 4,
             right: 8,
             bottom: 0,
             left: 0,
@@ -69,6 +78,8 @@
         },
         plugins: {
           legend: {
+            position: 'top',
+            align: 'end',
             labels: {
               usePointStyle: true,
               boxWidth: 10,
@@ -77,6 +88,7 @@
                 family: 'Inter, PingFang SC, Microsoft YaHei, sans-serif',
                 weight: '600',
               },
+              padding: 14,
             },
           },
           tooltip: {
@@ -87,6 +99,8 @@
             borderWidth: 1,
             padding: 12,
             displayColors: true,
+            mode: 'nearest',
+            intersect: false,
             callbacks: {
               title(items) {
                 return items?.[0]?.label || '';
@@ -178,16 +192,16 @@
           backgroundColor: 'rgba(249, 115, 22, 0.78)',
           borderRadius: 6,
           maxBarThickness: 14,
-          barPercentage: 0.72,
-          categoryPercentage: 0.7,
+          barPercentage: 0.66,
+          categoryPercentage: 0.66,
         }, {
           label: '训练消耗 (kcal)',
           data: trainingValues,
           backgroundColor: 'rgba(20, 184, 166, 0.8)',
           borderRadius: 6,
           maxBarThickness: 14,
-          barPercentage: 0.72,
-          categoryPercentage: 0.7,
+          barPercentage: 0.66,
+          categoryPercentage: 0.66,
         }],
       },
       options: makeCommonOptions(),
