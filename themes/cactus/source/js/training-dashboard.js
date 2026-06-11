@@ -22,55 +22,87 @@
         return true;
       }
 
-      const interval = Math.ceil(total / 8);
+      const interval = Math.ceil(total / 7);
       return index === 0 || index === total - 1 || index % interval === 0;
     }
 
     function makeCommonOptions() {
       return {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          labels: {
-            usePointStyle: true,
-            boxWidth: 10,
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          duration: 900,
+          easing: 'easeOutQuart',
+        },
+        layout: {
+          padding: {
+            top: 8,
+            right: 6,
+            bottom: 0,
+            left: 0,
           },
         },
-        tooltip: {
-          callbacks: {
-            title(items) {
-              return items?.[0]?.label || '';
+        plugins: {
+          legend: {
+            labels: {
+              usePointStyle: true,
+              boxWidth: 10,
+              color: '#cbd5e1',
+              font: {
+                family: 'Inter, PingFang SC, Microsoft YaHei, sans-serif',
+                weight: '600',
+              },
+            },
+          },
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            titleColor: '#f8fafc',
+            bodyColor: '#e2e8f0',
+            borderColor: 'rgba(148, 163, 184, 0.18)',
+            borderWidth: 1,
+            padding: 12,
+            displayColors: true,
+            callbacks: {
+              title(items) {
+                return items?.[0]?.label || '';
+              },
             },
           },
         },
-      },
-      scales: {
-        x: {
-          grid: {
-            display: false,
+        scales: {
+          x: {
+            grid: {
+              display: false,
+            },
+            ticks: {
+              autoSkip: false,
+              color: '#94a3b8',
+              maxRotation: 0,
+              minRotation: 0,
+              padding: 8,
+              callback(value, index, ticks) {
+                const total = ticks?.length || 0;
+                if (!shouldShowDateTick(index, total)) {
+                  return '';
+                }
+                const label = typeof this.getLabelForValue === 'function'
+                  ? this.getLabelForValue(value)
+                  : value;
+                return shortDateLabel(label);
+              },
+            },
           },
-          ticks: {
-            autoSkip: false,
-            callback(value, index, ticks) {
-              const total = ticks?.length || 0;
-              if (!shouldShowDateTick(index, total)) {
-                return '';
-              }
-              const label = typeof this.getLabelForValue === 'function'
-                ? this.getLabelForValue(value)
-                : value;
-              return shortDateLabel(label);
+          y: {
+            grid: {
+              color: 'rgba(148, 163, 184, 0.14)',
+            },
+            ticks: {
+              color: '#94a3b8',
+              precision: 0,
             },
           },
         },
-        y: {
-          ticks: {
-            precision: 0,
-          },
-        },
-      },
-    };
+      };
     }
 
     new Chart(document.getElementById('weight-chart'), {
@@ -80,11 +112,14 @@
         datasets: [{
           label: '体重 (kg)',
           data: weightValues,
-          borderColor: '#0f766e',
-          backgroundColor: 'rgba(15, 118, 110, 0.12)',
-          tension: 0.35,
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56, 189, 248, 0.14)',
+          tension: 0.38,
           fill: true,
           pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#e0f2fe',
+          pointBorderColor: '#0f172a',
         }],
       },
       options: makeCommonOptions(),
@@ -97,19 +132,21 @@
         datasets: [{
           label: '体脂率 (%)',
           data: bodyFatValues,
-          borderColor: '#ea580c',
-          backgroundColor: 'rgba(234, 88, 12, 0.12)',
-          tension: 0.35,
+          borderColor: '#f97316',
+          backgroundColor: 'rgba(249, 115, 22, 0.12)',
+          tension: 0.38,
           fill: false,
           pointRadius: 3,
+          pointHoverRadius: 5,
         }, {
           label: '骨骼肌量 (kg)',
           data: muscleValues,
-          borderColor: '#2563eb',
-          backgroundColor: 'rgba(37, 99, 235, 0.12)',
-          tension: 0.35,
+          borderColor: '#a78bfa',
+          backgroundColor: 'rgba(167, 139, 250, 0.12)',
+          tension: 0.38,
           fill: false,
           pointRadius: 3,
+          pointHoverRadius: 5,
         }],
       },
       options: makeCommonOptions(),
@@ -122,11 +159,15 @@
         datasets: [{
           label: '饮食摄入 (kcal)',
           data: intakeValues,
-          backgroundColor: '#f97316',
+          backgroundColor: 'rgba(249, 115, 22, 0.8)',
+          borderRadius: 8,
+          maxBarThickness: 18,
         }, {
           label: '训练消耗 (kcal)',
           data: trainingValues,
-          backgroundColor: '#14b8a6',
+          backgroundColor: 'rgba(20, 184, 166, 0.82)',
+          borderRadius: 8,
+          maxBarThickness: 18,
         }],
       },
       options: makeCommonOptions(),
@@ -139,11 +180,12 @@
         datasets: [{
           label: '骑行里程 (km)',
           data: cyclingValues,
-          borderColor: '#7c3aed',
-          backgroundColor: 'rgba(124, 58, 237, 0.12)',
-          tension: 0.35,
+          borderColor: '#c084fc',
+          backgroundColor: 'rgba(192, 132, 252, 0.12)',
+          tension: 0.38,
           fill: true,
           pointRadius: 3,
+          pointHoverRadius: 5,
         }],
       },
       options: makeCommonOptions(),
