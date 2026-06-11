@@ -18,12 +18,37 @@
     }
 
     function shouldShowDateTick(index, total) {
-      if (total <= 10) {
+      if (total <= 8) {
         return true;
       }
 
-      const interval = Math.ceil(total / 7);
+      const interval = Math.ceil(total / 6);
       return index === 0 || index === total - 1 || index % interval === 0;
+    }
+
+    function buildDateTicks(total, options = {}) {
+      const hideMiddle = options.hideMiddle !== false;
+      const maxTicksLimit = options.maxTicksLimit || 7;
+      return {
+        autoSkip: hideMiddle,
+        autoSkipPadding: 12,
+        maxTicksLimit,
+        color: '#64748b',
+        maxRotation: 0,
+        minRotation: 0,
+        padding: 10,
+        sampleSize: Math.min(total || 1, 10),
+        callback(value, index, ticks) {
+          const tickTotal = ticks?.length || 0;
+          if (!shouldShowDateTick(index, tickTotal)) {
+            return '';
+          }
+          const label = typeof this.getLabelForValue === 'function'
+            ? this.getLabelForValue(value)
+            : value;
+          return shortDateLabel(label);
+        },
+      };
     }
 
     function makeCommonOptions() {
@@ -37,7 +62,7 @@
         layout: {
           padding: {
             top: 8,
-            right: 6,
+            right: 8,
             bottom: 0,
             left: 0,
           },
@@ -74,23 +99,7 @@
             grid: {
               display: false,
             },
-            ticks: {
-              autoSkip: false,
-              color: '#64748b',
-              maxRotation: 0,
-              minRotation: 0,
-              padding: 8,
-              callback(value, index, ticks) {
-                const total = ticks?.length || 0;
-                if (!shouldShowDateTick(index, total)) {
-                  return '';
-                }
-                const label = typeof this.getLabelForValue === 'function'
-                  ? this.getLabelForValue(value)
-                  : value;
-                return shortDateLabel(label);
-              },
-            },
+            ticks: buildDateTicks(labels.length),
           },
           y: {
             grid: {
@@ -114,12 +123,13 @@
           data: weightValues,
           borderColor: '#0f766e',
           backgroundColor: 'rgba(15, 118, 110, 0.12)',
-          tension: 0.38,
+          tension: 0.32,
           fill: true,
-          pointRadius: 3,
+          pointRadius: 2.5,
           pointHoverRadius: 5,
-          pointBackgroundColor: '#e0f2fe',
-          pointBorderColor: '#0f172a',
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: '#0f766e',
+          pointBorderWidth: 1.5,
         }],
       },
       options: makeCommonOptions(),
@@ -134,19 +144,25 @@
           data: bodyFatValues,
           borderColor: '#ea580c',
           backgroundColor: 'rgba(234, 88, 12, 0.12)',
-          tension: 0.38,
+          tension: 0.32,
           fill: false,
-          pointRadius: 3,
+          pointRadius: 2.5,
           pointHoverRadius: 5,
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: '#ea580c',
+          pointBorderWidth: 1.5,
         }, {
           label: '骨骼肌量 (kg)',
           data: muscleValues,
           borderColor: '#2563eb',
           backgroundColor: 'rgba(37, 99, 235, 0.12)',
-          tension: 0.38,
+          tension: 0.32,
           fill: false,
-          pointRadius: 3,
+          pointRadius: 2.5,
           pointHoverRadius: 5,
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: '#2563eb',
+          pointBorderWidth: 1.5,
         }],
       },
       options: makeCommonOptions(),
@@ -159,15 +175,19 @@
         datasets: [{
           label: '饮食摄入 (kcal)',
           data: intakeValues,
-          backgroundColor: 'rgba(249, 115, 22, 0.8)',
-          borderRadius: 8,
-          maxBarThickness: 18,
+          backgroundColor: 'rgba(249, 115, 22, 0.78)',
+          borderRadius: 6,
+          maxBarThickness: 14,
+          barPercentage: 0.72,
+          categoryPercentage: 0.7,
         }, {
           label: '训练消耗 (kcal)',
           data: trainingValues,
-          backgroundColor: 'rgba(20, 184, 166, 0.82)',
-          borderRadius: 8,
-          maxBarThickness: 18,
+          backgroundColor: 'rgba(20, 184, 166, 0.8)',
+          borderRadius: 6,
+          maxBarThickness: 14,
+          barPercentage: 0.72,
+          categoryPercentage: 0.7,
         }],
       },
       options: makeCommonOptions(),
@@ -182,10 +202,13 @@
           data: cyclingValues,
           borderColor: '#7c3aed',
           backgroundColor: 'rgba(124, 58, 237, 0.12)',
-          tension: 0.38,
+          tension: 0.3,
           fill: true,
-          pointRadius: 3,
+          pointRadius: 2.5,
           pointHoverRadius: 5,
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: '#7c3aed',
+          pointBorderWidth: 1.5,
         }],
       },
       options: makeCommonOptions(),
