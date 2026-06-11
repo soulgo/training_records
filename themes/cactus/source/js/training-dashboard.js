@@ -78,18 +78,7 @@
         },
         plugins: {
           legend: {
-            position: 'top',
-            align: 'end',
-            labels: {
-              usePointStyle: true,
-              boxWidth: 10,
-              color: '#334155',
-              font: {
-                family: 'Inter, PingFang SC, Microsoft YaHei, sans-serif',
-                weight: '600',
-              },
-              padding: 14,
-            },
+            display: false,
           },
           tooltip: {
             backgroundColor: 'rgba(15, 23, 42, 0.95)',
@@ -128,7 +117,21 @@
       };
     }
 
-    new Chart(document.getElementById('weight-chart'), {
+    function renderLegend(chart, chartId) {
+      const host = document.querySelector('[data-chart-legend-for="' + chartId + '"]');
+      if (!host) {
+        return;
+      }
+
+      host.innerHTML = chart.data.datasets.map((dataset) => (
+        '<span class="chart-legend__item">' +
+          '<span class="chart-legend__swatch" style="--legend-color:' + dataset.borderColor + ';"></span>' +
+          '<span class="chart-legend__label">' + dataset.label + '</span>' +
+        '</span>'
+      )).join('');
+    }
+
+    const weightChart = new Chart(document.getElementById('weight-chart'), {
       type: 'line',
       data: {
         labels,
@@ -148,8 +151,9 @@
       },
       options: makeCommonOptions(),
     });
+    renderLegend(weightChart, 'weight-chart');
 
-    new Chart(document.getElementById('composition-chart'), {
+    const compositionChart = new Chart(document.getElementById('composition-chart'), {
       type: 'line',
       data: {
         labels,
@@ -181,8 +185,9 @@
       },
       options: makeCommonOptions(),
     });
+    renderLegend(compositionChart, 'composition-chart');
 
-    new Chart(document.getElementById('calorie-chart'), {
+    const calorieChart = new Chart(document.getElementById('calorie-chart'), {
       type: 'bar',
       data: {
         labels: (charts.intakeCalories || []).map((point) => point.date),
@@ -206,8 +211,9 @@
       },
       options: makeCommonOptions(),
     });
+    renderLegend(calorieChart, 'calorie-chart');
 
-    new Chart(document.getElementById('cycling-chart'), {
+    const cyclingChart = new Chart(document.getElementById('cycling-chart'), {
       type: 'line',
       data: {
         labels: cyclingLabels,
@@ -227,6 +233,7 @@
       },
       options: makeCommonOptions(),
     });
+    renderLegend(cyclingChart, 'cycling-chart');
   }
 
   const dailyPayload = document.getElementById('daily-overview-data');

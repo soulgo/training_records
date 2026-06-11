@@ -462,10 +462,10 @@ undefined
 
 .chart-heading
   display flex
-  align-items flex-end
+  align-items flex-start
   justify-content space-between
   gap 1rem
-  margin-bottom 0.9rem
+  margin-bottom 0.65rem
 
 .chart-heading h2
   margin 0
@@ -475,6 +475,41 @@ undefined
   margin-top 0.28rem
   color #7188a0
   font-size 0.86rem
+
+.chart-legend
+  display flex
+  flex-wrap wrap
+  justify-content flex-end
+  gap 0.45rem
+  margin-top 0.15rem
+  min-height 2.2rem
+  align-items flex-start
+
+.chart-legend__item
+  display inline-flex
+  align-items center
+  gap 0.45rem
+  padding 0.28rem 0.55rem
+  border-radius 999px
+  background #f8fbff
+  border 1px solid #dce7f4
+  color #314b68
+  font-size 0.84rem
+  font-weight 700
+  line-height 1
+  white-space nowrap
+
+.chart-legend__swatch
+  display inline-block
+  width 0.78rem
+  height 0.78rem
+  border-radius 999px
+  background var(--legend-color, currentColor)
+  box-shadow 0 0 0 2px rgba(255, 255, 255, 0.8) inset
+
+.chart-legend__label
+  overflow hidden
+  text-overflow ellipsis
 
 .chart-card canvas
   width 100%
