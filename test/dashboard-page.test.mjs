@@ -103,7 +103,7 @@ test('dashboard chart script keeps full data while sparsifying x-axis labels and
 test('dashboard chart legends render as top-right labels without filled backgrounds', () => {
   const script = readFileSync(path.join(rootDir, 'themes', 'cactus', 'source', 'js', 'training-dashboard.js'), 'utf8');
   const styles = readFileSync(path.join(rootDir, 'themes', 'cactus', 'source', 'css', 'training-dashboard.styl'), 'utf8');
-  const legendItemStyles = styles.match(/\.chart-legend__item\n([\s\S]*?)(?=\n\.[^\s])/);
+  const legendItemStyles = styles.match(/^\.chart-legend__item\r?\n([\s\S]*?)(?=^\.[^\s])/m);
 
   assert.match(script, /setAttribute\('aria-label', '图例：'/);
   assert.match(script, /class="chart-legend__text"/);
