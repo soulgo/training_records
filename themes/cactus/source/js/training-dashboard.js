@@ -47,7 +47,7 @@
             labels: {
               usePointStyle: true,
               boxWidth: 10,
-              color: '#cbd5e1',
+              color: '#334155',
               font: {
                 family: 'Inter, PingFang SC, Microsoft YaHei, sans-serif',
                 weight: '600',
@@ -76,7 +76,7 @@
             },
             ticks: {
               autoSkip: false,
-              color: '#94a3b8',
+              color: '#64748b',
               maxRotation: 0,
               minRotation: 0,
               padding: 8,
@@ -97,7 +97,7 @@
               color: 'rgba(148, 163, 184, 0.14)',
             },
             ticks: {
-              color: '#94a3b8',
+              color: '#64748b',
               precision: 0,
             },
           },
@@ -112,8 +112,8 @@
         datasets: [{
           label: '体重 (kg)',
           data: weightValues,
-          borderColor: '#38bdf8',
-          backgroundColor: 'rgba(56, 189, 248, 0.14)',
+          borderColor: '#0f766e',
+          backgroundColor: 'rgba(15, 118, 110, 0.12)',
           tension: 0.38,
           fill: true,
           pointRadius: 3,
@@ -132,8 +132,8 @@
         datasets: [{
           label: '体脂率 (%)',
           data: bodyFatValues,
-          borderColor: '#f97316',
-          backgroundColor: 'rgba(249, 115, 22, 0.12)',
+          borderColor: '#ea580c',
+          backgroundColor: 'rgba(234, 88, 12, 0.12)',
           tension: 0.38,
           fill: false,
           pointRadius: 3,
@@ -141,8 +141,8 @@
         }, {
           label: '骨骼肌量 (kg)',
           data: muscleValues,
-          borderColor: '#a78bfa',
-          backgroundColor: 'rgba(167, 139, 250, 0.12)',
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.12)',
           tension: 0.38,
           fill: false,
           pointRadius: 3,
@@ -180,8 +180,8 @@
         datasets: [{
           label: '骑行里程 (km)',
           data: cyclingValues,
-          borderColor: '#c084fc',
-          backgroundColor: 'rgba(192, 132, 252, 0.12)',
+          borderColor: '#7c3aed',
+          backgroundColor: 'rgba(124, 58, 237, 0.12)',
           tension: 0.38,
           fill: true,
           pointRadius: 3,
