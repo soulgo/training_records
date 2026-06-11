@@ -32,6 +32,22 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
   assert.match(action, /sync_db_reason=no_data_changes/);
   assert.match(action, /if: \$\{\{ inputs\.run_backfill == 'true' && \(inputs\.sync_db_mode == 'always' \|\| steps\.sync_db_changes\.outputs\.sync_db_needed == 'true'\) \}\}/);
   assert.match(action, /run:\s*npm run sync:db/);
+  assert.match(action, /- name: Export database markdown for Hexo posts/);
+  assert.match(action, /\$snapshot_source" != "database"/);
+  assert.match(action, /\$strict_database_snapshot" != "true"/);
+  assert.match(action, /npm run export:markdown/);
+  assert.ok(
+    action.indexOf('- name: Export database markdown for Hexo posts') > action.indexOf('- name: Sync safe database repairs'),
+    'database markdown export should run after safe database repairs',
+  );
+  assert.ok(
+    action.indexOf('- name: Run tests') > action.indexOf('- name: Export database markdown for Hexo posts'),
+    'tests should run against the DB-derived markdown used by Hexo',
+  );
+  assert.ok(
+    action.indexOf('- name: Build site data and static files') > action.indexOf('- name: Export database markdown for Hexo posts'),
+    'Hexo should build after DB-derived thought posts are exported',
+  );
   assert.doesNotMatch(action, /run:\s*npm run backfill:core/);
   assert.doesNotMatch(action, /run:\s*npm run reconcile:markdown/);
   assert.doesNotMatch(action, /run:\s*npm run backfill:thoughts/);
