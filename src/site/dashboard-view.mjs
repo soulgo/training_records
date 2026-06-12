@@ -145,8 +145,8 @@ function buildSecondaryMetrics({ latestMeasurement, latestDay, previousDay }) {
 }
 
 function buildSleepCards({ sleepSummarySource, sleepPreviousSource }) {
-  const sleep = sleepSummarySource || {};
-  const previousSleep = sleepPreviousSource || {};
+  const sleep = normalizeSleepDisplaySummary(sleepSummarySource || {});
+  const previousSleep = normalizeSleepDisplaySummary(sleepPreviousSource || {});
   const deepRatio = sleep.deepSleepRatioPct ?? buildSleepRatioValue(sleep.deepSleepMinutes, sleep.totalSleepMinutes);
   const lightRatio = sleep.lightSleepRatioPct ?? buildSleepRatioValue(sleep.lightSleepMinutes, sleep.totalSleepMinutes);
 
@@ -184,6 +184,16 @@ function hasSleepSummary(sleep) {
     sleep.nightSleepMinutes,
     sleep.napMinutes,
   ].some((value) => value !== null && value !== undefined));
+}
+
+function normalizeSleepDisplaySummary(sleep) {
+  if (!sleep) {
+    return {};
+  }
+  return {
+    ...sleep,
+    totalSleepMinutes: sleep.totalSleepMinutes ?? sleep.nightSleepMinutes ?? null,
+  };
 }
 
 function buildSleepRatioValue(partMinutes, totalMinutes) {
@@ -242,8 +252,9 @@ function buildDailyOverviewEntry(day) {
   const workoutDurationLabel = formatWorkoutDuration(day);
   const cyclingDistanceLabel = `${formatNumber(day.workoutSummary.cyclingDistanceKm)} km`;
   const nutritionCaloriesLabel = day.nutrition.totalCalories === null ? '—' : `${formatNumber(day.nutrition.totalCalories, 0)} kcal`;
-  const sleepLabel = day.sleepSummary?.totalSleepMinutes !== null && day.sleepSummary?.totalSleepMinutes !== undefined
-    ? `${formatNumber(day.sleepSummary.totalSleepMinutes, 0)} 分钟`
+  const sleepTotalMinutes = day.sleepSummary?.totalSleepMinutes ?? day.sleepSummary?.nightSleepMinutes ?? null;
+  const sleepLabel = sleepTotalMinutes !== null && sleepTotalMinutes !== undefined
+    ? `${formatNumber(sleepTotalMinutes, 0)} 分钟`
     : '—';
   const tags = Object.entries(day.workoutSummary.countsByType || {})
     .filter(([, count]) => count > 0)

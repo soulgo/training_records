@@ -166,6 +166,51 @@ test('dashboard sleep cards ignore incomplete latest sleep metrics without durat
   assert.match(view.sleepCards[2].valueHtml, /63/);
 });
 
+test('dashboard sleep cards fall back to night sleep when total duration is missing', () => {
+  const view = buildDashboardViewModel({
+    generatedAt: '2026-06-12T00:00:00.000Z',
+    latest: {
+      measurement: { archivedDate: '2026-06-11', weightKg: 71.2 },
+      daily: buildDay('2026-06-11', {
+        measurement: { archivedDate: '2026-06-11', weightKg: 71.2 },
+        sleepSummary: {
+          totalSleepMinutes: null,
+          nightSleepMinutes: 372,
+          napMinutes: null,
+          deepSleepMinutes: 109,
+          lightSleepMinutes: 175,
+          remSleepMinutes: 88,
+          awakeMinutes: null,
+          sleepScore: 78,
+          deepSleepRatioPct: 29,
+          lightSleepRatioPct: 48,
+        },
+      }),
+    },
+    daily: [
+      buildDay('2026-06-11', {
+        measurement: { archivedDate: '2026-06-11', weightKg: 71.2 },
+        sleepSummary: {
+          totalSleepMinutes: null,
+          nightSleepMinutes: 372,
+          napMinutes: null,
+          deepSleepMinutes: 109,
+          lightSleepMinutes: 175,
+          remSleepMinutes: 88,
+          awakeMinutes: null,
+          sleepScore: 78,
+          deepSleepRatioPct: 29,
+          lightSleepRatioPct: 48,
+        },
+      }),
+    ],
+    charts: {},
+  });
+
+  assert.match(view.sleepCards[0].valueHtml, /372/);
+  assert.equal(view.recentDays[0].sleepLabel, '372 分钟');
+});
+
 test('dashboard view model keeps the stable rendering contract for overview cards and charts', () => {
   const view = buildDashboardViewModel({
     generatedAt: '2026-05-13T00:00:00.000Z',
