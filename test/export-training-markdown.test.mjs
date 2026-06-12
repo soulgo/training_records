@@ -89,10 +89,77 @@ test('exportDerivedTrainingMarkdown uses database when no telegram fallback batc
   assert.deepEqual(observedStrictValues, ['true']);
 });
 
+test('exportDerivedTrainingMarkdown runs database schema preflight before strict database export', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push('connect');
+    },
+    async query(sql) {
+      calls.push(sql);
+      return { rows: [] };
+    },
+    async end() {
+      calls.push('end');
+    },
+  };
+
+  await exportDerivedTrainingMarkdown({
+    rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    ensureCoreSchema: async (client) => {
+      await client.query('alter table core.training_day add column if not exists sleep_total_minutes integer null');
+    },
+    buildTrainingSnapshot: async () => {
+      calls.push('snapshot');
+      return {
+        generatedAt: '2026-06-12T00:00:00.000Z',
+        latest: {
+          measurement: null,
+          daily: { date: '2026-06-12' },
+        },
+        daily: [],
+        charts: {
+          weightKg: [],
+          bodyFatPct: [],
+          skeletalMuscleKg: [],
+          basalMetabolism: [],
+          visceralFatLevel: [],
+          intakeCalories: [],
+          trainingCalories: [],
+          cyclingDistanceKm: [],
+        },
+      };
+    },
+    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-12\n',
+  });
+
+  assert.deepEqual(calls, [
+    'connect',
+    'alter table core.training_day add column if not exists sleep_total_minutes integer null',
+    'end',
+    'snapshot',
+  ]);
+});
+
 test('exportDerivedTrainingMarkdown surfaces incomplete database snapshots', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const recordPath = path.join(tempRoot, '训练记录.md');
   const observedSources = [];
+  const fakeClient = {
+    async connect() {},
+    async query() {
+      return { rows: [] };
+    },
+    async end() {},
+  };
 
   await writeFile(recordPath, '# 训练记录\n\n### 2026-04-06\n', 'utf8');
 
@@ -103,6 +170,10 @@ test('exportDerivedTrainingMarkdown surfaces incomplete database snapshots', asy
         TRAINING_DB_ENABLED: 'true',
         TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       },
+      createClient() {
+        return fakeClient;
+      },
+      ensureCoreSchema: async () => {},
       buildTrainingSnapshot: async ({ source }) => {
         observedSources.push(source);
         throw new Error('database snapshot is empty or missing measurements');
@@ -120,6 +191,13 @@ test('exportDerivedTrainingMarkdown surfaces unavailable database snapshots', as
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const recordPath = path.join(tempRoot, '训练记录.md');
   const observedSources = [];
+  const fakeClient = {
+    async connect() {},
+    async query() {
+      return { rows: [] };
+    },
+    async end() {},
+  };
 
   await writeFile(recordPath, '# 训练记录\n\n### 2026-05-14\n', 'utf8');
 
@@ -130,6 +208,10 @@ test('exportDerivedTrainingMarkdown surfaces unavailable database snapshots', as
         TRAINING_DB_ENABLED: 'true',
         TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       },
+      createClient() {
+        return fakeClient;
+      },
+      ensureCoreSchema: async () => {},
       buildTrainingSnapshot: async ({ source }) => {
         observedSources.push(source);
         throw new Error('database snapshot unavailable: timeout expired');
@@ -140,6 +222,55 @@ test('exportDerivedTrainingMarkdown surfaces unavailable database snapshots', as
   );
 
   assert.deepEqual(observedSources, ['database']);
+  assert.match(await readFile(recordPath, 'utf8'), /2026-05-14/);
+});
+
+test('exportDerivedTrainingMarkdown does not overwrite markdown when schema preflight fails', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
+  const recordPath = path.join(tempRoot, '训练记录.md');
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push('connect');
+    },
+    async query() {
+      throw new Error('permission denied for schema core');
+    },
+    async end() {
+      calls.push('end');
+    },
+  };
+
+  await writeFile(recordPath, '# 训练记录\n\n### 2026-05-14\n', 'utf8');
+
+  await assert.rejects(
+    exportDerivedTrainingMarkdown({
+      rootDir: tempRoot,
+      env: {
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      createClient() {
+        return fakeClient;
+      },
+      ensureCoreSchema: async (client) => {
+        await client.query('alter table core.training_day add column if not exists sleep_total_minutes integer null');
+      },
+      buildTrainingSnapshot: async () => {
+        calls.push('snapshot');
+        return {
+          generatedAt: '2026-06-12T00:00:00.000Z',
+          latest: { measurement: null, daily: { date: '2026-06-12' } },
+          daily: [],
+          charts: {},
+        };
+      },
+      exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-12\n',
+    }),
+    /permission denied for schema core/i,
+  );
+
+  assert.deepEqual(calls, ['connect', 'end']);
   assert.match(await readFile(recordPath, 'utf8'), /2026-05-14/);
 });
 
