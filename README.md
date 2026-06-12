@@ -8,7 +8,7 @@
 
 - 从 PostgreSQL `core.*` 读取结构化训练数据。
 - 通过 Telegram 发送锻炼、饮食、体脂秤和睡眠截图，并调用 AI 识别归档。
-- Telegram `/随想` / `/thought` 写入随想和身体反馈，支持编辑、删除、移动和带图。
+- Telegram `/随想` / `/thought` 写入随想和身体反馈，支持编辑、删除、移动、带图和 Markdown 文档附件正文。
 - Telegram `/分析` / `/analysis` 基于训练快照生成训练建议，只回发 Telegram，不写入数据。
 - PostgreSQL 写入失败时，批次进入待补偿队列，数据库恢复后重放。
 - 定时从数据库导出 Markdown 备份。
@@ -151,7 +151,7 @@ Telegram 自动流程：
 1. Telegram 消息进入 Cloudflare Worker。
 2. Worker 校验 secret；帮助消息直接回复，其它消息触发 GitHub `repository_dispatch`。
 3. `telegram-sync.yml` 执行 `npm run sync:telegram`。
-4. 图片批次调用 AI 识别；随想和分析按命令分支处理。
+4. 图片批次调用 AI 识别；随想、Markdown 附件随想和分析按命令分支处理。
 5. 图片、随想和身体反馈写 PostgreSQL。
 6. PostgreSQL 失败时写 pending 队列。
 7. 内容变化后 workflow 只提交文件；站点构建部署由 push 或 DB-only 异步 deploy workflow 完成。
@@ -236,6 +236,9 @@ PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`
 
 **Telegram 图片为什么没有入库？**
 常见原因是未授权 chat、AI 识别失败、置信度低、同一批次日期冲突，或图片和文件名都没有可靠日期。先看 GitHub Actions 的 `Telegram Sync` 日志和 pending 队列。
+
+**Telegram Markdown 附件随想怎么发？**
+把 `.md` 或 `.markdown` 文件作为 Telegram 文档附件发送，并在 caption 写 `/随想`、`/随想 杂七杂八` 或 `/随想 身体反馈`。附件正文会写入 `core.thought.body`，大小上限为 5MB。
 
 **`/分析` 会改训练记录吗？**
 不会。它只读取 `TrainingSnapshot`，调用 AI 后回发 Telegram。

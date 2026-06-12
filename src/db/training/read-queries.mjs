@@ -8,6 +8,15 @@ export const TRAINING_DAY_QUERY = `
     active_hours,
     cycling_distance_km,
     intake_calories,
+    sleep_total_minutes,
+    night_sleep_minutes,
+    nap_minutes,
+    sleep_start_time,
+    sleep_end_time,
+    deep_sleep_minutes,
+    light_sleep_minutes,
+    rem_sleep_minutes,
+    awake_minutes,
     nutrition_details_json
   from core.training_day
   order by archived_date asc

@@ -8,6 +8,7 @@ import {
   readTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabaseWithClients,
 } from './read-client.mjs';
+import { getLastProcessedTelegramUpdateId as getLastUpdateIdFromAdapter } from '../../adapters/postgres/telegram-batch-repository.pg.mjs';
 
 const { Client } = pg;
 
@@ -78,11 +79,7 @@ export async function getLastProcessedTelegramUpdateId(options = {}) {
 
   try {
     await client.connect();
-    const result = await client.query(`
-      select coalesce(max(update_id), 0) as last_processed_update_id
-      from ingest.telegram_message
-    `);
-    return Number(result.rows[0]?.last_processed_update_id ?? 0);
+    return await getLastUpdateIdFromAdapter(client);
   } finally {
     await client.end();
   }

@@ -1,20 +1,34 @@
 .dashboard-page
+  position relative
   margin-top 1.25rem
   display flex
   flex-direction column
-  gap 1.2rem
+  gap 1.05rem
   color #0f2d4a
   background linear-gradient(180deg, #eef8ff 0%, #f8fbff 22%, #ffffff 100%)
+
+.dashboard-page:before
+  content ""
+  position absolute
+  inset 0
+  pointer-events none
+  background linear-gradient(180deg, rgba(255, 255, 255, 0.35), transparent 18%)
 
 .dashboard-page .overview-card,
 .dashboard-page .hero-card,
 .dashboard-page .metric-card,
 .dashboard-page .chart-card,
 .dashboard-page .day-card
-  box-shadow 0 14px 34px rgba(30, 64, 175, 0.07)
+  box-shadow 0 18px 48px rgba(30, 64, 175, 0.09)
+  backdrop-filter blur(12px)
 
-.dashboard-page .overview-card
-  background linear-gradient(180deg, #ffffff 0%, #edf7ff 100%)
+.dashboard-page .overview-card,
+.dashboard-page .hero-card,
+.dashboard-page .metric-card,
+.dashboard-page .chart-card,
+.dashboard-page .day-card
+  background rgba(255, 255, 255, 0.88)
+  border 1px solid rgba(191, 219, 254, 0.85)
 
 .dashboard-page .overview-card:before
   background radial-gradient(circle, rgba(56, 189, 248, 0.22), rgba(56, 189, 248, 0))
@@ -80,7 +94,7 @@
   align-items flex-end
   justify-content space-between
   gap 1rem
-  margin-bottom 0.9rem
+  margin-bottom 0.75rem
 
 .dashboard-section__eyebrow
   display inline-flex
@@ -153,8 +167,8 @@
 .overview-card__meta
   display grid
   grid-template-columns repeat(2, minmax(0, 1fr))
-  gap 0.75rem
-  margin-top 1.15rem
+  gap 0.7rem
+  margin-top 1rem
 
 .overview-card__meta-item
   padding 0.82rem 0.9rem
@@ -172,8 +186,8 @@ undefined
 .overview-card__stats
   display grid
   grid-template-columns repeat(2, minmax(0, 1fr))
-  gap 0.8rem
-  margin-top 1rem
+  gap 0.7rem
+  margin-top 0.85rem
   min-width 0
 
 .overview-card__meta-item,
@@ -212,14 +226,14 @@ undefined
 .hero-metrics
   display grid
   grid-template-columns repeat(2, minmax(0, 1fr))
-  gap 1rem
+  gap 0.8rem
 
 .hero-card,
 .metric-card
   display flex
   flex-direction column
   min-height 100%
-  padding 1.15rem
+  padding 1rem 1rem 0.95rem
 
 .hero-label,
 .metric-title
@@ -433,34 +447,89 @@ undefined
 .metric-grid__cards
   display grid
   grid-template-columns repeat(3, minmax(0, 1fr))
-  gap 1rem
+  gap 0.85rem
 
 .chart-grid
   display grid
   grid-template-columns repeat(2, minmax(0, 1fr))
-  gap 1rem
+  gap 0.85rem
 
 .chart-card
-  padding 1.05rem 1.05rem 0.95rem
+  position relative
+  padding 1rem 1rem 0.9rem
 
 .chart-card--wide
   min-height 21rem
 
 .chart-heading
   display flex
-  align-items flex-end
+  align-items flex-start
   justify-content space-between
-  gap 1rem
-  margin-bottom 0.9rem
+  gap 0.75rem
+  margin-bottom 0.55rem
 
 .chart-heading h2
   margin 0
 
-.chart-heading span
+.chart-heading > div:first-child > span:not(.dashboard-section__eyebrow)
   display block
   margin-top 0.28rem
   color #7188a0
   font-size 0.86rem
+
+.chart-legend
+  position absolute
+  top 1.08rem
+  right 1rem
+  display flex
+  flex-direction column
+  flex-wrap nowrap
+  justify-content flex-end
+  gap 0.38rem
+  max-width min(42%, 12rem)
+  min-height 1.4rem
+  align-items flex-end
+
+.chart-legend__item
+  display inline-flex
+  align-items center
+  justify-content flex-end
+  gap 0.4rem
+  max-width 100%
+  min-height 1.25rem
+  padding 0
+  color #38536f
+  font-size 0.78rem
+  font-weight 700
+  line-height 1.1
+  white-space nowrap
+
+.chart-legend__swatch
+  display inline-flex
+  flex 0 0 auto
+  width 0.58rem
+  height 0.58rem
+  border-radius 999px
+  background var(--legend-color, currentColor)
+  box-shadow 0 0 0 2px rgba(255, 255, 255, 0.9)
+
+.chart-legend__label
+  display inline-flex
+  align-items baseline
+  gap 0.24rem
+  min-width 0
+  overflow hidden
+  text-overflow ellipsis
+
+.chart-legend__text
+  color #274862
+  overflow hidden
+  text-overflow ellipsis
+
+.chart-legend__unit
+  color #7188a0
+  font-size 0.72rem
+  font-weight 700
 
 .chart-card canvas
   width 100%
@@ -610,6 +679,12 @@ undefined
   .chart-card canvas
     height 220px !important
 
+  .chart-heading
+    min-height 3.45rem
+
+  .chart-legend
+    max-width 10rem
+
   .comparison-pill
     grid-template-columns auto 1fr
 
@@ -651,6 +726,16 @@ undefined
   .daily-section__heading
     align-items flex-start
     flex-direction column
+
+  .chart-heading
+    min-height auto
+    padding-top 2.65rem
+
+  .chart-legend
+    top 1rem
+    right 1rem
+    justify-content flex-end
+    max-width calc(100% - 2rem)
 
   .daily-section__meta
     width 100%

@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access, readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { constants } from 'node:fs';
+import { access, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 const rootDir = new URL('../', import.meta.url);
 
@@ -29,6 +32,22 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
   assert.match(action, /sync_db_reason=no_data_changes/);
   assert.match(action, /if: \$\{\{ inputs\.run_backfill == 'true' && \(inputs\.sync_db_mode == 'always' \|\| steps\.sync_db_changes\.outputs\.sync_db_needed == 'true'\) \}\}/);
   assert.match(action, /run:\s*npm run sync:db/);
+  assert.match(action, /- name: Export database markdown for Hexo posts/);
+  assert.match(action, /\$snapshot_source" != "database"/);
+  assert.match(action, /\$strict_database_snapshot" != "true"/);
+  assert.match(action, /npm run export:markdown/);
+  assert.ok(
+    action.indexOf('- name: Export database markdown for Hexo posts') > action.indexOf('- name: Sync safe database repairs'),
+    'database markdown export should run after safe database repairs',
+  );
+  assert.ok(
+    action.indexOf('- name: Run tests') > action.indexOf('- name: Export database markdown for Hexo posts'),
+    'tests should run against the DB-derived markdown used by Hexo',
+  );
+  assert.ok(
+    action.indexOf('- name: Build site data and static files') > action.indexOf('- name: Export database markdown for Hexo posts'),
+    'Hexo should build after DB-derived thought posts are exported',
+  );
   assert.doesNotMatch(action, /run:\s*npm run backfill:core/);
   assert.doesNotMatch(action, /run:\s*npm run reconcile:markdown/);
   assert.doesNotMatch(action, /run:\s*npm run backfill:thoughts/);
@@ -268,12 +287,48 @@ test('telegram-sync workflows keep database-only detection without blocking on p
     assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
     assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
     assert.match(workflow, /db_content_changed=true/);
-    assert.match(workflow, /readyStoredTrainingBatches/);
+    assert.match(workflow, /readyStoredContentBatches/);
     assert.match(workflow, /- name: Write Telegram sync summary/);
     assert.match(workflow, /- name: Notify Telegram sync result/);
     assert.match(workflow, /if: success\(\) && github\.event_name == 'repository_dispatch' && \(steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'\)/);
     assert.match(workflow, /strict_database_snapshot/);
     assert.doesNotMatch(workflow, /steps\.detect\.outputs\.db_content_changed == 'true'[\s\S]*uses:\s*\.\/\.github\/actions\/site-build/);
+  }
+});
+
+test('telegram-sync workflows treat stored thought batches as database content changes', async () => {
+  const workflows = [
+    await readWorkflow('.github/workflows/telegram-sync.yml'),
+    await readWorkflow('.github/workflows/telegram-sync-dev.yml'),
+  ];
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-workflow-detect-'));
+  const resultPath = path.join(tempRoot, 'telegram-sync-result.json');
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batches: [
+        {
+          kind: 'thought',
+          status: 'ready',
+          persistenceStatus: 'stored',
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  for (const workflow of workflows) {
+    const detectionScript = extractDatabaseContentDetectionScript(workflow);
+    const output = execFileSync(process.execPath, ['-e', detectionScript], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        TELEGRAM_SYNC_RESULT_PATH: resultPath,
+      },
+    });
+
+    assert.match(output, /db_content_changed=true/);
   }
 });
 
@@ -409,4 +464,10 @@ async function readWorkflow(relativePath) {
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractDatabaseContentDetectionScript(workflow) {
+  const match = workflow.match(/node <<'NODE' >> "\$GITHUB_OUTPUT"\n([\s\S]*?readyStored[\s\S]*?)\n\s*NODE/);
+  assert.ok(match, 'missing database content detection script');
+  return match[1];
 }

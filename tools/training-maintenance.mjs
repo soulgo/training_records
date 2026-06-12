@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { exportDerivedTrainingMarkdown as exportDerivedTrainingMarkdownDefault } from './export-training-markdown.mjs';
 import { syncTrainingCore as syncTrainingCoreDefault } from './sync-training-core.mjs';
+import { readPendingRecognitionBatches as readPendingBatchesDefault } from './training-db-core.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..');
@@ -18,12 +19,13 @@ export async function runTrainingMaintenance(options = {}) {
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
   const syncTrainingCore = options.syncTrainingCore ?? syncTrainingCoreDefault;
+  const readPendingBatches = options.readPendingBatches ?? readPendingBatchesDefault;
   const exportDerivedTrainingMarkdown =
     options.exportDerivedTrainingMarkdown ?? exportDerivedTrainingMarkdownDefault;
 
   let payload;
   if (command === 'inspect') {
-    payload = await inspectMaintenanceState({ rootDir, env });
+    payload = await inspectMaintenanceState({ rootDir, env, readPendingBatches });
   } else if (command === 'sync') {
     payload = await runSyncMaintenance({ rootDir, env, stderr, flags, syncTrainingCore });
   } else if (command === 'export') {
@@ -55,22 +57,21 @@ export async function runTrainingMaintenance(options = {}) {
   return payload;
 }
 
-async function inspectMaintenanceState({ rootDir, env }) {
+async function inspectMaintenanceState({ rootDir, env, readPendingBatches }) {
   const runtimeDir = path.join(rootDir, 'runtime');
-  const pendingFallback = await readNdjsonSummary(
-    path.join(runtimeDir, 'telegram-sync-pending.ndjson'),
-  );
   const archiveFailures = await readNdjsonSummary(
     path.join(runtimeDir, 'training-archive-failures.ndjson'),
   );
+  const pendingDatabase = await readPendingDatabaseSummary({ env, readPendingBatches });
 
   return {
     status: 'ok',
     mode: 'inspect',
     readonly: true,
     data: {
-      pendingFallbackCount: pendingFallback.validCount,
-      pendingFallbackInvalidLines: pendingFallback.invalidLines,
+      pendingDatabaseCount: pendingDatabase.count,
+      pendingDatabaseStatus: pendingDatabase.status,
+      pendingDatabaseError: pendingDatabase.error,
       archiveFailureCount: archiveFailures.validCount,
       archiveFailureInvalidLines: archiveFailures.invalidLines,
       database: {
@@ -79,6 +80,23 @@ async function inspectMaintenanceState({ rootDir, env }) {
       },
     },
   };
+}
+
+async function readPendingDatabaseSummary({ env, readPendingBatches }) {
+  try {
+    const pending = await readPendingBatches({ env, limit: 1000 });
+    return {
+      status: 'ok',
+      count: pending.length,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      status: 'unavailable',
+      count: 0,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 async function runSyncMaintenance({ rootDir, env, stderr, flags, syncTrainingCore }) {

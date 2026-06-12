@@ -410,7 +410,8 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
 
   assert.equal(result.status, 'stored');
   assert.equal(calls[0][0], 'connect');
-  assert.equal(calls[1][0], 'BEGIN');
+  assert.ok(calls.some(([sql]) => /alter table core\.sleep/i.test(sql)), 'ensureCoreSchema should run before BEGIN');
+  assert.equal(calls[2][0], 'BEGIN');
   assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_message/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)));
@@ -685,6 +686,9 @@ test('persistNormalizedBatch upserts sleep without deleting nutrition details', 
   assert.equal(calls.some(([sql]) => /insert into core\.meal/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal|sleep)/i.test(sql)), false);
   assert.match(trainingDayInsert[0], /existing_day/i);
+  assert.match(trainingDayInsert[0], /sleep_summary/i);
+  assert.match(trainingDayInsert[0], /sleep_total_minutes/i);
+  assert.match(trainingDayInsert[0], /sleep_start_time/i);
   assert.equal(trainingDayInsert[1][9], false);
   assert.equal(trainingDayInsert[1][10], false);
 });

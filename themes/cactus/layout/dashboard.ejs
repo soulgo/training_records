@@ -136,6 +136,7 @@ function formatDailyRange(pageIndex, pageSize, total) {
                 <h2><%= chart.title %></h2>
                 <span><%= chart.subtitle %></span>
               </div>
+              <div class="chart-legend" data-chart-legend-for="<%= chart.id %>"></div>
             </div>
             <canvas id="<%= chart.id %>"></canvas>
           </article>

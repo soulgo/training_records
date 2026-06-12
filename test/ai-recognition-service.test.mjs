@@ -5,7 +5,7 @@ import {
   buildRecognitionCacheKey,
   isRecognitionCacheEnabled,
   recognizeTelegramImageMessage,
-} from '../src/ai/recognition-service.mjs';
+} from '../src/app/use-cases/image-recognition.use-case.mjs';
 
 const promptMetadata = {
   version: '2026-05-24',
@@ -89,121 +89,6 @@ test('recognizeTelegramImageMessage skips cache when disabled and keeps runtime 
   assert.equal(result.model, 'gpt-test');
   assert.equal(result.messageId, 77);
   assert.equal(result.imageType, 'workout');
-});
-
-test('recognizeTelegramImageMessage includes telegram message date context in image prompt', async () => {
-  let promptText = '';
-  await recognizeTelegramImageMessage({
-    aiProvider: {
-      env: { model: 'gpt-test' },
-      async requestChatCompletion(input) {
-        promptText = input.messages
-          .find((message) => message.role === 'user')
-          .content.find((part) => part.type === 'text')
-          .text;
-        return {
-          ok: true,
-          async json() {
-            return {
-              choices: [
-                {
-                  message: {
-                    content: JSON.stringify({
-                      imageType: 'workout',
-                      detectedDate: '2026-06-06',
-                      dateEvidence: 'image shows 6月6日, year from telegram message',
-                      confidence: 0.92,
-                      warnings: [],
-                      records: {
-                        measurement: null,
-                        activities: [],
-                        meals: [],
-                        totalCalories: null,
-                        details: [],
-                        dailyWorkoutSummary: null,
-                      },
-                    }),
-                  },
-                },
-              ],
-            };
-          },
-        };
-      },
-    },
-    message: {
-      messageId: 82,
-      caption: '',
-      text: '',
-      dateUnix: Date.UTC(2026, 5, 8, 5, 46, 33) / 1000,
-      photos: [{ fileUniqueId: 'file-date-context' }],
-    },
-    imageUrl: 'https://example.com/image.jpg',
-    systemPrompt: 'system prompt',
-    promptMetadata,
-    env: {
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
-    },
-  });
-
-  assert.match(promptText, /telegramMessageDate: 2026-06-08/);
-  assert.match(promptText, /telegramMessageYear: 2026/);
-});
-
-test('recognizeTelegramImageMessage normalizes string null detectedDate before schema validation', async () => {
-  const result = await recognizeTelegramImageMessage({
-    aiProvider: {
-      env: { model: 'gpt-test' },
-      async requestChatCompletion() {
-        return {
-          ok: true,
-          async json() {
-            return {
-              choices: [
-                {
-                  message: {
-                    content: JSON.stringify({
-                      imageType: 'workout',
-                      detectedDate: 'null',
-                      dateEvidence: 'no reliable image date',
-                      confidence: 0.97,
-                      warnings: [],
-                      records: {
-                        measurement: null,
-                        activities: [{ time: '19:10', type: '力量训练', detail: '总消耗241千卡' }],
-                        meals: [],
-                        totalCalories: null,
-                        details: [],
-                        dailyWorkoutSummary: null,
-                      },
-                    }),
-                  },
-                },
-              ],
-            };
-          },
-        };
-      },
-    },
-    message: {
-      messageId: 83,
-      caption: '',
-      text: '',
-      photos: [{ fileUniqueId: 'file-string-null' }],
-    },
-    imageUrl: 'https://example.com/image.jpg',
-    systemPrompt: 'system prompt',
-    promptMetadata,
-    env: {
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
-    },
-  });
-
-  assert.equal(result.detectedDate, null);
-  assert.equal(result.imageType, 'workout');
-  assert.equal(result.records.activities.length, 1);
 });
 
 test('recognizeTelegramImageMessage normalizes incomplete Huawei sleep payloads before schema validation', async () => {

@@ -1,4 +1,12 @@
 export {
+  readCoreDay,
+  readCoreDays,
+  replaceCoreDay,
+  replaceCoreDays,
+  writeCoreDays,
+} from '../src/adapters/postgres/index.mjs';
+
+export {
   persistNormalizedBatch,
   persistTrainingSnapshotToCore,
   persistTrainingSnapshotToCoreClient,
@@ -7,4 +15,4 @@ export {
   backfillCoreSleepFromIngestBatches,
   backfillCoreSleepFromIngestBatchesClient,
   importTrainingMarkdownToDatabase,
-} from '../src/db/training/write.mjs';
+} from '../src/adapters/postgres/training-write.facade.mjs';

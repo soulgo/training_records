@@ -111,6 +111,20 @@ runs:
       shell: bash
       run: npm run sync:db
 
+    - name: Export database markdown for Hexo posts
+      shell: bash
+      env:
+        SNAPSHOT_SOURCE: ${{ env.TRAINING_SNAPSHOT_SOURCE }}
+        STRICT_DATABASE_SNAPSHOT: ${{ env.TRAINING_SNAPSHOT_STRICT_DATABASE }}
+      run: |
+        snapshot_source="$(printf '%s' "$SNAPSHOT_SOURCE" | tr '[:upper:]' '[:lower:]')"
+        strict_database_snapshot="$(printf '%s' "$STRICT_DATABASE_SNAPSHOT" | tr '[:upper:]' '[:lower:]')"
+        if [ "$snapshot_source" != "database" ] || [ "$strict_database_snapshot" != "true" ]; then
+          echo "Skipping database markdown export for snapshot_source=${SNAPSHOT_SOURCE:-unset}, strict_database_snapshot=${STRICT_DATABASE_SNAPSHOT:-unset}"
+          exit 0
+        fi
+        npm run export:markdown
+
     - name: Run tests
       if: ${{ inputs.run_tests == 'true' }}
       shell: bash

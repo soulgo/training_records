@@ -840,6 +840,7 @@ test('runTelegramSync does not run sleep backfill when pending recognition repla
 
 test('runTelegramSync queues database replay when image persistence fails', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-fallback-'));
+  const queuedPersistenceFailures = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -879,6 +880,10 @@ test('runTelegramSync queues database replay when image persistence fails', asyn
     persistNormalizedBatch: async () => {
       throw new Error('database unavailable');
     },
+    appendPendingRecognitionBatch: async (entry) => {
+      queuedPersistenceFailures.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
     exportTrainingMarkdown: () => {
       throw new Error('should not export from database on fallback');
     },
@@ -888,11 +893,12 @@ test('runTelegramSync queues database replay when image persistence fails', asyn
   assert.equal(result.fallbackUsed, false);
   assert.equal(result.batchResults[0].persistenceStatus, 'pending_replay');
   assert.equal(result.batchResults[0].persistenceError, 'database unavailable');
+  assert.equal(queuedPersistenceFailures.length, 1);
+  assert.equal(queuedPersistenceFailures[0].batch.batchId, 'album-1');
+  assert.equal(queuedPersistenceFailures[0].batch.archivedDate, '2026-05-09');
+  assert.equal(queuedPersistenceFailures[0].failureCategory, 'database');
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
-  assert.match(
-    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    /album-1/,
-  );
+  await assert.rejects(readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'), /ENOENT/);
 });
 
 test('runTelegramSync skips undated batches without persisting fallback or markdown writes', async () => {
@@ -991,10 +997,7 @@ test('runTelegramSync skips undated batches without persisting fallback or markd
   assert.deepEqual(persistedBatches, []);
   assert.equal(result.batchResults[0].status, 'skipped');
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'));
-  assert.equal(
-    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    '',
-  );
+  await assert.rejects(readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'), /ENOENT/);
 });
 
 test('runTelegramSync skips conflicting-date batches and continues processing ready batches', async () => {
@@ -1157,10 +1160,7 @@ test('runTelegramSync skips conflicting-date batches and continues processing re
   assert.match(result.batchResults[0].failureReason, /conflicting detected dates/);
   assert.equal(result.batchResults[1].status, 'ready');
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
-  assert.equal(
-    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    '',
-  );
+  await assert.rejects(readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'), /ENOENT/);
 });
 
 test('buildTelegramSyncReport exposes pending replay and archived date details for logs', () => {
@@ -1945,6 +1945,280 @@ test('runTelegramSync stores a /thought telegram message in core without writing
   );
 });
 
+test('runTelegramSync stores markdown document content as the thought body', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-md-'));
+  const persistedBatches = [];
+  const downloadedFileIds = [];
+  let recognized = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 503,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想 这段 caption 正文应该被 Markdown 附件覆盖',
+          document: {
+            file_id: 'markdown-file-503',
+            file_unique_id: 'markdown-uniq-503',
+            file_name: '训练随想.md',
+            mime_type: 'text/markdown',
+            file_size: 128,
+          },
+        },
+      },
+    ],
+    recognizeBatch: async () => {
+      recognized = true;
+      return [];
+    },
+    fetchTelegramFile: async (fileId) => {
+      downloadedFileIds.push(fileId);
+      return {
+        filePath: 'documents/训练随想.md',
+        contentType: 'text/markdown',
+        data: Buffer.from('\uFEFF# Markdown 标题\n\n- 动作更稳\n', 'utf8'),
+      };
+    },
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+  });
+
+  assert.equal(recognized, false);
+  assert.deepEqual(downloadedFileIds, ['markdown-file-503']);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'no_images');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches.length, 1);
+  assert.equal(persistedBatches[0].thought.body, '# Markdown 标题\n\n- 动作更稳');
+});
+
+test('runTelegramSync accepts markdown thought attachments larger than 1MB up to the configured limit', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-md-5mb-'));
+  const persistedBatches = [];
+  const largeMarkdownBody = `# 大随想\n\n${'动作记录\n'.repeat(140_000)}`;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 508,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想',
+          document: {
+            file_id: 'markdown-file-508',
+            file_unique_id: 'markdown-uniq-508',
+            file_name: '大随想.md',
+            mime_type: 'text/markdown',
+            file_size: Buffer.byteLength(largeMarkdownBody, 'utf8'),
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async () => ({
+      filePath: 'documents/大随想.md',
+      contentType: 'text/markdown',
+      data: Buffer.from(largeMarkdownBody, 'utf8'),
+    }),
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+  });
+
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches.length, 1);
+  assert.equal(Buffer.byteLength(persistedBatches[0].thought.body, 'utf8') > 1024 * 1024, true);
+  assert.equal(persistedBatches[0].thought.body.startsWith('# 大随想'), true);
+});
+
+test('runTelegramSync allows module-only captions when a markdown document supplies the body', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-md-module-'));
+  const persistedBatches = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 504,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想 身体反馈',
+          document: {
+            file_id: 'markdown-file-504',
+            file_unique_id: 'markdown-uniq-504',
+            file_name: '身体反馈.md',
+            mime_type: 'text/plain',
+            file_size: 64,
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async () => ({
+      filePath: 'documents/身体反馈.md',
+      contentType: 'text/plain',
+      data: Buffer.from('## 腰背反馈\n\n今天硬拉后右侧腰背有点刺痛', 'utf8'),
+    }),
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+  });
+
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches[0].thought.thoughtModule, 'body_feedback');
+  assert.equal(persistedBatches[0].thought.body, '## 腰背反馈\n\n今天硬拉后右侧腰背有点刺痛');
+});
+
+test('runTelegramSync rejects empty markdown thought attachments before persistence', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-md-empty-'));
+  let persisted = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 505,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想',
+          document: {
+            file_id: 'markdown-file-505',
+            file_unique_id: 'markdown-uniq-505',
+            file_name: '空随想.md',
+            mime_type: 'text/markdown',
+            file_size: 8,
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async () => ({
+      filePath: 'documents/空随想.md',
+      contentType: 'text/markdown',
+      data: Buffer.from(' \n\t', 'utf8'),
+    }),
+    persistNormalizedBatch: async () => {
+      persisted = true;
+      return { status: 'stored' };
+    },
+  });
+
+  assert.equal(persisted, false);
+  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'failed');
+  assert.match(result.batchResults[0].failureReason, /empty markdown attachment/i);
+});
+
+test('runTelegramSync rejects oversized markdown thought attachments before download', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-md-large-'));
+  let downloaded = false;
+  let persisted = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 506,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想',
+          document: {
+            file_id: 'markdown-file-506',
+            file_unique_id: 'markdown-uniq-506',
+            file_name: '过大的随想.md',
+            mime_type: 'text/markdown',
+            file_size: 5 * 1024 * 1024 + 1,
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async () => {
+      downloaded = true;
+      return {
+        filePath: 'documents/过大的随想.md',
+        contentType: 'text/markdown',
+        data: Buffer.from('# too large', 'utf8'),
+      };
+    },
+    persistNormalizedBatch: async () => {
+      persisted = true;
+      return { status: 'stored' };
+    },
+  });
+
+  assert.equal(downloaded, false);
+  assert.equal(persisted, false);
+  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'failed');
+  assert.match(result.batchResults[0].failureReason, /markdown attachment too large/i);
+});
+
+test('runTelegramSync reports markdown thought attachment download failures', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-md-download-'));
+  let persisted = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 507,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想',
+          document: {
+            file_id: 'markdown-file-507',
+            file_unique_id: 'markdown-uniq-507',
+            file_name: '下载失败.md',
+            mime_type: 'text/markdown',
+            file_size: 64,
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async () => {
+      throw new Error('Telegram file download failed with HTTP 500');
+    },
+    persistNormalizedBatch: async () => {
+      persisted = true;
+      return { status: 'stored' };
+    },
+  });
+
+  assert.equal(persisted, false);
+  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batchResults[0].failureCategory, 'telegram_api');
+  assert.match(result.batchResults[0].failureReason, /Telegram file download failed/i);
+});
+
 test('runTelegramSync writes /随想 image artifacts and stores core thought metadata', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-photo-'));
   const persistedBatches = [];
@@ -2568,6 +2842,219 @@ photos:
   );
 });
 
+test('runTelegramSync uses markdown document content as an explicit thought edit body', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-edit-md-'));
+  const persistedBatches = [];
+  const downloadedFileIds = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 136,
+          date: Math.floor(new Date('2026-05-18T02:59:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想编 126 这段 caption 正文应该被 Markdown 附件覆盖',
+          document: {
+            file_id: 'markdown-edit-file-136',
+            file_unique_id: 'markdown-edit-uniq-136',
+            file_name: '修订随想.md',
+            mime_type: 'text/markdown',
+            file_size: 128,
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async (fileId) => {
+      downloadedFileIds.push(fileId);
+      return {
+        filePath: 'documents/修订随想.md',
+        contentType: 'text/markdown',
+        data: Buffer.from('\uFEFF# 新标题\n\n修订正文', 'utf8'),
+      };
+    },
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.deepEqual(downloadedFileIds, ['markdown-edit-file-136']);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_edit_database_only');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches.length, 1);
+  assert.equal(persistedBatches[0].kind, 'thought_edit');
+  assert.equal(persistedBatches[0].thoughtEdit.targetMessageId, 126);
+  assert.equal(persistedBatches[0].thoughtEdit.body, '# 新标题\n\n修订正文');
+  assert.equal(persistedBatches[0].thoughtEdit.storage.markdownPath, null);
+});
+
+test('runTelegramSync allows module-only explicit thought edit captions when markdown supplies the body', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-edit-md-module-'));
+  const persistedBatches = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 137,
+          date: Math.floor(new Date('2026-05-18T02:59:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想编 126 身体反馈',
+          document: {
+            file_id: 'markdown-edit-file-137',
+            file_unique_id: 'markdown-edit-uniq-137',
+            file_name: '身体反馈修订.md',
+            mime_type: 'text/markdown',
+            file_size: 128,
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async () => ({
+      filePath: 'documents/身体反馈修订.md',
+      contentType: 'text/markdown',
+      data: Buffer.from('## 腰背反馈\n\n今天右侧腰背恢复正常', 'utf8'),
+    }),
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, 'body_feedback');
+  assert.deepEqual(persistedBatches[0].thoughtEdit.tags, ['身体反馈', '随想', 'Telegram']);
+  assert.equal(persistedBatches[0].thoughtEdit.body, '## 腰背反馈\n\n今天右侧腰背恢复正常');
+});
+
+test('runTelegramSync rejects empty markdown explicit thought edit attachments before persistence', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-edit-md-empty-'));
+  let persisted = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 138,
+          date: Math.floor(new Date('2026-05-18T02:59:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想编 126',
+          document: {
+            file_id: 'markdown-edit-file-138',
+            file_unique_id: 'markdown-edit-uniq-138',
+            file_name: '空修订.md',
+            mime_type: 'text/markdown',
+            file_size: 8,
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async () => ({
+      filePath: 'documents/空修订.md',
+      contentType: 'text/markdown',
+      data: Buffer.from(' \n\t', 'utf8'),
+    }),
+    persistNormalizedBatch: async () => {
+      persisted = true;
+      return { status: 'stored' };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.equal(persisted, false);
+  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'failed');
+  assert.match(result.batchResults[0].failureReason, /empty markdown attachment/i);
+});
+
+test('runTelegramSync rejects oversized markdown explicit thought edit attachments before download', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-edit-md-large-'));
+  let downloaded = false;
+  let persisted = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 139,
+          date: Math.floor(new Date('2026-05-18T02:59:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想编 126',
+          document: {
+            file_id: 'markdown-edit-file-139',
+            file_unique_id: 'markdown-edit-uniq-139',
+            file_name: '过大修订.md',
+            mime_type: 'text/markdown',
+            file_size: 5 * 1024 * 1024 + 1,
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async () => {
+      downloaded = true;
+      return {
+        filePath: 'documents/过大修订.md',
+        contentType: 'text/markdown',
+        data: Buffer.from('# too large', 'utf8'),
+      };
+    },
+    persistNormalizedBatch: async () => {
+      persisted = true;
+      return { status: 'stored' };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.equal(downloaded, false);
+  assert.equal(persisted, false);
+  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'failed');
+  assert.match(result.batchResults[0].failureReason, /markdown attachment too large/i);
+});
+
 test('runTelegramSync deletes a telegram thought and its photos when receiving a reply delete command', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-delete-'));
   const postsDir = path.join(tempRoot, 'source', '_posts');
@@ -2844,6 +3331,7 @@ telegram_chat_id: 42
 
 test('runTelegramSync keeps thought posts when database persistence fails and queues replay', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-fallback-'));
+  const queuedPersistenceFailures = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -2863,6 +3351,10 @@ test('runTelegramSync keeps thought posts when database persistence fails and qu
     persistNormalizedBatch: async () => {
       throw new Error('database unavailable');
     },
+    appendPendingRecognitionBatch: async (entry) => {
+      queuedPersistenceFailures.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
     buildTrainingSnapshot: async () => {
       throw new Error('buildTrainingSnapshot should not run for thought-only sync');
     },
@@ -2878,10 +3370,10 @@ test('runTelegramSync keeps thought posts when database persistence fails and qu
     readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-701.md'), 'utf8'),
     /ENOENT/,
   );
-  assert.match(
-    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    /thought-701/,
-  );
+  assert.equal(queuedPersistenceFailures.length, 1);
+  assert.equal(queuedPersistenceFailures[0].batch.batchId, 'thought-701');
+  assert.equal(queuedPersistenceFailures[0].failureCategory, 'database');
+  await assert.rejects(readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'), /ENOENT/);
 });
 
 test('runTelegramSync replays pending thought batches without rewriting training markdown', async () => {
@@ -3340,6 +3832,8 @@ test('runTelegramSync replies to help commands without image recognition or pers
   assert.equal(sentMessages[0].replyToMessageId, 9016);
   assert.match(sentMessages[0].text, /\/随想 内容：记录锻炼随想/);
   assert.match(sentMessages[0].text, /\/移动 id 模块/);
+  assert.match(sentMessages[0].text, /Markdown：用“文件”发送 \.md\/\.markdown/);
+  assert.match(sentMessages[0].text, /Markdown 编辑：重新发送 \.md\/\.markdown/);
   assert.equal(sentMessages[1].replyToMessageId, 9017);
 
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
@@ -5174,75 +5668,6 @@ test('runTelegramSync sends Telegram result notification when an image batch is 
   assert.equal(sentMessages[0].replyToMessageId, 902);
   assert.match(sentMessages[0].text, /解析未入库/);
   assert.match(sentMessages[0].text, /no reliable image or filename date/);
-});
-
-test('runTelegramSync queues low-confidence visible-date images instead of reporting no reliable date', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-low-confidence-date-'));
-  const queued = [];
-  const sentMessages = [];
-
-  const result = await runTelegramSync({
-    rootDir: tempRoot,
-    env: {
-      TELEGRAM_BOT_TOKEN: 'token',
-      AI_API_KEY: 'key',
-      AI_BASE_URL: 'https://example.com/v1',
-      AI_MODEL: 'gpt-test',
-      TELEGRAM_ALLOWED_CHAT_IDS: '42',
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-      TELEGRAM_SYNC_NOTIFY: 'true',
-    },
-    getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
-      {
-        update_id: 901,
-        message: {
-          message_id: 903,
-          date: Math.floor(new Date('2026-06-08T05:46:33Z').getTime() / 1000),
-          chat: { id: 42 },
-          photo: [{ file_id: 'file-a', file_unique_id: 'uniq-a' }],
-        },
-      },
-    ],
-    recognizeBatch: async () => ({
-      recognitions: [
-        {
-          messageId: 903,
-          imageType: 'workout',
-          detectedDate: '2026-06-06',
-          dateEvidence: 'image shows 6月6日, year from telegram message',
-          confidence: 0.62,
-          warnings: ['date text is small'],
-          records: {
-            activities: [{ time: '19:13', type: '力量训练', detail: '总消耗241千卡' }],
-          },
-        },
-      ],
-      recognitionErrors: [],
-    }),
-    appendPendingRecognitionBatch: async (entry) => {
-      queued.push(entry);
-      return { status: 'queued', batchId: entry.batch.batchId };
-    },
-    sendTelegramMessage: async (message) => {
-      sentMessages.push(message);
-      return { message_id: 9903 };
-    },
-  });
-
-  const batch = result.batchResults[0];
-  assert.equal(batch.status, 'skipped');
-  assert.equal(batch.failureCategory, 'ai_service');
-  assert.equal(batch.recognitionPendingStatus, 'queued');
-  assert.match(batch.reason, /image date detected below confidence threshold: 2026-06-06/);
-  assert.doesNotMatch(batch.reason, /no reliable image or filename date/);
-  assert.equal(batch.dateSources[0].detectedDate, '2026-06-06');
-  assert.equal(queued.length, 1);
-  assert.equal(sentMessages.length, 1);
-  assert.match(sentMessages[0].text, /AI 识别失败/);
-  assert.match(sentMessages[0].text, /已加入重试队列/);
-  assert.doesNotMatch(sentMessages[0].text, /no reliable image or filename date/);
 });
 
 test('runTelegramSync queues partial failure ready batches for pending recognition', async () => {

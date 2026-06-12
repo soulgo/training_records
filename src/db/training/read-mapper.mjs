@@ -29,11 +29,11 @@ export function buildTrainingSnapshotFromRows({
     filteredDayRows.map((row) => [
       normalizeDateKey(row.archived_date),
       {
-        sleepTotalMinutes: toNullableNumber(row.sleep_total_minutes),
+        totalSleepMinutes: toNullableNumber(row.sleep_total_minutes),
         nightSleepMinutes: toNullableNumber(row.night_sleep_minutes),
         napMinutes: toNullableNumber(row.nap_minutes),
-        sleepStartTime: row.sleep_start_time ?? null,
-        sleepEndTime: row.sleep_end_time ?? null,
+        bedtime: row.sleep_start_time ?? null,
+        wakeTime: row.sleep_end_time ?? null,
         deepSleepMinutes: toNullableNumber(row.deep_sleep_minutes),
         lightSleepMinutes: toNullableNumber(row.light_sleep_minutes),
         remSleepMinutes: toNullableNumber(row.rem_sleep_minutes),

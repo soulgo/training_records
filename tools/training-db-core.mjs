@@ -1,10 +1,17 @@
-export { resolveTrainingCoreConfig } from './training-db-config.mjs';
+export { resolveTrainingCoreConfig } from '../src/db/training/config.mjs';
+export {
+  readCoreDay,
+  readCoreDays,
+  replaceCoreDay,
+  replaceCoreDays,
+  writeCoreDays,
+} from '../src/adapters/postgres/index.mjs';
 export {
   readTrainingSnapshotFromDatabase,
   getLastProcessedTelegramUpdateId,
   readTrainingSnapshotFromDatabaseClient,
   readArchiveTrainingSnapshotFromDatabaseClient,
-} from './training-db-read.mjs';
+} from '../src/db/training/read.mjs';
 export {
   persistNormalizedBatch,
   persistTrainingSnapshotToCore,
@@ -14,7 +21,7 @@ export {
   backfillCoreSleepFromIngestBatches,
   backfillCoreSleepFromIngestBatchesClient,
   importTrainingMarkdownToDatabase,
-} from './training-db-write.mjs';
+} from '../src/adapters/postgres/training-write.facade.mjs';
 export {
   appendPendingRecognitionBatch,
   markPendingRecognitionResolved,

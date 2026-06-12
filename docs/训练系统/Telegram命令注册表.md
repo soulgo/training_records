@@ -43,8 +43,27 @@
 - `explicit_edit` 必须排在相册图片归组前面，保证单图 caption 的编辑命令仍可替换图片。
 - `edited_message` 和 `reply_edit` 必须排在 `thought` 前面，保证已知随想的编辑不会被识别成新随想。
 - 图片和相册仍由原分组逻辑处理，registry 只声明其优先级位置。
+- Markdown 文档附件随想仍归入 `thought` 命令组；registry 只识别 caption 中的 `/随想` / `/thought` 和模块 token，附件类型识别由 Telegram 同步归一化逻辑处理。
 
-## 4. Rollback
+## 4. Markdown 附件随想
+
+`/随想` / `/thought` 支持 Telegram document 携带 Markdown 正文：
+
+```text
+/随想
+/随想 杂七杂八
+/随想 身体反馈
+```
+
+约定：
+
+- 支持 `.md`、`.markdown`、`text/markdown`、`text/x-markdown`，以及 `text/plain` 且文件名为 Markdown 扩展名的 document。
+- Markdown document 不进入图片 `photos`，不会触发训练图片识别。
+- caption 只用于命令和模块识别；如果 caption 同时有正文和附件，附件正文优先。
+- 运行时下载第一个 Markdown 附件，按 UTF-8 去 BOM/trim 后写入 `core.thought.body`。
+- 单个附件上限为 5MB；空文件、下载失败和超限都会在持久化前失败。
+
+## 5. Rollback
 
 回滚成本低：
 
@@ -54,7 +73,7 @@
 
 不需要数据库 migration，不需要改 GitHub Actions，不需要改 Cloudflare Worker。
 
-## 5. 验证
+## 6. 验证
 
 最低验证命令：
 

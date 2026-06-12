@@ -18,62 +18,147 @@
     }
 
     function shouldShowDateTick(index, total) {
-      if (total <= 10) {
+      if (total <= 8) {
         return true;
       }
 
-      const interval = Math.ceil(total / 8);
+      const interval = Math.ceil(total / 6);
       return index === 0 || index === total - 1 || index % interval === 0;
+    }
+
+    function buildDateTicks(total, options = {}) {
+      const hideMiddle = options.hideMiddle !== false;
+      const maxTicksLimit = options.maxTicksLimit || 7;
+      return {
+        autoSkip: hideMiddle,
+        autoSkipPadding: 12,
+        maxTicksLimit,
+        color: '#64748b',
+        maxRotation: 0,
+        minRotation: 0,
+        padding: 10,
+        sampleSize: Math.min(total || 1, 10),
+        callback(value, index, ticks) {
+          const tickTotal = ticks?.length || 0;
+          if (!shouldShowDateTick(index, tickTotal)) {
+            return '';
+          }
+          const label = typeof this.getLabelForValue === 'function'
+            ? this.getLabelForValue(value)
+            : value;
+          return shortDateLabel(label);
+        },
+      };
     }
 
     function makeCommonOptions() {
       return {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          labels: {
-            usePointStyle: true,
-            boxWidth: 10,
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'nearest',
+          intersect: false,
+          axis: 'x',
+        },
+        hover: {
+          mode: 'nearest',
+          intersect: false,
+        },
+        animation: {
+          duration: 900,
+          easing: 'easeOutQuart',
+        },
+        layout: {
+          padding: {
+            top: 4,
+            right: 8,
+            bottom: 0,
+            left: 0,
           },
         },
-        tooltip: {
-          callbacks: {
-            title(items) {
-              return items?.[0]?.label || '';
-            },
-          },
-        },
-      },
-      scales: {
-        x: {
-          grid: {
+        plugins: {
+          legend: {
             display: false,
           },
-          ticks: {
-            autoSkip: false,
-            callback(value, index, ticks) {
-              const total = ticks?.length || 0;
-              if (!shouldShowDateTick(index, total)) {
-                return '';
-              }
-              const label = typeof this.getLabelForValue === 'function'
-                ? this.getLabelForValue(value)
-                : value;
-              return shortDateLabel(label);
+          tooltip: {
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
+            titleColor: '#f8fafc',
+            bodyColor: '#e2e8f0',
+            borderColor: 'rgba(148, 163, 184, 0.18)',
+            borderWidth: 1,
+            padding: 12,
+            displayColors: true,
+            mode: 'nearest',
+            intersect: false,
+            callbacks: {
+              title(items) {
+                return items?.[0]?.label || '';
+              },
             },
           },
         },
-        y: {
-          ticks: {
-            precision: 0,
+        scales: {
+          x: {
+            grid: {
+              display: false,
+            },
+            ticks: buildDateTicks(labels.length),
+          },
+          y: {
+            grid: {
+              color: 'rgba(148, 163, 184, 0.14)',
+            },
+            ticks: {
+              color: '#64748b',
+              precision: 0,
+            },
           },
         },
-      },
-    };
+      };
     }
 
-    new Chart(document.getElementById('weight-chart'), {
+    function renderLegend(chart, chartId) {
+      const host = document.querySelector('[data-chart-legend-for="' + chartId + '"]');
+      if (!host) {
+        return;
+      }
+
+      const legends = chart.data.datasets.map((dataset) => splitLegendLabel(dataset.label));
+      host.setAttribute('role', 'list');
+      host.setAttribute('aria-label', '图例：' + legends.map((legend) => legend.raw).join('、'));
+      host.innerHTML = chart.data.datasets.map((dataset) => {
+        const legend = splitLegendLabel(dataset.label);
+        const color = String(dataset.borderColor || dataset.backgroundColor || 'currentColor');
+        const unit = legend.unit
+          ? '<span class="chart-legend__unit">' + escapeHtml(legend.unit) + '</span>'
+          : '';
+
+        return '<span class="chart-legend__item" role="listitem">' +
+          '<span class="chart-legend__swatch" style="--legend-color:' + color + ';" aria-hidden="true"></span>' +
+          '<span class="chart-legend__label">' +
+            '<span class="chart-legend__text">' + escapeHtml(legend.name) + '</span>' +
+            unit +
+          '</span>' +
+        '</span>';
+      }).join('');
+    }
+
+    function splitLegendLabel(label) {
+      const raw = String(label || '').trim();
+      const match = raw.match(/^(.+?)\s*(\([^)]*\))$/);
+
+      if (!match) {
+        return { raw, name: raw, unit: '' };
+      }
+
+      return {
+        raw,
+        name: match[1].trim(),
+        unit: match[2],
+      };
+    }
+
+    const weightChart = new Chart(document.getElementById('weight-chart'), {
       type: 'line',
       data: {
         labels,
@@ -82,15 +167,20 @@
           data: weightValues,
           borderColor: '#0f766e',
           backgroundColor: 'rgba(15, 118, 110, 0.12)',
-          tension: 0.35,
+          tension: 0.32,
           fill: true,
-          pointRadius: 3,
+          pointRadius: 2.5,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: '#0f766e',
+          pointBorderWidth: 1.5,
         }],
       },
       options: makeCommonOptions(),
     });
+    renderLegend(weightChart, 'weight-chart');
 
-    new Chart(document.getElementById('composition-chart'), {
+    const compositionChart = new Chart(document.getElementById('composition-chart'), {
       type: 'line',
       data: {
         labels,
@@ -99,40 +189,58 @@
           data: bodyFatValues,
           borderColor: '#ea580c',
           backgroundColor: 'rgba(234, 88, 12, 0.12)',
-          tension: 0.35,
+          tension: 0.32,
           fill: false,
-          pointRadius: 3,
+          pointRadius: 2.5,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: '#ea580c',
+          pointBorderWidth: 1.5,
         }, {
           label: '骨骼肌量 (kg)',
           data: muscleValues,
           borderColor: '#2563eb',
           backgroundColor: 'rgba(37, 99, 235, 0.12)',
-          tension: 0.35,
+          tension: 0.32,
           fill: false,
-          pointRadius: 3,
+          pointRadius: 2.5,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: '#2563eb',
+          pointBorderWidth: 1.5,
         }],
       },
       options: makeCommonOptions(),
     });
+    renderLegend(compositionChart, 'composition-chart');
 
-    new Chart(document.getElementById('calorie-chart'), {
+    const calorieChart = new Chart(document.getElementById('calorie-chart'), {
       type: 'bar',
       data: {
         labels: (charts.intakeCalories || []).map((point) => point.date),
         datasets: [{
           label: '饮食摄入 (kcal)',
           data: intakeValues,
-          backgroundColor: '#f97316',
+          backgroundColor: 'rgba(249, 115, 22, 0.78)',
+          borderRadius: 6,
+          maxBarThickness: 14,
+          barPercentage: 0.66,
+          categoryPercentage: 0.66,
         }, {
           label: '训练消耗 (kcal)',
           data: trainingValues,
-          backgroundColor: '#14b8a6',
+          backgroundColor: 'rgba(20, 184, 166, 0.8)',
+          borderRadius: 6,
+          maxBarThickness: 14,
+          barPercentage: 0.66,
+          categoryPercentage: 0.66,
         }],
       },
       options: makeCommonOptions(),
     });
+    renderLegend(calorieChart, 'calorie-chart');
 
-    new Chart(document.getElementById('cycling-chart'), {
+    const cyclingChart = new Chart(document.getElementById('cycling-chart'), {
       type: 'line',
       data: {
         labels: cyclingLabels,
@@ -141,13 +249,18 @@
           data: cyclingValues,
           borderColor: '#7c3aed',
           backgroundColor: 'rgba(124, 58, 237, 0.12)',
-          tension: 0.35,
+          tension: 0.3,
           fill: true,
-          pointRadius: 3,
+          pointRadius: 2.5,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#ffffff',
+          pointBorderColor: '#7c3aed',
+          pointBorderWidth: 1.5,
         }],
       },
       options: makeCommonOptions(),
     });
+    renderLegend(cyclingChart, 'cycling-chart');
   }
 
   const dailyPayload = document.getElementById('daily-overview-data');

@@ -6,15 +6,10 @@ import path from 'node:path';
 
 import { runTrainingMaintenance } from '../tools/training-maintenance.mjs';
 
-test('training maintenance inspect is read-only and reports runtime queue counts', async () => {
+test('training maintenance inspect is read-only and reports database pending queue counts', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-maintenance-inspect-'));
   const runtimeDir = path.join(tempRoot, 'runtime');
   await mkdir(runtimeDir, { recursive: true });
-  await writeFile(
-    path.join(runtimeDir, 'telegram-sync-pending.ndjson'),
-    `${JSON.stringify({ batch: { batchId: 'pending-1' } })}\nnot-json\n`,
-    'utf8',
-  );
   await writeFile(
     path.join(runtimeDir, 'training-archive-failures.ndjson'),
     `${JSON.stringify({ error: 'database unavailable' })}\n`,
@@ -29,6 +24,10 @@ test('training maintenance inspect is read-only and reports runtime queue counts
       syncCalled = true;
       return { status: 'stored' };
     },
+    readPendingBatches: async () => [
+      { batchId: 'pending-1', failureCategory: 'database' },
+      { batchId: 'pending-2', failureCategory: 'ai_service' },
+    ],
     stdout: { write() {} },
   });
 
@@ -36,8 +35,9 @@ test('training maintenance inspect is read-only and reports runtime queue counts
   assert.equal(result.mode, 'inspect');
   assert.equal(result.readonly, true);
   assert.equal(result.status, 'ok');
-  assert.equal(result.data.pendingFallbackCount, 1);
-  assert.equal(result.data.pendingFallbackInvalidLines, 1);
+  assert.equal(result.data.pendingDatabaseCount, 2);
+  assert.equal(result.data.pendingDatabaseStatus, 'ok');
+  assert.equal(result.data.pendingDatabaseError, null);
   assert.equal(result.data.archiveFailureCount, 1);
 });
 
@@ -60,6 +60,45 @@ test('training maintenance sync delegates to syncTrainingCore', async () => {
   assert.equal(result.readonly, false);
   assert.equal(result.status, 'unchanged');
   assert.deepEqual(result.result, { status: 'unchanged', archive: { status: 'unchanged' } });
+});
+
+test('training maintenance inspect reports unavailable database pending queue without file fallback', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-maintenance-inspect-db-'));
+
+  const result = await runTrainingMaintenance({
+    argv: ['inspect'],
+    rootDir: tempRoot,
+    readPendingBatches: async () => {
+      throw new Error('database unavailable');
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(result.status, 'ok');
+  assert.equal(result.data.pendingDatabaseCount, 0);
+  assert.equal(result.data.pendingDatabaseStatus, 'unavailable');
+  assert.match(result.data.pendingDatabaseError, /database unavailable/);
+});
+
+test('training maintenance inspect still reports archive failure log count', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-maintenance-inspect-archive-'));
+  const runtimeDir = path.join(tempRoot, 'runtime');
+  await mkdir(runtimeDir, { recursive: true });
+  await writeFile(
+    path.join(runtimeDir, 'training-archive-failures.ndjson'),
+    `${JSON.stringify({ error: 'database unavailable' })}\nnot-json\n`,
+    'utf8',
+  );
+
+  const result = await runTrainingMaintenance({
+    argv: ['inspect'],
+    rootDir: tempRoot,
+    readPendingBatches: async () => [],
+    stdout: { write() {} },
+  });
+
+  assert.equal(result.data.archiveFailureCount, 1);
+  assert.equal(result.data.archiveFailureInvalidLines, 1);
 });
 
 test('training maintenance sync can explicitly run all database phases', async () => {
@@ -275,8 +314,8 @@ test('v8 overview documents the local document index and historical replacements
   assert.match(overview, /telegram_sync_refactor\.md/);
   assert.match(overview, /maintenance_scripts\.md/);
   assert.match(overview, /checklist\.md/);
-  assert.match(overview, /deploy_build_v7/);
-  assert.match(overview, /telegram_sync_v6/);
-  assert.match(overview, /re_v5/);
+  assert.match(overview, /构建性能优化_v7/);
+  assert.match(overview, /图片识别优化_v6/);
+  assert.match(overview, /系统优化重构_v5/);
   assert.match(overview, /历史参考/);
 });

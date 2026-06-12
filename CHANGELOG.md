@@ -15,13 +15,55 @@
 
 ### Added
 
-- Telegram 图片识别新增备用 OpenAI-compatible AI 配置：`TELEGRAM_RECOGNITION_FALLBACK_API_KEY`、`TELEGRAM_RECOGNITION_FALLBACK_BASE_URL`、`TELEGRAM_RECOGNITION_FALLBACK_MODEL` 和 `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS`。主 AI 出现 timeout、HTTP 429/5xx、空内容或网络失败时，会自动切到备用 AI 重试。
-- GitHub Actions main/dev Telegram Sync workflow 新增备用 AI 配置透传，并补齐 GitHub + Cloudflare 配置清单和 AI Provider 文档。
+- 随想模块列表页新增长内容自动摘要：正文超过摘要阈值时只显示开头内容，并提供“查看全文”链接跳转到对应随想详情页，避免长 Markdown 附件随想撑满模块首页。
+- 锻炼随想、杂七杂八和身体反馈三个随想模块新增分页能力：每页最多展示 15 条随想，超过后自动生成 `page/2/` 等分页页，并显示上一页/下一页按钮。
+- Telegram `/随想` / `/thought` 新增 Markdown 文档附件正文能力：发送 `.md` 或 `.markdown` 文档并在 caption 写命令后，系统下载附件、按 UTF-8 去 BOM/trim，并把正文写入 `core.thought.body`；caption 仅用于命令和模块识别，附件正文优先，单个附件大小上限为 5MB。
+- Telegram `/随想编 <id>` 新增 Markdown 文档附件编辑能力：发送新的 `.md` 或 `.markdown` 文档并在 caption 写 `/随想编 id` 或 `/随想编 id 模块` 后，附件内容会作为新的完整正文写入 `thoughtEdit.body` 并整体替换原随想正文；caption 正文不与附件拼接。
+- Telegram `/help` / `/帮助` 命令清单新增 Markdown 附件发送和 Markdown 附件编辑用法说明，提示通过 Telegram“文件”发送 `.md/.markdown` 并在 caption 写随想或编辑命令。
+- 补充 Markdown 附件随想的分组、运行链路和页面渲染测试，覆盖模块-only caption、非 Markdown 文档跳过、空文件、下载失败、5MB 超限和大于 1MB 但不超过 5MB 的成功路径。
+- 补充 Markdown 附件编辑随想的分组和运行链路测试，覆盖 id-only caption、模块-only caption、附件正文优先、空文件和 5MB 超限。
+
+### Changed
+
+- 调整首页趋势分析卡片图例样式：图例固定在每张图表卡片右上角，多指标竖向排列且不再使用底色/边框，避免横向图例挤压左上角标题与副标题。
+- 将 Telegram 图片识别备用 AI 方案文档从仓库根目录移动到 `docs/训练系统/AI_BACKUP_SOLUTION.md`，使训练系统文档集中维护。
 
 ### Fixed
 
-- 修复 Telegram 图片识别缓存读取 PostgreSQL 超时时被误归类为 AI 识别失败的问题。识别缓存查库失败现在会降级为 cache miss 并继续调用 AI。
-- 修复主 AI 返回空内容或包装后的 timeout 时只能进入 pending 队列的问题；配置备用 AI 后会先用备用 provider 进行当前批次识别重试。
+- 补全 v1.2.7 修复的遗漏范围：`core-row-writer.pg.mjs` 中 `buildSleepRows` 的 14 个 `int4` 字段（`nightSleepMinutes`、`totalSleepMinutes`、`deepSleepMinutes`、`lightSleepMinutes`、`remSleepMinutes`、`awakeMinutes`、`napMinutes`、`sleepScore`、`sleepScorePercentile`、`deepSleepContinuityScore`、`wakeCount`、`breathingQualityScore`、`averageHeartRateBpm`、`hrvMs`）以及 `insertCoreMeasurements`/`insertCoreActivities`/`insertCoreMeals` 的整型字段，`incremental-write.pg.mjs` 的 nutrition 和 workout summary 参数，`archive-repository.pg.mjs` 的 sleep/activity/meal 整型字段，均补加 `Math.round(Number(...))` 取整保护，防止 AI 识别返回浮点值（如 `143.1`）触发 `invalid input syntax for type integer` 导致数据库写入失败和首页无数据显示。
+- 修复 `core.sleep` 和 `core.training_day` 表缺少新增列（`total_sleep_minutes`、`sleep_score`、`average_heart_rate_bpm`、`hrv_ms` 等）导致 `column does not exist` 写入失败。新增 `schema-preflight.pg.mjs` 在每次进程首次连接数据库时自动执行 `ALTER TABLE ADD COLUMN IF NOT EXISTS`，确保 schema 演进无需手动迁移。
+
+## [1.2.7] - 2026-06-10
+
+### Fixed
+
+- 修复 AI 识别返回浮点卡路里值（如 `143.1`）导致 PostgreSQL `integer[]` 列写入失败（`invalid input syntax for type integer`）的问题。涉及 `normalizeNutrition` 中 `calories`/`recommendedMin`/`recommendedMax`、`sumMealCalories`、`summarizeActivities.trainingCalories` 以及 `normalizeBatchActivity.calories` 的取整处理。
+
+## [1.2.6] - 2026-06-10
+
+### Changed
+
+- 六边形架构重构 v13.1 全面落地：B3/B4/B9/B10/B11/B12 全部完成，374 测试通过。
+- B3 Step 2 SQL 提取全部完成（`writeCoreDays` / `readCoreDay` / `upsertArchiveParseSnapshot` 已迁移到 `src/adapters/postgres/core-day-repository.pg.mjs`）。
+- B4 read.mjs 内联 SQL 已委托到适配器（`getLastProcessedTelegramUpdateId` 迁移至 `src/adapters/postgres/telegram-batch-repository.pg.mjs`）。
+- B9 tools/ 目录对齐：4 对重复模块 diff 完成并薄化为 re-export（training-domain/parser/snapshot/dashboard-view），`tools/training-db-core.mjs` 改为从 `src/adapters/postgres/` 导入，`src/domain/training/training-snapshot.mjs` 移除对 tools/ 的反向引用，`tools/lib/fs-walk.mjs` 复制到 `src/shared/`。
+- B11 遗留代码清理：15 项全部完成——旧文件薄化为 re-export 或确立 canonical 位置，逻辑已迁移到 adapters/use-cases。
+- B12 测试验证：领域实体 5 tests、领域服务 6 tests、适配器 2 tests、Telegram Mock 4 tests，CI 已配置。
+- `src/jobs/telegram-sync-job.mjs` 与 `src/app/use-cases/telegram-sync.use-case.mjs` 导出对齐。
+- DI 容器 `src/infra/app-factory.mjs` 验证通过，无循环依赖；`src/infra/config.mjs` 统一配置校验就绪。
+- 文档目录中文重命名：`re_v5`→`系统优化重构_v5`、`deploy_build_v7`→`构建性能优化_v7`、`telegram_sync_v6`→`图片识别优化_v6`。
+- `docs/系统架构/系统总览.md` 新增六边形架构章节，内部接口手册 CLI 入口更新为新 use-case 路径。
+- `docs/优化重构/数据统一与六边形架构重构_v13/实施checklist.md` 里程碑全部 ✅。
+
+### Fixed
+
+- 修复 `src/jobs/telegram-sync-job.mjs` 导入不存在的导出导致 `pending-store.test.mjs` 和 `src-boundary.test.mjs` 失败。
+- 修复多个文件尾部 null 字节引发的语法错误。
+
+### Added
+
+- `src/adapters/postgres/telegram-batch-repository.pg.mjs` 新增 `getLastProcessedTelegramUpdateId` 实例方法和独立函数。
+- `src/shared/fs-walk.mjs` 从 `tools/lib/` 迁移至 shared 层。
 
 ## [1.2.5] - 2026-06-08
 

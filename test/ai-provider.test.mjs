@@ -5,7 +5,7 @@ import {
   AiProviderError,
   createAiProvider,
   normalizeAiProviderName,
-} from '../src/ai/provider.mjs';
+} from '../src/adapters/ai/index.mjs';
 
 test('normalizeAiProviderName defaults to openai-compatible', () => {
   assert.equal(normalizeAiProviderName(''), 'openai-compatible');
