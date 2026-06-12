@@ -16,7 +16,10 @@
 ### Added
 
 - Telegram `/随想` / `/thought` 新增 Markdown 文档附件正文能力：发送 `.md` 或 `.markdown` 文档并在 caption 写命令后，系统下载附件、按 UTF-8 去 BOM/trim，并把正文写入 `core.thought.body`；caption 仅用于命令和模块识别，附件正文优先，单个附件大小上限为 5MB。
+- Telegram `/随想编 <id>` 新增 Markdown 文档附件编辑能力：发送新的 `.md` 或 `.markdown` 文档并在 caption 写 `/随想编 id` 或 `/随想编 id 模块` 后，附件内容会作为新的完整正文写入 `thoughtEdit.body` 并整体替换原随想正文；caption 正文不与附件拼接。
+- Telegram `/help` / `/帮助` 命令清单新增 Markdown 附件发送和 Markdown 附件编辑用法说明，提示通过 Telegram“文件”发送 `.md/.markdown` 并在 caption 写随想或编辑命令。
 - 补充 Markdown 附件随想的分组、运行链路和页面渲染测试，覆盖模块-only caption、非 Markdown 文档跳过、空文件、下载失败、5MB 超限和大于 1MB 但不超过 5MB 的成功路径。
+- 补充 Markdown 附件编辑随想的分组和运行链路测试，覆盖 id-only caption、模块-only caption、附件正文优先、空文件和 5MB 超限。
 
 ### Changed
 

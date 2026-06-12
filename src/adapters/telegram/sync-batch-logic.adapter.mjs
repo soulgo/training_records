@@ -860,6 +860,7 @@ function analyzeThoughtEditBatch(batch) {
   const message = batch.messages?.[0] ?? null;
   const body = batch.thoughtEdit?.body?.trim() ?? '';
   const targetMessageId = normalizeMessageId(batch.thoughtEdit?.targetMessageId);
+  const hasMarkdownDocument = batchHasMarkdownDocuments(batch);
 
   if (!targetMessageId) {
     return buildSkippedBatchResult(batch, {
@@ -867,7 +868,7 @@ function analyzeThoughtEditBatch(batch) {
     });
   }
 
-  if (!body) {
+  if (!body && !hasMarkdownDocument) {
     return buildSkippedBatchResult(batch, {
       reason: 'empty thought body',
     });
@@ -1380,12 +1381,12 @@ function parseThoughtEditCommand(text) {
   }
 
   const rawBody = match[2].trim();
-  const bodyMatch = rawBody.match(/^(\d+)\s+([\s\S]+)$/u);
+  const bodyMatch = rawBody.match(/^(\d+)(?:\s+([\s\S]*))?$/u);
   if (!bodyMatch) {
     return null;
   }
 
-  const parsedBody = parseThoughtModuleBody(bodyMatch[2]);
+  const parsedBody = parseThoughtModuleBody(bodyMatch[2] ?? '');
   return {
     command: match[1],
     targetMessageId: Number(bodyMatch[1]),

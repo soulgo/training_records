@@ -900,7 +900,7 @@ async function handleThoughtSyncBatch({
 }
 
 async function prepareThoughtMarkdownBody({ batch, kind, fetchTelegramFile }) {
-  if (kind !== 'thought') {
+  if (kind !== 'thought' && kind !== 'thought_edit') {
     return { status: 'ready', batch };
   }
 
@@ -957,13 +957,7 @@ async function prepareThoughtMarkdownBody({ batch, kind, fetchTelegramFile }) {
 
     return {
       status: 'ready',
-      batch: {
-        ...batch,
-        thought: {
-          ...batch.thought,
-          body,
-        },
-      },
+      batch: attachMarkdownBodyToThoughtBatch(batch, kind, body),
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -973,6 +967,26 @@ async function prepareThoughtMarkdownBody({ batch, kind, fetchTelegramFile }) {
       failureCategory: classifyFailureCategory(errorMessage, { phase: 'telegram_file_download' }),
     };
   }
+}
+
+function attachMarkdownBodyToThoughtBatch(batch, kind, body) {
+  if (kind === 'thought_edit') {
+    return {
+      ...batch,
+      thoughtEdit: {
+        ...batch.thoughtEdit,
+        body,
+      },
+    };
+  }
+
+  return {
+    ...batch,
+    thought: {
+      ...batch.thought,
+      body,
+    },
+  };
 }
 
 function findThoughtMarkdownDocument(batch) {

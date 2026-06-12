@@ -12,6 +12,8 @@ export const TELEGRAM_HELP_TEXT = [
   '/分析 问题：基于训练、体脂、饮食和身体反馈生成训练建议',
   '',
   '图片：直接发送训练/饮食/体脂截图会自动识别；图片 caption 以 /随想 开头时会归档为带图随想。',
+  'Markdown：用“文件”发送 .md/.markdown，caption 写 /随想、/随想 杂七杂八 或 /随想 身体反馈；页面正文以附件内容为准。',
+  'Markdown 编辑：重新发送 .md/.markdown，caption 写 /随想编 id 或 /随想编 id 模块；附件会整体替换原正文。',
 ].join('\n');
 
 export function isTelegramHelpText(text) {

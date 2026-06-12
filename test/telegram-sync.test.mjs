@@ -870,6 +870,66 @@ test('groups explicit thought edit commands by target message id', async () => {
   assert.equal(batches[0].thoughtEdit.body, '今天骑行 40 公里，补充一下高德和手表差了12公里多。');
 });
 
+test('groups explicit thought edit markdown document captions with empty body', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    telegramUpdate(405, {
+      messageId: 134,
+      telegram: {
+        caption: '/随想编 126',
+        document: telegramDocumentFile({
+          fileId: 'md-edit-file-134',
+          fileUniqueId: 'md-edit-uniq-134',
+          fileName: '修订随想.md',
+          mimeType: 'text/markdown',
+        }),
+      },
+    }),
+  ]);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought_edit');
+  assert.equal(batches[0].thoughtEdit.command, '/随想编');
+  assert.equal(batches[0].thoughtEdit.targetMessageId, 126);
+  assert.equal(batches[0].thoughtEdit.body, '');
+  assert.equal(batches[0].thoughtEdit.thoughtModule, null);
+  assert.equal(batches[0].messages[0].markdownDocuments.length, 1);
+  assert.equal(batches[0].messages[0].markdownDocuments[0].fileId, 'md-edit-file-134');
+  assert.deepEqual(batches[0].messages[0].photos, []);
+});
+
+test('groups explicit thought edit markdown document captions with module-only body', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    telegramUpdate(406, {
+      messageId: 135,
+      telegram: {
+        caption: '/随想编 126 杂七杂八',
+        document: telegramDocumentFile({
+          fileId: 'md-edit-file-135',
+          fileUniqueId: 'md-edit-uniq-135',
+          fileName: '杂项修订.markdown',
+          mimeType: 'text/plain',
+        }),
+      },
+    }),
+  ]);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought_edit');
+  assert.equal(batches[0].thoughtEdit.targetMessageId, 126);
+  assert.equal(batches[0].thoughtEdit.body, '');
+  assert.equal(batches[0].thoughtEdit.thoughtModule, 'misc');
+  assert.equal(batches[0].messages[0].markdownDocuments.length, 1);
+  assert.equal(batches[0].messages[0].markdownDocuments[0].mimeType, 'text/plain');
+});
+
 test('groups explicit thought edit captions with images as photo replacement edits', async () => {
   const lib = await importTelegramSyncLib();
 

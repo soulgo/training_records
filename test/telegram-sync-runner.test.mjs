@@ -2842,6 +2842,219 @@ photos:
   );
 });
 
+test('runTelegramSync uses markdown document content as an explicit thought edit body', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-edit-md-'));
+  const persistedBatches = [];
+  const downloadedFileIds = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 136,
+          date: Math.floor(new Date('2026-05-18T02:59:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想编 126 这段 caption 正文应该被 Markdown 附件覆盖',
+          document: {
+            file_id: 'markdown-edit-file-136',
+            file_unique_id: 'markdown-edit-uniq-136',
+            file_name: '修订随想.md',
+            mime_type: 'text/markdown',
+            file_size: 128,
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async (fileId) => {
+      downloadedFileIds.push(fileId);
+      return {
+        filePath: 'documents/修订随想.md',
+        contentType: 'text/markdown',
+        data: Buffer.from('\uFEFF# 新标题\n\n修订正文', 'utf8'),
+      };
+    },
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.deepEqual(downloadedFileIds, ['markdown-edit-file-136']);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_edit_database_only');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches.length, 1);
+  assert.equal(persistedBatches[0].kind, 'thought_edit');
+  assert.equal(persistedBatches[0].thoughtEdit.targetMessageId, 126);
+  assert.equal(persistedBatches[0].thoughtEdit.body, '# 新标题\n\n修订正文');
+  assert.equal(persistedBatches[0].thoughtEdit.storage.markdownPath, null);
+});
+
+test('runTelegramSync allows module-only explicit thought edit captions when markdown supplies the body', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-edit-md-module-'));
+  const persistedBatches = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 137,
+          date: Math.floor(new Date('2026-05-18T02:59:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想编 126 身体反馈',
+          document: {
+            file_id: 'markdown-edit-file-137',
+            file_unique_id: 'markdown-edit-uniq-137',
+            file_name: '身体反馈修订.md',
+            mime_type: 'text/markdown',
+            file_size: 128,
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async () => ({
+      filePath: 'documents/身体反馈修订.md',
+      contentType: 'text/markdown',
+      data: Buffer.from('## 腰背反馈\n\n今天右侧腰背恢复正常', 'utf8'),
+    }),
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, 'body_feedback');
+  assert.deepEqual(persistedBatches[0].thoughtEdit.tags, ['身体反馈', '随想', 'Telegram']);
+  assert.equal(persistedBatches[0].thoughtEdit.body, '## 腰背反馈\n\n今天右侧腰背恢复正常');
+});
+
+test('runTelegramSync rejects empty markdown explicit thought edit attachments before persistence', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-edit-md-empty-'));
+  let persisted = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 138,
+          date: Math.floor(new Date('2026-05-18T02:59:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想编 126',
+          document: {
+            file_id: 'markdown-edit-file-138',
+            file_unique_id: 'markdown-edit-uniq-138',
+            file_name: '空修订.md',
+            mime_type: 'text/markdown',
+            file_size: 8,
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async () => ({
+      filePath: 'documents/空修订.md',
+      contentType: 'text/markdown',
+      data: Buffer.from(' \n\t', 'utf8'),
+    }),
+    persistNormalizedBatch: async () => {
+      persisted = true;
+      return { status: 'stored' };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.equal(persisted, false);
+  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'failed');
+  assert.match(result.batchResults[0].failureReason, /empty markdown attachment/i);
+});
+
+test('runTelegramSync rejects oversized markdown explicit thought edit attachments before download', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-edit-md-large-'));
+  let downloaded = false;
+  let persisted = false;
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 139,
+          date: Math.floor(new Date('2026-05-18T02:59:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想编 126',
+          document: {
+            file_id: 'markdown-edit-file-139',
+            file_unique_id: 'markdown-edit-uniq-139',
+            file_name: '过大修订.md',
+            mime_type: 'text/markdown',
+            file_size: 5 * 1024 * 1024 + 1,
+          },
+        },
+      },
+    ],
+    fetchTelegramFile: async () => {
+      downloaded = true;
+      return {
+        filePath: 'documents/过大修订.md',
+        contentType: 'text/markdown',
+        data: Buffer.from('# too large', 'utf8'),
+      };
+    },
+    persistNormalizedBatch: async () => {
+      persisted = true;
+      return { status: 'stored' };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.equal(downloaded, false);
+  assert.equal(persisted, false);
+  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'failed');
+  assert.match(result.batchResults[0].failureReason, /markdown attachment too large/i);
+});
+
 test('runTelegramSync deletes a telegram thought and its photos when receiving a reply delete command', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-delete-'));
   const postsDir = path.join(tempRoot, 'source', '_posts');
@@ -3619,6 +3832,8 @@ test('runTelegramSync replies to help commands without image recognition or pers
   assert.equal(sentMessages[0].replyToMessageId, 9016);
   assert.match(sentMessages[0].text, /\/随想 内容：记录锻炼随想/);
   assert.match(sentMessages[0].text, /\/移动 id 模块/);
+  assert.match(sentMessages[0].text, /Markdown：用“文件”发送 \.md\/\.markdown/);
+  assert.match(sentMessages[0].text, /Markdown 编辑：重新发送 \.md\/\.markdown/);
   assert.equal(sentMessages[1].replyToMessageId, 9017);
 
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
