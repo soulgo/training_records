@@ -2,6 +2,10 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import pg from 'pg';
+
+import { ensureCoreSchema as ensureCoreSchemaDefault } from '../src/adapters/postgres/schema-preflight.pg.mjs';
+import { resolveTrainingCoreConfig } from '../src/db/training/config.mjs';
 import { exportTrainingMarkdown } from './training-db-core.mjs';
 import { buildTrainingSnapshot } from './training-snapshot.mjs';
 import { getThoughtModuleTags, normalizeThoughtModule } from './lib/thought-modules.mjs';
@@ -9,6 +13,7 @@ import { readDirRecursive } from './lib/fs-walk.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
+const { Client } = pg;
 
 export async function exportDerivedTrainingMarkdown(options = {}) {
   const activeRootDir = options.rootDir ?? rootDir;
@@ -25,6 +30,11 @@ export async function exportDerivedTrainingMarkdown(options = {}) {
     createClient: options.createClient,
     now: options.now,
   };
+  await runDatabaseSchemaPreflight({
+    env: snapshotOptions.env,
+    createClient: options.createClient,
+    ensureCoreSchema: options.ensureCoreSchema,
+  });
   const snapshot = await buildSnapshot(snapshotOptions);
 
   const markdown = (options.exportTrainingMarkdown ?? exportTrainingMarkdown)(snapshot);
@@ -42,6 +52,31 @@ export async function exportDerivedTrainingMarkdown(options = {}) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   await exportDerivedTrainingMarkdown();
+}
+
+async function runDatabaseSchemaPreflight(options = {}) {
+  const config = resolveTrainingCoreConfig(options.env);
+  if (!config.enabled || !config.url) {
+    return;
+  }
+
+  const createClient =
+    options.createClient ??
+    ((dbConfig) =>
+      new Client({
+        connectionString: dbConfig.url,
+        connectionTimeoutMillis: dbConfig.timeoutMs,
+        application_name: dbConfig.appName,
+      }));
+  const client = createClient(config);
+  const ensureCoreSchema = options.ensureCoreSchema ?? ensureCoreSchemaDefault;
+
+  try {
+    await client.connect();
+    await ensureCoreSchema(client);
+  } finally {
+    await client.end();
+  }
 }
 
 async function exportThoughtMarkdownBackup({ rootDir, thoughts }) {
