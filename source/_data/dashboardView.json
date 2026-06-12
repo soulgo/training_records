@@ -1,0 +1,2480 @@
+{
+  "generatedAt": "2026-06-12T07:09:51.376Z",
+  "latestMeasurement": {
+    "archivedDate": "2026-06-07",
+    "measuredAt": "2026-06-07",
+    "bodyScore": null,
+    "weightKg": 71.4,
+    "bmi": 23,
+    "bodyFatPct": 22.1,
+    "skeletalMuscleKg": 30.1,
+    "visceralFatLevel": 8,
+    "basalMetabolismKcal": 1567,
+    "bodyWaterPct": 50.1,
+    "proteinPct": 23.7,
+    "boneMassKg": 2.91,
+    "fatFreeMassKg": 55.9,
+    "bodyAge": 30,
+    "bodyType": "标准"
+  },
+  "latestDay": {
+    "date": "2026-06-07",
+    "measurement": {
+      "archivedDate": "2026-06-07",
+      "measuredAt": "2026-06-07",
+      "bodyScore": null,
+      "weightKg": 71.4,
+      "bmi": 23,
+      "bodyFatPct": 22.1,
+      "skeletalMuscleKg": 30.1,
+      "visceralFatLevel": 8,
+      "basalMetabolismKcal": 1567,
+      "bodyWaterPct": 50.1,
+      "proteinPct": 23.7,
+      "boneMassKg": 2.91,
+      "fatFreeMassKg": 55.9,
+      "bodyAge": 30,
+      "bodyType": "标准"
+    },
+    "measurements": [
+      {
+        "archivedDate": "2026-06-07",
+        "measuredAt": "2026-06-07",
+        "bodyScore": null,
+        "weightKg": 71.4,
+        "bmi": 23,
+        "bodyFatPct": 22.1,
+        "skeletalMuscleKg": 30.1,
+        "visceralFatLevel": 8,
+        "basalMetabolismKcal": 1567,
+        "bodyWaterPct": 50.1,
+        "proteinPct": 23.7,
+        "boneMassKg": 2.91,
+        "fatFreeMassKg": 55.9,
+        "bodyAge": 30,
+        "bodyType": "标准"
+      }
+    ],
+    "activities": [
+      {
+        "time": "08:37",
+        "type": "HIIT",
+        "rawType": "HIIT",
+        "detail": "总消耗326千卡，时长00:43:52，平均128次/分钟",
+        "durationText": "00:43:52",
+        "durationSeconds": 2632,
+        "calories": 326,
+        "distanceKm": null,
+        "avgSpeedKmh": null,
+        "heartRate": 128
+      }
+    ],
+    "sleep": [
+      {
+        "sleepType": "夜间睡眠",
+        "bedtime": "00:00",
+        "wakeTime": "05:22",
+        "nightSleepMinutes": 322,
+        "totalSleepMinutes": 322,
+        "napMinutes": null,
+        "deepSleepMinutes": 41,
+        "lightSleepMinutes": 179,
+        "remSleepMinutes": 102,
+        "awakeMinutes": null,
+        "sleepStageText": "深睡 41分钟，浅睡 2小时59分钟，快速眼动 1小时42分钟",
+        "sleepStageDetail": [
+          "深睡比例 13%；浅睡比例 56%；快速眼动比例 31%；清醒次数 0次；睡眠连续性 60分"
+        ],
+        "sleepScore": 70,
+        "sleepScorePercentile": 18,
+        "deepSleepRatioPct": 13,
+        "lightSleepRatioPct": 56,
+        "remSleepRatioPct": 31,
+        "deepSleepContinuityScore": 60,
+        "wakeCount": 0,
+        "breathingQualityScore": 100,
+        "averageHeartRateBpm": 67,
+        "hrvMs": 33,
+        "averageSpo2Pct": 98,
+        "averageRespiratoryRate": 14,
+        "analysisText": "睡眠质量一般，深睡比例只有13%，低于正常范围，且睡眠不足，长期睡眠时间不足不利于恢复。检测到昨天一共小睡103分钟，小睡过长可能是睡眠质量一般的原因。",
+        "suggestionText": "建议午睡时长控制在30分钟以内，过长的午睡会影响夜间睡眠驱动力，影响夜间睡眠时长和质量。",
+        "sleepStartTime": "00:00",
+        "sleepEndTime": "05:22"
+      }
+    ],
+    "sleepSummary": {
+      "records": [
+        {
+          "sleepType": "夜间睡眠",
+          "bedtime": "00:00",
+          "wakeTime": "05:22",
+          "nightSleepMinutes": 322,
+          "totalSleepMinutes": 322,
+          "napMinutes": null,
+          "deepSleepMinutes": 41,
+          "lightSleepMinutes": 179,
+          "remSleepMinutes": 102,
+          "awakeMinutes": null,
+          "sleepStageText": "深睡 41分钟，浅睡 2小时59分钟，快速眼动 1小时42分钟",
+          "sleepStageDetail": [
+            "深睡比例 13%；浅睡比例 56%；快速眼动比例 31%；清醒次数 0次；睡眠连续性 60分"
+          ],
+          "sleepScore": 70,
+          "sleepScorePercentile": 18,
+          "deepSleepRatioPct": 13,
+          "lightSleepRatioPct": 56,
+          "remSleepRatioPct": 31,
+          "deepSleepContinuityScore": 60,
+          "wakeCount": 0,
+          "breathingQualityScore": 100,
+          "averageHeartRateBpm": 67,
+          "hrvMs": 33,
+          "averageSpo2Pct": 98,
+          "averageRespiratoryRate": 14,
+          "analysisText": "睡眠质量一般，深睡比例只有13%，低于正常范围，且睡眠不足，长期睡眠时间不足不利于恢复。检测到昨天一共小睡103分钟，小睡过长可能是睡眠质量一般的原因。",
+          "suggestionText": "建议午睡时长控制在30分钟以内，过长的午睡会影响夜间睡眠驱动力，影响夜间睡眠时长和质量。",
+          "sleepStartTime": "00:00",
+          "sleepEndTime": "05:22"
+        }
+      ],
+      "totalSleepMinutes": 322,
+      "nightSleepMinutes": 322,
+      "napMinutes": null,
+      "sleepStartTime": "00:00",
+      "sleepEndTime": "05:22",
+      "deepSleepMinutes": 41,
+      "lightSleepMinutes": 179,
+      "remSleepMinutes": 102,
+      "awakeMinutes": null,
+      "sleepScore": 70,
+      "sleepScorePercentile": 18,
+      "deepSleepRatioPct": 13,
+      "lightSleepRatioPct": 56,
+      "remSleepRatioPct": 31,
+      "deepSleepContinuityScore": 60,
+      "wakeCount": 0,
+      "breathingQualityScore": 100,
+      "averageHeartRateBpm": 67,
+      "hrvMs": 33,
+      "averageSpo2Pct": 98,
+      "averageRespiratoryRate": 14,
+      "analysisText": "睡眠质量一般，深睡比例只有13%，低于正常范围，且睡眠不足，长期睡眠时间不足不利于恢复。检测到昨天一共小睡103分钟，小睡过长可能是睡眠质量一般的原因。",
+      "suggestionText": "建议午睡时长控制在30分钟以内，过长的午睡会影响夜间睡眠驱动力，影响夜间睡眠时长和质量。"
+    },
+    "workoutSummary": {
+      "totalActivities": 1,
+      "totalDurationSeconds": 2632,
+      "trainingCalories": 284,
+      "workoutDurationMinutes": 34,
+      "activeHours": 6,
+      "cyclingDistanceKm": 0,
+      "countsByType": {
+        "HIIT": 1
+      }
+    },
+    "nutrition": {
+      "meals": [
+        {
+          "name": "早餐",
+          "calories": 114,
+          "recommendedMin": 541,
+          "recommendedMax": 973
+        },
+        {
+          "name": "午餐",
+          "calories": 592,
+          "recommendedMin": 649,
+          "recommendedMax": 1081
+        },
+        {
+          "name": "晚餐",
+          "calories": 460,
+          "recommendedMin": 325,
+          "recommendedMax": 757
+        }
+      ],
+      "totalCalories": 1166,
+      "details": [
+        "早餐：康比特奶味分离乳清蛋白粉750g 1勺，114千卡；康比特肌酸250g 3克，0千卡。",
+        "午餐：米饭（蒸）1碗，232千卡；清炒小白菜1盘，136千卡；猪蹄（熟）0.5只，224千卡。",
+        "晚餐：洋葱鸡蛋炒饭1盘，460千卡。"
+      ]
+    }
+  },
+  "previousDay": {
+    "date": "2026-06-06",
+    "measurement": {
+      "archivedDate": "2026-06-06",
+      "measuredAt": "2026-06-06",
+      "bodyScore": null,
+      "weightKg": 70.9,
+      "bmi": 22.8,
+      "bodyFatPct": 22.1,
+      "skeletalMuscleKg": 29.85,
+      "visceralFatLevel": 8,
+      "basalMetabolismKcal": 1556,
+      "bodyWaterPct": 50,
+      "proteinPct": 23.9,
+      "boneMassKg": 5.77,
+      "fatFreeMassKg": 55.58,
+      "bodyAge": 30,
+      "bodyType": "标准型"
+    },
+    "measurements": [
+      {
+        "archivedDate": "2026-06-06",
+        "measuredAt": "2026-06-06",
+        "bodyScore": null,
+        "weightKg": 70.9,
+        "bmi": 22.8,
+        "bodyFatPct": 22.1,
+        "skeletalMuscleKg": 29.85,
+        "visceralFatLevel": 8,
+        "basalMetabolismKcal": 1556,
+        "bodyWaterPct": 50,
+        "proteinPct": 23.9,
+        "boneMassKg": 5.77,
+        "fatFreeMassKg": 55.58,
+        "bodyAge": 30,
+        "bodyType": "标准型"
+      }
+    ],
+    "activities": [
+      {
+        "time": "06:46",
+        "type": "HIIT",
+        "rawType": "HIIT",
+        "detail": "总消耗379千卡，时长00:59:26，平均心率116次/分钟",
+        "durationText": "00:59:26",
+        "durationSeconds": 3566,
+        "calories": 379,
+        "distanceKm": null,
+        "avgSpeedKmh": null,
+        "heartRate": 116
+      },
+      {
+        "time": "18:24",
+        "type": "力量训练",
+        "rawType": "力量训练",
+        "detail": "总消耗403千卡，时长01:16:27，平均心率100次/分钟",
+        "durationText": "01:16:27",
+        "durationSeconds": 4587,
+        "calories": 403,
+        "distanceKm": null,
+        "avgSpeedKmh": null,
+        "heartRate": 100
+      }
+    ],
+    "sleep": [
+      {
+        "sleepType": "夜间睡眠",
+        "bedtime": "23:50",
+        "wakeTime": "06:55",
+        "nightSleepMinutes": null,
+        "totalSleepMinutes": 528,
+        "napMinutes": null,
+        "deepSleepMinutes": 225,
+        "lightSleepMinutes": 180,
+        "remSleepMinutes": 134,
+        "awakeMinutes": null,
+        "sleepStageText": "深睡、浅睡、快速眼动、清醒",
+        "sleepStageDetail": [
+          "深睡 2小时45分钟；浅睡 3小时0分钟；快速眼动 2小时14分钟"
+        ],
+        "sleepScore": 86,
+        "sleepScorePercentile": 96,
+        "deepSleepRatioPct": 39,
+        "lightSleepRatioPct": 30,
+        "remSleepRatioPct": 31,
+        "deepSleepContinuityScore": 87,
+        "wakeCount": 0,
+        "breathingQualityScore": 98,
+        "averageHeartRateBpm": 63,
+        "hrvMs": 44,
+        "averageSpo2Pct": 97,
+        "averageRespiratoryRate": 14,
+        "analysisText": "睡眠质量良好，然而快速眼动（REM）睡眠的比例为31%，略微偏高，可能存在多梦的现象。多梦不仅会让人睡眠浅，还可能稍有影响恢复，同时还会影响记忆力和日间注意力水平。检测到昨日一共小睡105分钟，小睡过长可能影响晚间的睡眠质量提升。",
+        "suggestionText": "建议午睡控制在半小时以内，午睡过长可能导致昼夜节律紊乱，影响睡眠质量。",
+        "sleepStartTime": "23:50",
+        "sleepEndTime": "06:55"
+      }
+    ],
+    "sleepSummary": {
+      "records": [
+        {
+          "sleepType": "夜间睡眠",
+          "bedtime": "23:50",
+          "wakeTime": "06:55",
+          "nightSleepMinutes": null,
+          "totalSleepMinutes": 528,
+          "napMinutes": null,
+          "deepSleepMinutes": 225,
+          "lightSleepMinutes": 180,
+          "remSleepMinutes": 134,
+          "awakeMinutes": null,
+          "sleepStageText": "深睡、浅睡、快速眼动、清醒",
+          "sleepStageDetail": [
+            "深睡 2小时45分钟；浅睡 3小时0分钟；快速眼动 2小时14分钟"
+          ],
+          "sleepScore": 86,
+          "sleepScorePercentile": 96,
+          "deepSleepRatioPct": 39,
+          "lightSleepRatioPct": 30,
+          "remSleepRatioPct": 31,
+          "deepSleepContinuityScore": 87,
+          "wakeCount": 0,
+          "breathingQualityScore": 98,
+          "averageHeartRateBpm": 63,
+          "hrvMs": 44,
+          "averageSpo2Pct": 97,
+          "averageRespiratoryRate": 14,
+          "analysisText": "睡眠质量良好，然而快速眼动（REM）睡眠的比例为31%，略微偏高，可能存在多梦的现象。多梦不仅会让人睡眠浅，还可能稍有影响恢复，同时还会影响记忆力和日间注意力水平。检测到昨日一共小睡105分钟，小睡过长可能影响晚间的睡眠质量提升。",
+          "suggestionText": "建议午睡控制在半小时以内，午睡过长可能导致昼夜节律紊乱，影响睡眠质量。",
+          "sleepStartTime": "23:50",
+          "sleepEndTime": "06:55"
+        }
+      ],
+      "totalSleepMinutes": 528,
+      "nightSleepMinutes": null,
+      "napMinutes": null,
+      "sleepStartTime": "23:50",
+      "sleepEndTime": "06:55",
+      "deepSleepMinutes": 225,
+      "lightSleepMinutes": 180,
+      "remSleepMinutes": 134,
+      "awakeMinutes": null,
+      "sleepScore": 86,
+      "sleepScorePercentile": 96,
+      "deepSleepRatioPct": 39,
+      "lightSleepRatioPct": 30,
+      "remSleepRatioPct": 31,
+      "deepSleepContinuityScore": 87,
+      "wakeCount": 0,
+      "breathingQualityScore": 98,
+      "averageHeartRateBpm": 63,
+      "hrvMs": 44,
+      "averageSpo2Pct": 97,
+      "averageRespiratoryRate": 14,
+      "analysisText": "睡眠质量良好，然而快速眼动（REM）睡眠的比例为31%，略微偏高，可能存在多梦的现象。多梦不仅会让人睡眠浅，还可能稍有影响恢复，同时还会影响记忆力和日间注意力水平。检测到昨日一共小睡105分钟，小睡过长可能影响晚间的睡眠质量提升。",
+      "suggestionText": "建议午睡控制在半小时以内，午睡过长可能导致昼夜节律紊乱，影响睡眠质量。"
+    },
+    "workoutSummary": {
+      "totalActivities": 2,
+      "totalDurationSeconds": 8153,
+      "trainingCalories": 663,
+      "workoutDurationMinutes": 99,
+      "activeHours": 13,
+      "cyclingDistanceKm": 0,
+      "countsByType": {
+        "HIIT": 1,
+        "力量训练": 1
+      }
+    },
+    "nutrition": {
+      "meals": [
+        {
+          "name": "早餐",
+          "calories": 114,
+          "recommendedMin": 544,
+          "recommendedMax": 978
+        },
+        {
+          "name": "午餐",
+          "calories": 632,
+          "recommendedMin": 652,
+          "recommendedMax": 1087
+        },
+        {
+          "name": "加餐",
+          "calories": 446,
+          "recommendedMin": 0,
+          "recommendedMax": 109
+        }
+      ],
+      "totalCalories": 1192,
+      "details": [
+        "早餐：康比特奶味分离乳清蛋白粉750g 1勺，114千卡；康比特肌酸250g 3克，0千卡",
+        "午餐：火锅(荤1素4) 1份，408千卡；猪蹄（熟）0.5只，224千卡",
+        "晚上加餐：红糖发糕 200克，446千卡"
+      ]
+    }
+  },
+  "dailyOverviewHint": "顶部主卡按最新体脂归档日展示，最近活动以下方日期卡片为准",
+  "latestDashboardDate": "2026-06-07",
+  "chartWindowDays": 30,
+  "dailyCardLimit": 4,
+  "dailyOverviewEntries": [
+    {
+      "date": "2026-06-07",
+      "weightLabel": "71.40 kg",
+      "activityCount": "1",
+      "trainingCaloriesLabel": "284 kcal",
+      "workoutDurationLabel": "34 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "1166 kcal",
+      "sleepLabel": "322 分钟",
+      "tags": [
+        "HIIT × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-07</h3>\n      <span>71.40 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>1</strong></li>\n      <li>训练消耗：<strong>284 kcal</strong></li>\n      <li>锻炼时长：<strong>34 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>1166 kcal</strong></li>\n      <li>睡眠：<strong>322 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-06-06",
+      "weightLabel": "70.90 kg",
+      "activityCount": "2",
+      "trainingCaloriesLabel": "663 kcal",
+      "workoutDurationLabel": "99 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "1192 kcal",
+      "sleepLabel": "528 分钟",
+      "tags": [
+        "HIIT × 1",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-06</h3>\n      <span>70.90 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>2</strong></li>\n      <li>训练消耗：<strong>663 kcal</strong></li>\n      <li>锻炼时长：<strong>99 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>1192 kcal</strong></li>\n      <li>睡眠：<strong>528 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-06-05",
+      "weightLabel": "71.45 kg",
+      "activityCount": "5",
+      "trainingCaloriesLabel": "422 kcal",
+      "workoutDurationLabel": "63 分钟",
+      "cyclingDistanceLabel": "12.40 km",
+      "nutritionCaloriesLabel": "582 kcal",
+      "sleepLabel": "498 分钟",
+      "tags": [
+        "户外骑行 × 4",
+        "爬楼 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-05</h3>\n      <span>71.45 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>5</strong></li>\n      <li>训练消耗：<strong>422 kcal</strong></li>\n      <li>锻炼时长：<strong>63 分钟</strong></li>\n      <li>骑行里程：<strong>12.40 km</strong></li>\n      <li>饮食热量：<strong>582 kcal</strong></li>\n      <li>睡眠：<strong>498 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 4</span><span>爬楼 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-06-04",
+      "weightLabel": "71.40 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "934 kcal",
+      "workoutDurationLabel": "135 分钟",
+      "cyclingDistanceLabel": "7.50 km",
+      "nutritionCaloriesLabel": "1298 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "HIIT × 1",
+        "户外骑行 × 3",
+        "爬楼 × 2",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-04</h3>\n      <span>71.40 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>934 kcal</strong></li>\n      <li>锻炼时长：<strong>135 分钟</strong></li>\n      <li>骑行里程：<strong>7.50 km</strong></li>\n      <li>饮食热量：<strong>1298 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>户外骑行 × 3</span><span>爬楼 × 2</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-06-03",
+      "weightLabel": "72.20 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "764 kcal",
+      "workoutDurationLabel": "78 分钟",
+      "cyclingDistanceLabel": "13.23 km",
+      "nutritionCaloriesLabel": "2050 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "户外骑行 × 5",
+        "爬楼 × 2"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-03</h3>\n      <span>72.20 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>764 kcal</strong></li>\n      <li>锻炼时长：<strong>78 分钟</strong></li>\n      <li>骑行里程：<strong>13.23 km</strong></li>\n      <li>饮食热量：<strong>2050 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 5</span><span>爬楼 × 2</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-06-02",
+      "weightLabel": "71.35 kg",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "824 kcal",
+      "workoutDurationLabel": "124 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "1259 kcal",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-02</h3>\n      <span>71.35 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>824 kcal</strong></li>\n      <li>锻炼时长：<strong>124 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>1259 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-06-01",
+      "weightLabel": "71.35 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "844 kcal",
+      "workoutDurationLabel": "102 分钟",
+      "cyclingDistanceLabel": "12.25 km",
+      "nutritionCaloriesLabel": "2421 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "HIIT × 2",
+        "户外骑行 × 4",
+        "爬楼 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-01</h3>\n      <span>71.35 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>844 kcal</strong></li>\n      <li>锻炼时长：<strong>102 分钟</strong></li>\n      <li>骑行里程：<strong>12.25 km</strong></li>\n      <li>饮食热量：<strong>2421 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 2</span><span>户外骑行 × 4</span><span>爬楼 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-31",
+      "weightLabel": "71.25 kg",
+      "activityCount": "1",
+      "trainingCaloriesLabel": "874 kcal",
+      "workoutDurationLabel": "58 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "868 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-31</h3>\n      <span>71.25 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>1</strong></li>\n      <li>训练消耗：<strong>874 kcal</strong></li>\n      <li>锻炼时长：<strong>58 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>868 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-30",
+      "weightLabel": "71.10 kg",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "605 kcal",
+      "workoutDurationLabel": "30 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "1180 kcal",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-30</h3>\n      <span>71.10 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>605 kcal</strong></li>\n      <li>锻炼时长：<strong>30 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>1180 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-05-29",
+      "weightLabel": "71.10 kg",
+      "activityCount": "2",
+      "trainingCaloriesLabel": "804 kcal",
+      "workoutDurationLabel": "71 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "851 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "HIIT × 1",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-29</h3>\n      <span>71.10 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>2</strong></li>\n      <li>训练消耗：<strong>804 kcal</strong></li>\n      <li>锻炼时长：<strong>71 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>851 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-28",
+      "weightLabel": "72.55 kg",
+      "activityCount": "6",
+      "trainingCaloriesLabel": "643 kcal",
+      "workoutDurationLabel": "89 分钟",
+      "cyclingDistanceLabel": "6.03 km",
+      "nutritionCaloriesLabel": "1620 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "HIIT × 1",
+        "户外骑行 × 2",
+        "爬楼 × 3"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-28</h3>\n      <span>72.55 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>6</strong></li>\n      <li>训练消耗：<strong>643 kcal</strong></li>\n      <li>锻炼时长：<strong>89 分钟</strong></li>\n      <li>骑行里程：<strong>6.03 km</strong></li>\n      <li>饮食热量：<strong>1620 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>户外骑行 × 2</span><span>爬楼 × 3</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-27",
+      "weightLabel": "71.90 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "577 kcal",
+      "workoutDurationLabel": "79 分钟",
+      "cyclingDistanceLabel": "12.07 km",
+      "nutritionCaloriesLabel": "1526 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "户外骑行 × 4",
+        "爬楼 × 2",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-27</h3>\n      <span>71.90 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>577 kcal</strong></li>\n      <li>锻炼时长：<strong>79 分钟</strong></li>\n      <li>骑行里程：<strong>12.07 km</strong></li>\n      <li>饮食热量：<strong>1526 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 4</span><span>爬楼 × 2</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-26",
+      "weightLabel": "72 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "951 kcal",
+      "workoutDurationLabel": "124 分钟",
+      "cyclingDistanceLabel": "13.29 km",
+      "nutritionCaloriesLabel": "1881 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "HIIT × 1",
+        "户外骑行 × 4",
+        "爬楼 × 2"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-26</h3>\n      <span>72 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>951 kcal</strong></li>\n      <li>锻炼时长：<strong>124 分钟</strong></li>\n      <li>骑行里程：<strong>13.29 km</strong></li>\n      <li>饮食热量：<strong>1881 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>户外骑行 × 4</span><span>爬楼 × 2</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-25",
+      "weightLabel": "71.95 kg",
+      "activityCount": "9",
+      "trainingCaloriesLabel": "1138 kcal",
+      "workoutDurationLabel": "149 分钟",
+      "cyclingDistanceLabel": "12.59 km",
+      "nutritionCaloriesLabel": "1516 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "HIIT × 1",
+        "户外骑行 × 4",
+        "爬楼 × 2",
+        "力量训练 × 2"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-25</h3>\n      <span>71.95 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>9</strong></li>\n      <li>训练消耗：<strong>1138 kcal</strong></li>\n      <li>锻炼时长：<strong>149 分钟</strong></li>\n      <li>骑行里程：<strong>12.59 km</strong></li>\n      <li>饮食热量：<strong>1516 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>户外骑行 × 4</span><span>爬楼 × 2</span><span>力量训练 × 2</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-24",
+      "weightLabel": "73.30 kg",
+      "activityCount": "1",
+      "trainingCaloriesLabel": "372 kcal",
+      "workoutDurationLabel": "52 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "938 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "HIIT × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-24</h3>\n      <span>73.30 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>1</strong></li>\n      <li>训练消耗：<strong>372 kcal</strong></li>\n      <li>锻炼时长：<strong>52 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>938 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-23",
+      "weightLabel": "72.90 kg",
+      "activityCount": "1",
+      "trainingCaloriesLabel": "600 kcal",
+      "workoutDurationLabel": "69 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "1645 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-23</h3>\n      <span>72.90 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>1</strong></li>\n      <li>训练消耗：<strong>600 kcal</strong></li>\n      <li>锻炼时长：<strong>69 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>1645 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-22",
+      "weightLabel": "73.70 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "1077 kcal",
+      "workoutDurationLabel": "148 分钟",
+      "cyclingDistanceLabel": "12.77 km",
+      "nutritionCaloriesLabel": "1385 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "HIIT × 1",
+        "户外骑行 × 4",
+        "爬楼 × 1",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-22</h3>\n      <span>73.70 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>1077 kcal</strong></li>\n      <li>锻炼时长：<strong>148 分钟</strong></li>\n      <li>骑行里程：<strong>12.77 km</strong></li>\n      <li>饮食热量：<strong>1385 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>户外骑行 × 4</span><span>爬楼 × 1</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-21",
+      "weightLabel": "72.05 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "510 kcal",
+      "workoutDurationLabel": "1小时46分",
+      "cyclingDistanceLabel": "11.74 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [
+        "力量训练 × 1",
+        "户外骑行 × 4",
+        "爬楼 × 2"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-21</h3>\n      <span>72.05 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>510 kcal</strong></li>\n      <li>锻炼时长：<strong>1小时46分</strong></li>\n      <li>骑行里程：<strong>11.74 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>力量训练 × 1</span><span>户外骑行 × 4</span><span>爬楼 × 2</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-20",
+      "weightLabel": "72.65 kg",
+      "activityCount": "6",
+      "trainingCaloriesLabel": "437 kcal",
+      "workoutDurationLabel": "1小时54分",
+      "cyclingDistanceLabel": "11.10 km",
+      "nutritionCaloriesLabel": "2377 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "HIIT × 1",
+        "户外骑行 × 4",
+        "爬楼 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-20</h3>\n      <span>72.65 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>6</strong></li>\n      <li>训练消耗：<strong>437 kcal</strong></li>\n      <li>锻炼时长：<strong>1小时54分</strong></li>\n      <li>骑行里程：<strong>11.10 km</strong></li>\n      <li>饮食热量：<strong>2377 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>户外骑行 × 4</span><span>爬楼 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-19",
+      "weightLabel": "71.30 kg",
+      "activityCount": "8",
+      "trainingCaloriesLabel": "1023 kcal",
+      "workoutDurationLabel": "124 分钟",
+      "cyclingDistanceLabel": "12.33 km",
+      "nutritionCaloriesLabel": "833 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "户外骑行 × 4",
+        "爬楼 × 3",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-19</h3>\n      <span>71.30 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>8</strong></li>\n      <li>训练消耗：<strong>1023 kcal</strong></li>\n      <li>锻炼时长：<strong>124 分钟</strong></li>\n      <li>骑行里程：<strong>12.33 km</strong></li>\n      <li>饮食热量：<strong>833 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 4</span><span>爬楼 × 3</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-18",
+      "weightLabel": "73 kg",
+      "activityCount": "4",
+      "trainingCaloriesLabel": "1062 kcal",
+      "workoutDurationLabel": "88 分钟",
+      "cyclingDistanceLabel": "6.22 km",
+      "nutritionCaloriesLabel": "1392 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "HIIT × 1",
+        "户外骑行 × 2",
+        "爬楼 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-18</h3>\n      <span>73 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>4</strong></li>\n      <li>训练消耗：<strong>1062 kcal</strong></li>\n      <li>锻炼时长：<strong>88 分钟</strong></li>\n      <li>骑行里程：<strong>6.22 km</strong></li>\n      <li>饮食热量：<strong>1392 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>户外骑行 × 2</span><span>爬楼 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-17",
+      "weightLabel": "73 kg",
+      "activityCount": "1",
+      "trainingCaloriesLabel": "1458 kcal",
+      "workoutDurationLabel": "133 分钟",
+      "cyclingDistanceLabel": "38.33 km",
+      "nutritionCaloriesLabel": "675 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "户外骑行 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-17</h3>\n      <span>73 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>1</strong></li>\n      <li>训练消耗：<strong>1458 kcal</strong></li>\n      <li>锻炼时长：<strong>133 分钟</strong></li>\n      <li>骑行里程：<strong>38.33 km</strong></li>\n      <li>饮食热量：<strong>675 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-16",
+      "weightLabel": "74 kg",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "72 kcal",
+      "workoutDurationLabel": "6 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "1328 kcal",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-16</h3>\n      <span>74 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>72 kcal</strong></li>\n      <li>锻炼时长：<strong>6 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>1328 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-05-15",
+      "weightLabel": "72.45 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "1069 kcal",
+      "workoutDurationLabel": "136 分钟",
+      "cyclingDistanceLabel": "6.11 km",
+      "nutritionCaloriesLabel": "978 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "HIIT × 1",
+        "户外骑行 × 2",
+        "爬楼 × 3",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-15</h3>\n      <span>72.45 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>1069 kcal</strong></li>\n      <li>锻炼时长：<strong>136 分钟</strong></li>\n      <li>骑行里程：<strong>6.11 km</strong></li>\n      <li>饮食热量：<strong>978 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>户外骑行 × 2</span><span>爬楼 × 3</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-14",
+      "weightLabel": "72.95 kg",
+      "activityCount": "6",
+      "trainingCaloriesLabel": "796 kcal",
+      "workoutDurationLabel": "89 分钟",
+      "cyclingDistanceLabel": "6.22 km",
+      "nutritionCaloriesLabel": "1846 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "燃脂训练 × 1",
+        "户外骑行 × 2",
+        "爬楼 × 3"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-14</h3>\n      <span>72.95 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>6</strong></li>\n      <li>训练消耗：<strong>796 kcal</strong></li>\n      <li>锻炼时长：<strong>89 分钟</strong></li>\n      <li>骑行里程：<strong>6.22 km</strong></li>\n      <li>饮食热量：<strong>1846 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>燃脂训练 × 1</span><span>户外骑行 × 2</span><span>爬楼 × 3</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-13",
+      "weightLabel": "73.65 kg",
+      "activityCount": "8",
+      "trainingCaloriesLabel": "210 kcal",
+      "workoutDurationLabel": "1小时43分",
+      "cyclingDistanceLabel": "17.64 km",
+      "nutritionCaloriesLabel": "969 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "户外骑行 × 5",
+        "爬楼 × 3"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-13</h3>\n      <span>73.65 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>8</strong></li>\n      <li>训练消耗：<strong>210 kcal</strong></li>\n      <li>锻炼时长：<strong>1小时43分</strong></li>\n      <li>骑行里程：<strong>17.64 km</strong></li>\n      <li>饮食热量：<strong>969 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 5</span><span>爬楼 × 3</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-12",
+      "weightLabel": "72.70 kg",
+      "activityCount": "8",
+      "trainingCaloriesLabel": "1237 kcal",
+      "workoutDurationLabel": "164 分钟",
+      "cyclingDistanceLabel": "12.37 km",
+      "nutritionCaloriesLabel": "857 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "燃脂训练 × 1",
+        "户外骑行 × 4",
+        "爬楼 × 2",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-12</h3>\n      <span>72.70 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>8</strong></li>\n      <li>训练消耗：<strong>1237 kcal</strong></li>\n      <li>锻炼时长：<strong>164 分钟</strong></li>\n      <li>骑行里程：<strong>12.37 km</strong></li>\n      <li>饮食热量：<strong>857 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>燃脂训练 × 1</span><span>户外骑行 × 4</span><span>爬楼 × 2</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-11",
+      "weightLabel": "72.65 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "1129 kcal",
+      "workoutDurationLabel": "136 分钟",
+      "cyclingDistanceLabel": "6.31 km",
+      "nutritionCaloriesLabel": "2459 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "燃脂训练 × 2",
+        "户外骑行 × 2",
+        "爬楼 × 2",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-11</h3>\n      <span>72.65 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>1129 kcal</strong></li>\n      <li>锻炼时长：<strong>136 分钟</strong></li>\n      <li>骑行里程：<strong>6.31 km</strong></li>\n      <li>饮食热量：<strong>2459 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>燃脂训练 × 2</span><span>户外骑行 × 2</span><span>爬楼 × 2</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-10",
+      "weightLabel": "73.40 kg",
+      "activityCount": "2",
+      "trainingCaloriesLabel": "643 kcal",
+      "workoutDurationLabel": "78 分钟",
+      "cyclingDistanceLabel": "10.14 km",
+      "nutritionCaloriesLabel": "1386 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "户外骑行 × 2"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-10</h3>\n      <span>73.40 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>2</strong></li>\n      <li>训练消耗：<strong>643 kcal</strong></li>\n      <li>锻炼时长：<strong>78 分钟</strong></li>\n      <li>骑行里程：<strong>10.14 km</strong></li>\n      <li>饮食热量：<strong>1386 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 2</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-09",
+      "weightLabel": "73.45 kg",
+      "activityCount": "9",
+      "trainingCaloriesLabel": "991 kcal",
+      "workoutDurationLabel": "120 分钟",
+      "cyclingDistanceLabel": "12.36 km",
+      "nutritionCaloriesLabel": "1593 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "燃脂训练 × 1",
+        "户外骑行 × 4",
+        "爬楼 × 2",
+        "力量训练 × 2"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-09</h3>\n      <span>73.45 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>9</strong></li>\n      <li>训练消耗：<strong>991 kcal</strong></li>\n      <li>锻炼时长：<strong>120 分钟</strong></li>\n      <li>骑行里程：<strong>12.36 km</strong></li>\n      <li>饮食热量：<strong>1593 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>燃脂训练 × 1</span><span>户外骑行 × 4</span><span>爬楼 × 2</span><span>力量训练 × 2</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-08",
+      "weightLabel": "72.85 kg",
+      "activityCount": "8",
+      "trainingCaloriesLabel": "1077 kcal",
+      "workoutDurationLabel": "127 分钟",
+      "cyclingDistanceLabel": "12.22 km",
+      "nutritionCaloriesLabel": "836 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "户外骑行 × 4",
+        "爬楼 × 2",
+        "燃脂训练 × 1",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-08</h3>\n      <span>72.85 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>8</strong></li>\n      <li>训练消耗：<strong>1077 kcal</strong></li>\n      <li>锻炼时长：<strong>127 分钟</strong></li>\n      <li>骑行里程：<strong>12.22 km</strong></li>\n      <li>饮食热量：<strong>836 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 4</span><span>爬楼 × 2</span><span>燃脂训练 × 1</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-07",
+      "weightLabel": "73.55 kg",
+      "activityCount": "5",
+      "trainingCaloriesLabel": "1329 kcal",
+      "workoutDurationLabel": "145 分钟",
+      "cyclingDistanceLabel": "9.31 km",
+      "nutritionCaloriesLabel": "3123 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "燃脂训练 × 1",
+        "户外骑行 × 3",
+        "爬楼 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-07</h3>\n      <span>73.55 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>5</strong></li>\n      <li>训练消耗：<strong>1329 kcal</strong></li>\n      <li>锻炼时长：<strong>145 分钟</strong></li>\n      <li>骑行里程：<strong>9.31 km</strong></li>\n      <li>饮食热量：<strong>3123 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>燃脂训练 × 1</span><span>户外骑行 × 3</span><span>爬楼 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-06",
+      "weightLabel": "73.55 kg",
+      "activityCount": "3",
+      "trainingCaloriesLabel": "1113 kcal",
+      "workoutDurationLabel": "112 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "1076 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "燃脂训练 × 2",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-06</h3>\n      <span>73.55 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>3</strong></li>\n      <li>训练消耗：<strong>1113 kcal</strong></li>\n      <li>锻炼时长：<strong>112 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>1076 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>燃脂训练 × 2</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-05",
+      "weightLabel": "无体脂数据",
+      "activityCount": "2",
+      "trainingCaloriesLabel": "842 kcal",
+      "workoutDurationLabel": "72 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [
+        "燃脂训练 × 2"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-05</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>2</strong></li>\n      <li>训练消耗：<strong>842 kcal</strong></li>\n      <li>锻炼时长：<strong>72 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>燃脂训练 × 2</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-04",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "673 kcal",
+      "workoutDurationLabel": "19 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-04</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>673 kcal</strong></li>\n      <li>锻炼时长：<strong>19 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-05-03",
+      "weightLabel": "无体脂数据",
+      "activityCount": "1",
+      "trainingCaloriesLabel": "424 kcal",
+      "workoutDurationLabel": "30 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [
+        "燃脂训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-03</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>1</strong></li>\n      <li>训练消耗：<strong>424 kcal</strong></li>\n      <li>锻炼时长：<strong>30 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>燃脂训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-05-02",
+      "weightLabel": "无体脂数据",
+      "activityCount": "1",
+      "trainingCaloriesLabel": "538 kcal",
+      "workoutDurationLabel": "46 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [
+        "燃脂训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-05-02</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>1</strong></li>\n      <li>训练消耗：<strong>538 kcal</strong></li>\n      <li>锻炼时长：<strong>46 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>燃脂训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-04-30",
+      "weightLabel": "无体脂数据",
+      "activityCount": "3",
+      "trainingCaloriesLabel": "746 kcal",
+      "workoutDurationLabel": "71 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [
+        "燃脂训练 × 3"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-30</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>3</strong></li>\n      <li>训练消耗：<strong>746 kcal</strong></li>\n      <li>锻炼时长：<strong>71 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>燃脂训练 × 3</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-04-29",
+      "weightLabel": "无体脂数据",
+      "activityCount": "5",
+      "trainingCaloriesLabel": "704 kcal",
+      "workoutDurationLabel": "63 分钟",
+      "cyclingDistanceLabel": "6.04 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [
+        "户外骑行 × 2",
+        "爬楼 × 2",
+        "燃脂训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-29</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>5</strong></li>\n      <li>训练消耗：<strong>704 kcal</strong></li>\n      <li>锻炼时长：<strong>63 分钟</strong></li>\n      <li>骑行里程：<strong>6.04 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 2</span><span>爬楼 × 2</span><span>燃脂训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-04-28",
+      "weightLabel": "无体脂数据",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "1458 kcal",
+      "workoutDurationLabel": "168 分钟",
+      "cyclingDistanceLabel": "9.04 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [
+        "爬楼 × 2",
+        "户外骑行 × 3",
+        "燃脂训练 × 1",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-28</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>1458 kcal</strong></li>\n      <li>锻炼时长：<strong>168 分钟</strong></li>\n      <li>骑行里程：<strong>9.04 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>爬楼 × 2</span><span>户外骑行 × 3</span><span>燃脂训练 × 1</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-04-27",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "863 kcal",
+      "workoutDurationLabel": "91 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-27</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>863 kcal</strong></li>\n      <li>锻炼时长：<strong>91 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-26",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "1178 kcal",
+      "workoutDurationLabel": "129 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-26</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>1178 kcal</strong></li>\n      <li>锻炼时长：<strong>129 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-25",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "802 kcal",
+      "workoutDurationLabel": "84 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-25</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>802 kcal</strong></li>\n      <li>锻炼时长：<strong>84 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-24",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "1736 kcal",
+      "workoutDurationLabel": "176 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-24</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>1736 kcal</strong></li>\n      <li>锻炼时长：<strong>176 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-23",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "1776 kcal",
+      "workoutDurationLabel": "193 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-23</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>1776 kcal</strong></li>\n      <li>锻炼时长：<strong>193 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-22",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "1634 kcal",
+      "workoutDurationLabel": "170 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-22</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>1634 kcal</strong></li>\n      <li>锻炼时长：<strong>170 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-21",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "1123 kcal",
+      "workoutDurationLabel": "124 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-21</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>1123 kcal</strong></li>\n      <li>锻炼时长：<strong>124 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-20",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "942 kcal",
+      "workoutDurationLabel": "95 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-20</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>942 kcal</strong></li>\n      <li>锻炼时长：<strong>95 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-19",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "618 kcal",
+      "workoutDurationLabel": "72 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-19</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>618 kcal</strong></li>\n      <li>锻炼时长：<strong>72 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-18",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "587 kcal",
+      "workoutDurationLabel": "50 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-18</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>587 kcal</strong></li>\n      <li>锻炼时长：<strong>50 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-17",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "792 kcal",
+      "workoutDurationLabel": "75 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-17</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>792 kcal</strong></li>\n      <li>锻炼时长：<strong>75 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-16",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "995 kcal",
+      "workoutDurationLabel": "95 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-16</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>995 kcal</strong></li>\n      <li>锻炼时长：<strong>95 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-15",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "797 kcal",
+      "workoutDurationLabel": "63 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-15</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>797 kcal</strong></li>\n      <li>锻炼时长：<strong>63 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-14",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "620 kcal",
+      "workoutDurationLabel": "47 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-14</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>620 kcal</strong></li>\n      <li>锻炼时长：<strong>47 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-13",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "779 kcal",
+      "workoutDurationLabel": "55 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-13</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>779 kcal</strong></li>\n      <li>锻炼时长：<strong>55 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-10",
+      "weightLabel": "无体脂数据",
+      "activityCount": "1",
+      "trainingCaloriesLabel": "— kcal",
+      "workoutDurationLabel": "9分",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "588 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "燃脂训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-10</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>1</strong></li>\n      <li>训练消耗：<strong>— kcal</strong></li>\n      <li>锻炼时长：<strong>9分</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>588 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>燃脂训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-04-06",
+      "weightLabel": "无体脂数据",
+      "activityCount": "0",
+      "trainingCaloriesLabel": "402 kcal",
+      "workoutDurationLabel": "30 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "—",
+      "sleepLabel": "—",
+      "tags": [],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-06</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>0</strong></li>\n      <li>训练消耗：<strong>402 kcal</strong></li>\n      <li>锻炼时长：<strong>30 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>—</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    \n  </article>"
+    },
+    {
+      "date": "2026-04-03",
+      "weightLabel": "无体脂数据",
+      "activityCount": "1",
+      "trainingCaloriesLabel": "459 kcal",
+      "workoutDurationLabel": "32 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "1062 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "燃脂训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-04-03</h3>\n      <span>无体脂数据</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>1</strong></li>\n      <li>训练消耗：<strong>459 kcal</strong></li>\n      <li>锻炼时长：<strong>32 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>1062 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>燃脂训练 × 1</span></div>\n  </article>"
+    }
+  ],
+  "recentDays": [
+    {
+      "date": "2026-06-07",
+      "weightLabel": "71.40 kg",
+      "activityCount": "1",
+      "trainingCaloriesLabel": "284 kcal",
+      "workoutDurationLabel": "34 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "1166 kcal",
+      "sleepLabel": "322 分钟",
+      "tags": [
+        "HIIT × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-07</h3>\n      <span>71.40 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>1</strong></li>\n      <li>训练消耗：<strong>284 kcal</strong></li>\n      <li>锻炼时长：<strong>34 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>1166 kcal</strong></li>\n      <li>睡眠：<strong>322 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-06-06",
+      "weightLabel": "70.90 kg",
+      "activityCount": "2",
+      "trainingCaloriesLabel": "663 kcal",
+      "workoutDurationLabel": "99 分钟",
+      "cyclingDistanceLabel": "0 km",
+      "nutritionCaloriesLabel": "1192 kcal",
+      "sleepLabel": "528 分钟",
+      "tags": [
+        "HIIT × 1",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-06</h3>\n      <span>70.90 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>2</strong></li>\n      <li>训练消耗：<strong>663 kcal</strong></li>\n      <li>锻炼时长：<strong>99 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>1192 kcal</strong></li>\n      <li>睡眠：<strong>528 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-06-05",
+      "weightLabel": "71.45 kg",
+      "activityCount": "5",
+      "trainingCaloriesLabel": "422 kcal",
+      "workoutDurationLabel": "63 分钟",
+      "cyclingDistanceLabel": "12.40 km",
+      "nutritionCaloriesLabel": "582 kcal",
+      "sleepLabel": "498 分钟",
+      "tags": [
+        "户外骑行 × 4",
+        "爬楼 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-05</h3>\n      <span>71.45 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>5</strong></li>\n      <li>训练消耗：<strong>422 kcal</strong></li>\n      <li>锻炼时长：<strong>63 分钟</strong></li>\n      <li>骑行里程：<strong>12.40 km</strong></li>\n      <li>饮食热量：<strong>582 kcal</strong></li>\n      <li>睡眠：<strong>498 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 4</span><span>爬楼 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-06-04",
+      "weightLabel": "71.40 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "934 kcal",
+      "workoutDurationLabel": "135 分钟",
+      "cyclingDistanceLabel": "7.50 km",
+      "nutritionCaloriesLabel": "1298 kcal",
+      "sleepLabel": "—",
+      "tags": [
+        "HIIT × 1",
+        "户外骑行 × 3",
+        "爬楼 × 2",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-04</h3>\n      <span>71.40 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>934 kcal</strong></li>\n      <li>锻炼时长：<strong>135 分钟</strong></li>\n      <li>骑行里程：<strong>7.50 km</strong></li>\n      <li>饮食热量：<strong>1298 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>户外骑行 × 3</span><span>爬楼 × 2</span><span>力量训练 × 1</span></div>\n  </article>"
+    }
+  ],
+  "dailyOverviewTotal": 58,
+  "trainedDays": 57,
+  "totalArchivedDays": 58,
+  "overviewStats": [
+    {
+      "label": "已训练天数",
+      "value": "57 天",
+      "hint": "当前记录中有训练消耗的日期"
+    },
+    {
+      "label": "累计训练归档",
+      "value": "58 天",
+      "hint": "完整训练归档天数"
+    }
+  ],
+  "overviewMeta": [
+    {
+      "label": "真实测量",
+      "value": "2026-06-07"
+    },
+    {
+      "label": "对比日期",
+      "value": "2026-06-06"
+    }
+  ],
+  "primaryMetrics": [
+    {
+      "title": "体重",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">71.40</span><span class=\"metric-value__unit\">kg</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>BMI</span><strong>23.0</strong></div>",
+      "comparison": {
+        "direction": "up",
+        "arrow": "↑",
+        "label": "较前一日新增",
+        "shortLabel": "上升",
+        "value": "0.71%",
+        "text": "较前一日新增 0.71%",
+        "strength": 16,
+        "delta": 0.5,
+        "ratio": 0.7052186177715091
+      },
+      "comparisonHtml": "<div class=\"hero-card__comparison comparison-pill comparison-pill--up\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↑</span><span>较前一日新增 0.71%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">上升</span></div><span class=\"comparison-pill__value\">0.71%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:16%\"></span></span></div>"
+    },
+    {
+      "title": "体脂率",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">22.1</span><span class=\"metric-value__unit\">%</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>骨骼肌量</span><strong>30.10 kg</strong></div>",
+      "comparison": {
+        "direction": "flat",
+        "arrow": "→",
+        "label": "较前一日",
+        "shortLabel": "持平",
+        "value": "持平",
+        "text": "较前一日持平",
+        "strength": 18,
+        "delta": 0,
+        "ratio": 0
+      },
+      "comparisonHtml": "<div class=\"hero-card__comparison comparison-pill comparison-pill--flat\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">→</span><span>较前一日持平</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">持平</span></div><span class=\"comparison-pill__value\">持平</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:18%\"></span></span></div>"
+    },
+    {
+      "title": "训练消耗",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">284</span><span class=\"metric-value__unit\">kcal</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>饮食摄入</span><strong>1166 kcal</strong></div>",
+      "comparison": {
+        "direction": "down",
+        "arrow": "↓",
+        "label": "较前一日下降",
+        "shortLabel": "回落",
+        "value": "57.16%",
+        "text": "较前一日下降 57.16%",
+        "strength": 49,
+        "delta": -379,
+        "ratio": 57.16440422322775
+      },
+      "comparisonHtml": "<div class=\"hero-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 57.16%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">57.16%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:49%\"></span></span></div>"
+    },
+    {
+      "title": "锻炼时长",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">34</span><span class=\"metric-value__unit\">分钟</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>活动小时数</span><strong>6 小时</strong></div>",
+      "comparison": {
+        "direction": "down",
+        "arrow": "↓",
+        "label": "较前一日下降",
+        "shortLabel": "回落",
+        "value": "65.66%",
+        "text": "较前一日下降 65.66%",
+        "strength": 56,
+        "delta": -65,
+        "ratio": 65.65656565656566
+      },
+      "comparisonHtml": "<div class=\"hero-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 65.66%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">65.66%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:56%\"></span></span></div>"
+    }
+  ],
+  "secondaryMetrics": [
+    {
+      "title": "基础代谢",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">1567</span><span class=\"metric-value__unit\">kcal/日</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>内脏脂肪等级</span><strong>8.0</strong></div>",
+      "comparison": {
+        "direction": "up",
+        "arrow": "↑",
+        "label": "较前一日新增",
+        "shortLabel": "上升",
+        "value": "0.71%",
+        "text": "较前一日新增 0.71%",
+        "strength": 16,
+        "delta": 11,
+        "ratio": 0.7069408740359897
+      },
+      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--up\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↑</span><span>较前一日新增 0.71%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">上升</span></div><span class=\"comparison-pill__value\">0.71%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:16%\"></span></span></div>"
+    },
+    {
+      "title": "水分与蛋白质",
+      "valueHtml": "<div class=\"metric-value metric-value--composite\"><span class=\"metric-value__pair\"><span class=\"metric-value__number\">50.1</span><span class=\"metric-value__unit\">%</span></span><span class=\"metric-value__separator\">/</span><span class=\"metric-value__pair\"><span class=\"metric-value__number\">23.7</span><span class=\"metric-value__unit\">%</span></span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>身体年龄</span><strong>30 岁</strong></div>",
+      "comparison": {
+        "direction": "up",
+        "arrow": "↑",
+        "label": "较前一日新增",
+        "shortLabel": "上升",
+        "value": "0.20%",
+        "text": "较前一日新增 0.20%",
+        "strength": 16,
+        "delta": 0.10000000000000142,
+        "ratio": 0.20000000000000281
+      },
+      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--up\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↑</span><span>较前一日新增 0.20%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">上升</span></div><span class=\"comparison-pill__value\">0.20%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:16%\"></span></span></div>"
+    },
+    {
+      "title": "骑行里程",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">0</span><span class=\"metric-value__unit\">km</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>当日活动</span><strong>1 次</strong></div>",
+      "comparison": {
+        "direction": "neutral",
+        "arrow": "·",
+        "label": "暂无前一日对比",
+        "shortLabel": "待比较",
+        "value": "",
+        "text": "暂无前一日对比",
+        "strength": 0,
+        "delta": null,
+        "ratio": null
+      },
+      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--neutral\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">·</span><span>暂无前一日对比</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">待比较</span></div><span class=\"comparison-pill__meter comparison-pill__meter--empty\"></span></div>"
+    }
+  ],
+  "sleepCards": [
+    {
+      "title": "总睡眠",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">322</span><span class=\"metric-value__unit\">分钟</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>夜间睡眠</span><strong>322 分钟</strong></div>",
+      "comparison": {
+        "direction": "down",
+        "arrow": "↓",
+        "label": "较前一日下降",
+        "shortLabel": "回落",
+        "value": "39.02%",
+        "text": "较前一日下降 39.02%",
+        "strength": 33,
+        "delta": -206,
+        "ratio": 39.015151515151516
+      },
+      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 39.02%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">39.02%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:33%\"></span></span></div>"
+    },
+    {
+      "title": "深睡 / 浅睡",
+      "valueHtml": "<div class=\"metric-value metric-value--composite\"><span class=\"metric-value__pair\"><span class=\"metric-value__number\">41</span><span class=\"metric-value__unit\">分钟</span></span><span class=\"metric-value__separator\">/</span><span class=\"metric-value__pair\"><span class=\"metric-value__number\">179</span><span class=\"metric-value__unit\">分钟</span></span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>REM / 清醒</span><strong>102 / — 分钟</strong></div>",
+      "comparison": {
+        "direction": "down",
+        "arrow": "↓",
+        "label": "较前一日下降",
+        "shortLabel": "回落",
+        "value": "81.78%",
+        "text": "较前一日下降 81.78%",
+        "strength": 70,
+        "delta": -184,
+        "ratio": 81.77777777777779
+      },
+      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 81.78%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">81.78%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:70%\"></span></span></div>"
+    },
+    {
+      "title": "深睡 / 浅睡比例",
+      "valueHtml": "<div class=\"metric-value metric-value--composite\"><span class=\"metric-value__pair\"><span class=\"metric-value__number\">13</span><span class=\"metric-value__unit\">%</span></span><span class=\"metric-value__separator\">/</span><span class=\"metric-value__pair\"><span class=\"metric-value__number\">56</span><span class=\"metric-value__unit\">%</span></span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>深睡 / 浅睡比</span><strong>41 / 179</strong></div>",
+      "comparison": {
+        "direction": "down",
+        "arrow": "↓",
+        "label": "较前一日下降",
+        "shortLabel": "回落",
+        "value": "66.45%",
+        "text": "较前一日下降 66.45%",
+        "strength": 56,
+        "delta": -36.91919191919192,
+        "ratio": 66.45454545454544
+      },
+      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 66.45%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">66.45%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:56%\"></span></span></div>"
+    }
+  ],
+  "chartCards": [
+    {
+      "id": "weight-chart",
+      "title": "体重趋势",
+      "subtitle": "最近 30 天归档走势",
+      "className": "chart-card chart-card--wide"
+    },
+    {
+      "id": "composition-chart",
+      "title": "体脂与骨骼肌",
+      "subtitle": "观察减脂与保肌变化",
+      "className": "chart-card chart-card--wide"
+    },
+    {
+      "id": "calorie-chart",
+      "title": "热量对比",
+      "subtitle": "摄入与训练消耗对照",
+      "className": "chart-card"
+    },
+    {
+      "id": "cycling-chart",
+      "title": "骑行里程",
+      "subtitle": "通勤有氧累积",
+      "className": "chart-card"
+    }
+  ],
+  "chartPayload": {
+    "charts": {
+      "weightKg": [
+        {
+          "date": "2026-05-09",
+          "value": 73.45
+        },
+        {
+          "date": "2026-05-10",
+          "value": 73.4
+        },
+        {
+          "date": "2026-05-11",
+          "value": 72.65
+        },
+        {
+          "date": "2026-05-12",
+          "value": 72.7
+        },
+        {
+          "date": "2026-05-13",
+          "value": 73.65
+        },
+        {
+          "date": "2026-05-14",
+          "value": 72.95
+        },
+        {
+          "date": "2026-05-15",
+          "value": 72.45
+        },
+        {
+          "date": "2026-05-16",
+          "value": 74
+        },
+        {
+          "date": "2026-05-17",
+          "value": 73
+        },
+        {
+          "date": "2026-05-18",
+          "value": 73
+        },
+        {
+          "date": "2026-05-19",
+          "value": 71.3
+        },
+        {
+          "date": "2026-05-20",
+          "value": 72.65
+        },
+        {
+          "date": "2026-05-21",
+          "value": 72.05
+        },
+        {
+          "date": "2026-05-22",
+          "value": 73.7
+        },
+        {
+          "date": "2026-05-23",
+          "value": 72.9
+        },
+        {
+          "date": "2026-05-24",
+          "value": 73.3
+        },
+        {
+          "date": "2026-05-25",
+          "value": 71.95
+        },
+        {
+          "date": "2026-05-26",
+          "value": 72
+        },
+        {
+          "date": "2026-05-27",
+          "value": 71.9
+        },
+        {
+          "date": "2026-05-28",
+          "value": 72.55
+        },
+        {
+          "date": "2026-05-29",
+          "value": 71.1
+        },
+        {
+          "date": "2026-05-30",
+          "value": 71.1
+        },
+        {
+          "date": "2026-05-31",
+          "value": 71.25
+        },
+        {
+          "date": "2026-06-01",
+          "value": 71.35
+        },
+        {
+          "date": "2026-06-02",
+          "value": 71.35
+        },
+        {
+          "date": "2026-06-03",
+          "value": 72.2
+        },
+        {
+          "date": "2026-06-04",
+          "value": 71.4
+        },
+        {
+          "date": "2026-06-05",
+          "value": 71.45
+        },
+        {
+          "date": "2026-06-06",
+          "value": 70.9
+        },
+        {
+          "date": "2026-06-07",
+          "value": 71.4
+        }
+      ],
+      "bodyFatPct": [
+        {
+          "date": "2026-05-09",
+          "value": 22.9
+        },
+        {
+          "date": "2026-05-10",
+          "value": 22.7
+        },
+        {
+          "date": "2026-05-11",
+          "value": 22.7
+        },
+        {
+          "date": "2026-05-12",
+          "value": 22.8
+        },
+        {
+          "date": "2026-05-13",
+          "value": 24.1
+        },
+        {
+          "date": "2026-05-14",
+          "value": 24.1
+        },
+        {
+          "date": "2026-05-15",
+          "value": 24
+        },
+        {
+          "date": "2026-05-16",
+          "value": 23.7
+        },
+        {
+          "date": "2026-05-17",
+          "value": 23.8
+        },
+        {
+          "date": "2026-05-18",
+          "value": 23.5
+        },
+        {
+          "date": "2026-05-19",
+          "value": 23.8
+        },
+        {
+          "date": "2026-05-20",
+          "value": 23.2
+        },
+        {
+          "date": "2026-05-21",
+          "value": 23.1
+        },
+        {
+          "date": "2026-05-22",
+          "value": 22.8
+        },
+        {
+          "date": "2026-05-23",
+          "value": 22.8
+        },
+        {
+          "date": "2026-05-24",
+          "value": 22.9
+        },
+        {
+          "date": "2026-05-25",
+          "value": 23.1
+        },
+        {
+          "date": "2026-05-26",
+          "value": 22.8
+        },
+        {
+          "date": "2026-05-27",
+          "value": 22.6
+        },
+        {
+          "date": "2026-05-28",
+          "value": 22.7
+        },
+        {
+          "date": "2026-05-29",
+          "value": 22.9
+        },
+        {
+          "date": "2026-05-30",
+          "value": 22.9
+        },
+        {
+          "date": "2026-05-31",
+          "value": 22.4
+        },
+        {
+          "date": "2026-06-01",
+          "value": 22.4
+        },
+        {
+          "date": "2026-06-02",
+          "value": 22.4
+        },
+        {
+          "date": "2026-06-03",
+          "value": 22.1
+        },
+        {
+          "date": "2026-06-04",
+          "value": 22.1
+        },
+        {
+          "date": "2026-06-05",
+          "value": 21.8
+        },
+        {
+          "date": "2026-06-06",
+          "value": 22.1
+        },
+        {
+          "date": "2026-06-07",
+          "value": 22.1
+        }
+      ],
+      "skeletalMuscleKg": [
+        {
+          "date": "2026-05-09",
+          "value": 30.6
+        },
+        {
+          "date": "2026-05-10",
+          "value": 30.75
+        },
+        {
+          "date": "2026-05-11",
+          "value": 30.4
+        },
+        {
+          "date": "2026-05-12",
+          "value": 30.35
+        },
+        {
+          "date": "2026-05-13",
+          "value": 30.7
+        },
+        {
+          "date": "2026-05-14",
+          "value": 30.45
+        },
+        {
+          "date": "2026-05-15",
+          "value": 30.25
+        },
+        {
+          "date": "2026-05-16",
+          "value": 30.45
+        },
+        {
+          "date": "2026-05-17",
+          "value": 30.3
+        },
+        {
+          "date": "2026-05-18",
+          "value": 30.25
+        },
+        {
+          "date": "2026-05-19",
+          "value": 29.75
+        },
+        {
+          "date": "2026-05-20",
+          "value": 30.2
+        },
+        {
+          "date": "2026-05-21",
+          "value": 30.15
+        },
+        {
+          "date": "2026-05-22",
+          "value": 30.8
+        },
+        {
+          "date": "2026-05-23",
+          "value": 30.55
+        },
+        {
+          "date": "2026-05-24",
+          "value": 30.5
+        },
+        {
+          "date": "2026-05-25",
+          "value": 30.4
+        },
+        {
+          "date": "2026-05-26",
+          "value": 30.3
+        },
+        {
+          "date": "2026-05-27",
+          "value": 30.35
+        },
+        {
+          "date": "2026-05-28",
+          "value": 30.2
+        },
+        {
+          "date": "2026-05-29",
+          "value": 30
+        },
+        {
+          "date": "2026-05-30",
+          "value": null
+        },
+        {
+          "date": "2026-05-31",
+          "value": 29.95
+        },
+        {
+          "date": "2026-06-01",
+          "value": 29.95
+        },
+        {
+          "date": "2026-06-02",
+          "value": 29.95
+        },
+        {
+          "date": "2026-06-03",
+          "value": 60.8
+        },
+        {
+          "date": "2026-06-04",
+          "value": 30.15
+        },
+        {
+          "date": "2026-06-05",
+          "value": 30.3
+        },
+        {
+          "date": "2026-06-06",
+          "value": 29.85
+        },
+        {
+          "date": "2026-06-07",
+          "value": 30.1
+        }
+      ],
+      "basalMetabolism": [
+        {
+          "date": "2026-05-09",
+          "value": 1596
+        },
+        {
+          "date": "2026-05-10",
+          "value": 1601
+        },
+        {
+          "date": "2026-05-11",
+          "value": 1585
+        },
+        {
+          "date": "2026-05-12",
+          "value": 1583
+        },
+        {
+          "date": "2026-05-13",
+          "value": 1601
+        },
+        {
+          "date": "2026-05-14",
+          "value": 1588
+        },
+        {
+          "date": "2026-05-15",
+          "value": 1576
+        },
+        {
+          "date": "2026-05-16",
+          "value": 1592
+        },
+        {
+          "date": "2026-05-17",
+          "value": 1580
+        },
+        {
+          "date": "2026-05-18",
+          "value": 1578
+        },
+        {
+          "date": "2026-05-19",
+          "value": 1553
+        },
+        {
+          "date": "2026-05-20",
+          "value": 1575
+        },
+        {
+          "date": "2026-05-21",
+          "value": 1571
+        },
+        {
+          "date": "2026-05-22",
+          "value": 1605
+        },
+        {
+          "date": "2026-05-23",
+          "value": 1591
+        },
+        {
+          "date": "2026-05-24",
+          "value": 1590
+        },
+        {
+          "date": "2026-05-25",
+          "value": 1582
+        },
+        {
+          "date": "2026-05-26",
+          "value": 1579
+        },
+        {
+          "date": "2026-05-27",
+          "value": 1580
+        },
+        {
+          "date": "2026-05-28",
+          "value": 1575
+        },
+        {
+          "date": "2026-05-29",
+          "value": 1563
+        },
+        {
+          "date": "2026-05-30",
+          "value": 1563
+        },
+        {
+          "date": "2026-05-31",
+          "value": 1562
+        },
+        {
+          "date": "2026-06-01",
+          "value": 1561
+        },
+        {
+          "date": "2026-06-02",
+          "value": 1561
+        },
+        {
+          "date": "2026-06-03",
+          "value": 1584
+        },
+        {
+          "date": "2026-06-04",
+          "value": 1570
+        },
+        {
+          "date": "2026-06-05",
+          "value": 1576
+        },
+        {
+          "date": "2026-06-06",
+          "value": 1556
+        },
+        {
+          "date": "2026-06-07",
+          "value": 1567
+        }
+      ],
+      "visceralFatLevel": [
+        {
+          "date": "2026-05-09",
+          "value": 9
+        },
+        {
+          "date": "2026-05-10",
+          "value": 9
+        },
+        {
+          "date": "2026-05-11",
+          "value": 8
+        },
+        {
+          "date": "2026-05-12",
+          "value": 8
+        },
+        {
+          "date": "2026-05-13",
+          "value": 9
+        },
+        {
+          "date": "2026-05-14",
+          "value": 8
+        },
+        {
+          "date": "2026-05-15",
+          "value": 8
+        },
+        {
+          "date": "2026-05-16",
+          "value": 9
+        },
+        {
+          "date": "2026-05-17",
+          "value": 8
+        },
+        {
+          "date": "2026-05-18",
+          "value": 9
+        },
+        {
+          "date": "2026-05-19",
+          "value": 8
+        },
+        {
+          "date": "2026-05-20",
+          "value": 8
+        },
+        {
+          "date": "2026-05-21",
+          "value": 8
+        },
+        {
+          "date": "2026-05-22",
+          "value": 9
+        },
+        {
+          "date": "2026-05-23",
+          "value": 8
+        },
+        {
+          "date": "2026-05-24",
+          "value": 9
+        },
+        {
+          "date": "2026-05-25",
+          "value": 8
+        },
+        {
+          "date": "2026-05-26",
+          "value": 8
+        },
+        {
+          "date": "2026-05-27",
+          "value": 8
+        },
+        {
+          "date": "2026-05-28",
+          "value": 8
+        },
+        {
+          "date": "2026-05-29",
+          "value": 8
+        },
+        {
+          "date": "2026-05-30",
+          "value": 8
+        },
+        {
+          "date": "2026-05-31",
+          "value": 8
+        },
+        {
+          "date": "2026-06-01",
+          "value": 8
+        },
+        {
+          "date": "2026-06-02",
+          "value": 8
+        },
+        {
+          "date": "2026-06-03",
+          "value": 8
+        },
+        {
+          "date": "2026-06-04",
+          "value": 8
+        },
+        {
+          "date": "2026-06-05",
+          "value": 8
+        },
+        {
+          "date": "2026-06-06",
+          "value": 8
+        },
+        {
+          "date": "2026-06-07",
+          "value": 8
+        }
+      ],
+      "intakeCalories": [
+        {
+          "date": "2026-05-09",
+          "value": 1593
+        },
+        {
+          "date": "2026-05-10",
+          "value": 1386
+        },
+        {
+          "date": "2026-05-11",
+          "value": 2459
+        },
+        {
+          "date": "2026-05-12",
+          "value": 857
+        },
+        {
+          "date": "2026-05-13",
+          "value": 969
+        },
+        {
+          "date": "2026-05-14",
+          "value": 1846
+        },
+        {
+          "date": "2026-05-15",
+          "value": 978
+        },
+        {
+          "date": "2026-05-16",
+          "value": 1328
+        },
+        {
+          "date": "2026-05-17",
+          "value": 675
+        },
+        {
+          "date": "2026-05-18",
+          "value": 1392
+        },
+        {
+          "date": "2026-05-19",
+          "value": 833
+        },
+        {
+          "date": "2026-05-20",
+          "value": 2377
+        },
+        {
+          "date": "2026-05-22",
+          "value": 1385
+        },
+        {
+          "date": "2026-05-23",
+          "value": 1645
+        },
+        {
+          "date": "2026-05-24",
+          "value": 938
+        },
+        {
+          "date": "2026-05-25",
+          "value": 1516
+        },
+        {
+          "date": "2026-05-26",
+          "value": 1881
+        },
+        {
+          "date": "2026-05-27",
+          "value": 1526
+        },
+        {
+          "date": "2026-05-28",
+          "value": 1620
+        },
+        {
+          "date": "2026-05-29",
+          "value": 851
+        },
+        {
+          "date": "2026-05-30",
+          "value": 1180
+        },
+        {
+          "date": "2026-05-31",
+          "value": 868
+        },
+        {
+          "date": "2026-06-01",
+          "value": 2421
+        },
+        {
+          "date": "2026-06-02",
+          "value": 1259
+        },
+        {
+          "date": "2026-06-03",
+          "value": 2050
+        },
+        {
+          "date": "2026-06-04",
+          "value": 1298
+        },
+        {
+          "date": "2026-06-05",
+          "value": 582
+        },
+        {
+          "date": "2026-06-06",
+          "value": 1192
+        },
+        {
+          "date": "2026-06-07",
+          "value": 1166
+        }
+      ],
+      "trainingCalories": [
+        {
+          "date": "2026-05-09",
+          "value": 991
+        },
+        {
+          "date": "2026-05-10",
+          "value": 643
+        },
+        {
+          "date": "2026-05-11",
+          "value": 1129
+        },
+        {
+          "date": "2026-05-12",
+          "value": 1237
+        },
+        {
+          "date": "2026-05-13",
+          "value": 210
+        },
+        {
+          "date": "2026-05-14",
+          "value": 796
+        },
+        {
+          "date": "2026-05-15",
+          "value": 1069
+        },
+        {
+          "date": "2026-05-16",
+          "value": 72
+        },
+        {
+          "date": "2026-05-17",
+          "value": 1458
+        },
+        {
+          "date": "2026-05-18",
+          "value": 1062
+        },
+        {
+          "date": "2026-05-19",
+          "value": 1023
+        },
+        {
+          "date": "2026-05-20",
+          "value": 437
+        },
+        {
+          "date": "2026-05-21",
+          "value": 510
+        },
+        {
+          "date": "2026-05-22",
+          "value": 1077
+        },
+        {
+          "date": "2026-05-23",
+          "value": 600
+        },
+        {
+          "date": "2026-05-24",
+          "value": 372
+        },
+        {
+          "date": "2026-05-25",
+          "value": 1138
+        },
+        {
+          "date": "2026-05-26",
+          "value": 951
+        },
+        {
+          "date": "2026-05-27",
+          "value": 577
+        },
+        {
+          "date": "2026-05-28",
+          "value": 643
+        },
+        {
+          "date": "2026-05-29",
+          "value": 804
+        },
+        {
+          "date": "2026-05-30",
+          "value": 605
+        },
+        {
+          "date": "2026-05-31",
+          "value": 874
+        },
+        {
+          "date": "2026-06-01",
+          "value": 844
+        },
+        {
+          "date": "2026-06-02",
+          "value": 824
+        },
+        {
+          "date": "2026-06-03",
+          "value": 764
+        },
+        {
+          "date": "2026-06-04",
+          "value": 934
+        },
+        {
+          "date": "2026-06-05",
+          "value": 422
+        },
+        {
+          "date": "2026-06-06",
+          "value": 663
+        },
+        {
+          "date": "2026-06-07",
+          "value": 284
+        }
+      ],
+      "cyclingDistanceKm": [
+        {
+          "date": "2026-05-09",
+          "value": 12.36
+        },
+        {
+          "date": "2026-05-10",
+          "value": 10.14
+        },
+        {
+          "date": "2026-05-11",
+          "value": 6.31
+        },
+        {
+          "date": "2026-05-12",
+          "value": 12.37
+        },
+        {
+          "date": "2026-05-13",
+          "value": 17.64
+        },
+        {
+          "date": "2026-05-14",
+          "value": 6.22
+        },
+        {
+          "date": "2026-05-15",
+          "value": 6.11
+        },
+        {
+          "date": "2026-05-17",
+          "value": 38.33
+        },
+        {
+          "date": "2026-05-18",
+          "value": 6.22
+        },
+        {
+          "date": "2026-05-19",
+          "value": 12.33
+        },
+        {
+          "date": "2026-05-20",
+          "value": 11.1
+        },
+        {
+          "date": "2026-05-21",
+          "value": 11.74
+        },
+        {
+          "date": "2026-05-22",
+          "value": 12.77
+        },
+        {
+          "date": "2026-05-25",
+          "value": 12.59
+        },
+        {
+          "date": "2026-05-26",
+          "value": 13.29
+        },
+        {
+          "date": "2026-05-27",
+          "value": 12.07
+        },
+        {
+          "date": "2026-05-28",
+          "value": 6.03
+        },
+        {
+          "date": "2026-06-01",
+          "value": 12.25
+        },
+        {
+          "date": "2026-06-03",
+          "value": 13.23
+        },
+        {
+          "date": "2026-06-04",
+          "value": 7.5
+        },
+        {
+          "date": "2026-06-05",
+          "value": 12.4
+        }
+      ],
+      "sleepMinutes": [
+        {
+          "date": "2026-06-05",
+          "value": 498
+        },
+        {
+          "date": "2026-06-06",
+          "value": 528
+        },
+        {
+          "date": "2026-06-07",
+          "value": 322
+        }
+      ]
+    }
+  }
+}
