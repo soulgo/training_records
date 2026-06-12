@@ -44,7 +44,10 @@ node tools/prompt-generator.mjs
 睡眠字段维护时要额外注意：
 
 - `records.sleep` 必须包含 schema 中的全部睡眠字段；画面不可见的字段填 `null`，不要省略。
+- `totalSleepMinutes` 和 `nightSleepMinutes` 是同一条 `records.sleep` 的两个字段，不能把它们相加，也不能拆成两条睡眠记录。
+- 如果截图同时显示总睡眠和夜间睡眠，总睡眠只写画面里的总睡眠，夜间睡眠只写画面里的夜间睡眠；除非画面明确列出单独午睡条目，否则仍然只输出一条 `records.sleep`。
 - `bedtime`、`wakeTime` 写截图中真实可见的时间文本，不要为了归档日改写。
+- 深睡、浅睡、REM、清醒、阶段占比、睡眠评分、心率、HRV、血氧、呼吸率等可见字段必须写入同一个 `records.sleep`。
 - `sleepScore`、`averageHeartRateBpm`、`hrvMs`、`averageSpo2Pct`、`averageRespiratoryRate` 等健康指标只从可见区域提取。
 - `analysisText` 和 `suggestionText` 只保存截图中已有的解读/建议，不让模型生成新建议。
 - 如果只看得到醒来日期，程序会按醒来日期减一天归档；prompt 不需要让 AI 输出“归档日期”。
@@ -70,6 +73,8 @@ node --test test/prompt-generator.test.mjs test/telegram-sync-runner.test.mjs te
 ```bash
 npm test
 ```
+
+如果新增或调整睡眠 prompt 的关键约束，要同步在 `test/prompt-generator.test.mjs` 增加断言，防止生成后的 prompt 丢失“总睡眠/夜间睡眠不可相加”和“阶段字段写入同一条 `records.sleep`”这类守护规则。
 
 ## 临时实验
 

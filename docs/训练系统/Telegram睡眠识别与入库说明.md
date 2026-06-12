@@ -33,7 +33,10 @@ schema 事实源是：
 - `imageType` 使用 `sleep`。
 - `records.sleep` 是睡眠字段唯一载体，不要把睡眠内容写进运动、饮食或体脂字段。
 - `records.sleep` 必须包含 schema 中的全部字段；画面不可见时填 `null`。
+- `totalSleepMinutes` 和 `nightSleepMinutes` 是同一条 `records.sleep` 的两个字段，不是两条记录；不要把二者相加。
+- 如果截图同时显示总睡眠和夜间睡眠，总睡眠写入 `totalSleepMinutes`，夜间睡眠写入 `nightSleepMinutes`；除非画面明确列出单独午睡条目，否则仍然只输出一条 `records.sleep`。
 - `bedtime`、`wakeTime` 写截图中真实可见的入睡/起床时间，不要为了归档日期改写。
+- 深睡、浅睡、REM、清醒、阶段占比和睡眠健康指标都必须写在同一个 `records.sleep` 中，不要拆到第二条记录或只保留总时长。
 - `sleepStageDetail` 只保留画面明确可见的信息，不补全推断。
 - `analysisText` 写截图底部已有的睡眠解读，`suggestionText` 写截图底部已有的睡眠建议，不让模型生成新建议。
 - 遇到跨天、多个日期或日期冲突时，宁可让 `detectedDate` 为 `null`。
@@ -138,6 +141,7 @@ Telegram 睡眠图进入同一条图片同步链路：
 - 同一天重复同步时，Telegram 图片路径只 upsert 本批次 sleep row 并刷新目标 `core.training_day`，不会整日删除重建其它模块。
 - Telegram sleep 正常同步不写 `archive.training_sleep`；该表保留给历史归档和回填维护。
 - archive-only 睡眠记录可通过回填链路补写 `core.sleep`。
+- 页面和分析读取睡眠卡片时，`core.sleep` 明细是优先来源；只有在 `core.sleep` 没有对应记录时，才使用 `core.training_day` 睡眠汇总兜底，避免明细和日汇总重复叠加。
 
 ## 6. SQL 与迁移
 
@@ -174,6 +178,8 @@ psql "$TRAINING_DB_URL" -f sql/training_records/sleep_health_metrics.sql
 8. 看 GitHub Actions summary 的 `taskStatus`、`persistenceStatus`、`failureDisposition` 和 failed message ids，确认是已入库、自动重试还是需要重新发送。
 9. 如果数据库写入失败，看 `runtime/telegram-sync-pending.ndjson` 是否等待重放。
 10. 如果数据库有数据但页面不显示，运行 `npm run build:data`，检查 `训练数据解析.md` 和 `source/_data/dashboardView.json`。
+
+如果页面睡眠卡片显示“待比较”，但 Telegram Sync action 已显示 `persistenceStatus=stored`，优先确认 `source/_data/dashboardView.json` 或构建产物中的睡眠分钟数是否来自 `core.sleep`。如果看到总睡眠等于“总睡眠 + 夜间睡眠”的异常值，说明读模型或 prompt 口径发生回退，需要检查 `readTrainingSnapshotFromDatabaseClient` 的睡眠来源选择和 `prompts/_source/recognition-rules.json` 的 sleep 规则。
 
 ## 8. 相关文件
 

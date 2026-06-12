@@ -143,6 +143,82 @@ test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before gr
   assert.ok(queries.some((sql) => /from core\.sleep/i.test(sql)));
 });
 
+test('readTrainingSnapshotFromDatabaseClient prefers core sleep rows over day sleep summary for sleep cards', async () => {
+  const client = {
+    async query(sql) {
+      if (/from core\.training_day/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-06-10',
+              total_activities: 0,
+              total_duration_seconds: 0,
+              training_calories: 0,
+              workout_duration_minutes: null,
+              active_hours: null,
+              cycling_distance_km: 0,
+              intake_calories: null,
+              sleep_total_minutes: 735,
+              night_sleep_minutes: 354,
+              nap_minutes: null,
+              sleep_start_time: '00:08',
+              sleep_end_time: '06:08',
+              deep_sleep_minutes: null,
+              light_sleep_minutes: null,
+              rem_sleep_minutes: null,
+              awake_minutes: null,
+              nutrition_details_json: [],
+            },
+          ],
+        };
+      }
+      if (/from core\.sleep/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-06-10',
+              sleep_type: '夜间睡眠',
+              bedtime: '00:08',
+              wake_time: '06:08',
+              night_sleep_minutes: 354,
+              total_sleep_minutes: 381,
+              nap_minutes: 27,
+              deep_sleep_minutes: 79,
+              light_sleep_minutes: 226,
+              rem_sleep_minutes: 49,
+              awake_minutes: null,
+              sleep_score: 76,
+              deep_sleep_ratio_pct: 22,
+              light_sleep_ratio_pct: 64,
+            },
+          ],
+        };
+      }
+      if (/from core\.(measurement|activity|meal|thought)/i.test(sql)) {
+        return { rows: [] };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+  };
+
+  const snapshot = await readTrainingSnapshotFromDatabaseClient(
+    client,
+    new Date('2026-06-12T00:00:00.000Z'),
+  );
+  const day = snapshot.daily.find((entry) => entry.date === '2026-06-10');
+
+  assert.ok(day);
+  assert.equal(day.sleep.length, 1);
+  assert.equal(day.sleepSummary.totalSleepMinutes, 381);
+  assert.equal(day.sleepSummary.nightSleepMinutes, 354);
+  assert.equal(day.sleepSummary.napMinutes, 27);
+  assert.equal(day.sleepSummary.deepSleepMinutes, 79);
+  assert.equal(day.sleepSummary.lightSleepMinutes, 226);
+  assert.equal(day.sleepSummary.remSleepMinutes, 49);
+  assert.equal(day.sleepSummary.deepSleepRatioPct, 22);
+  assert.equal(day.sleepSummary.lightSleepRatioPct, 64);
+});
+
 test('readTrainingSnapshotFromDatabase can limit daily rows by date window', async () => {
   const queries = [];
   const snapshot = await readTrainingSnapshotFromDatabase({

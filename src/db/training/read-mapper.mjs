@@ -83,11 +83,12 @@ export function buildTrainingSnapshotFromRows({
       recommendedMin: toNullableNumber(meal.recommended_min),
       recommendedMax: toNullableNumber(meal.recommended_max),
     }));
-    const sleep = summarizeSleepRecords([
-      ...(sleepByDate.get(archivedDate) ?? []).map(normalizeSleepRow),
-      ...extractSleepRecords(row),
-      sleepSummaryByDate.get(archivedDate) ?? null,
-    ]);
+    const sleepRecords = (sleepByDate.get(archivedDate) ?? []).map(normalizeSleepRow);
+    const sleep = summarizeSleepRecords(
+      sleepRecords.length > 0
+        ? sleepRecords
+        : [sleepSummaryByDate.get(archivedDate) ?? null],
+    );
 
     return {
       date: archivedDate,
@@ -171,28 +172,6 @@ function countActivitiesByType(activities) {
     countsByType[activity.type] = (countsByType[activity.type] ?? 0) + 1;
   }
   return countsByType;
-}
-
-function extractSleepRecords(row) {
-  const sleep = {
-    sleepType: '夜间睡眠',
-    bedtime: row.sleep_start_time ?? null,
-    wakeTime: row.sleep_end_time ?? null,
-    nightSleepMinutes: toNullableNumber(row.night_sleep_minutes),
-    totalSleepMinutes: toNullableNumber(row.sleep_total_minutes),
-    napMinutes: toNullableNumber(row.nap_minutes),
-    deepSleepMinutes: toNullableNumber(row.deep_sleep_minutes),
-    lightSleepMinutes: toNullableNumber(row.light_sleep_minutes),
-    remSleepMinutes: toNullableNumber(row.rem_sleep_minutes),
-    awakeMinutes: toNullableNumber(row.awake_minutes),
-    sleepStageText: null,
-    sleepStageDetail: null,
-    sleepScore: toNullableNumber(row.sleep_score),
-    deepSleepRatioPct: toNullableNumber(row.deep_sleep_ratio_pct),
-    lightSleepRatioPct: toNullableNumber(row.light_sleep_ratio_pct),
-    remSleepRatioPct: toNullableNumber(row.rem_sleep_ratio_pct),
-  };
-  return hasAnySleepValue(sleep) ? [sleep] : [];
 }
 
 function normalizeSleepRow(row) {

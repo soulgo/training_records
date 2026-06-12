@@ -30,6 +30,7 @@
 
 ### Fixed
 
+- 修复睡眠看板在 Telegram 睡眠截图已解析并入库后仍显示“待比较”的问题：页面读取数据库快照时优先使用 `core.sleep` 明细作为睡眠卡片来源，只在缺少明细时才回退到 `core.training_day` 睡眠汇总，避免把 `totalSleepMinutes` 与 `nightSleepMinutes` 或日汇总重复聚合；同时加固图片识别 prompt，明确总睡眠和夜间睡眠是同一条 `records.sleep` 的两个字段、不可相加，睡眠阶段和健康指标也必须写入同一条睡眠记录。
 - 修复睡眠截图识别已拿到夜间睡眠时长但遗漏总睡眠时长时，页面总睡眠和日期卡片仍显示 `—` 的问题：Telegram 睡眠归一化会从 `nightSleepMinutes` 补齐 `totalSleepMinutes`，看板展示也兼容已入库的同类半残数据。
 - 修复 Markdown Backup 定时任务在生产库缺少新增睡眠汇总列时导出失败的问题：`export:markdown` 在严格读取数据库快照前会先执行幂等 schema preflight，只补齐缺失列，不回填或推断业务数据；preflight 或快照读取失败时仍直接失败且不会覆盖现有 Markdown 备份，避免数据丢失和不准确备份。
 - 补全 v1.2.7 修复的遗漏范围：`core-row-writer.pg.mjs` 中 `buildSleepRows` 的 14 个 `int4` 字段（`nightSleepMinutes`、`totalSleepMinutes`、`deepSleepMinutes`、`lightSleepMinutes`、`remSleepMinutes`、`awakeMinutes`、`napMinutes`、`sleepScore`、`sleepScorePercentile`、`deepSleepContinuityScore`、`wakeCount`、`breathingQualityScore`、`averageHeartRateBpm`、`hrvMs`）以及 `insertCoreMeasurements`/`insertCoreActivities`/`insertCoreMeals` 的整型字段，`incremental-write.pg.mjs` 的 nutrition 和 workout summary 参数，`archive-repository.pg.mjs` 的 sleep/activity/meal 整型字段，均补加 `Math.round(Number(...))` 取整保护，防止 AI 识别返回浮点值（如 `143.1`）触发 `invalid input syntax for type integer` 导致数据库写入失败和首页无数据显示。
