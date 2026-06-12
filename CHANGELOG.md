@@ -15,6 +15,8 @@
 
 ### Added
 
+- 随想模块列表页新增长内容自动摘要：正文超过摘要阈值时只显示开头内容，并提供“查看全文”链接跳转到对应随想详情页，避免长 Markdown 附件随想撑满模块首页。
+- 锻炼随想、杂七杂八和身体反馈三个随想模块新增分页能力：每页最多展示 15 条随想，超过后自动生成 `page/2/` 等分页页，并显示上一页/下一页按钮。
 - Telegram `/随想` / `/thought` 新增 Markdown 文档附件正文能力：发送 `.md` 或 `.markdown` 文档并在 caption 写命令后，系统下载附件、按 UTF-8 去 BOM/trim，并把正文写入 `core.thought.body`；caption 仅用于命令和模块识别，附件正文优先，单个附件大小上限为 5MB。
 - Telegram `/随想编 <id>` 新增 Markdown 文档附件编辑能力：发送新的 `.md` 或 `.markdown` 文档并在 caption 写 `/随想编 id` 或 `/随想编 id 模块` 后，附件内容会作为新的完整正文写入 `thoughtEdit.body` 并整体替换原随想正文；caption 正文不与附件拼接。
 - Telegram `/help` / `/帮助` 命令清单新增 Markdown 附件发送和 Markdown 附件编辑用法说明，提示通过 Telegram“文件”发送 `.md/.markdown` 并在 caption 写随想或编辑命令。
@@ -24,6 +26,7 @@
 ### Changed
 
 - 调整首页趋势分析卡片图例样式：图例固定在每张图表卡片右上角，多指标竖向排列且不再使用底色/边框，避免横向图例挤压左上角标题与副标题。
+- 将 Telegram 图片识别备用 AI 方案文档从仓库根目录移动到 `docs/训练系统/AI_BACKUP_SOLUTION.md`，使训练系统文档集中维护。
 
 ### Fixed
 

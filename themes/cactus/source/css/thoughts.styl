@@ -70,6 +70,17 @@
 .thought-card__body > :last-child
   margin-bottom 0
 
+.thought-card__read-more
+  display inline-flex
+  align-items center
+  margin-top 0.85rem
+  color #2563eb
+  font-size 0.92rem
+  font-weight 600
+
+.thought-card__read-more:hover
+  color #1d4ed8
+
 .thought-card__photos
   display grid
   grid-template-columns repeat(auto-fill, minmax(9rem, 1fr))
@@ -89,6 +100,38 @@
   height 100%
   object-fit cover
 
+.thoughts-pagination
+  display flex
+  align-items center
+  justify-content center
+  gap 0.75rem
+  margin-top 1.5rem
+
+.thoughts-pagination__link
+  display inline-flex
+  align-items center
+  justify-content center
+  min-width 4.5rem
+  padding 0.45rem 0.85rem
+  border 1px solid #cbd5e1
+  border-radius 8px
+  background #ffffff
+  color #2563eb
+  font-size 0.9rem
+  line-height 1.2
+
+.thoughts-pagination__link:hover
+  border-color #93c5fd
+  color #1d4ed8
+
+.thoughts-pagination__link--disabled
+  color #94a3b8
+  cursor default
+
+.thoughts-pagination__status
+  color #64748b
+  font-size 0.9rem
+
 @media (max-width: 720px)
   .thoughts-page
     margin-top 1.5rem
@@ -102,3 +145,10 @@
 
   .thought-card__photos
     grid-template-columns repeat(auto-fill, minmax(7.5rem, 1fr))
+
+  .thoughts-pagination
+    gap 0.5rem
+
+  .thoughts-pagination__link
+    min-width 4rem
+    padding 0.42rem 0.65rem

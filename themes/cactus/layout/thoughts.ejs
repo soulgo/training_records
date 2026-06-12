@@ -12,17 +12,64 @@ function resolveThoughtModule(post) {
   return 'workout';
 }
 
+function getPageNumber(value) {
+  const pageNumber = Number(value || 1);
+  if (!Number.isFinite(pageNumber) || pageNumber < 1) {
+    return 1;
+  }
+  return Math.floor(pageNumber);
+}
+
+function stripHtml(value) {
+  return String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function getThoughtExcerpt(post, limit) {
+  const plainText = stripHtml(post.content);
+  if (plainText.length <= limit) {
+    return {
+      isLong: false,
+      html: post.content,
+    };
+  }
+
+  return {
+    isLong: true,
+    text: plainText.slice(0, limit).replace(/\s+\S*$/, '').trim() + '...',
+  };
+}
+
+function getPagePath(basePath, pageNumber) {
+  const normalizedBasePath = String(basePath || '/thoughts/').replace(/^\/?/, '/').replace(/\/?$/, '/');
+  if (pageNumber <= 1) {
+    return normalizedBasePath;
+  }
+  return `${normalizedBasePath}page/${pageNumber}/`;
+}
+
 const thoughtModuleEmptyTexts = {
   workout: '还没有锻炼随想。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/随想 锻炼 正文</code> 自动归档到这里。',
   misc: '还没有杂七杂八。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/随想 杂七杂八 正文</code> 自动归档到这里。',
   body_feedback: '还没有身体反馈。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/随想 身体反馈 正文</code> 自动归档到这里。',
 };
+const thoughtModuleBasePaths = {
+  workout: '/thoughts/',
+  misc: '/misc/',
+  body_feedback: '/body-feedback/',
+};
 const activeThoughtModule = page.thought_module || 'workout';
+const thoughtsPageSize = Number(page.thought_page_size || 15);
+const thoughtsCurrentPage = getPageNumber(page.thought_page_current);
 const thoughts = site.posts
   .sort('date', 'desc')
   .filter((post) => post?.tags?.findOne && post.tags.findOne({ name: '随想' }))
   .filter((post) => resolveThoughtModule(post) === activeThoughtModule);
+const thoughtsTotalPages = Math.max(1, Math.ceil(thoughts.length / thoughtsPageSize));
+const thoughtsStartIndex = (thoughtsCurrentPage - 1) * thoughtsPageSize;
+const pagedThoughts = thoughts.slice(thoughtsStartIndex, thoughtsStartIndex + thoughtsPageSize);
+const thoughtsBasePath = page.thought_base_path || thoughtModuleBasePaths[activeThoughtModule] || '/thoughts/';
 const emptyText = thoughtModuleEmptyTexts[activeThoughtModule] || thoughtModuleEmptyTexts.workout;
+const excerptLimit = Number(page.thought_excerpt_limit || 180);
 %>
 
 <section class="thoughts-page">
@@ -32,7 +79,8 @@ const emptyText = thoughtModuleEmptyTexts[activeThoughtModule] || thoughtModuleE
     </div>
   <% } else { %>
     <div class="thoughts-list">
-      <% thoughts.each(function(post) { %>
+      <% pagedThoughts.each(function(post) { %>
+        <% const excerpt = getThoughtExcerpt(post, excerptLimit); %>
         <article class="thought-card">
           <div class="thought-card__meta">
             <time datetime="<%= full_date(post.date) %>"><%= date(post.date, 'YYYY-MM-DD HH:mm') %></time>
@@ -50,8 +98,15 @@ const emptyText = thoughtModuleEmptyTexts[activeThoughtModule] || thoughtModuleE
             </div>
           </div>
           <div class="thought-card__body">
-            <%- post.content %>
+            <% if (excerpt.isLong) { %>
+              <p><%= excerpt.text %></p>
+            <% } else { %>
+              <%- excerpt.html %>
+            <% } %>
           </div>
+          <% if (excerpt.isLong) { %>
+            <a class="thought-card__read-more" href="<%- url_for(post.path) %>">查看全文</a>
+          <% } %>
           <% if (post.photos && post.photos.length) { %>
             <div class="thought-card__photos">
               <% post.photos.forEach(function(photo) { %>
@@ -64,5 +119,20 @@ const emptyText = thoughtModuleEmptyTexts[activeThoughtModule] || thoughtModuleE
         </article>
       <% }) %>
     </div>
+    <% if (thoughtsTotalPages > 1) { %>
+      <nav class="thoughts-pagination" aria-label="随想分页">
+        <% if (thoughtsCurrentPage > 1) { %>
+          <a class="thoughts-pagination__link" href="<%- url_for(getPagePath(thoughtsBasePath, thoughtsCurrentPage - 1)) %>">上一页</a>
+        <% } else { %>
+          <span class="thoughts-pagination__link thoughts-pagination__link--disabled">上一页</span>
+        <% } %>
+        <span class="thoughts-pagination__status"><%= thoughtsCurrentPage %> / <%= thoughtsTotalPages %></span>
+        <% if (thoughtsCurrentPage < thoughtsTotalPages) { %>
+          <a class="thoughts-pagination__link" href="<%- url_for(getPagePath(thoughtsBasePath, thoughtsCurrentPage + 1)) %>">下一页</a>
+        <% } else { %>
+          <span class="thoughts-pagination__link thoughts-pagination__link--disabled">下一页</span>
+        <% } %>
+      </nav>
+    <% } %>
   <% } %>
 </section>

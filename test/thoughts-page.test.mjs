@@ -277,6 +277,115 @@ RPE 7
   });
 });
 
+test('thoughts page truncates long telegram thought content and links to the detail page', () => {
+  withSharedSiteFixture(() => {
+    const thoughtPostPath = path.join(rootDir, 'source', '_posts', '2026-05-14-telegram-thought-504.md');
+    const originalThoughtPost = readOptionalFile(thoughtPostPath);
+    const visibleLead = '列表页应该显示这段开头摘要。'.repeat(15);
+    const longTail = '这个长段落不应该直接出现在随想列表页，只应该在详情页完整显示。'.repeat(12);
+
+    try {
+      writeFileSync(
+        thoughtPostPath,
+        `---
+date: 2026-05-14 10:30:00
+tags:
+  - 训练
+  - 随想
+  - Telegram
+telegram_message_id: 504
+telegram_chat_id: 42
+---
+
+${visibleLead}${longTail}
+`,
+        'utf8',
+      );
+
+      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+
+      const thoughtsIndex = readFileSync(path.join(rootDir, 'public', 'thoughts', 'index.html'), 'utf8');
+      const detailPage = readFileSync(
+        path.join(rootDir, 'public', 'thoughts', '2026', '05', '14', '2026-05-14-telegram-thought-504', 'index.html'),
+        'utf8',
+      );
+
+      assert.match(thoughtsIndex, /列表页应该显示这段开头摘要/);
+      assert.doesNotMatch(thoughtsIndex, /这个长段落不应该直接出现在随想列表页/);
+      assert.match(
+        thoughtsIndex,
+        /<a class="thought-card__read-more" href="\/thoughts\/2026\/05\/14\/2026-05-14-telegram-thought-504\/">查看全文<\/a>/,
+      );
+      assert.match(detailPage, /这个长段落不应该直接出现在随想列表页/);
+    } finally {
+      restoreOptionalFile(thoughtPostPath, originalThoughtPost);
+    }
+  });
+});
+
+test('thought module pages paginate telegram thoughts after fifteen entries', () => {
+  withSharedSiteFixture(() => {
+    const createdPostPaths = Array.from({ length: 16 }, (_, index) =>
+      path.join(rootDir, 'source', '_posts', `2026-06-${String(index + 1).padStart(2, '0')}-telegram-thought-9${String(index).padStart(2, '0')}.md`),
+    );
+    const originalPosts = createdPostPaths.map(readOptionalFile);
+
+    try {
+      createdPostPaths.forEach((postPath, index) => {
+        const day = String(index + 1).padStart(2, '0');
+        const messageId = `9${String(index).padStart(2, '0')}`;
+        writeFileSync(
+          postPath,
+          `---
+date: 2026-06-${day} 10:30:00
+tags:
+  - 训练
+  - 随想
+  - Telegram
+telegram_message_id: ${messageId}
+telegram_chat_id: 42
+---
+
+分页测试随想 ${index + 1}
+`,
+          'utf8',
+        );
+      });
+
+      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+
+      const thoughtsIndex = readFileSync(path.join(rootDir, 'public', 'thoughts', 'index.html'), 'utf8');
+      const thoughtsPageTwo = readFileSync(path.join(rootDir, 'public', 'thoughts', 'page', '2', 'index.html'), 'utf8');
+
+      assert.match(thoughtsIndex, /分页测试随想 16/);
+      assert.equal(countMatches(thoughtsIndex, /class="thought-card"/g), 15);
+      assert.match(thoughtsIndex, /<span class="thoughts-pagination__status">1 \/ 2<\/span>/);
+      assert.match(thoughtsIndex, /<a[^>]+href="\/thoughts\/page\/2\/"[^>]*>下一页<\/a>/);
+
+      assert.match(thoughtsPageTwo, /分页测试随想 1/);
+      assert.equal(countMatches(thoughtsPageTwo, /class="thought-card"/g) > 0, true);
+      assert.match(thoughtsPageTwo, /<span class="thoughts-pagination__status">2 \/ 2<\/span>/);
+      assert.match(thoughtsPageTwo, /<a[^>]+href="\/thoughts\/"[^>]*>上一页<\/a>/);
+    } finally {
+      createdPostPaths.forEach((postPath, index) => restoreOptionalFile(postPath, originalPosts[index]));
+    }
+  });
+});
+
 test('thoughts page and detail page render telegram thought photos', () => {
   withSharedSiteFixture(() => {
     const thoughtPostPath = path.join(rootDir, 'source', '_posts', '2026-05-14-telegram-thought-502.md');
@@ -387,6 +496,10 @@ function readOptionalFile(targetPath) {
   } catch {
     return null;
   }
+}
+
+function countMatches(value, pattern) {
+  return [...String(value).matchAll(pattern)].length;
 }
 
 function restoreOptionalFile(targetPath, content) {
