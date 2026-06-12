@@ -225,6 +225,74 @@ test('sleep screenshots are archived by bedtime date and keep Huawei sleep healt
   assert.equal(analyzed.sleep.records[0].analysisText, '睡眠质量良好。睡眠时长6小时51分钟，在正常范围内。');
 });
 
+test('sleep screenshots derive total sleep from night sleep when recognition omits total duration', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const [batch] = lib.groupTelegramUpdates([
+    telegramUpdate(171, {
+      messageId: 71,
+      date: Math.floor(new Date('2026-06-12T03:02:00Z').getTime() / 1000),
+      telegram: {
+        photo: [telegramPhoto({ fileId: 'sleep-file-jun-12', fileUniqueId: 'sleep-uniq-jun-12' })],
+      },
+    }),
+  ]);
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 71,
+      imageType: 'sleep',
+      detectedDate: '2026-06-12',
+      dateEvidence: 'image header: 6月12日, sleep card shows night sleep 6小时12分钟',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: null,
+        sleep: {
+          sleepType: '夜间睡眠',
+          bedtime: '6/11 23:02',
+          wakeTime: '6/12 05:14',
+          nightSleepMinutes: 372,
+          totalSleepMinutes: null,
+          napMinutes: null,
+          deepSleepMinutes: 109,
+          lightSleepMinutes: 175,
+          remSleepMinutes: 88,
+          awakeMinutes: null,
+          sleepStageText: '深睡1小时49分钟；浅睡2小时55分钟；快速眼动1小时28分钟',
+          sleepStageDetail: ['深睡 1小时49分钟', '浅睡 2小时55分钟', '快速眼动 1小时28分钟'],
+          sleepScore: 78,
+          sleepScorePercentile: 57,
+          deepSleepRatioPct: 29,
+          lightSleepRatioPct: 48,
+          remSleepRatioPct: 23,
+          deepSleepContinuityScore: 70,
+          wakeCount: 0,
+          breathingQualityScore: 98,
+          averageHeartRateBpm: 67,
+          hrvMs: 43,
+          averageSpo2Pct: 96,
+          averageRespiratoryRate: 14.3,
+          analysisText: null,
+          suggestionText: null,
+        },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-06-11');
+  assert.equal(analyzed.sleep.totalSleepMinutes, 372);
+  assert.equal(analyzed.sleep.records[0].totalSleepMinutes, 372);
+});
+
 test('sleep screenshots without extracted sleep fields are not reported as stored training data', async () => {
   const lib = await importTelegramSyncLib();
 

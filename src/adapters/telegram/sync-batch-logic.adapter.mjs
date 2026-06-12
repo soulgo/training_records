@@ -1185,9 +1185,10 @@ function normalizeSleepRecords(records, archivedDate) {
 
   const latest = normalized.at(-1);
   const sum = (key) => normalized.reduce((total, item) => total + Number(item[key] ?? 0), 0) || null;
+  const latestTotalSleepMinutes = deriveTotalSleepMinutes(latest);
   return {
     records: normalized,
-    totalSleepMinutes: latest.totalSleepMinutes ?? sum('totalSleepMinutes'),
+    totalSleepMinutes: latestTotalSleepMinutes ?? sum('totalSleepMinutes'),
     nightSleepMinutes: latest.nightSleepMinutes ?? sum('nightSleepMinutes'),
     napMinutes: latest.napMinutes ?? sum('napMinutes'),
     sleepStartTime: latest.bedtime ?? null,
@@ -1254,7 +1255,7 @@ function normalizeSleepRecord(record, archivedDate) {
     bedtime: normalizeClockTime(record.bedtime),
     wakeTime: normalizeClockTime(record.wakeTime),
     nightSleepMinutes: record.nightSleepMinutes ?? null,
-    totalSleepMinutes: record.totalSleepMinutes ?? null,
+    totalSleepMinutes: deriveTotalSleepMinutes(record),
     napMinutes: record.napMinutes ?? null,
     deepSleepMinutes: record.deepSleepMinutes ?? null,
     lightSleepMinutes: record.lightSleepMinutes ?? null,
@@ -1278,6 +1279,13 @@ function normalizeSleepRecord(record, archivedDate) {
     suggestionText: record.suggestionText ?? null,
     archivedDate,
   };
+}
+
+function deriveTotalSleepMinutes(record) {
+  if (!record) {
+    return null;
+  }
+  return record.totalSleepMinutes ?? record.nightSleepMinutes ?? null;
 }
 
 function normalizeClockTime(value) {
