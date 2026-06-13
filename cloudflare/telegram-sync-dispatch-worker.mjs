@@ -3,7 +3,7 @@ const DEFAULT_GITHUB_OWNER = 'soulgo';
 const DEFAULT_GITHUB_REPO = 'training_records';
 const TELEGRAM_API_BASE_URL = 'https://api.telegram.org';
 const TELEGRAM_SECRET_HEADER = 'X-Telegram-Bot-Api-Secret-Token';
-const ALBUM_BUFFER_DELAY_MS = 3_000;
+const IMAGE_BURST_BUFFER_DELAY_MS = 3_000;
 
 import { TELEGRAM_HELP_TEXT, isTelegramHelpText } from '../src/telegram/help.mjs';
 
@@ -43,10 +43,7 @@ export class TelegramAlbumBuffer {
       await this.state.storage.put('updates', updates);
     }
 
-    const existingAlarm = await getStateAlarm(this.state);
-    if (!existingAlarm) {
-      await setStateAlarm(this.state, Date.now() + ALBUM_BUFFER_DELAY_MS);
-    }
+    await setStateAlarm(this.state, Date.now() + IMAGE_BURST_BUFFER_DELAY_MS);
 
     return jsonResponse(202, {
       ok: true,
@@ -142,9 +139,9 @@ export async function handleTelegramWebhook(request, env, options = {}) {
     return jsonResponse(500, { ok: false, error: dispatchConfigError });
   }
 
-  const albumKey = getAlbumBufferKey(update);
-  if (albumKey && env?.TELEGRAM_ALBUM_BUFFER) {
-    const stubId = env.TELEGRAM_ALBUM_BUFFER.idFromName(albumKey);
+  const imageBufferKey = getImageBufferKey(update);
+  if (imageBufferKey && env?.TELEGRAM_ALBUM_BUFFER) {
+    const stubId = env.TELEGRAM_ALBUM_BUFFER.idFromName(imageBufferKey);
     const stub = env.TELEGRAM_ALBUM_BUFFER.get(stubId);
     const response = await stub.fetch(
       new Request('https://telegram-album-buffer.internal/enqueue', {
@@ -169,7 +166,8 @@ export async function handleTelegramWebhook(request, env, options = {}) {
       ok: true,
       buffered: true,
       updateId: update?.update_id ?? null,
-      albumKey,
+      bufferKey: imageBufferKey,
+      albumKey: imageBufferKey,
     });
   }
 
@@ -350,28 +348,36 @@ function resolveGithubRepository(env) {
   };
 }
 
-function getAlbumBufferKey(update) {
+function getImageBufferKey(update) {
   const message = update?.message ?? update?.edited_message ?? null;
   const chatId = message?.chat?.id;
-  const mediaGroupId = message?.media_group_id;
-  if (chatId == null || !mediaGroupId) {
+  if (chatId == null || !messageHasImage(message)) {
     return null;
   }
-  return `${chatId}:${mediaGroupId}`;
+  return `${chatId}:images`;
+}
+
+function messageHasImage(message) {
+  if (!message) {
+    return false;
+  }
+  if ((message.photo ?? []).length > 0) {
+    return true;
+  }
+  return isImageDocument(message.document);
+}
+
+function isImageDocument(document) {
+  if (!document?.file_id) {
+    return false;
+  }
+  const mimeType = document.mime_type?.trim().toLowerCase() || '';
+  const fileName = document.file_name?.trim() || '';
+  return mimeType.startsWith('image/') || /\.(?:jpe?g|png|webp|gif|bmp|heic|heif|tiff?)$/i.test(fileName);
 }
 
 async function readBufferedUpdates(state) {
   return (await state.storage.get('updates')) ?? [];
-}
-
-async function getStateAlarm(state) {
-  if (typeof state.storage?.getAlarm === 'function') {
-    return state.storage.getAlarm();
-  }
-  if (typeof state.getAlarm === 'function') {
-    return state.getAlarm();
-  }
-  return null;
 }
 
 async function setStateAlarm(state, value) {

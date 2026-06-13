@@ -319,6 +319,7 @@ test('handleTelegramWebhook buffers album updates and dispatches them together a
         message_id: 21,
         media_group_id: 'album-1',
         chat: { id: 42 },
+        photo: [{ file_id: 'photo-21' }],
       },
     }),
     {
@@ -334,6 +335,7 @@ test('handleTelegramWebhook buffers album updates and dispatches them together a
         message_id: 22,
         media_group_id: 'album-1',
         chat: { id: 42 },
+        photo: [{ file_id: 'photo-22' }],
       },
     }),
     {
@@ -346,7 +348,7 @@ test('handleTelegramWebhook buffers album updates and dispatches them together a
   assert.equal(secondResponse.status, 202);
   assert.equal(calls.length, 0);
 
-  await namespace.flush('42:album-1');
+  await namespace.flush('42:images');
 
   assert.equal(calls.length, 1);
   assert.deepEqual(JSON.parse(calls[0].init.body), {
@@ -359,6 +361,7 @@ test('handleTelegramWebhook buffers album updates and dispatches them together a
             message_id: 21,
             media_group_id: 'album-1',
             chat: { id: 42 },
+            photo: [{ file_id: 'photo-21' }],
           },
         },
         {
@@ -367,11 +370,147 @@ test('handleTelegramWebhook buffers album updates and dispatches them together a
             message_id: 22,
             media_group_id: 'album-1',
             chat: { id: 42 },
+            photo: [{ file_id: 'photo-22' }],
           },
         },
       ],
     },
   });
+});
+
+test('handleTelegramWebhook buffers consecutive image batches from the same chat in update order', async () => {
+  const calls = [];
+  const env = createEnv();
+  const recordDispatch = async (url, init) => {
+    calls.push({ url, init });
+    return new Response(null, { status: 204 });
+  };
+  const namespace = createAlbumBufferNamespace(env, {
+    fetchImpl: recordDispatch,
+  });
+  const workerEnv = {
+    ...env,
+    TELEGRAM_ALBUM_BUFFER: namespace,
+  };
+
+  const updates = [
+    {
+      update_id: 402,
+      message: {
+        message_id: 42,
+        media_group_id: 'album-a',
+        chat: { id: 42 },
+        photo: [{ file_id: 'photo-42' }],
+      },
+    },
+    {
+      update_id: 401,
+      message: {
+        message_id: 41,
+        media_group_id: 'album-a',
+        chat: { id: 42 },
+        photo: [{ file_id: 'photo-41' }],
+      },
+    },
+    {
+      update_id: 403,
+      message: {
+        message_id: 43,
+        chat: { id: 42 },
+        photo: [{ file_id: 'photo-43' }],
+      },
+    },
+  ];
+
+  for (const update of updates) {
+    const response = await handleTelegramWebhook(createTelegramRequest(update), workerEnv, {
+      fetchImpl: recordDispatch,
+    });
+    assert.equal(response.status, 202);
+  }
+
+  assert.equal(calls.length, 0);
+
+  await namespace.flush('42:images');
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    event_type: 'telegram_update',
+    client_payload: {
+      telegram_updates: [
+        {
+          update_id: 401,
+          message: {
+            message_id: 41,
+            media_group_id: 'album-a',
+            chat: { id: 42 },
+            photo: [{ file_id: 'photo-41' }],
+          },
+        },
+        {
+          update_id: 402,
+          message: {
+            message_id: 42,
+            media_group_id: 'album-a',
+            chat: { id: 42 },
+            photo: [{ file_id: 'photo-42' }],
+          },
+        },
+        {
+          update_id: 403,
+          message: {
+            message_id: 43,
+            chat: { id: 42 },
+            photo: [{ file_id: 'photo-43' }],
+          },
+        },
+      ],
+    },
+  });
+});
+
+test('TelegramAlbumBuffer keeps the image burst window open as more updates arrive', async () => {
+  const originalNow = Date.now;
+  const state = createDurableObjectState();
+  const buffer = new TelegramAlbumBuffer(state, {
+    ...createEnv(),
+    __dispatchFetchImpl: async () => new Response(null, { status: 204 }),
+  });
+
+  try {
+    Date.now = () => 1_000;
+    await buffer.fetch(
+      new Request('https://worker.example.com/buffer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          update: {
+            update_id: 410,
+            message: { message_id: 50, chat: { id: 42 }, photo: [{ file_id: 'photo-50' }] },
+          },
+        }),
+      }),
+    );
+    assert.equal(await state.getAlarm(), 4_000);
+
+    Date.now = () => 2_500;
+    await buffer.fetch(
+      new Request('https://worker.example.com/buffer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          update: {
+            update_id: 411,
+            message: { message_id: 51, chat: { id: 42 }, photo: [{ file_id: 'photo-51' }] },
+          },
+        }),
+      }),
+    );
+
+    assert.equal(await state.getAlarm(), 5_500);
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test('TelegramAlbumBuffer deduplicates repeated updates inside the same album batch', async () => {
