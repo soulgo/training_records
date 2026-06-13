@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- 补充 Telegram 连续图片 burst dispatch 的回执回归测试，覆盖同一次 `repository_dispatch` 中包含多个图片业务 batch 时，`telegram-sync-notify` 必须按业务 batch 逐条发送 Telegram 回执，并分别回复到对应批次首条消息，防止再次出现 3 批图片只收到 2 条回执的退化。
 - 修复 Telegram 连续快速发送多批图片时，中间批次的 GitHub Actions run 可能因固定 `concurrency.group` 在进入 runner 前被自动取消，导致第二批图片看起来被跳过的问题；生产和 dev Telegram Sync workflow 现在仅对 `repository_dispatch` 使用包含 `github.run_id` 的唯一并发组，保留手动/push 同步的固定并发保护。
 - 修复 Telegram 连续发送多批图片时，相册和单图批次被拆成多个独立 GitHub `repository_dispatch`、顺序依赖外部排队的问题；Cloudflare Worker 现在按 chat 对连续图片 update 进行 3 秒突发缓冲，photo 与图片文件都会按 `update_id` 合并派发，确保一轮连续发送按 Telegram 顺序进入同步解析。
 - 修复 Telegram 连续发送图片时，单图批次因 AI 将 `detectedDate` 留空但 `warnings` 已说明截图内可见月日而被误判为无可靠日期，导致该批次不入库、首页无更新的问题；日期归档现在会从图片证据 warning 中提取单一月日并结合 Telegram 消息年份补全，同时继续跳过冲突或多日期 warning。
