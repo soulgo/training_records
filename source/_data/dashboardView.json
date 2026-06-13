@@ -1,175 +1,620 @@
 {
-  "generatedAt": "2026-06-12T07:09:51.376Z",
+  "generatedAt": "2026-06-13T02:56:53.520Z",
   "latestMeasurement": {
-    "archivedDate": "2026-06-07",
-    "measuredAt": "2026-06-07",
+    "archivedDate": "2026-06-11",
+    "measuredAt": "2026-06-11",
     "bodyScore": null,
-    "weightKg": 71.4,
-    "bmi": 23,
-    "bodyFatPct": 22.1,
-    "skeletalMuscleKg": 30.1,
+    "weightKg": 71.2,
+    "bmi": 22.9,
+    "bodyFatPct": 22.3,
+    "skeletalMuscleKg": 29.85,
     "visceralFatLevel": 8,
-    "basalMetabolismKcal": 1567,
-    "bodyWaterPct": 50.1,
-    "proteinPct": 23.7,
-    "boneMassKg": 2.91,
-    "fatFreeMassKg": 55.9,
+    "basalMetabolismKcal": 1556,
+    "bodyWaterPct": 49.9,
+    "proteinPct": 23.8,
+    "boneMassKg": 2.885,
+    "fatFreeMassKg": 55.68,
     "bodyAge": 30,
-    "bodyType": "标准"
+    "bodyType": "标准型"
   },
   "latestDay": {
-    "date": "2026-06-07",
+    "date": "2026-06-11",
     "measurement": {
-      "archivedDate": "2026-06-07",
-      "measuredAt": "2026-06-07",
+      "archivedDate": "2026-06-11",
+      "measuredAt": "2026-06-11",
       "bodyScore": null,
-      "weightKg": 71.4,
-      "bmi": 23,
-      "bodyFatPct": 22.1,
-      "skeletalMuscleKg": 30.1,
+      "weightKg": 71.2,
+      "bmi": 22.9,
+      "bodyFatPct": 22.3,
+      "skeletalMuscleKg": 29.85,
       "visceralFatLevel": 8,
-      "basalMetabolismKcal": 1567,
-      "bodyWaterPct": 50.1,
-      "proteinPct": 23.7,
-      "boneMassKg": 2.91,
-      "fatFreeMassKg": 55.9,
+      "basalMetabolismKcal": 1556,
+      "bodyWaterPct": 49.9,
+      "proteinPct": 23.8,
+      "boneMassKg": 2.885,
+      "fatFreeMassKg": 55.68,
       "bodyAge": 30,
-      "bodyType": "标准"
+      "bodyType": "标准型"
     },
     "measurements": [
       {
-        "archivedDate": "2026-06-07",
-        "measuredAt": "2026-06-07",
+        "archivedDate": "2026-06-11",
+        "measuredAt": "2026-06-11",
         "bodyScore": null,
-        "weightKg": 71.4,
-        "bmi": 23,
-        "bodyFatPct": 22.1,
-        "skeletalMuscleKg": 30.1,
+        "weightKg": 71.2,
+        "bmi": 22.9,
+        "bodyFatPct": 22.3,
+        "skeletalMuscleKg": 29.85,
         "visceralFatLevel": 8,
-        "basalMetabolismKcal": 1567,
-        "bodyWaterPct": 50.1,
-        "proteinPct": 23.7,
-        "boneMassKg": 2.91,
-        "fatFreeMassKg": 55.9,
+        "basalMetabolismKcal": 1556,
+        "bodyWaterPct": 49.9,
+        "proteinPct": 23.8,
+        "boneMassKg": 2.885,
+        "fatFreeMassKg": 55.68,
         "bodyAge": 30,
-        "bodyType": "标准"
+        "bodyType": "标准型"
       }
     ],
     "activities": [
       {
-        "time": "08:37",
-        "type": "HIIT",
-        "rawType": "HIIT",
-        "detail": "总消耗326千卡，时长00:43:52，平均128次/分钟",
-        "durationText": "00:43:52",
-        "durationSeconds": 2632,
-        "calories": 326,
+        "time": "06:38",
+        "type": "弹力带力量训练",
+        "rawType": "弹力带力量训练",
+        "detail": "总消耗 234 千卡，时长 00:40:04，105次/分钟",
+        "durationText": "00:40:04",
+        "durationSeconds": 2404,
+        "calories": 234,
         "distanceKm": null,
         "avgSpeedKmh": null,
-        "heartRate": 128
+        "heartRate": null
+      },
+      {
+        "time": "08:13",
+        "type": "户外骑行",
+        "rawType": "户外骑行",
+        "detail": "距离 3.25 公里，时长 00:13:22，均速 14.59 公里/小时",
+        "durationText": "00:13:22",
+        "durationSeconds": 802,
+        "calories": null,
+        "distanceKm": 3.25,
+        "avgSpeedKmh": 14.59,
+        "heartRate": null
+      },
+      {
+        "time": "08:26",
+        "type": "爬楼",
+        "rawType": "爬楼",
+        "detail": "总消耗 51 千卡，时长 00:05:51，133次/分钟",
+        "durationText": "00:05:51",
+        "durationSeconds": 351,
+        "calories": 51,
+        "distanceKm": null,
+        "avgSpeedKmh": null,
+        "heartRate": null
+      },
+      {
+        "time": "11:29",
+        "type": "户外骑行",
+        "rawType": "户外骑行",
+        "detail": "距离 3.13 公里，时长 00:20:26，均速 9.19 公里/小时",
+        "durationText": "00:20:26",
+        "durationSeconds": 1226,
+        "calories": null,
+        "distanceKm": 3.13,
+        "avgSpeedKmh": 9.19,
+        "heartRate": null
+      },
+      {
+        "time": "13:59",
+        "type": "户外骑行",
+        "rawType": "户外骑行",
+        "detail": "距离 3.15 公里，时长 00:14:08，均速 13.37 公里/小时",
+        "durationText": "00:14:08",
+        "durationSeconds": 848,
+        "calories": null,
+        "distanceKm": 3.15,
+        "avgSpeedKmh": 13.37,
+        "heartRate": null
+      },
+      {
+        "time": "14:13",
+        "type": "爬楼",
+        "rawType": "爬楼",
+        "detail": "总消耗 59 千卡，时长 00:10:02，106次/分钟",
+        "durationText": "00:10:02",
+        "durationSeconds": 602,
+        "calories": 59,
+        "distanceKm": null,
+        "avgSpeedKmh": null,
+        "heartRate": null
       }
     ],
     "sleep": [
       {
         "sleepType": "夜间睡眠",
-        "bedtime": "00:00",
-        "wakeTime": "05:22",
-        "nightSleepMinutes": 322,
-        "totalSleepMinutes": 322,
+        "bedtime": "23:42",
+        "wakeTime": "05:54",
+        "nightSleepMinutes": 372,
+        "totalSleepMinutes": null,
         "napMinutes": null,
-        "deepSleepMinutes": 41,
-        "lightSleepMinutes": 179,
-        "remSleepMinutes": 102,
+        "deepSleepMinutes": 109,
+        "lightSleepMinutes": 175,
+        "remSleepMinutes": 88,
         "awakeMinutes": null,
-        "sleepStageText": "深睡 41分钟，浅睡 2小时59分钟，快速眼动 1小时42分钟",
-        "sleepStageDetail": [
-          "深睡比例 13%；浅睡比例 56%；快速眼动比例 31%；清醒次数 0次；睡眠连续性 60分"
-        ],
-        "sleepScore": 70,
-        "sleepScorePercentile": 18,
-        "deepSleepRatioPct": 13,
-        "lightSleepRatioPct": 56,
-        "remSleepRatioPct": 31,
-        "deepSleepContinuityScore": 60,
+        "sleepStageText": "深睡 1小时49分钟，浅睡 2小时55分钟，快速眼动 1小时25分钟",
+        "sleepStageDetail": null,
+        "sleepScore": 78,
+        "sleepScorePercentile": 57,
+        "deepSleepRatioPct": 29,
+        "lightSleepRatioPct": 48,
+        "remSleepRatioPct": 23,
+        "deepSleepContinuityScore": 70,
         "wakeCount": 0,
-        "breathingQualityScore": 100,
+        "breathingQualityScore": 98,
         "averageHeartRateBpm": 67,
-        "hrvMs": 33,
-        "averageSpo2Pct": 98,
+        "hrvMs": 43,
+        "averageSpo2Pct": 96,
         "averageRespiratoryRate": 14,
-        "analysisText": "睡眠质量一般，深睡比例只有13%，低于正常范围，且睡眠不足，长期睡眠时间不足不利于恢复。检测到昨天一共小睡103分钟，小睡过长可能是睡眠质量一般的原因。",
-        "suggestionText": "建议午睡时长控制在30分钟以内，过长的午睡会影响夜间睡眠驱动力，影响夜间睡眠时长和质量。",
-        "sleepStartTime": "00:00",
-        "sleepEndTime": "05:22"
+        "analysisText": "睡眠质量一般，睡眠时长6小时12分钟，在正常范围内。优质的睡眠能力皮肤提供给足足的营养，让皮肤变得光滑而有弹性。",
+        "suggestionText": "建议睡前洗热水澡，洗热水澡有利于舒缓心情，消除疲劳，进而促进睡眠。",
+        "sleepStartTime": "23:42",
+        "sleepEndTime": "05:54"
+      },
+      {
+        "sleepType": "夜间睡眠",
+        "bedtime": "23:42",
+        "wakeTime": "05:54",
+        "nightSleepMinutes": 372,
+        "totalSleepMinutes": 372,
+        "napMinutes": null,
+        "deepSleepMinutes": 109,
+        "lightSleepMinutes": 175,
+        "remSleepMinutes": 88,
+        "awakeMinutes": null,
+        "sleepStageText": "深睡 1小时49分钟，浅睡 2小时55分钟，快速眼动 1小时25分钟",
+        "sleepStageDetail": null,
+        "sleepScore": 78,
+        "sleepScorePercentile": 57,
+        "deepSleepRatioPct": 29,
+        "lightSleepRatioPct": 48,
+        "remSleepRatioPct": 23,
+        "deepSleepContinuityScore": 70,
+        "wakeCount": 0,
+        "breathingQualityScore": 98,
+        "averageHeartRateBpm": 67,
+        "hrvMs": 43,
+        "averageSpo2Pct": 96,
+        "averageRespiratoryRate": 14,
+        "analysisText": "睡眠质量一般，睡眠时长6小时12分钟，在正常范围内。优质的睡眠能力皮肤提供给足足的营养，让皮肤变得光滑而有弹性。",
+        "suggestionText": "建议睡前洗热水澡，洗热水澡有利于舒缓心情，消除疲劳，进而促进睡眠。",
+        "sleepStartTime": "23:42",
+        "sleepEndTime": "05:54"
       }
     ],
     "sleepSummary": {
       "records": [
         {
           "sleepType": "夜间睡眠",
-          "bedtime": "00:00",
-          "wakeTime": "05:22",
-          "nightSleepMinutes": 322,
-          "totalSleepMinutes": 322,
+          "bedtime": "23:42",
+          "wakeTime": "05:54",
+          "nightSleepMinutes": 372,
+          "totalSleepMinutes": null,
           "napMinutes": null,
-          "deepSleepMinutes": 41,
-          "lightSleepMinutes": 179,
-          "remSleepMinutes": 102,
+          "deepSleepMinutes": 109,
+          "lightSleepMinutes": 175,
+          "remSleepMinutes": 88,
           "awakeMinutes": null,
-          "sleepStageText": "深睡 41分钟，浅睡 2小时59分钟，快速眼动 1小时42分钟",
-          "sleepStageDetail": [
-            "深睡比例 13%；浅睡比例 56%；快速眼动比例 31%；清醒次数 0次；睡眠连续性 60分"
-          ],
-          "sleepScore": 70,
-          "sleepScorePercentile": 18,
-          "deepSleepRatioPct": 13,
-          "lightSleepRatioPct": 56,
-          "remSleepRatioPct": 31,
-          "deepSleepContinuityScore": 60,
+          "sleepStageText": "深睡 1小时49分钟，浅睡 2小时55分钟，快速眼动 1小时25分钟",
+          "sleepStageDetail": null,
+          "sleepScore": 78,
+          "sleepScorePercentile": 57,
+          "deepSleepRatioPct": 29,
+          "lightSleepRatioPct": 48,
+          "remSleepRatioPct": 23,
+          "deepSleepContinuityScore": 70,
           "wakeCount": 0,
-          "breathingQualityScore": 100,
+          "breathingQualityScore": 98,
           "averageHeartRateBpm": 67,
-          "hrvMs": 33,
-          "averageSpo2Pct": 98,
+          "hrvMs": 43,
+          "averageSpo2Pct": 96,
           "averageRespiratoryRate": 14,
-          "analysisText": "睡眠质量一般，深睡比例只有13%，低于正常范围，且睡眠不足，长期睡眠时间不足不利于恢复。检测到昨天一共小睡103分钟，小睡过长可能是睡眠质量一般的原因。",
-          "suggestionText": "建议午睡时长控制在30分钟以内，过长的午睡会影响夜间睡眠驱动力，影响夜间睡眠时长和质量。",
-          "sleepStartTime": "00:00",
-          "sleepEndTime": "05:22"
+          "analysisText": "睡眠质量一般，睡眠时长6小时12分钟，在正常范围内。优质的睡眠能力皮肤提供给足足的营养，让皮肤变得光滑而有弹性。",
+          "suggestionText": "建议睡前洗热水澡，洗热水澡有利于舒缓心情，消除疲劳，进而促进睡眠。",
+          "sleepStartTime": "23:42",
+          "sleepEndTime": "05:54"
+        },
+        {
+          "sleepType": "夜间睡眠",
+          "bedtime": "23:42",
+          "wakeTime": "05:54",
+          "nightSleepMinutes": 372,
+          "totalSleepMinutes": 372,
+          "napMinutes": null,
+          "deepSleepMinutes": 109,
+          "lightSleepMinutes": 175,
+          "remSleepMinutes": 88,
+          "awakeMinutes": null,
+          "sleepStageText": "深睡 1小时49分钟，浅睡 2小时55分钟，快速眼动 1小时25分钟",
+          "sleepStageDetail": null,
+          "sleepScore": 78,
+          "sleepScorePercentile": 57,
+          "deepSleepRatioPct": 29,
+          "lightSleepRatioPct": 48,
+          "remSleepRatioPct": 23,
+          "deepSleepContinuityScore": 70,
+          "wakeCount": 0,
+          "breathingQualityScore": 98,
+          "averageHeartRateBpm": 67,
+          "hrvMs": 43,
+          "averageSpo2Pct": 96,
+          "averageRespiratoryRate": 14,
+          "analysisText": "睡眠质量一般，睡眠时长6小时12分钟，在正常范围内。优质的睡眠能力皮肤提供给足足的营养，让皮肤变得光滑而有弹性。",
+          "suggestionText": "建议睡前洗热水澡，洗热水澡有利于舒缓心情，消除疲劳，进而促进睡眠。",
+          "sleepStartTime": "23:42",
+          "sleepEndTime": "05:54"
         }
       ],
-      "totalSleepMinutes": 322,
-      "nightSleepMinutes": 322,
+      "totalSleepMinutes": 372,
+      "nightSleepMinutes": 372,
       "napMinutes": null,
-      "sleepStartTime": "00:00",
-      "sleepEndTime": "05:22",
-      "deepSleepMinutes": 41,
-      "lightSleepMinutes": 179,
-      "remSleepMinutes": 102,
+      "sleepStartTime": "23:42",
+      "sleepEndTime": "05:54",
+      "deepSleepMinutes": 109,
+      "lightSleepMinutes": 175,
+      "remSleepMinutes": 88,
       "awakeMinutes": null,
-      "sleepScore": 70,
-      "sleepScorePercentile": 18,
-      "deepSleepRatioPct": 13,
-      "lightSleepRatioPct": 56,
-      "remSleepRatioPct": 31,
-      "deepSleepContinuityScore": 60,
+      "sleepScore": 78,
+      "sleepScorePercentile": 57,
+      "deepSleepRatioPct": 29,
+      "lightSleepRatioPct": 48,
+      "remSleepRatioPct": 23,
+      "deepSleepContinuityScore": 70,
       "wakeCount": 0,
-      "breathingQualityScore": 100,
+      "breathingQualityScore": 98,
       "averageHeartRateBpm": 67,
-      "hrvMs": 33,
-      "averageSpo2Pct": 98,
+      "hrvMs": 43,
+      "averageSpo2Pct": 96,
       "averageRespiratoryRate": 14,
-      "analysisText": "睡眠质量一般，深睡比例只有13%，低于正常范围，且睡眠不足，长期睡眠时间不足不利于恢复。检测到昨天一共小睡103分钟，小睡过长可能是睡眠质量一般的原因。",
-      "suggestionText": "建议午睡时长控制在30分钟以内，过长的午睡会影响夜间睡眠驱动力，影响夜间睡眠时长和质量。"
+      "analysisText": "睡眠质量一般，睡眠时长6小时12分钟，在正常范围内。优质的睡眠能力皮肤提供给足足的营养，让皮肤变得光滑而有弹性。",
+      "suggestionText": "建议睡前洗热水澡，洗热水澡有利于舒缓心情，消除疲劳，进而促进睡眠。"
     },
     "workoutSummary": {
-      "totalActivities": 1,
-      "totalDurationSeconds": 2632,
-      "trainingCalories": 284,
-      "workoutDurationMinutes": 34,
-      "activeHours": 6,
-      "cyclingDistanceKm": 0,
+      "totalActivities": 6,
+      "totalDurationSeconds": 6233,
+      "trainingCalories": 344,
+      "workoutDurationMinutes": 90,
+      "activeHours": 14,
+      "cyclingDistanceKm": 9.53,
       "countsByType": {
+        "弹力带力量训练": 1,
+        "户外骑行": 3,
+        "爬楼": 2
+      }
+    },
+    "nutrition": {
+      "meals": [
+        {
+          "name": "早餐",
+          "calories": 112,
+          "recommendedMin": 519,
+          "recommendedMax": 934
+        },
+        {
+          "name": "午餐",
+          "calories": 380,
+          "recommendedMin": 623,
+          "recommendedMax": 1037
+        },
+        {
+          "name": "晚餐",
+          "calories": 791,
+          "recommendedMin": 312,
+          "recommendedMax": 726
+        }
+      ],
+      "totalCalories": 1283,
+      "details": [
+        "早餐：馒头 1个，112千卡",
+        "午餐：烩面片 1份，266千卡；黄瓜 1段，20千卡；荔枝 6个，94千卡",
+        "晚餐：章鱼肉 100克，52千卡；泡椒鱼皮 50克，43千卡；香辣鸡翅 0.5对，61千卡；烤肉 5串，635千卡"
+      ]
+    }
+  },
+  "previousDay": {
+    "date": "2026-06-10",
+    "measurement": {
+      "archivedDate": "2026-06-10",
+      "measuredAt": "2026-06-10",
+      "bodyScore": null,
+      "weightKg": 71.35,
+      "bmi": 23,
+      "bodyFatPct": 22,
+      "skeletalMuscleKg": 30.1,
+      "visceralFatLevel": 8,
+      "basalMetabolismKcal": 1568,
+      "bodyWaterPct": 50.2,
+      "proteinPct": 23.7,
+      "boneMassKg": 2.91,
+      "fatFreeMassKg": 55.7,
+      "bodyAge": 30,
+      "bodyType": "标准型"
+    },
+    "measurements": [
+      {
+        "archivedDate": "2026-06-10",
+        "measuredAt": "2026-06-10",
+        "bodyScore": null,
+        "weightKg": 71.35,
+        "bmi": 23,
+        "bodyFatPct": 22,
+        "skeletalMuscleKg": 30.1,
+        "visceralFatLevel": 8,
+        "basalMetabolismKcal": 1568,
+        "bodyWaterPct": 50.2,
+        "proteinPct": 23.7,
+        "boneMassKg": 2.91,
+        "fatFreeMassKg": 55.7,
+        "bodyAge": 30,
+        "bodyType": "标准型"
+      }
+    ],
+    "activities": [
+      {
+        "time": "08:08",
+        "type": "户外骑行",
+        "rawType": "户外骑行",
+        "detail": "距离3.22公里，时长00:23:37，均速8.18公里/小时",
+        "durationText": "00:23:37",
+        "durationSeconds": 1417,
+        "calories": null,
+        "distanceKm": 3.22,
+        "avgSpeedKmh": 8.18,
+        "heartRate": null
+      },
+      {
+        "time": "08:33",
+        "type": "爬楼",
+        "rawType": "爬楼",
+        "detail": "总消耗29千卡，时长00:04:37，平均心率110次/分钟",
+        "durationText": "00:04:37",
+        "durationSeconds": 277,
+        "calories": 29,
+        "distanceKm": null,
+        "avgSpeedKmh": null,
+        "heartRate": 110
+      },
+      {
+        "time": "09:50",
+        "type": "爬楼",
+        "rawType": "爬楼",
+        "detail": "总消耗44千卡，时长00:06:47，平均心率113次/分钟",
+        "durationText": "00:06:47",
+        "durationSeconds": 407,
+        "calories": 44,
+        "distanceKm": null,
+        "avgSpeedKmh": null,
+        "heartRate": 113
+      },
+      {
+        "time": "11:48",
+        "type": "户外骑行",
+        "rawType": "户外骑行",
+        "detail": "距离3.13公里，时长00:16:15，均速11.56公里/小时",
+        "durationText": "00:16:15",
+        "durationSeconds": 975,
+        "calories": null,
+        "distanceKm": 3.13,
+        "avgSpeedKmh": 11.56,
+        "heartRate": null
+      },
+      {
+        "time": "14:05",
+        "type": "户外骑行",
+        "rawType": "户外骑行",
+        "detail": "距离3.20公里，时长00:12:54，均速14.88公里/小时",
+        "durationText": "00:12:54",
+        "durationSeconds": 774,
+        "calories": null,
+        "distanceKm": 3.2,
+        "avgSpeedKmh": 14.88,
+        "heartRate": null
+      },
+      {
+        "time": "14:18",
+        "type": "爬楼",
+        "rawType": "爬楼",
+        "detail": "总消耗53千卡，时长00:07:34，平均心率115次/分钟",
+        "durationText": "00:07:34",
+        "durationSeconds": 454,
+        "calories": 53,
+        "distanceKm": null,
+        "avgSpeedKmh": null,
+        "heartRate": 115
+      },
+      {
+        "time": "18:13",
+        "type": "户外骑行",
+        "rawType": "户外骑行",
+        "detail": "距离3.06公里，时长00:12:31，均速14.67公里/小时",
+        "durationText": "00:12:31",
+        "durationSeconds": 751,
+        "calories": null,
+        "distanceKm": 3.06,
+        "avgSpeedKmh": 14.67,
+        "heartRate": null
+      },
+      {
+        "time": "18:48",
+        "type": "HIIT",
+        "rawType": "HIIT",
+        "detail": "总消耗409千卡，时长00:57:33，平均心率124次/分钟",
+        "durationText": "00:57:33",
+        "durationSeconds": 3453,
+        "calories": 409,
+        "distanceKm": null,
+        "avgSpeedKmh": null,
+        "heartRate": 124
+      }
+    ],
+    "sleep": [
+      {
+        "sleepType": "夜间睡眠",
+        "bedtime": "00:08",
+        "wakeTime": "06:08",
+        "nightSleepMinutes": 354,
+        "totalSleepMinutes": 381,
+        "napMinutes": null,
+        "deepSleepMinutes": null,
+        "lightSleepMinutes": null,
+        "remSleepMinutes": null,
+        "awakeMinutes": null,
+        "sleepStageText": "清醒、浅睡、快速眼动、深睡",
+        "sleepStageDetail": null,
+        "sleepScore": 76,
+        "sleepScorePercentile": 44,
+        "deepSleepRatioPct": 22,
+        "lightSleepRatioPct": 64,
+        "remSleepRatioPct": 14,
+        "deepSleepContinuityScore": 66,
+        "wakeCount": 2,
+        "breathingQualityScore": 98,
+        "averageHeartRateBpm": 65,
+        "hrvMs": 48,
+        "averageSpo2Pct": null,
+        "averageRespiratoryRate": 14,
+        "analysisText": "睡眠质量一般，睡眠期间醒了2次，总体处于正常范围内，存在轻微问题。",
+        "suggestionText": "长时间睡眠后容易产生疲乏、焦虑等负面情绪，进一步影响睡眠质量。建议在睡前3小时内避免剧烈运动。",
+        "sleepStartTime": "00:08",
+        "sleepEndTime": "06:08"
+      },
+      {
+        "sleepType": "夜间睡眠",
+        "bedtime": "00:08",
+        "wakeTime": "06:08",
+        "nightSleepMinutes": 354,
+        "totalSleepMinutes": 354,
+        "napMinutes": null,
+        "deepSleepMinutes": null,
+        "lightSleepMinutes": null,
+        "remSleepMinutes": null,
+        "awakeMinutes": null,
+        "sleepStageText": "深睡 1小时19分钟，浅睡 3小时46分钟，快速眼动 49分钟",
+        "sleepStageDetail": null,
+        "sleepScore": 76,
+        "sleepScorePercentile": 44,
+        "deepSleepRatioPct": 22,
+        "lightSleepRatioPct": 64,
+        "remSleepRatioPct": 14,
+        "deepSleepContinuityScore": 66,
+        "wakeCount": 2,
+        "breathingQualityScore": 98,
+        "averageHeartRateBpm": 65,
+        "hrvMs": 48,
+        "averageSpo2Pct": 97,
+        "averageRespiratoryRate": 14,
+        "analysisText": "睡眠质量一般，睡眠期间醒了2次，略高于正常范围。存在睡眠问题，长眠睡眠，容易出现睡醒后体力恢复不佳的情况，导致日间疲劳、工作效率降低。",
+        "suggestionText": "建议在睡觉或清晨提早30分钟，适当的有氧运动不仅能够促进新陈代谢，还能舒缓压力，提升睡眠质量；注意不要在睡前3小时之内进行剧烈运动。",
+        "sleepStartTime": "00:08",
+        "sleepEndTime": "06:08"
+      }
+    ],
+    "sleepSummary": {
+      "records": [
+        {
+          "sleepType": "夜间睡眠",
+          "bedtime": "00:08",
+          "wakeTime": "06:08",
+          "nightSleepMinutes": 354,
+          "totalSleepMinutes": 381,
+          "napMinutes": null,
+          "deepSleepMinutes": null,
+          "lightSleepMinutes": null,
+          "remSleepMinutes": null,
+          "awakeMinutes": null,
+          "sleepStageText": "清醒、浅睡、快速眼动、深睡",
+          "sleepStageDetail": null,
+          "sleepScore": 76,
+          "sleepScorePercentile": 44,
+          "deepSleepRatioPct": 22,
+          "lightSleepRatioPct": 64,
+          "remSleepRatioPct": 14,
+          "deepSleepContinuityScore": 66,
+          "wakeCount": 2,
+          "breathingQualityScore": 98,
+          "averageHeartRateBpm": 65,
+          "hrvMs": 48,
+          "averageSpo2Pct": null,
+          "averageRespiratoryRate": 14,
+          "analysisText": "睡眠质量一般，睡眠期间醒了2次，总体处于正常范围内，存在轻微问题。",
+          "suggestionText": "长时间睡眠后容易产生疲乏、焦虑等负面情绪，进一步影响睡眠质量。建议在睡前3小时内避免剧烈运动。",
+          "sleepStartTime": "00:08",
+          "sleepEndTime": "06:08"
+        },
+        {
+          "sleepType": "夜间睡眠",
+          "bedtime": "00:08",
+          "wakeTime": "06:08",
+          "nightSleepMinutes": 354,
+          "totalSleepMinutes": 354,
+          "napMinutes": null,
+          "deepSleepMinutes": null,
+          "lightSleepMinutes": null,
+          "remSleepMinutes": null,
+          "awakeMinutes": null,
+          "sleepStageText": "深睡 1小时19分钟，浅睡 3小时46分钟，快速眼动 49分钟",
+          "sleepStageDetail": null,
+          "sleepScore": 76,
+          "sleepScorePercentile": 44,
+          "deepSleepRatioPct": 22,
+          "lightSleepRatioPct": 64,
+          "remSleepRatioPct": 14,
+          "deepSleepContinuityScore": 66,
+          "wakeCount": 2,
+          "breathingQualityScore": 98,
+          "averageHeartRateBpm": 65,
+          "hrvMs": 48,
+          "averageSpo2Pct": 97,
+          "averageRespiratoryRate": 14,
+          "analysisText": "睡眠质量一般，睡眠期间醒了2次，略高于正常范围。存在睡眠问题，长眠睡眠，容易出现睡醒后体力恢复不佳的情况，导致日间疲劳、工作效率降低。",
+          "suggestionText": "建议在睡觉或清晨提早30分钟，适当的有氧运动不仅能够促进新陈代谢，还能舒缓压力，提升睡眠质量；注意不要在睡前3小时之内进行剧烈运动。",
+          "sleepStartTime": "00:08",
+          "sleepEndTime": "06:08"
+        }
+      ],
+      "totalSleepMinutes": 354,
+      "nightSleepMinutes": 354,
+      "napMinutes": null,
+      "sleepStartTime": "00:08",
+      "sleepEndTime": "06:08",
+      "deepSleepMinutes": null,
+      "lightSleepMinutes": null,
+      "remSleepMinutes": null,
+      "awakeMinutes": null,
+      "sleepScore": 76,
+      "sleepScorePercentile": 44,
+      "deepSleepRatioPct": 22,
+      "lightSleepRatioPct": 64,
+      "remSleepRatioPct": 14,
+      "deepSleepContinuityScore": 66,
+      "wakeCount": 2,
+      "breathingQualityScore": 98,
+      "averageHeartRateBpm": 65,
+      "hrvMs": 48,
+      "averageSpo2Pct": 97,
+      "averageRespiratoryRate": 14,
+      "analysisText": "睡眠质量一般，睡眠期间醒了2次，略高于正常范围。存在睡眠问题，长眠睡眠，容易出现睡醒后体力恢复不佳的情况，导致日间疲劳、工作效率降低。",
+      "suggestionText": "建议在睡觉或清晨提早30分钟，适当的有氧运动不仅能够促进新陈代谢，还能舒缓压力，提升睡眠质量；注意不要在睡前3小时之内进行剧烈运动。"
+    },
+    "workoutSummary": {
+      "totalActivities": 8,
+      "totalDurationSeconds": 8508,
+      "trainingCalories": 535,
+      "workoutDurationMinutes": 137,
+      "activeHours": 13,
+      "cyclingDistanceKm": 12.61,
+      "countsByType": {
+        "户外骑行": 4,
+        "爬楼": 3,
         "HIIT": 1
       }
     },
@@ -177,234 +622,102 @@
       "meals": [
         {
           "name": "早餐",
-          "calories": 114,
-          "recommendedMin": 541,
-          "recommendedMax": 973
+          "calories": 245,
+          "recommendedMin": 556,
+          "recommendedMax": 1001
         },
         {
           "name": "午餐",
-          "calories": 592,
-          "recommendedMin": 649,
-          "recommendedMax": 1081
+          "calories": 516,
+          "recommendedMin": 668,
+          "recommendedMax": 1112
         },
         {
           "name": "晚餐",
-          "calories": 460,
-          "recommendedMin": 325,
-          "recommendedMax": 757
+          "calories": 226,
+          "recommendedMin": 334,
+          "recommendedMax": 779
         }
       ],
-      "totalCalories": 1166,
+      "totalCalories": 987,
       "details": [
-        "早餐：康比特奶味分离乳清蛋白粉750g 1勺，114千卡；康比特肌酸250g 3克，0千卡。",
-        "午餐：米饭（蒸）1碗，232千卡；清炒小白菜1盘，136千卡；猪蹄（熟）0.5只，224千卡。",
-        "晚餐：洋葱鸡蛋炒饭1盘，460千卡。"
-      ]
-    }
-  },
-  "previousDay": {
-    "date": "2026-06-06",
-    "measurement": {
-      "archivedDate": "2026-06-06",
-      "measuredAt": "2026-06-06",
-      "bodyScore": null,
-      "weightKg": 70.9,
-      "bmi": 22.8,
-      "bodyFatPct": 22.1,
-      "skeletalMuscleKg": 29.85,
-      "visceralFatLevel": 8,
-      "basalMetabolismKcal": 1556,
-      "bodyWaterPct": 50,
-      "proteinPct": 23.9,
-      "boneMassKg": 5.77,
-      "fatFreeMassKg": 55.58,
-      "bodyAge": 30,
-      "bodyType": "标准型"
-    },
-    "measurements": [
-      {
-        "archivedDate": "2026-06-06",
-        "measuredAt": "2026-06-06",
-        "bodyScore": null,
-        "weightKg": 70.9,
-        "bmi": 22.8,
-        "bodyFatPct": 22.1,
-        "skeletalMuscleKg": 29.85,
-        "visceralFatLevel": 8,
-        "basalMetabolismKcal": 1556,
-        "bodyWaterPct": 50,
-        "proteinPct": 23.9,
-        "boneMassKg": 5.77,
-        "fatFreeMassKg": 55.58,
-        "bodyAge": 30,
-        "bodyType": "标准型"
-      }
-    ],
-    "activities": [
-      {
-        "time": "06:46",
-        "type": "HIIT",
-        "rawType": "HIIT",
-        "detail": "总消耗379千卡，时长00:59:26，平均心率116次/分钟",
-        "durationText": "00:59:26",
-        "durationSeconds": 3566,
-        "calories": 379,
-        "distanceKm": null,
-        "avgSpeedKmh": null,
-        "heartRate": 116
-      },
-      {
-        "time": "18:24",
-        "type": "力量训练",
-        "rawType": "力量训练",
-        "detail": "总消耗403千卡，时长01:16:27，平均心率100次/分钟",
-        "durationText": "01:16:27",
-        "durationSeconds": 4587,
-        "calories": 403,
-        "distanceKm": null,
-        "avgSpeedKmh": null,
-        "heartRate": 100
-      }
-    ],
-    "sleep": [
-      {
-        "sleepType": "夜间睡眠",
-        "bedtime": "23:50",
-        "wakeTime": "06:55",
-        "nightSleepMinutes": null,
-        "totalSleepMinutes": 528,
-        "napMinutes": null,
-        "deepSleepMinutes": 225,
-        "lightSleepMinutes": 180,
-        "remSleepMinutes": 134,
-        "awakeMinutes": null,
-        "sleepStageText": "深睡、浅睡、快速眼动、清醒",
-        "sleepStageDetail": [
-          "深睡 2小时45分钟；浅睡 3小时0分钟；快速眼动 2小时14分钟"
-        ],
-        "sleepScore": 86,
-        "sleepScorePercentile": 96,
-        "deepSleepRatioPct": 39,
-        "lightSleepRatioPct": 30,
-        "remSleepRatioPct": 31,
-        "deepSleepContinuityScore": 87,
-        "wakeCount": 0,
-        "breathingQualityScore": 98,
-        "averageHeartRateBpm": 63,
-        "hrvMs": 44,
-        "averageSpo2Pct": 97,
-        "averageRespiratoryRate": 14,
-        "analysisText": "睡眠质量良好，然而快速眼动（REM）睡眠的比例为31%，略微偏高，可能存在多梦的现象。多梦不仅会让人睡眠浅，还可能稍有影响恢复，同时还会影响记忆力和日间注意力水平。检测到昨日一共小睡105分钟，小睡过长可能影响晚间的睡眠质量提升。",
-        "suggestionText": "建议午睡控制在半小时以内，午睡过长可能导致昼夜节律紊乱，影响睡眠质量。",
-        "sleepStartTime": "23:50",
-        "sleepEndTime": "06:55"
-      }
-    ],
-    "sleepSummary": {
-      "records": [
-        {
-          "sleepType": "夜间睡眠",
-          "bedtime": "23:50",
-          "wakeTime": "06:55",
-          "nightSleepMinutes": null,
-          "totalSleepMinutes": 528,
-          "napMinutes": null,
-          "deepSleepMinutes": 225,
-          "lightSleepMinutes": 180,
-          "remSleepMinutes": 134,
-          "awakeMinutes": null,
-          "sleepStageText": "深睡、浅睡、快速眼动、清醒",
-          "sleepStageDetail": [
-            "深睡 2小时45分钟；浅睡 3小时0分钟；快速眼动 2小时14分钟"
-          ],
-          "sleepScore": 86,
-          "sleepScorePercentile": 96,
-          "deepSleepRatioPct": 39,
-          "lightSleepRatioPct": 30,
-          "remSleepRatioPct": 31,
-          "deepSleepContinuityScore": 87,
-          "wakeCount": 0,
-          "breathingQualityScore": 98,
-          "averageHeartRateBpm": 63,
-          "hrvMs": 44,
-          "averageSpo2Pct": 97,
-          "averageRespiratoryRate": 14,
-          "analysisText": "睡眠质量良好，然而快速眼动（REM）睡眠的比例为31%，略微偏高，可能存在多梦的现象。多梦不仅会让人睡眠浅，还可能稍有影响恢复，同时还会影响记忆力和日间注意力水平。检测到昨日一共小睡105分钟，小睡过长可能影响晚间的睡眠质量提升。",
-          "suggestionText": "建议午睡控制在半小时以内，午睡过长可能导致昼夜节律紊乱，影响睡眠质量。",
-          "sleepStartTime": "23:50",
-          "sleepEndTime": "06:55"
-        }
-      ],
-      "totalSleepMinutes": 528,
-      "nightSleepMinutes": null,
-      "napMinutes": null,
-      "sleepStartTime": "23:50",
-      "sleepEndTime": "06:55",
-      "deepSleepMinutes": 225,
-      "lightSleepMinutes": 180,
-      "remSleepMinutes": 134,
-      "awakeMinutes": null,
-      "sleepScore": 86,
-      "sleepScorePercentile": 96,
-      "deepSleepRatioPct": 39,
-      "lightSleepRatioPct": 30,
-      "remSleepRatioPct": 31,
-      "deepSleepContinuityScore": 87,
-      "wakeCount": 0,
-      "breathingQualityScore": 98,
-      "averageHeartRateBpm": 63,
-      "hrvMs": 44,
-      "averageSpo2Pct": 97,
-      "averageRespiratoryRate": 14,
-      "analysisText": "睡眠质量良好，然而快速眼动（REM）睡眠的比例为31%，略微偏高，可能存在多梦的现象。多梦不仅会让人睡眠浅，还可能稍有影响恢复，同时还会影响记忆力和日间注意力水平。检测到昨日一共小睡105分钟，小睡过长可能影响晚间的睡眠质量提升。",
-      "suggestionText": "建议午睡控制在半小时以内，午睡过长可能导致昼夜节律紊乱，影响睡眠质量。"
-    },
-    "workoutSummary": {
-      "totalActivities": 2,
-      "totalDurationSeconds": 8153,
-      "trainingCalories": 663,
-      "workoutDurationMinutes": 99,
-      "activeHours": 13,
-      "cyclingDistanceKm": 0,
-      "countsByType": {
-        "HIIT": 1,
-        "力量训练": 1
-      }
-    },
-    "nutrition": {
-      "meals": [
-        {
-          "name": "早餐",
-          "calories": 114,
-          "recommendedMin": 544,
-          "recommendedMax": 978
-        },
-        {
-          "name": "午餐",
-          "calories": 632,
-          "recommendedMin": 652,
-          "recommendedMax": 1087
-        },
-        {
-          "name": "加餐",
-          "calories": 446,
-          "recommendedMin": 0,
-          "recommendedMax": 109
-        }
-      ],
-      "totalCalories": 1192,
-      "details": [
-        "早餐：康比特奶味分离乳清蛋白粉750g 1勺，114千卡；康比特肌酸250g 3克，0千卡",
-        "午餐：火锅(荤1素4) 1份，408千卡；猪蹄（熟）0.5只，224千卡",
-        "晚上加餐：红糖发糕 200克，446千卡"
+        "煎饼果子 1份 245千卡",
+        "麻辣烫（素多荤少，均值）1大碗 516千卡",
+        "康比特奶味分离乳清蛋白粉750g 1勺 114千卡",
+        "康比特肌酸250g 3克 0千卡",
+        "馒头 高GI 1个 112千卡"
       ]
     }
   },
   "dailyOverviewHint": "顶部主卡按最新体脂归档日展示，最近活动以下方日期卡片为准",
-  "latestDashboardDate": "2026-06-07",
+  "latestDashboardDate": "2026-06-11",
   "chartWindowDays": 30,
   "dailyCardLimit": 4,
   "dailyOverviewEntries": [
+    {
+      "date": "2026-06-11",
+      "weightLabel": "71.20 kg",
+      "activityCount": "6",
+      "trainingCaloriesLabel": "344 kcal",
+      "workoutDurationLabel": "90 分钟",
+      "cyclingDistanceLabel": "9.53 km",
+      "nutritionCaloriesLabel": "1283 kcal",
+      "sleepLabel": "372 分钟",
+      "tags": [
+        "弹力带力量训练 × 1",
+        "户外骑行 × 3",
+        "爬楼 × 2"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-11</h3>\n      <span>71.20 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>6</strong></li>\n      <li>训练消耗：<strong>344 kcal</strong></li>\n      <li>锻炼时长：<strong>90 分钟</strong></li>\n      <li>骑行里程：<strong>9.53 km</strong></li>\n      <li>饮食热量：<strong>1283 kcal</strong></li>\n      <li>睡眠：<strong>372 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>弹力带力量训练 × 1</span><span>户外骑行 × 3</span><span>爬楼 × 2</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-06-10",
+      "weightLabel": "71.35 kg",
+      "activityCount": "8",
+      "trainingCaloriesLabel": "535 kcal",
+      "workoutDurationLabel": "137 分钟",
+      "cyclingDistanceLabel": "12.61 km",
+      "nutritionCaloriesLabel": "987 kcal",
+      "sleepLabel": "354 分钟",
+      "tags": [
+        "户外骑行 × 4",
+        "爬楼 × 3",
+        "HIIT × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-10</h3>\n      <span>71.35 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>8</strong></li>\n      <li>训练消耗：<strong>535 kcal</strong></li>\n      <li>锻炼时长：<strong>137 分钟</strong></li>\n      <li>骑行里程：<strong>12.61 km</strong></li>\n      <li>饮食热量：<strong>987 kcal</strong></li>\n      <li>睡眠：<strong>354 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 4</span><span>爬楼 × 3</span><span>HIIT × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-06-09",
+      "weightLabel": "71.55 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "338 kcal",
+      "workoutDurationLabel": "99 分钟",
+      "cyclingDistanceLabel": "12.33 km",
+      "nutritionCaloriesLabel": "1280 kcal",
+      "sleepLabel": "396 分钟",
+      "tags": [
+        "户外骑行 × 4",
+        "爬楼 × 2",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-09</h3>\n      <span>71.55 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>338 kcal</strong></li>\n      <li>锻炼时长：<strong>99 分钟</strong></li>\n      <li>骑行里程：<strong>12.33 km</strong></li>\n      <li>饮食热量：<strong>1280 kcal</strong></li>\n      <li>睡眠：<strong>396 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 4</span><span>爬楼 × 2</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-06-08",
+      "weightLabel": "72.30 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "496 kcal",
+      "workoutDurationLabel": "119 分钟",
+      "cyclingDistanceLabel": "12.22 km",
+      "nutritionCaloriesLabel": "1581 kcal",
+      "sleepLabel": "525 分钟",
+      "tags": [
+        "户外骑行 × 4",
+        "爬楼 × 2",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-08</h3>\n      <span>72.30 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>496 kcal</strong></li>\n      <li>锻炼时长：<strong>119 分钟</strong></li>\n      <li>骑行里程：<strong>12.22 km</strong></li>\n      <li>饮食热量：<strong>1581 kcal</strong></li>\n      <li>睡眠：<strong>525 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 4</span><span>爬楼 × 2</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
     {
       "date": "2026-06-07",
       "weightLabel": "71.40 kg",
@@ -1235,201 +1548,240 @@
   ],
   "recentDays": [
     {
-      "date": "2026-06-07",
-      "weightLabel": "71.40 kg",
-      "activityCount": "1",
-      "trainingCaloriesLabel": "284 kcal",
-      "workoutDurationLabel": "34 分钟",
-      "cyclingDistanceLabel": "0 km",
-      "nutritionCaloriesLabel": "1166 kcal",
-      "sleepLabel": "322 分钟",
+      "date": "2026-06-11",
+      "weightLabel": "71.20 kg",
+      "activityCount": "6",
+      "trainingCaloriesLabel": "344 kcal",
+      "workoutDurationLabel": "90 分钟",
+      "cyclingDistanceLabel": "9.53 km",
+      "nutritionCaloriesLabel": "1283 kcal",
+      "sleepLabel": "372 分钟",
       "tags": [
-        "HIIT × 1"
+        "弹力带力量训练 × 1",
+        "户外骑行 × 3",
+        "爬楼 × 2"
       ],
-      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-07</h3>\n      <span>71.40 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>1</strong></li>\n      <li>训练消耗：<strong>284 kcal</strong></li>\n      <li>锻炼时长：<strong>34 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>1166 kcal</strong></li>\n      <li>睡眠：<strong>322 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span></div>\n  </article>"
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-11</h3>\n      <span>71.20 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>6</strong></li>\n      <li>训练消耗：<strong>344 kcal</strong></li>\n      <li>锻炼时长：<strong>90 分钟</strong></li>\n      <li>骑行里程：<strong>9.53 km</strong></li>\n      <li>饮食热量：<strong>1283 kcal</strong></li>\n      <li>睡眠：<strong>372 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>弹力带力量训练 × 1</span><span>户外骑行 × 3</span><span>爬楼 × 2</span></div>\n  </article>"
     },
     {
-      "date": "2026-06-06",
-      "weightLabel": "70.90 kg",
-      "activityCount": "2",
-      "trainingCaloriesLabel": "663 kcal",
-      "workoutDurationLabel": "99 分钟",
-      "cyclingDistanceLabel": "0 km",
-      "nutritionCaloriesLabel": "1192 kcal",
-      "sleepLabel": "528 分钟",
-      "tags": [
-        "HIIT × 1",
-        "力量训练 × 1"
-      ],
-      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-06</h3>\n      <span>70.90 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>2</strong></li>\n      <li>训练消耗：<strong>663 kcal</strong></li>\n      <li>锻炼时长：<strong>99 分钟</strong></li>\n      <li>骑行里程：<strong>0 km</strong></li>\n      <li>饮食热量：<strong>1192 kcal</strong></li>\n      <li>睡眠：<strong>528 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>力量训练 × 1</span></div>\n  </article>"
-    },
-    {
-      "date": "2026-06-05",
-      "weightLabel": "71.45 kg",
-      "activityCount": "5",
-      "trainingCaloriesLabel": "422 kcal",
-      "workoutDurationLabel": "63 分钟",
-      "cyclingDistanceLabel": "12.40 km",
-      "nutritionCaloriesLabel": "582 kcal",
-      "sleepLabel": "498 分钟",
+      "date": "2026-06-10",
+      "weightLabel": "71.35 kg",
+      "activityCount": "8",
+      "trainingCaloriesLabel": "535 kcal",
+      "workoutDurationLabel": "137 分钟",
+      "cyclingDistanceLabel": "12.61 km",
+      "nutritionCaloriesLabel": "987 kcal",
+      "sleepLabel": "354 分钟",
       "tags": [
         "户外骑行 × 4",
-        "爬楼 × 1"
+        "爬楼 × 3",
+        "HIIT × 1"
       ],
-      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-05</h3>\n      <span>71.45 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>5</strong></li>\n      <li>训练消耗：<strong>422 kcal</strong></li>\n      <li>锻炼时长：<strong>63 分钟</strong></li>\n      <li>骑行里程：<strong>12.40 km</strong></li>\n      <li>饮食热量：<strong>582 kcal</strong></li>\n      <li>睡眠：<strong>498 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 4</span><span>爬楼 × 1</span></div>\n  </article>"
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-10</h3>\n      <span>71.35 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>8</strong></li>\n      <li>训练消耗：<strong>535 kcal</strong></li>\n      <li>锻炼时长：<strong>137 分钟</strong></li>\n      <li>骑行里程：<strong>12.61 km</strong></li>\n      <li>饮食热量：<strong>987 kcal</strong></li>\n      <li>睡眠：<strong>354 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 4</span><span>爬楼 × 3</span><span>HIIT × 1</span></div>\n  </article>"
     },
     {
-      "date": "2026-06-04",
-      "weightLabel": "71.40 kg",
+      "date": "2026-06-09",
+      "weightLabel": "71.55 kg",
       "activityCount": "7",
-      "trainingCaloriesLabel": "934 kcal",
-      "workoutDurationLabel": "135 分钟",
-      "cyclingDistanceLabel": "7.50 km",
-      "nutritionCaloriesLabel": "1298 kcal",
-      "sleepLabel": "—",
+      "trainingCaloriesLabel": "338 kcal",
+      "workoutDurationLabel": "99 分钟",
+      "cyclingDistanceLabel": "12.33 km",
+      "nutritionCaloriesLabel": "1280 kcal",
+      "sleepLabel": "396 分钟",
       "tags": [
-        "HIIT × 1",
-        "户外骑行 × 3",
+        "户外骑行 × 4",
         "爬楼 × 2",
         "力量训练 × 1"
       ],
-      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-04</h3>\n      <span>71.40 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>934 kcal</strong></li>\n      <li>锻炼时长：<strong>135 分钟</strong></li>\n      <li>骑行里程：<strong>7.50 km</strong></li>\n      <li>饮食热量：<strong>1298 kcal</strong></li>\n      <li>睡眠：<strong>—</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>HIIT × 1</span><span>户外骑行 × 3</span><span>爬楼 × 2</span><span>力量训练 × 1</span></div>\n  </article>"
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-09</h3>\n      <span>71.55 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>338 kcal</strong></li>\n      <li>锻炼时长：<strong>99 分钟</strong></li>\n      <li>骑行里程：<strong>12.33 km</strong></li>\n      <li>饮食热量：<strong>1280 kcal</strong></li>\n      <li>睡眠：<strong>396 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 4</span><span>爬楼 × 2</span><span>力量训练 × 1</span></div>\n  </article>"
+    },
+    {
+      "date": "2026-06-08",
+      "weightLabel": "72.30 kg",
+      "activityCount": "7",
+      "trainingCaloriesLabel": "496 kcal",
+      "workoutDurationLabel": "119 分钟",
+      "cyclingDistanceLabel": "12.22 km",
+      "nutritionCaloriesLabel": "1581 kcal",
+      "sleepLabel": "525 分钟",
+      "tags": [
+        "户外骑行 × 4",
+        "爬楼 × 2",
+        "力量训练 × 1"
+      ],
+      "cardHtml": "<article class=\"day-card\">\n    <div class=\"day-card__header\">\n      <h3>2026-06-08</h3>\n      <span>72.30 kg</span>\n    </div>\n    <ul class=\"day-card__stats\">\n      <li>活动次数：<strong>7</strong></li>\n      <li>训练消耗：<strong>496 kcal</strong></li>\n      <li>锻炼时长：<strong>119 分钟</strong></li>\n      <li>骑行里程：<strong>12.22 km</strong></li>\n      <li>饮食热量：<strong>1581 kcal</strong></li>\n      <li>睡眠：<strong>525 分钟</strong></li>\n    </ul>\n    <div class=\"day-card__tags\"><span>户外骑行 × 4</span><span>爬楼 × 2</span><span>力量训练 × 1</span></div>\n  </article>"
     }
   ],
-  "dailyOverviewTotal": 58,
-  "trainedDays": 57,
-  "totalArchivedDays": 58,
+  "dailyOverviewTotal": 62,
+  "trainedDays": 61,
+  "totalArchivedDays": 62,
   "overviewStats": [
     {
       "label": "已训练天数",
-      "value": "57 天",
+      "value": "61 天",
       "hint": "当前记录中有训练消耗的日期"
     },
     {
       "label": "累计训练归档",
-      "value": "58 天",
+      "value": "62 天",
       "hint": "完整训练归档天数"
     }
   ],
   "overviewMeta": [
     {
       "label": "真实测量",
-      "value": "2026-06-07"
+      "value": "2026-06-11"
     },
     {
       "label": "对比日期",
-      "value": "2026-06-06"
+      "value": "2026-06-10"
     }
   ],
   "primaryMetrics": [
     {
       "title": "体重",
-      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">71.40</span><span class=\"metric-value__unit\">kg</span></div>",
-      "metaHtml": "<div class=\"metric-meta\"><span>BMI</span><strong>23.0</strong></div>",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">71.20</span><span class=\"metric-value__unit\">kg</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>BMI</span><strong>22.9</strong></div>",
+      "comparison": {
+        "direction": "down",
+        "arrow": "↓",
+        "label": "较前一日下降",
+        "shortLabel": "回落",
+        "value": "0.21%",
+        "text": "较前一日下降 0.21%",
+        "strength": 16,
+        "delta": -0.14999999999999147,
+        "ratio": 0.21023125437980586
+      },
+      "comparisonHtml": "<div class=\"hero-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 0.21%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">0.21%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:16%\"></span></span></div>"
+    },
+    {
+      "title": "体脂率",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">22.3</span><span class=\"metric-value__unit\">%</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>骨骼肌量</span><strong>29.85 kg</strong></div>",
       "comparison": {
         "direction": "up",
         "arrow": "↑",
         "label": "较前一日新增",
         "shortLabel": "上升",
-        "value": "0.71%",
-        "text": "较前一日新增 0.71%",
+        "value": "1.36%",
+        "text": "较前一日新增 1.36%",
         "strength": 16,
-        "delta": 0.5,
-        "ratio": 0.7052186177715091
+        "delta": 0.3000000000000007,
+        "ratio": 1.3636363636363669
       },
-      "comparisonHtml": "<div class=\"hero-card__comparison comparison-pill comparison-pill--up\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↑</span><span>较前一日新增 0.71%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">上升</span></div><span class=\"comparison-pill__value\">0.71%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:16%\"></span></span></div>"
-    },
-    {
-      "title": "体脂率",
-      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">22.1</span><span class=\"metric-value__unit\">%</span></div>",
-      "metaHtml": "<div class=\"metric-meta\"><span>骨骼肌量</span><strong>30.10 kg</strong></div>",
-      "comparison": {
-        "direction": "flat",
-        "arrow": "→",
-        "label": "较前一日",
-        "shortLabel": "持平",
-        "value": "持平",
-        "text": "较前一日持平",
-        "strength": 18,
-        "delta": 0,
-        "ratio": 0
-      },
-      "comparisonHtml": "<div class=\"hero-card__comparison comparison-pill comparison-pill--flat\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">→</span><span>较前一日持平</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">持平</span></div><span class=\"comparison-pill__value\">持平</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:18%\"></span></span></div>"
+      "comparisonHtml": "<div class=\"hero-card__comparison comparison-pill comparison-pill--up\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↑</span><span>较前一日新增 1.36%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">上升</span></div><span class=\"comparison-pill__value\">1.36%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:16%\"></span></span></div>"
     },
     {
       "title": "训练消耗",
-      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">284</span><span class=\"metric-value__unit\">kcal</span></div>",
-      "metaHtml": "<div class=\"metric-meta\"><span>饮食摄入</span><strong>1166 kcal</strong></div>",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">344</span><span class=\"metric-value__unit\">kcal</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>饮食摄入</span><strong>1283 kcal</strong></div>",
       "comparison": {
         "direction": "down",
         "arrow": "↓",
         "label": "较前一日下降",
         "shortLabel": "回落",
-        "value": "57.16%",
-        "text": "较前一日下降 57.16%",
-        "strength": 49,
-        "delta": -379,
-        "ratio": 57.16440422322775
+        "value": "35.70%",
+        "text": "较前一日下降 35.70%",
+        "strength": 30,
+        "delta": -191,
+        "ratio": 35.700934579439256
       },
-      "comparisonHtml": "<div class=\"hero-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 57.16%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">57.16%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:49%\"></span></span></div>"
+      "comparisonHtml": "<div class=\"hero-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 35.70%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">35.70%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:30%\"></span></span></div>"
     },
     {
       "title": "锻炼时长",
-      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">34</span><span class=\"metric-value__unit\">分钟</span></div>",
-      "metaHtml": "<div class=\"metric-meta\"><span>活动小时数</span><strong>6 小时</strong></div>",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">90</span><span class=\"metric-value__unit\">分钟</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>活动小时数</span><strong>14 小时</strong></div>",
       "comparison": {
         "direction": "down",
         "arrow": "↓",
         "label": "较前一日下降",
         "shortLabel": "回落",
-        "value": "65.66%",
-        "text": "较前一日下降 65.66%",
-        "strength": 56,
-        "delta": -65,
-        "ratio": 65.65656565656566
+        "value": "34.31%",
+        "text": "较前一日下降 34.31%",
+        "strength": 29,
+        "delta": -47,
+        "ratio": 34.306569343065696
       },
-      "comparisonHtml": "<div class=\"hero-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 65.66%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">65.66%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:56%\"></span></span></div>"
+      "comparisonHtml": "<div class=\"hero-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 34.31%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">34.31%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:29%\"></span></span></div>"
     }
   ],
   "secondaryMetrics": [
     {
       "title": "基础代谢",
-      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">1567</span><span class=\"metric-value__unit\">kcal/日</span></div>",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">1556</span><span class=\"metric-value__unit\">kcal/日</span></div>",
       "metaHtml": "<div class=\"metric-meta\"><span>内脏脂肪等级</span><strong>8.0</strong></div>",
       "comparison": {
-        "direction": "up",
-        "arrow": "↑",
-        "label": "较前一日新增",
-        "shortLabel": "上升",
-        "value": "0.71%",
-        "text": "较前一日新增 0.71%",
+        "direction": "down",
+        "arrow": "↓",
+        "label": "较前一日下降",
+        "shortLabel": "回落",
+        "value": "0.77%",
+        "text": "较前一日下降 0.77%",
         "strength": 16,
-        "delta": 11,
-        "ratio": 0.7069408740359897
+        "delta": -12,
+        "ratio": 0.7653061224489796
       },
-      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--up\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↑</span><span>较前一日新增 0.71%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">上升</span></div><span class=\"comparison-pill__value\">0.71%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:16%\"></span></span></div>"
+      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 0.77%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">0.77%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:16%\"></span></span></div>"
     },
     {
       "title": "水分与蛋白质",
-      "valueHtml": "<div class=\"metric-value metric-value--composite\"><span class=\"metric-value__pair\"><span class=\"metric-value__number\">50.1</span><span class=\"metric-value__unit\">%</span></span><span class=\"metric-value__separator\">/</span><span class=\"metric-value__pair\"><span class=\"metric-value__number\">23.7</span><span class=\"metric-value__unit\">%</span></span></div>",
+      "valueHtml": "<div class=\"metric-value metric-value--composite\"><span class=\"metric-value__pair\"><span class=\"metric-value__number\">49.9</span><span class=\"metric-value__unit\">%</span></span><span class=\"metric-value__separator\">/</span><span class=\"metric-value__pair\"><span class=\"metric-value__number\">23.8</span><span class=\"metric-value__unit\">%</span></span></div>",
       "metaHtml": "<div class=\"metric-meta\"><span>身体年龄</span><strong>30 岁</strong></div>",
+      "comparison": {
+        "direction": "down",
+        "arrow": "↓",
+        "label": "较前一日下降",
+        "shortLabel": "回落",
+        "value": "0.60%",
+        "text": "较前一日下降 0.60%",
+        "strength": 16,
+        "delta": -0.30000000000000426,
+        "ratio": 0.5976095617529965
+      },
+      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 0.60%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">0.60%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:16%\"></span></span></div>"
+    },
+    {
+      "title": "骑行里程",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">9.53</span><span class=\"metric-value__unit\">km</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>当日活动</span><strong>6 次</strong></div>",
+      "comparison": {
+        "direction": "down",
+        "arrow": "↓",
+        "label": "较前一日下降",
+        "shortLabel": "回落",
+        "value": "24.43%",
+        "text": "较前一日下降 24.43%",
+        "strength": 21,
+        "delta": -3.08,
+        "ratio": 24.42505947660587
+      },
+      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 24.43%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">24.43%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:21%\"></span></span></div>"
+    }
+  ],
+  "sleepCards": [
+    {
+      "title": "总睡眠",
+      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">372</span><span class=\"metric-value__unit\">分钟</span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>夜间睡眠</span><strong>372 分钟</strong></div>",
       "comparison": {
         "direction": "up",
         "arrow": "↑",
         "label": "较前一日新增",
         "shortLabel": "上升",
-        "value": "0.20%",
-        "text": "较前一日新增 0.20%",
+        "value": "5.08%",
+        "text": "较前一日新增 5.08%",
         "strength": 16,
-        "delta": 0.10000000000000142,
-        "ratio": 0.20000000000000281
+        "delta": 18,
+        "ratio": 5.084745762711865
       },
-      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--up\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↑</span><span>较前一日新增 0.20%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">上升</span></div><span class=\"comparison-pill__value\">0.20%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:16%\"></span></span></div>"
+      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--up\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↑</span><span>较前一日新增 5.08%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">上升</span></div><span class=\"comparison-pill__value\">5.08%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:16%\"></span></span></div>"
     },
     {
-      "title": "骑行里程",
-      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">0</span><span class=\"metric-value__unit\">km</span></div>",
-      "metaHtml": "<div class=\"metric-meta\"><span>当日活动</span><strong>1 次</strong></div>",
+      "title": "深睡 / 浅睡",
+      "valueHtml": "<div class=\"metric-value metric-value--composite\"><span class=\"metric-value__pair\"><span class=\"metric-value__number\">109</span><span class=\"metric-value__unit\">分钟</span></span><span class=\"metric-value__separator\">/</span><span class=\"metric-value__pair\"><span class=\"metric-value__number\">175</span><span class=\"metric-value__unit\">分钟</span></span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>REM / 清醒</span><strong>88 / — 分钟</strong></div>",
       "comparison": {
         "direction": "neutral",
         "arrow": "·",
@@ -1442,59 +1794,23 @@
         "ratio": null
       },
       "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--neutral\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">·</span><span>暂无前一日对比</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">待比较</span></div><span class=\"comparison-pill__meter comparison-pill__meter--empty\"></span></div>"
-    }
-  ],
-  "sleepCards": [
-    {
-      "title": "总睡眠",
-      "valueHtml": "<div class=\"metric-value\"><span class=\"metric-value__number\">322</span><span class=\"metric-value__unit\">分钟</span></div>",
-      "metaHtml": "<div class=\"metric-meta\"><span>夜间睡眠</span><strong>322 分钟</strong></div>",
-      "comparison": {
-        "direction": "down",
-        "arrow": "↓",
-        "label": "较前一日下降",
-        "shortLabel": "回落",
-        "value": "39.02%",
-        "text": "较前一日下降 39.02%",
-        "strength": 33,
-        "delta": -206,
-        "ratio": 39.015151515151516
-      },
-      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 39.02%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">39.02%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:33%\"></span></span></div>"
-    },
-    {
-      "title": "深睡 / 浅睡",
-      "valueHtml": "<div class=\"metric-value metric-value--composite\"><span class=\"metric-value__pair\"><span class=\"metric-value__number\">41</span><span class=\"metric-value__unit\">分钟</span></span><span class=\"metric-value__separator\">/</span><span class=\"metric-value__pair\"><span class=\"metric-value__number\">179</span><span class=\"metric-value__unit\">分钟</span></span></div>",
-      "metaHtml": "<div class=\"metric-meta\"><span>REM / 清醒</span><strong>102 / — 分钟</strong></div>",
-      "comparison": {
-        "direction": "down",
-        "arrow": "↓",
-        "label": "较前一日下降",
-        "shortLabel": "回落",
-        "value": "81.78%",
-        "text": "较前一日下降 81.78%",
-        "strength": 70,
-        "delta": -184,
-        "ratio": 81.77777777777779
-      },
-      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 81.78%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">81.78%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:70%\"></span></span></div>"
     },
     {
       "title": "深睡 / 浅睡比例",
-      "valueHtml": "<div class=\"metric-value metric-value--composite\"><span class=\"metric-value__pair\"><span class=\"metric-value__number\">13</span><span class=\"metric-value__unit\">%</span></span><span class=\"metric-value__separator\">/</span><span class=\"metric-value__pair\"><span class=\"metric-value__number\">56</span><span class=\"metric-value__unit\">%</span></span></div>",
-      "metaHtml": "<div class=\"metric-meta\"><span>深睡 / 浅睡比</span><strong>41 / 179</strong></div>",
+      "valueHtml": "<div class=\"metric-value metric-value--composite\"><span class=\"metric-value__pair\"><span class=\"metric-value__number\">29</span><span class=\"metric-value__unit\">%</span></span><span class=\"metric-value__separator\">/</span><span class=\"metric-value__pair\"><span class=\"metric-value__number\">48</span><span class=\"metric-value__unit\">%</span></span></div>",
+      "metaHtml": "<div class=\"metric-meta\"><span>深睡 / 浅睡比</span><strong>109 / 175</strong></div>",
       "comparison": {
-        "direction": "down",
-        "arrow": "↓",
-        "label": "较前一日下降",
-        "shortLabel": "回落",
-        "value": "66.45%",
-        "text": "较前一日下降 66.45%",
-        "strength": 56,
-        "delta": -36.91919191919192,
-        "ratio": 66.45454545454544
+        "direction": "neutral",
+        "arrow": "·",
+        "label": "暂无前一日对比",
+        "shortLabel": "待比较",
+        "value": "",
+        "text": "暂无前一日对比",
+        "strength": 0,
+        "delta": null,
+        "ratio": null
       },
-      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--down\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">↓</span><span>较前一日下降 66.45%</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">回落</span></div><span class=\"comparison-pill__value\">66.45%</span><span class=\"comparison-pill__meter\"><span class=\"comparison-pill__meter-fill\" style=\"width:56%\"></span></span></div>"
+      "comparisonHtml": "<div class=\"metric-card__comparison comparison-pill comparison-pill--neutral\"><div class=\"comparison-pill__summary\"><span class=\"comparison-pill__arrow\">·</span><span>暂无前一日对比</span><span class=\"comparison-pill__label\" aria-hidden=\"true\">待比较</span></div><span class=\"comparison-pill__meter comparison-pill__meter--empty\"></span></div>"
     }
   ],
   "chartCards": [
@@ -1526,22 +1842,6 @@
   "chartPayload": {
     "charts": {
       "weightKg": [
-        {
-          "date": "2026-05-09",
-          "value": 73.45
-        },
-        {
-          "date": "2026-05-10",
-          "value": 73.4
-        },
-        {
-          "date": "2026-05-11",
-          "value": 72.65
-        },
-        {
-          "date": "2026-05-12",
-          "value": 72.7
-        },
         {
           "date": "2026-05-13",
           "value": 73.65
@@ -1645,25 +1945,25 @@
         {
           "date": "2026-06-07",
           "value": 71.4
+        },
+        {
+          "date": "2026-06-08",
+          "value": 72.3
+        },
+        {
+          "date": "2026-06-09",
+          "value": 71.55
+        },
+        {
+          "date": "2026-06-10",
+          "value": 71.35
+        },
+        {
+          "date": "2026-06-11",
+          "value": 71.2
         }
       ],
       "bodyFatPct": [
-        {
-          "date": "2026-05-09",
-          "value": 22.9
-        },
-        {
-          "date": "2026-05-10",
-          "value": 22.7
-        },
-        {
-          "date": "2026-05-11",
-          "value": 22.7
-        },
-        {
-          "date": "2026-05-12",
-          "value": 22.8
-        },
         {
           "date": "2026-05-13",
           "value": 24.1
@@ -1767,25 +2067,25 @@
         {
           "date": "2026-06-07",
           "value": 22.1
+        },
+        {
+          "date": "2026-06-08",
+          "value": 22.1
+        },
+        {
+          "date": "2026-06-09",
+          "value": 22.1
+        },
+        {
+          "date": "2026-06-10",
+          "value": 22
+        },
+        {
+          "date": "2026-06-11",
+          "value": 22.3
         }
       ],
       "skeletalMuscleKg": [
-        {
-          "date": "2026-05-09",
-          "value": 30.6
-        },
-        {
-          "date": "2026-05-10",
-          "value": 30.75
-        },
-        {
-          "date": "2026-05-11",
-          "value": 30.4
-        },
-        {
-          "date": "2026-05-12",
-          "value": 30.35
-        },
         {
           "date": "2026-05-13",
           "value": 30.7
@@ -1889,25 +2189,25 @@
         {
           "date": "2026-06-07",
           "value": 30.1
+        },
+        {
+          "date": "2026-06-08",
+          "value": 60.8
+        },
+        {
+          "date": "2026-06-09",
+          "value": 60.3
+        },
+        {
+          "date": "2026-06-10",
+          "value": 30.1
+        },
+        {
+          "date": "2026-06-11",
+          "value": 29.85
         }
       ],
       "basalMetabolism": [
-        {
-          "date": "2026-05-09",
-          "value": 1596
-        },
-        {
-          "date": "2026-05-10",
-          "value": 1601
-        },
-        {
-          "date": "2026-05-11",
-          "value": 1585
-        },
-        {
-          "date": "2026-05-12",
-          "value": 1583
-        },
         {
           "date": "2026-05-13",
           "value": 1601
@@ -2011,25 +2311,25 @@
         {
           "date": "2026-06-07",
           "value": 1567
+        },
+        {
+          "date": "2026-06-08",
+          "value": 1583
+        },
+        {
+          "date": "2026-06-09",
+          "value": 1570
+        },
+        {
+          "date": "2026-06-10",
+          "value": 1568
+        },
+        {
+          "date": "2026-06-11",
+          "value": 1556
         }
       ],
       "visceralFatLevel": [
-        {
-          "date": "2026-05-09",
-          "value": 9
-        },
-        {
-          "date": "2026-05-10",
-          "value": 9
-        },
-        {
-          "date": "2026-05-11",
-          "value": 8
-        },
-        {
-          "date": "2026-05-12",
-          "value": 8
-        },
         {
           "date": "2026-05-13",
           "value": 9
@@ -2133,25 +2433,25 @@
         {
           "date": "2026-06-07",
           "value": 8
+        },
+        {
+          "date": "2026-06-08",
+          "value": 8
+        },
+        {
+          "date": "2026-06-09",
+          "value": 8
+        },
+        {
+          "date": "2026-06-10",
+          "value": 8
+        },
+        {
+          "date": "2026-06-11",
+          "value": 8
         }
       ],
       "intakeCalories": [
-        {
-          "date": "2026-05-09",
-          "value": 1593
-        },
-        {
-          "date": "2026-05-10",
-          "value": 1386
-        },
-        {
-          "date": "2026-05-11",
-          "value": 2459
-        },
-        {
-          "date": "2026-05-12",
-          "value": 857
-        },
         {
           "date": "2026-05-13",
           "value": 969
@@ -2251,25 +2551,25 @@
         {
           "date": "2026-06-07",
           "value": 1166
+        },
+        {
+          "date": "2026-06-08",
+          "value": 1581
+        },
+        {
+          "date": "2026-06-09",
+          "value": 1280
+        },
+        {
+          "date": "2026-06-10",
+          "value": 987
+        },
+        {
+          "date": "2026-06-11",
+          "value": 1283
         }
       ],
       "trainingCalories": [
-        {
-          "date": "2026-05-09",
-          "value": 991
-        },
-        {
-          "date": "2026-05-10",
-          "value": 643
-        },
-        {
-          "date": "2026-05-11",
-          "value": 1129
-        },
-        {
-          "date": "2026-05-12",
-          "value": 1237
-        },
         {
           "date": "2026-05-13",
           "value": 210
@@ -2373,25 +2673,25 @@
         {
           "date": "2026-06-07",
           "value": 284
+        },
+        {
+          "date": "2026-06-08",
+          "value": 496
+        },
+        {
+          "date": "2026-06-09",
+          "value": 338
+        },
+        {
+          "date": "2026-06-10",
+          "value": 535
+        },
+        {
+          "date": "2026-06-11",
+          "value": 344
         }
       ],
       "cyclingDistanceKm": [
-        {
-          "date": "2026-05-09",
-          "value": 12.36
-        },
-        {
-          "date": "2026-05-10",
-          "value": 10.14
-        },
-        {
-          "date": "2026-05-11",
-          "value": 6.31
-        },
-        {
-          "date": "2026-05-12",
-          "value": 12.37
-        },
         {
           "date": "2026-05-13",
           "value": 17.64
@@ -2459,6 +2759,22 @@
         {
           "date": "2026-06-05",
           "value": 12.4
+        },
+        {
+          "date": "2026-06-08",
+          "value": 12.22
+        },
+        {
+          "date": "2026-06-09",
+          "value": 12.33
+        },
+        {
+          "date": "2026-06-10",
+          "value": 12.61
+        },
+        {
+          "date": "2026-06-11",
+          "value": 9.53
         }
       ],
       "sleepMinutes": [
@@ -2473,6 +2789,22 @@
         {
           "date": "2026-06-07",
           "value": 322
+        },
+        {
+          "date": "2026-06-08",
+          "value": 525
+        },
+        {
+          "date": "2026-06-09",
+          "value": 396
+        },
+        {
+          "date": "2026-06-10",
+          "value": 354
+        },
+        {
+          "date": "2026-06-11",
+          "value": 372
         }
       ]
     }
