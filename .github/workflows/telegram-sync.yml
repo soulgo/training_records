@@ -16,7 +16,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: telegram-sync
+  group: ${{ github.event_name == 'repository_dispatch' && format('telegram-sync-{0}', github.run_id) || 'telegram-sync' }}
   cancel-in-progress: false
 
 jobs:
@@ -139,7 +139,10 @@ jobs:
           TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
         run: |
           node <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          (async () => {
           const fs = require('fs');
+          const path = require('path');
+          const { pathToFileURL } = require('url');
           const resultPath = process.env.TELEGRAM_SYNC_RESULT_PATH;
           let result = {};
           try {
@@ -150,8 +153,10 @@ jobs:
             console.log('Result file was not written.');
             process.exit(0);
           }
-          const batches = result.batchResults ?? result.batches ?? [];
-          const timings = result.timingsMs ?? {};
+          const { buildTelegramSyncReport } = await import(pathToFileURL(path.resolve('tools/telegram-sync.mjs')).href);
+          const report = result.batchResults ? buildTelegramSyncReport(result) : result;
+          const batches = report.batches ?? result.batches ?? result.batchResults ?? [];
+          const timings = report.timingsMs ?? result.timingsMs ?? {};
           console.log('## Telegram sync result');
           console.log('');
           if (Object.keys(timings).length > 0) {
@@ -175,6 +180,10 @@ jobs:
                 (batch.status === 'skipped' || batch.status === 'ignored' ? 'skip' : 'none'));
             console.log(`| ${batch.batchId ?? ''} | ${batch.taskStatus ?? batch.status ?? ''} | ${batch.persistenceStatus ?? ''} | ${batch.archivedDate ?? ''} | ${images} | ${batch.recognitionPendingStatus ?? ''} | ${failureDisposition} | ${failedIds} |`);
           }
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
           NODE
 
       - name: Notify Telegram sync result

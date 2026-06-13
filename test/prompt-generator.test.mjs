@@ -17,10 +17,16 @@ test('generateRecognitionPrompt includes all key constraints', async () => {
   const prompt = await generateRecognitionPrompt();
 
   assert.match(prompt, /^<!-- prompt-metadata /);
-  assert.equal(parsePromptMetadataHeader(prompt).version, '2026-06-05');
+  assert.equal(parsePromptMetadataHeader(prompt).version, '2026-06-13');
   assert.equal(parsePromptMetadataHeader(prompt).schemaName, 'telegram_training_image');
-  assert.equal(parsePromptMetadataHeader(prompt).schemaVersion, 'v1');
+  assert.equal(parsePromptMetadataHeader(prompt).schemaVersion, 'v2');
   assert.match(prompt, /只能输出符合 schema 的 JSON/);
+  assert.match(prompt, /## 自适应提取规则/);
+  assert.match(prompt, /`detectedApp`/);
+  assert.match(prompt, /截图上真实可见/);
+  assert.match(prompt, /## App Profile 记忆/);
+  assert.match(prompt, /Apple Health/);
+  assert.match(prompt, /Active Energy.*activityCaloriesKcal/);
   assert.match(prompt, /## 输出类型/);
   assert.match(prompt, /`imageType` 只能是：/);
   assert.match(prompt, /- `measurement`：/);
@@ -118,10 +124,20 @@ test('generated recognition prompt loads correctly from structured source', asyn
   assert.equal(recognition.workout.title, '运动 workout');
   assert.equal(recognition.nutrition.title, '饮食 nutrition');
   assert.equal(recognition.sleep.title, '睡眠 sleep');
+  assert.equal(recognition.adaptiveExtraction.title, '自适应提取规则');
   assert.ok(Array.isArray(recognition.outputType.rules));
   assert.ok(recognition.outputType.rules.length > 0);
   assert.ok(Array.isArray(recognition.sleep.rules));
   assert.ok(recognition.sleep.rules.length > 0);
+});
+
+test('app profiles load as the adaptive recognition memory source', async () => {
+  const profiles = await loadStructuredSource('app-profiles');
+
+  assert.equal(profiles.metadata.schemaVersion, 'v2');
+  assert.ok(Array.isArray(profiles.profiles));
+  assert.ok(profiles.profiles.some((profile) => profile.appName === '华为健康'));
+  assert.ok(profiles.profiles.some((profile) => profile.appName === 'Apple Health'));
 });
 
 test('generated analysis prompt loads correctly from structured source', async () => {

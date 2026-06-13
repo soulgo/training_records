@@ -251,6 +251,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   const dateSources = [];
   const sourceImageCount = batch.messages.length;
   let recognizedImageCount = 0;
+  let detectedApp = null;
   const failedMessageIds = [];
   const dataIssues = [];
 
@@ -280,6 +281,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     }
 
     recognizedImageCount += 1;
+    detectedApp ??= normalizeDetectedApp(recognition.detectedApp);
     const normalizedDetectedDate = normalizeRecognitionDate(recognition, message);
 
     for (const warning of recognition.warnings ?? []) {
@@ -366,6 +368,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       warnings,
       issues,
       dateSources,
+      detectedApp,
       sourceImageCount,
       recognizedImageCount,
       failedImageCount: failedMessageIds.length,
@@ -379,6 +382,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       warnings,
       issues,
       dateSources,
+      detectedApp,
       sourceImageCount,
       recognizedImageCount,
       failedImageCount: failedMessageIds.length,
@@ -400,6 +404,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       warnings,
       issues,
       dateSources,
+      detectedApp,
       sourceImageCount,
       recognizedImageCount,
       failedImageCount: failedMessageIds.length,
@@ -424,6 +429,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       warnings,
       issues,
       dateSources,
+      detectedApp,
       sourceImageCount,
       recognizedImageCount,
       failedImageCount: failedMessageIds.length,
@@ -439,6 +445,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     status: 'ready',
     batchId: batch.batchId,
     archivedDate,
+    detectedApp,
     measurement,
     activities: normalizedActivities,
     workoutDailySummary: normalizeWorkoutDailySummary(workoutDailySummary),
@@ -794,11 +801,20 @@ function batchLikelyLostOriginalFilename(batch) {
   );
 }
 
+function normalizeDetectedApp(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
 function buildSkippedBatchResult(batch, {
   reason,
   warnings = [],
   issues = [],
   dateSources = [],
+  detectedApp = null,
   sourceImageCount = 0,
   recognizedImageCount = 0,
   failedImageCount = 0,
@@ -814,6 +830,7 @@ function buildSkippedBatchResult(batch, {
     warnings,
     issues,
     dateSources,
+    detectedApp,
     sourceImageCount,
     recognizedImageCount,
     failedImageCount,

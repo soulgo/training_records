@@ -106,6 +106,51 @@ test('parseWeightKg converts jin values to kilograms with precision', () => {
   assert.equal(parseWeightKg('60.70 kg'), 60.7);
 });
 
+test('analyzeTelegramBatch exposes the first non-empty detectedApp for audit', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const [batch] = lib.groupTelegramUpdates([
+    telegramUpdate(141, {
+      messageId: 41,
+      telegram: {
+        photo: [telegramPhoto({ fileId: 'apple-workout-file', fileUniqueId: 'apple-workout-uniq' })],
+      },
+    }),
+  ]);
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 41,
+      imageType: 'workout',
+      detectedApp: 'Apple Health',
+      detectedDate: '2026-06-12',
+      dateEvidence: 'image header: Jun 12',
+      confidence: 0.91,
+      warnings: [],
+      records: {
+        measurement: null,
+        activities: [],
+        meals: [],
+        totalCalories: null,
+        details: [],
+        dailyWorkoutSummary: {
+          activityCaloriesKcal: 420,
+          workoutDurationMinutes: 50,
+          activeHours: null,
+        },
+        sleep: null,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.detectedApp, 'Apple Health');
+  assert.equal(analyzed.workoutDailySummary.activityCaloriesKcal, 420);
+});
+
 test('uses meal calories as nutrition total when recognition omits totalCalories', async () => {
   const lib = await importTelegramSyncLib();
 
@@ -1771,6 +1816,47 @@ test('fills missing measurement date from telegram message year when month-day i
   assert.equal(analyzed.status, 'ready');
   assert.equal(analyzed.archivedDate, '2026-05-06');
   assert.equal(analyzed.measurement?.measuredAt, '2026-05-06');
+});
+
+test('fills missing image date from visible month-day mentioned in recognition warnings', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-visible-month-day-warning',
+    messages: [
+      {
+        updateId: 520905758,
+        messageId: 563,
+        mediaGroupId: null,
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 5, 13, 1, 2, 30) / 1000,
+        photos: [{ fileId: 'file-nutrition', fileUniqueId: 'uniq-nutrition', source: 'photo' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 563,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no reliable image date',
+      confidence: 0.96,
+      warnings: ['image shows 6月13日 but no year is visible'],
+      records: {
+        meals: [{ name: '早餐', calories: 412, recommendedMin: 500, recommendedMax: 900 }],
+        totalCalories: 412,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-06-13');
+  assert.equal(analyzed.nutrition.totalCalories, 412);
 });
 
 test('uses measurement measuredAt as fallback archived date for a multi-image album', async () => {

@@ -154,6 +154,82 @@ test('telegram sync notifier reports partial failures instead of success for sto
   assert.doesNotMatch(sentMessages[0].text, /解析成功/);
 });
 
+test('telegram sync notifier sends one reply for each image business batch in a burst dispatch', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notifier-burst-'));
+  const resultPath = path.join(tempRoot, 'result.json');
+  const sentMessages = [];
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'image',
+          status: 'ready',
+          batchId: 'album-workout',
+          archivedDate: '2026-06-13',
+          messages: [
+            { chatId: 42, messageId: 6101, mediaGroupId: 'album-workout' },
+            { chatId: 42, messageId: 6102, mediaGroupId: 'album-workout' },
+          ],
+          persistenceStatus: 'stored',
+          sourceImageCount: 2,
+          recognizedImageCount: 2,
+          failedImageCount: 0,
+        },
+        {
+          kind: 'image',
+          status: 'ready',
+          batchId: 'single-6103',
+          archivedDate: '2026-06-13',
+          messages: [{ chatId: 42, messageId: 6103, mediaGroupId: null }],
+          persistenceStatus: 'stored',
+          sourceImageCount: 1,
+          recognizedImageCount: 1,
+          failedImageCount: 0,
+        },
+        {
+          kind: 'image',
+          status: 'skipped',
+          batchId: 'single-6104',
+          messages: [{ chatId: 42, messageId: 6104, mediaGroupId: null }],
+          failureCategory: 'ai_service',
+          recognitionPendingStatus: 'queued',
+          failureReason: 'HTTP 429 rate limited',
+          sourceImageCount: 1,
+          recognizedImageCount: 0,
+          failedImageCount: 1,
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  const result = await notifyTelegramSyncResultFromFile({
+    resultPath,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+      TELEGRAM_SYNC_TRANSPORT: 'webhook',
+    },
+    sendMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9905 };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(result.sent, 3);
+  assert.equal(sentMessages.length, 3);
+  assert.deepEqual(
+    sentMessages.map((message) => message.replyToMessageId),
+    [6101, 6103, 6104],
+  );
+  assert.match(sentMessages[0].text, /解析成功/);
+  assert.match(sentMessages[1].text, /解析成功/);
+  assert.match(sentMessages[2].text, /已加入重试队列/);
+});
+
 test('telegram sync notifier explains deferred database writes for pending replay image batches', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notifier-fallback-'));
   const resultPath = path.join(tempRoot, 'result.json');

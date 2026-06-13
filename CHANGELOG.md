@@ -13,8 +13,19 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 补充 Telegram 连续图片 burst dispatch 的回执回归测试，覆盖同一次 `repository_dispatch` 中包含多个图片业务 batch 时，`telegram-sync-notify` 必须按业务 batch 逐条发送 Telegram 回执，并分别回复到对应批次首条消息，防止再次出现 3 批图片只收到 2 条回执的退化。
+- 修复 Telegram 连续快速发送多批图片时，中间批次的 GitHub Actions run 可能因固定 `concurrency.group` 在进入 runner 前被自动取消，导致第二批图片看起来被跳过的问题；生产和 dev Telegram Sync workflow 现在仅对 `repository_dispatch` 使用包含 `github.run_id` 的唯一并发组，保留手动/push 同步的固定并发保护。
+- 修复 Telegram 连续发送多批图片时，相册和单图批次被拆成多个独立 GitHub `repository_dispatch`、顺序依赖外部排队的问题；Cloudflare Worker 现在按 chat 对连续图片 update 进行 3 秒突发缓冲，photo 与图片文件都会按 `update_id` 合并派发，确保一轮连续发送按 Telegram 顺序进入同步解析。
+- 修复 Telegram 连续发送图片时，单图批次因 AI 将 `detectedDate` 留空但 `warnings` 已说明截图内可见月日而被误判为无可靠日期，导致该批次不入库、首页无更新的问题；日期归档现在会从图片证据 warning 中提取单一月日并结合 Telegram 消息年份补全，同时继续跳过冲突或多日期 warning。
+
+## [1.2.8] - 2026-06-13
+
 ### Added
 
+- Telegram 图片识别新增自适应健康 APP 字段映射 v15：schema 升级到 `v2`，顶层增加 `detectedApp`，并新增 `prompts/_source/app-profiles.json` 作为 APP 别名、页面特征、字段别名、单位换算和时间优先级的可维护记忆源。
+- 新增 Apple Health 睡眠识别 fixture 与回归测试，覆盖非华为 APP 的 `detectedApp` 保留、可见核心睡眠字段提取，以及截图不可见字段保持 `null`。
 - 随想模块列表页新增长内容自动摘要：正文超过摘要阈值时只显示开头内容，并提供“查看全文”链接跳转到对应随想详情页，避免长 Markdown 附件随想撑满模块首页。
 - 锻炼随想、杂七杂八和身体反馈三个随想模块新增分页能力：每页最多展示 15 条随想，超过后自动生成 `page/2/` 等分页页，并显示上一页/下一页按钮。
 - Telegram `/随想` / `/thought` 新增 Markdown 文档附件正文能力：发送 `.md` 或 `.markdown` 文档并在 caption 写命令后，系统下载附件、按 UTF-8 去 BOM/trim，并把正文写入 `core.thought.body`；caption 仅用于命令和模块识别，附件正文优先，单个附件大小上限为 5MB。
@@ -25,11 +36,17 @@
 
 ### Changed
 
+- 图片识别 prompt 改为 APP 无关的自适应提取口径：移除华为「自由训练」专属提示，要求 AI 只提取截图真实可见数据，并通过 App Profile 将不同 APP 的字段别名映射到现有 schema 字段；batch 结果同步输出第一个非空 `detectedApp` 作为审计信息。
 - 调整首页趋势分析卡片图例样式：图例固定在每张图表卡片右上角，多指标竖向排列且不再使用底色/边框，避免横向图例挤压左上角标题与副标题。
 - 将 Telegram 图片识别备用 AI 方案文档从仓库根目录移动到 `docs/训练系统/AI_BACKUP_SOLUTION.md`，使训练系统文档集中维护。
 
+### Removed
+
+- 删除 v15 文档中的 v15-B / extraMetrics / `extra_metrics_json` 路线说明，明确当前自适应图片解析只落地现有字段映射，不扩展 core 表结构或页面展示。
+
 ### Fixed
 
+- 修复 Telegram 连续分批发送图片时，Telegram 回执显示 partial failure 但 GitHub Action summary 仍显示 `ready + stored` 的审计不一致问题：生产和 dev workflow 的 summary 现在会用 `buildTelegramSyncReport()` 规范化原始同步结果，正确展示 `taskStatus=partialFailure`、`failureDisposition=auto_retry`、图片计数和失败 message id；同步结果文件仍保留原始 `batchResults`，保证 after-action Telegram 通知可继续回复到原消息。
 - 修复睡眠看板在 Telegram 睡眠截图已解析并入库后仍显示“待比较”的问题：页面读取数据库快照时优先使用 `core.sleep` 明细作为睡眠卡片来源，只在缺少明细时才回退到 `core.training_day` 睡眠汇总，避免把 `totalSleepMinutes` 与 `nightSleepMinutes` 或日汇总重复聚合；同时加固图片识别 prompt，明确总睡眠和夜间睡眠是同一条 `records.sleep` 的两个字段、不可相加，睡眠阶段和健康指标也必须写入同一条睡眠记录。
 - 修复睡眠截图识别已拿到夜间睡眠时长但遗漏总睡眠时长时，页面总睡眠和日期卡片仍显示 `—` 的问题：Telegram 睡眠归一化会从 `nightSleepMinutes` 补齐 `totalSleepMinutes`，看板展示也兼容已入库的同类半残数据。
 - 修复 Markdown Backup 定时任务在生产库缺少新增睡眠汇总列时导出失败的问题：`export:markdown` 在严格读取数据库快照前会先执行幂等 schema preflight，只补齐缺失列，不回填或推断业务数据；preflight 或快照读取失败时仍直接失败且不会覆盖现有 Markdown 备份，避免数据丢失和不准确备份。

@@ -543,6 +543,7 @@ function normalizeRecognitionPayload(value) {
   const missingMeasurementData = value.imageType === 'measurement' && !isPlainObject(records.measurement);
   return {
     ...value,
+    detectedApp: value.detectedApp ?? null,
     confidence: missingMeasurementData
       ? Math.min(Number.isFinite(value.confidence) ? value.confidence : 0, 0.5)
       : value.confidence,

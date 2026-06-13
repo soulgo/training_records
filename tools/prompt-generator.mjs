@@ -18,9 +18,10 @@ export async function getStructuredSourceMetadata(name) {
 }
 
 export async function getRecognitionPromptMetadata() {
-  const [sharedMetadata, recognitionMetadata] = await Promise.all([
+  const [sharedMetadata, recognitionMetadata, appProfilesMetadata] = await Promise.all([
     getStructuredSourceMetadata('shared-rules'),
     getStructuredSourceMetadata('recognition-rules'),
+    getStructuredSourceMetadata('app-profiles'),
   ]);
 
   return {
@@ -30,6 +31,7 @@ export async function getRecognitionPromptMetadata() {
     sourceVersions: {
       shared: sharedMetadata.version ?? null,
       recognition: recognitionMetadata.version ?? null,
+      appProfiles: appProfilesMetadata.version ?? null,
     },
   };
 }
@@ -50,11 +52,12 @@ export async function getAnalysisPromptMetadata() {
 }
 
 export async function generateRecognitionPrompt() {
-  const [shared, recognition] = await Promise.all([
+  const [shared, recognition, appProfiles] = await Promise.all([
     loadStructuredSource('shared-rules'),
     loadStructuredSource('recognition-rules'),
+    loadStructuredSource('app-profiles'),
   ]);
-  const metadata = buildRecognitionPromptMetadata(shared.metadata, recognition.metadata);
+  const metadata = buildRecognitionPromptMetadata(shared.metadata, recognition.metadata, appProfiles.metadata);
 
   const sections = [
     renderPromptMetadataHeader(metadata),
@@ -62,6 +65,8 @@ export async function generateRecognitionPrompt() {
     '',
     renderSection(recognition.batchRules),
     renderSection(recognition.screenshotTypeRules),
+    renderSection(recognition.adaptiveExtraction),
+    renderAppProfilesMemory(appProfiles),
     renderSection(recognition.outputType),
     renderSection(recognition.dateRules),
     renderSection(shared.sharedDateRules),
@@ -156,7 +161,7 @@ export function parsePromptMetadataHeader(content) {
   }
 }
 
-function buildRecognitionPromptMetadata(sharedMetadata = {}, recognitionMetadata = {}) {
+function buildRecognitionPromptMetadata(sharedMetadata = {}, recognitionMetadata = {}, appProfilesMetadata = {}) {
   return {
     version: recognitionMetadata.version ?? sharedMetadata.version ?? '',
     schemaName: recognitionMetadata.schemaName ?? 'telegram_training_image',
@@ -164,6 +169,7 @@ function buildRecognitionPromptMetadata(sharedMetadata = {}, recognitionMetadata
     sourceVersions: {
       shared: sharedMetadata.version ?? null,
       recognition: recognitionMetadata.version ?? null,
+      appProfiles: appProfilesMetadata.version ?? null,
     },
   };
 }
@@ -187,6 +193,52 @@ function renderSection(section) {
       lines.push(rule);
     }
   }
+  lines.push('');
+  return lines.join('\n');
+}
+
+function renderAppProfilesMemory(source) {
+  if (!source?.profiles?.length) return '';
+
+  const lines = [`## ${source.title ?? 'App Profile 记忆'}`, ''];
+  for (const rule of source.rules ?? []) {
+    lines.push(rule);
+  }
+  if ((source.rules ?? []).length > 0) {
+    lines.push('');
+  }
+
+  for (const profile of source.profiles) {
+    const aliases = (profile.appAliases ?? []).slice(0, 4);
+    lines.push(`- ${profile.appName}${aliases.length > 0 ? `（别名：${aliases.join('、')}）` : ''}`);
+
+    const pageTypes = Object.entries(profile.pageTypes ?? {})
+      .map(([type, cues]) => `${type}: ${(cues ?? []).slice(0, 3).join('、')}`)
+      .filter((line) => !line.endsWith(': '));
+    if (pageTypes.length > 0) {
+      lines.push(`  - 页面特征：${pageTypes.join('；')}`);
+    }
+
+    const fieldAliases = Object.entries(profile.fieldAliases ?? {})
+      .flatMap(([target, aliasesForTarget]) =>
+        (aliasesForTarget ?? []).slice(0, 3).map((alias) => `${alias} -> ${target}`),
+      )
+      .slice(0, 12);
+    if (fieldAliases.length > 0) {
+      lines.push(`  - 字段别名：${fieldAliases.join('；')}`);
+    }
+
+    const conversions = (profile.unitConversions ?? []).slice(0, 4);
+    if (conversions.length > 0) {
+      lines.push(`  - 单位换算：${conversions.join('；')}`);
+    }
+
+    const timePriority = (profile.timePriority ?? []).slice(0, 4);
+    if (timePriority.length > 0) {
+      lines.push(`  - 时间优先级：${timePriority.join(' > ')}`);
+    }
+  }
+
   lines.push('');
   return lines.join('\n');
 }

@@ -22,6 +22,7 @@
 睡眠图片识别规则维护在：
 
 - `prompts/_source/recognition-rules.json`
+- `prompts/_source/app-profiles.json`
 - 生成产物 `prompts/telegram-training-image-recognition.md`
 
 schema 事实源是：
@@ -31,6 +32,8 @@ schema 事实源是：
 关键约束：
 
 - `imageType` 使用 `sleep`。
+- 顶层 `detectedApp` 记录截图来源 APP；无法可靠识别时填 `null`。
+- 不同 APP 的睡眠标签、时间位置和单位优先通过 `app-profiles.json` 映射到现有 `records.sleep` 字段。
 - `records.sleep` 是睡眠字段唯一载体，不要把睡眠内容写进运动、饮食或体脂字段。
 - `records.sleep` 必须包含 schema 中的全部字段；画面不可见时填 `null`。
 - `totalSleepMinutes` 和 `nightSleepMinutes` 是同一条 `records.sleep` 的两个字段，不是两条记录；不要把二者相加。
@@ -184,6 +187,7 @@ psql "$TRAINING_DB_URL" -f sql/training_records/sleep_health_metrics.sql
 ## 8. 相关文件
 
 - `prompts/_source/recognition-rules.json`
+- `prompts/_source/app-profiles.json`
 - `prompts/telegram-training-image-recognition.md`
 - `tools/telegram-recognition-schema.mjs`
 - `tools/telegram-sync-lib.mjs`

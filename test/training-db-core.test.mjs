@@ -490,6 +490,8 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls[2][0], 'BEGIN');
   assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_message/i.test(sql)));
+  const recognitionCall = calls.find(([sql]) => /insert into ingest\.telegram_recognition/i.test(sql));
+  assert.equal(JSON.parse(recognitionCall[1][2]).detectedApp, '华为健康');
   assert.ok(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into core\.measurement/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into core\.activity/i.test(sql)));

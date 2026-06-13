@@ -1,0 +1,47 @@
+{
+  "imageType": "sleep",
+  "detectedApp": "Apple Health",
+  "detectedDate": "2026-06-12",
+  "dateEvidence": "image header: Jun 12",
+  "confidence": 0.94,
+  "warnings": [],
+  "records": {
+    "measurement": null,
+    "activities": [],
+    "meals": [],
+    "totalCalories": null,
+    "details": [],
+    "dailyWorkoutSummary": null,
+    "sleep": {
+      "sleepType": "夜间睡眠",
+      "bedtime": "23:15",
+      "wakeTime": "06:45",
+      "nightSleepMinutes": 450,
+      "totalSleepMinutes": 450,
+      "napMinutes": null,
+      "deepSleepMinutes": 96,
+      "lightSleepMinutes": null,
+      "remSleepMinutes": 82,
+      "awakeMinutes": null,
+      "sleepStageText": "Deep 1 hr 36 min; REM 1 hr 22 min",
+      "sleepStageDetail": [
+        "Deep 1 hr 36 min",
+        "REM 1 hr 22 min"
+      ],
+      "sleepScore": null,
+      "sleepScorePercentile": null,
+      "deepSleepRatioPct": null,
+      "lightSleepRatioPct": null,
+      "remSleepRatioPct": null,
+      "deepSleepContinuityScore": null,
+      "wakeCount": null,
+      "breathingQualityScore": null,
+      "averageHeartRateBpm": null,
+      "hrvMs": null,
+      "averageSpo2Pct": null,
+      "averageRespiratoryRate": null,
+      "analysisText": null,
+      "suggestionText": null
+    }
+  }
+}

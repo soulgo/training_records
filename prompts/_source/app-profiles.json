@@ -1,0 +1,76 @@
+{
+  "_description": "Adaptive app-profile memory for Telegram image recognition. Keep entries short: aliases, page cues, field aliases, units, and time priorities only.",
+  "metadata": {
+    "version": "2026-06-13",
+    "schemaVersion": "v2"
+  },
+  "title": "App Profile 记忆",
+  "rules": [
+    "- App Profile 是可维护的字段映射记忆：只帮助把不同 APP 的可见标签映射到现有 schema 字段。",
+    "- 新 APP 先补 profile 和 fixture；不要为了单个 APP 改 core 表结构、页面展示或 batch 主链路。",
+    "- Profile 没覆盖的字段按通用规则判断；看不清或截图不可见时仍填 `null` 或空数组。"
+  ],
+  "profiles": [
+    {
+      "appName": "华为健康",
+      "appAliases": ["华为运动健康", "Huawei Health", "Health"],
+      "pageTypes": {
+        "measurement": ["体脂秤", "身体成分", "体重"],
+        "workout": ["运动记录", "活动记录", "活动总览"],
+        "nutrition": ["饮食记录", "热量摄入"],
+        "sleep": ["睡眠", "睡眠评分", "睡眠阶段"]
+      },
+      "fieldAliases": {
+        "records.measurement.weightKg": ["体重", "当前体重"],
+        "records.measurement.bodyFatPct": ["体脂率"],
+        "records.measurement.skeletalMuscleKg": ["骨骼肌量"],
+        "records.dailyWorkoutSummary.activityCaloriesKcal": ["活动热量", "活动消耗", "运动消耗"],
+        "records.dailyWorkoutSummary.workoutDurationMinutes": ["锻炼时长", "运动时长"],
+        "records.sleep.totalSleepMinutes": ["总睡眠", "睡眠时长"],
+        "records.sleep.nightSleepMinutes": ["夜间睡眠"],
+        "records.sleep.deepSleepMinutes": ["深睡"]
+      },
+      "unitConversions": [
+        "斤 -> kg: kg = 斤 * 0.5",
+        "千卡/kcal -> kcal",
+        "小时+分钟 -> minutes"
+      ],
+      "timePriority": [
+        "截图内完整日期时间",
+        "页面顶部主日期 + 可见开始/测量时间",
+        "睡眠时间轴中的入睡日期优先于醒来日期"
+      ]
+    },
+    {
+      "appName": "Apple Health",
+      "appAliases": ["Apple 健康", "Health", "Fitness", "Apple Fitness"],
+      "pageTypes": {
+        "measurement": ["Body Measurements", "Weight", "Body Fat Percentage"],
+        "workout": ["Activity", "Move", "Fitness", "Workout"],
+        "nutrition": ["Nutrition", "Dietary Energy"],
+        "sleep": ["Sleep", "Time Asleep", "Sleep Stages"]
+      },
+      "fieldAliases": {
+        "records.measurement.weightKg": ["Weight", "Body Weight"],
+        "records.measurement.bodyFatPct": ["Body Fat Percentage"],
+        "records.dailyWorkoutSummary.activityCaloriesKcal": ["Active Energy", "Move", "Active Calories"],
+        "records.dailyWorkoutSummary.workoutDurationMinutes": ["Exercise Minutes", "Workout Time"],
+        "records.sleep.totalSleepMinutes": ["Time Asleep", "Sleep Duration"],
+        "records.sleep.deepSleepMinutes": ["Deep", "Deep Sleep"],
+        "records.sleep.remSleepMinutes": ["REM", "REM Sleep"],
+        "records.sleep.bedtime": ["Sleep start", "Went to Bed"],
+        "records.sleep.wakeTime": ["Wake Up", "Awake at"]
+      },
+      "unitConversions": [
+        "lb -> kg: kg = lb * 0.45359237",
+        "Cal/kcal -> kcal",
+        "hr/min -> minutes"
+      ],
+      "timePriority": [
+        "截图内页面日期",
+        "睡眠图表的起止时间",
+        "Workout/Activity 详情里的开始时间"
+      ]
+    }
+  ]
+}
