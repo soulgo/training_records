@@ -1818,6 +1818,47 @@ test('fills missing measurement date from telegram message year when month-day i
   assert.equal(analyzed.measurement?.measuredAt, '2026-05-06');
 });
 
+test('fills missing image date from visible month-day mentioned in recognition warnings', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-visible-month-day-warning',
+    messages: [
+      {
+        updateId: 520905758,
+        messageId: 563,
+        mediaGroupId: null,
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 5, 13, 1, 2, 30) / 1000,
+        photos: [{ fileId: 'file-nutrition', fileUniqueId: 'uniq-nutrition', source: 'photo' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 563,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no reliable image date',
+      confidence: 0.96,
+      warnings: ['image shows 6月13日 but no year is visible'],
+      records: {
+        meals: [{ name: '早餐', calories: 412, recommendedMin: 500, recommendedMax: 900 }],
+        totalCalories: 412,
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-06-13');
+  assert.equal(analyzed.nutrition.totalCalories, 412);
+});
+
 test('uses measurement measuredAt as fallback archived date for a multi-image album', async () => {
   const lib = await importTelegramSyncLib();
 

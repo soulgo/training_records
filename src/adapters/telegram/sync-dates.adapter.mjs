@@ -21,6 +21,11 @@ export function normalizeRecognitionDate(recognition, message) {
     return evidenceDate;
   }
 
+  const warningDate = normalizeRecognitionWarningDate(recognition, messageDate.year);
+  if (warningDate) {
+    return warningDate;
+  }
+
   return null;
 }
 
@@ -56,6 +61,43 @@ function normalizeDetectedDateValue(value, messageYear) {
   }
 
   return null;
+}
+
+function normalizeRecognitionWarningDate(recognition, messageYear) {
+  if (!Array.isArray(recognition.warnings) || !Number.isInteger(messageYear)) {
+    return null;
+  }
+
+  const dates = new Set();
+  for (const warning of recognition.warnings) {
+    const text = String(warning ?? '').trim();
+    if (!shouldParseWarningDate(text)) {
+      continue;
+    }
+    const date = normalizeDetectedDateValue(text, messageYear);
+    if (date) {
+      dates.add(date);
+    }
+  }
+
+  return dates.size === 1 ? [...dates][0] : null;
+}
+
+function shouldParseWarningDate(text) {
+  if (!text) {
+    return false;
+  }
+
+  if (/conflict|conflicting|ambiguous|multiple dates|多个.*日期|多日期|日期冲突|无法确定/.test(text)) {
+    return false;
+  }
+
+  const imageEvidence = /\b(?:image|screenshot|ocr|header|screen)\b/i.test(text) || /截图|画面|图片/.test(text);
+  if (!imageEvidence) {
+    return false;
+  }
+
+  return shouldParseDateEvidence(text);
 }
 
 export function collectFilenameDates(batch) {

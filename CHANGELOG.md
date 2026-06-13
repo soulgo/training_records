@@ -13,6 +13,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复 Telegram 连续发送图片时，单图批次因 AI 将 `detectedDate` 留空但 `warnings` 已说明截图内可见月日而被误判为无可靠日期，导致该批次不入库、首页无更新的问题；日期归档现在会从图片证据 warning 中提取单一月日并结合 Telegram 消息年份补全，同时继续跳过冲突或多日期 warning。
+
 ## [1.2.8] - 2026-06-13
 
 ### Added
