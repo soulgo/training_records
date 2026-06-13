@@ -13,6 +13,8 @@
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-06-13
+
 ### Added
 
 - Telegram 图片识别新增自适应健康 APP 字段映射 v15：schema 升级到 `v2`，顶层增加 `detectedApp`，并新增 `prompts/_source/app-profiles.json` 作为 APP 别名、页面特征、字段别名、单位换算和时间优先级的可维护记忆源。
@@ -37,6 +39,7 @@
 
 ### Fixed
 
+- 修复 Telegram 连续分批发送图片时，Telegram 回执显示 partial failure 但 GitHub Action summary 仍显示 `ready + stored` 的审计不一致问题：生产和 dev workflow 的 summary 现在会用 `buildTelegramSyncReport()` 规范化原始同步结果，正确展示 `taskStatus=partialFailure`、`failureDisposition=auto_retry`、图片计数和失败 message id；同步结果文件仍保留原始 `batchResults`，保证 after-action Telegram 通知可继续回复到原消息。
 - 修复睡眠看板在 Telegram 睡眠截图已解析并入库后仍显示“待比较”的问题：页面读取数据库快照时优先使用 `core.sleep` 明细作为睡眠卡片来源，只在缺少明细时才回退到 `core.training_day` 睡眠汇总，避免把 `totalSleepMinutes` 与 `nightSleepMinutes` 或日汇总重复聚合；同时加固图片识别 prompt，明确总睡眠和夜间睡眠是同一条 `records.sleep` 的两个字段、不可相加，睡眠阶段和健康指标也必须写入同一条睡眠记录。
 - 修复睡眠截图识别已拿到夜间睡眠时长但遗漏总睡眠时长时，页面总睡眠和日期卡片仍显示 `—` 的问题：Telegram 睡眠归一化会从 `nightSleepMinutes` 补齐 `totalSleepMinutes`，看板展示也兼容已入库的同类半残数据。
 - 修复 Markdown Backup 定时任务在生产库缺少新增睡眠汇总列时导出失败的问题：`export:markdown` 在严格读取数据库快照前会先执行幂等 schema preflight，只补齐缺失列，不回填或推断业务数据；preflight 或快照读取失败时仍直接失败且不会覆盖现有 Markdown 备份，避免数据丢失和不准确备份。

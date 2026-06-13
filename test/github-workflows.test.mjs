@@ -332,6 +332,64 @@ test('telegram-sync workflows treat stored thought batches as database content c
   }
 });
 
+test('telegram-sync workflow summary normalizes partial failure task status from raw result files', async () => {
+  const workflows = [
+    await readWorkflow('.github/workflows/telegram-sync.yml'),
+    await readWorkflow('.github/workflows/telegram-sync-dev.yml'),
+  ];
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-workflow-summary-'));
+  const resultPath = path.join(tempRoot, 'telegram-sync-result.json');
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'image',
+          status: 'ready',
+          batchId: 'album-partial-summary',
+          archivedDate: '2026-06-13',
+          persistenceStatus: 'stored',
+          partialFailure: true,
+          failureCategory: 'ai_service',
+          failureReason: 'telegram_training_image returned invalid JSON',
+          sourceImageCount: 2,
+          recognizedImageCount: 1,
+          failedImageCount: 1,
+          messages: [
+            { chatId: 42, messageId: 6101, updateId: 9101, mediaGroupId: 'album-partial-summary' },
+            { chatId: 42, messageId: 6102, updateId: 9102, mediaGroupId: 'album-partial-summary' },
+          ],
+          recognitionErrors: [
+            {
+              messageId: 6102,
+              error: 'telegram_training_image returned invalid JSON',
+              failureCategory: 'ai_service',
+            },
+          ],
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  for (const workflow of workflows) {
+    const summaryScript = extractTelegramSyncSummaryScript(workflow);
+    const output = execFileSync(process.execPath, ['-e', summaryScript], {
+      encoding: 'utf8',
+      cwd: rootDir,
+      env: {
+        ...process.env,
+        TELEGRAM_SYNC_RESULT_PATH: resultPath,
+      },
+    });
+
+    assert.match(output, /\| album-partial-summary \| partialFailure \| stored \| 2026-06-13 \| 2\/1\/1 \|/);
+    assert.match(output, /\| auto_retry \| 6102 \|/);
+    assert.doesNotMatch(output, /\| album-partial-summary \| ready \| stored/);
+  }
+});
+
 test('markdown backup workflow exports database snapshots behind GitHub variable gates', async () => {
   const workflow = await readWorkflow('.github/workflows/markdown-backup.yml');
 
@@ -469,5 +527,11 @@ function escapeRegExp(value) {
 function extractDatabaseContentDetectionScript(workflow) {
   const match = workflow.match(/node <<'NODE' >> "\$GITHUB_OUTPUT"\n([\s\S]*?readyStored[\s\S]*?)\n\s*NODE/);
   assert.ok(match, 'missing database content detection script');
+  return match[1];
+}
+
+function extractTelegramSyncSummaryScript(workflow) {
+  const match = workflow.match(/node <<'NODE' >> "\$GITHUB_STEP_SUMMARY"\n([\s\S]*?)\n\s*NODE/);
+  assert.ok(match, 'missing Telegram sync summary script');
   return match[1];
 }
