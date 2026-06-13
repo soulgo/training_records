@@ -22,6 +22,9 @@ test('exportDerivedTrainingMarkdown still uses database when telegram fallback b
 
   await exportDerivedTrainingMarkdown({
     rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'false',
+    },
     buildTrainingSnapshot: async ({ source }) => {
       observedSources.push(source);
       return {
