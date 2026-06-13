@@ -14,13 +14,14 @@
 8. [Telegram 图片识别 Prompt 维护](训练系统/Telegram图片识别Prompt维护.md)
 9. [GitHub 与 Cloudflare 配置](部署维护/GitHub与Cloudflare配置.md)
 10. [日常维护手册](部署维护/日常维护手册.md)
-11. [Dev 环境搭建步骤](dev_env/dev_environment_implementation.md)
-12. [常见问题排查](问题排查/常见问题排查.md)
-13. [V10 数据库唯一事实源与 Markdown 备份方案](优化重构/数据库唯一事实源与 markdown 备份_v10/数据库唯一事实源与Markdown备份方案.md)
-14. [V11 落地 checklist](优化重构/Telegram同步PostgreSQL提速与OpenAI兼容API_v11/checklist.md)
-15. [V12 MCP 删除与数据库结构对齐](优化重构/MCP删除与数据库结构对齐_v12/README.md)
-16. [V13 数据统一与六边形架构重构](优化重构/数据统一与六边形架构重构_v13/README.md)
-17. [V15 自适应图片解析入库](优化重构/自适应图片解析入库_v15/README.md)
+11. [Dev 合并 Main 操作手册](部署维护/dev合并main/README.md)
+12. [Dev 环境搭建步骤](dev_env/dev_environment_implementation.md)
+13. [常见问题排查](问题排查/常见问题排查.md)
+14. [V10 数据库唯一事实源与 Markdown 备份方案](优化重构/数据库唯一事实源与 markdown 备份_v10/数据库唯一事实源与Markdown备份方案.md)
+15. [V11 落地 checklist](优化重构/Telegram同步PostgreSQL提速与OpenAI兼容API_v11/checklist.md)
+16. [V12 MCP 删除与数据库结构对齐](优化重构/MCP删除与数据库结构对齐_v12/README.md)
+17. [V13 数据统一与六边形架构重构](优化重构/数据统一与六边形架构重构_v13/README.md)
+18. [V15 自适应图片解析入库](优化重构/自适应图片解析入库_v15/README.md)
 
 ## 文档目录
 

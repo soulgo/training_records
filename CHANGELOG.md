@@ -13,6 +13,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增 Dev 合并 Main 操作手册，明确 `dev` 合入 `main` 时的允许合并范围、生产数据保护路径、`source/_data/**` 派生数据边界、严格恢复脚本、测试清理和推送后 Actions 验证流程，方便后续快速执行“只合代码、不合 dev 数据”的发布合并。
+
 ### Fixed
 
 - 补充 Telegram 连续图片 burst dispatch 的回执回归测试，覆盖同一次 `repository_dispatch` 中包含多个图片业务 batch 时，`telegram-sync-notify` 必须按业务 batch 逐条发送 Telegram 回执，并分别回复到对应批次首条消息，防止再次出现 3 批图片只收到 2 条回执的退化。
