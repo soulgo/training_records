@@ -5,7 +5,8 @@
 图片识别 prompt 的**单一事实来源**是结构化源文件：
 
 - `prompts/_source/shared-rules.json` — 共享规则（空值约定、置信度、日期共享规则）
-- `prompts/_source/recognition-rules.json` — 识别特有规则（输出类型、日期、体脂秤、运动、饮食、睡眠）
+- `prompts/_source/recognition-rules.json` — 识别特有规则（自适应提取、输出类型、日期、体脂秤、运动、饮食、睡眠）
+- `prompts/_source/app-profiles.json` — APP 识别记忆（APP 别名、页面特征、字段别名、单位换算、时间优先级）
 
 运行时 prompt `prompts/telegram-training-image-recognition.md` 由生成器从结构化源编译产出：
 
@@ -26,6 +27,8 @@ node tools/prompt-generator.mjs
 - **先改结构化源，再运行生成器，最后用测试验证。不要直接手写成品 prompt。**
 - 日期、单位、空值和餐次口径要写成明确规则，避免让模型自由猜。
 - schema 字段名不要在 prompt 里改名；字段结构由 `buildRecognitionSchema()` 约束。
+- 当前图片识别 schema 版本是 `v2`，顶层必须包含 `detectedApp`；无法可靠识别 APP 来源时填 `null`。
+- 适配新健康 APP 时，优先补 `prompts/_source/app-profiles.json` 和 `test/fixtures/telegram-recognition/` 样例；不要为了单个 APP 改数据库表或页面展示。
 - 新增识别字段时，需要同步修改 schema、`analyzeTelegramBatch()`、数据库/Markdown 写入逻辑和测试。
 - 如果新增的是睡眠识别字段，还要同步更新 `core.sleep`、`archive.training_sleep` 和 `archive.training_day` 的睡眠汇总列。
 - 睡眠截图的时间语义要和程序侧一致：AI 负责提取真实入睡/起床时间，程序负责把醒来时间前一天作为睡眠归档日。
@@ -40,6 +43,8 @@ node tools/prompt-generator.mjs
 | `nutrition` | 饮食、餐次、总摄入截图 | `records.meals`、`records.totalCalories`、`records.details` |
 | `sleep` | 睡眠时长、入睡/起床、睡眠阶段、睡眠健康指标截图 | `records.sleep` |
 | `unknown` | 非上述业务截图或无法可靠识别 | 空 records、低置信或 warning |
+
+顶层 `detectedApp` 用于记录截图来源 APP，例如 `华为健康`、`Apple Health`、`Keep`；它只进入识别 JSON 和 batch 审计信息，不写入 core 固定列，也不改变页面展示。看不出来源时填 `null`。
 
 睡眠字段维护时要额外注意：
 

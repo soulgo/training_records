@@ -7,7 +7,14 @@ import {
   extractAiResponseContent,
   parseAiJsonContent,
 } from '../src/core/ai/schema-validator.mjs';
-import { buildRecognitionSchema } from '../tools/telegram-recognition-schema.mjs';
+import {
+  buildRecognitionSchema,
+  RECOGNITION_SCHEMA_VERSION,
+} from '../tools/telegram-recognition-schema.mjs';
+
+test('recognition schema version is bumped for detectedApp contract changes', () => {
+  assert.equal(RECOGNITION_SCHEMA_VERSION, 'v2');
+});
 
 test('extractAiResponseContent throws AiProviderError when content is empty', () => {
   assert.throws(
@@ -46,6 +53,7 @@ test('parseAiJsonContent throws AiSchemaError for missing required fields', () =
       parseAiJsonContent(
         JSON.stringify({
           imageType: 'measurement',
+          detectedApp: null,
           detectedDate: null,
           dateEvidence: 'no reliable image date',
           confidence: 0.9,
@@ -60,13 +68,45 @@ test('parseAiJsonContent throws AiSchemaError for missing required fields', () =
           },
         }),
         buildRecognitionSchema(),
-        { schemaName: 'telegram_training_image', schemaVersion: 'v1' },
+        { schemaName: 'telegram_training_image', schemaVersion: RECOGNITION_SCHEMA_VERSION },
       ),
     (error) => {
       assert.ok(error instanceof AiSchemaError);
       assert.equal(error.schemaName, 'telegram_training_image');
-      assert.equal(error.schemaVersion, 'v1');
+      assert.equal(error.schemaVersion, RECOGNITION_SCHEMA_VERSION);
       assert.match(error.message, /warnings/);
+      return true;
+    },
+  );
+});
+
+test('parseAiJsonContent requires detectedApp in recognition payloads', () => {
+  assert.throws(
+    () =>
+      parseAiJsonContent(
+        JSON.stringify({
+          imageType: 'measurement',
+          detectedDate: null,
+          dateEvidence: 'no reliable image date',
+          confidence: 0.9,
+          warnings: [],
+          records: {
+            measurement: null,
+            activities: [],
+            meals: [],
+            totalCalories: null,
+            details: [],
+            dailyWorkoutSummary: null,
+            sleep: null,
+          },
+        }),
+        buildRecognitionSchema(),
+        { schemaName: 'telegram_training_image', schemaVersion: RECOGNITION_SCHEMA_VERSION },
+      ),
+    (error) => {
+      assert.ok(error instanceof AiSchemaError);
+      assert.equal(error.schemaVersion, RECOGNITION_SCHEMA_VERSION);
+      assert.match(error.message, /detectedApp/);
       return true;
     },
   );
@@ -75,6 +115,7 @@ test('parseAiJsonContent throws AiSchemaError for missing required fields', () =
 test('parseAiJsonContent returns a valid recognition payload unchanged', () => {
   const payload = {
     imageType: 'workout',
+    detectedApp: 'Apple Health',
     detectedDate: null,
     dateEvidence: 'no reliable image date',
     confidence: 0.92,
@@ -129,7 +170,7 @@ test('parseAiJsonContent returns a valid recognition payload unchanged', () => {
 
   const parsed = parseAiJsonContent(JSON.stringify(payload), buildRecognitionSchema(), {
     schemaName: 'telegram_training_image',
-    schemaVersion: 'v1',
+    schemaVersion: RECOGNITION_SCHEMA_VERSION,
   });
 
   assert.deepEqual(parsed, payload);

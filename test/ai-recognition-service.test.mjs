@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import {
   buildRecognitionCacheKey,
@@ -10,8 +11,13 @@ import {
 const promptMetadata = {
   version: '2026-05-24',
   schemaName: 'telegram_training_image',
-  schemaVersion: 'v1',
+  schemaVersion: 'v2',
 };
+
+async function loadRecognitionFixture(name) {
+  const fixtureUrl = new URL(`./fixtures/telegram-recognition/${name}.json`, import.meta.url);
+  return JSON.parse(await readFile(fixtureUrl, 'utf8'));
+}
 
 test('recognition cache key includes file id, prompt version, schema version, and model', () => {
   const key = buildRecognitionCacheKey({
@@ -85,10 +91,57 @@ test('recognizeTelegramImageMessage skips cache when disabled and keeps runtime 
   assert.equal(requestCount, 1);
   assert.equal(result.cacheStatus, 'disabled');
   assert.equal(result.promptVersion, '2026-05-24');
-  assert.equal(result.schemaVersion, 'v1');
+  assert.equal(result.schemaVersion, 'v2');
   assert.equal(result.model, 'gpt-test');
   assert.equal(result.messageId, 77);
   assert.equal(result.imageType, 'workout');
+  assert.equal(result.detectedApp, null);
+});
+
+test('recognizeTelegramImageMessage preserves detectedApp and visible non-Huawei core fields', async () => {
+  const fixture = await loadRecognitionFixture('apple-health-sleep-visible-core-fields');
+
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      env: { model: 'gpt-test' },
+      async requestChatCompletion() {
+        return {
+          ok: true,
+          async json() {
+            return {
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify(fixture),
+                  },
+                },
+              ],
+            };
+          },
+        };
+      },
+    },
+    message: {
+      messageId: 81,
+      caption: '',
+      text: '',
+      photos: [{ fileUniqueId: 'apple-health-sleep-file' }],
+    },
+    imageUrl: 'https://example.com/apple-health-sleep.jpg',
+    systemPrompt: 'system prompt',
+    promptMetadata,
+    env: {
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
+    },
+  });
+
+  assert.equal(result.detectedApp, 'Apple Health');
+  assert.equal(result.records.sleep.bedtime, '23:15');
+  assert.equal(result.records.sleep.wakeTime, '06:45');
+  assert.equal(result.records.sleep.totalSleepMinutes, 450);
+  assert.equal(result.records.sleep.sleepScore, null);
+  assert.equal(result.records.sleep.averageHeartRateBpm, null);
 });
 
 test('recognizeTelegramImageMessage normalizes incomplete Huawei sleep payloads before schema validation', async () => {
@@ -172,6 +225,7 @@ test('recognizeTelegramImageMessage hits cache when versioned metadata matches',
     dateEvidence: 'image header: 2026-05-24',
     confidence: 0.99,
     warnings: [],
+    detectedApp: '华为健康',
     records: {
       measurement: null,
       activities: [],
@@ -204,9 +258,9 @@ test('recognizeTelegramImageMessage hits cache when versioned metadata matches',
       TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true',
     },
     readRecognitionCache: async ({ cacheKey, promptVersion, schemaVersion, model }) => {
-      assert.equal(cacheKey, 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v1:model:gpt-test');
+      assert.equal(cacheKey, 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:model:gpt-test');
       assert.equal(promptVersion, '2026-05-24');
-      assert.equal(schemaVersion, 'v1');
+      assert.equal(schemaVersion, 'v2');
       assert.equal(model, 'gpt-test');
       return cached;
     },
@@ -214,8 +268,9 @@ test('recognizeTelegramImageMessage hits cache when versioned metadata matches',
 
   assert.equal(requestCount, 0);
   assert.equal(result.cacheStatus, 'hit');
-  assert.equal(result.cacheKey, 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v1:model:gpt-test');
+  assert.equal(result.cacheKey, 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:model:gpt-test');
   assert.equal(result.imageType, 'measurement');
+  assert.equal(result.detectedApp, '华为健康');
   assert.equal(result.messageId, 78);
   assert.equal(result.promptVersion, undefined);
 });
@@ -279,7 +334,7 @@ test('recognizeTelegramImageMessage misses cache when prompt version changes', a
   assert.equal(requestCount, 1);
   assert.equal(result.cacheStatus, 'miss');
   assert.equal(result.promptVersion, '2026-05-25');
-  assert.equal(result.schemaVersion, 'v1');
+  assert.equal(result.schemaVersion, 'v2');
 });
 
 test('recognizeTelegramImageMessage treats cache read failures as cache misses', async () => {

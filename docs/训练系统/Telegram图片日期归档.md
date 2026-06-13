@@ -44,7 +44,7 @@
 - 活动总览这类页面顶部的大号日期，如果可靠，属于截图画面内可见日期。
 - 如果截图画面里只出现 `5月22日` 这类月日，可以用 Telegram 消息年份补全；Telegram 消息时间只用于补全年份，不能单独当作图片日期。
 
-这些规则写在 `prompts/telegram-training-image-recognition.md`，事实源是 `prompts/_source/recognition-rules.json`。
+这些规则写在 `prompts/telegram-training-image-recognition.md`，事实源是 `prompts/_source/recognition-rules.json`；不同 APP 的时间位置和字段别名记忆维护在 `prompts/_source/app-profiles.json`。
 
 ## 3. Telegram `photo` 和 `document` 的差异
 
@@ -258,6 +258,7 @@
 如果将来调整日期归档规则，至少要一起检查：
 
 - `prompts/telegram-training-image-recognition.md`
+- `prompts/_source/app-profiles.json`
 - `tools/telegram-sync-lib.mjs`
 - `tools/telegram-sync-dates.mjs`
 - `tools/telegram-sync.mjs`

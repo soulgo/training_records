@@ -15,6 +15,8 @@
 
 ### Added
 
+- Telegram 图片识别新增自适应健康 APP 字段映射 v15：schema 升级到 `v2`，顶层增加 `detectedApp`，并新增 `prompts/_source/app-profiles.json` 作为 APP 别名、页面特征、字段别名、单位换算和时间优先级的可维护记忆源。
+- 新增 Apple Health 睡眠识别 fixture 与回归测试，覆盖非华为 APP 的 `detectedApp` 保留、可见核心睡眠字段提取，以及截图不可见字段保持 `null`。
 - 随想模块列表页新增长内容自动摘要：正文超过摘要阈值时只显示开头内容，并提供“查看全文”链接跳转到对应随想详情页，避免长 Markdown 附件随想撑满模块首页。
 - 锻炼随想、杂七杂八和身体反馈三个随想模块新增分页能力：每页最多展示 15 条随想，超过后自动生成 `page/2/` 等分页页，并显示上一页/下一页按钮。
 - Telegram `/随想` / `/thought` 新增 Markdown 文档附件正文能力：发送 `.md` 或 `.markdown` 文档并在 caption 写命令后，系统下载附件、按 UTF-8 去 BOM/trim，并把正文写入 `core.thought.body`；caption 仅用于命令和模块识别，附件正文优先，单个附件大小上限为 5MB。
@@ -25,8 +27,13 @@
 
 ### Changed
 
+- 图片识别 prompt 改为 APP 无关的自适应提取口径：移除华为「自由训练」专属提示，要求 AI 只提取截图真实可见数据，并通过 App Profile 将不同 APP 的字段别名映射到现有 schema 字段；batch 结果同步输出第一个非空 `detectedApp` 作为审计信息。
 - 调整首页趋势分析卡片图例样式：图例固定在每张图表卡片右上角，多指标竖向排列且不再使用底色/边框，避免横向图例挤压左上角标题与副标题。
 - 将 Telegram 图片识别备用 AI 方案文档从仓库根目录移动到 `docs/训练系统/AI_BACKUP_SOLUTION.md`，使训练系统文档集中维护。
+
+### Removed
+
+- 删除 v15 文档中的 v15-B / extraMetrics / `extra_metrics_json` 路线说明，明确当前自适应图片解析只落地现有字段映射，不扩展 core 表结构或页面展示。
 
 ### Fixed
 

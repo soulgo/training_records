@@ -47,6 +47,7 @@ export const normalizedBatch = {
     {
       messageId: 71,
       imageType: 'workout',
+      detectedApp: '华为健康',
       detectedDate: '2026-05-09',
       confidence: 0.97,
     },

@@ -2,9 +2,9 @@
   "_description": "Image recognition prompt rules. Edit here, then run `node tools/prompt-generator.mjs` to regenerate prompts/telegram-training-image-recognition.md.",
 
   "metadata": {
-    "version": "2026-06-05",
+    "version": "2026-06-13",
     "schemaName": "telegram_training_image",
-    "schemaVersion": "v1"
+    "schemaVersion": "v2"
   },
 
   "role": "你是训练记录截图结构化助手。只能输出符合 schema 的 JSON，不要输出解释、Markdown 或额外字段。",
@@ -25,6 +25,17 @@
       "- 训练记录 / 活动列表截图：只输出 `records.activities` 活动明细（每条活动的时间、类型、详情），不要输出 `records.dailyWorkoutSummary`。",
       "- 饮食记录截图：如果画面没有日期，`detectedDate` 必须为 `null`，不要从 Telegram 时间、caption 或当前日期猜测。",
       "- 体脂秤截图：如果画面没有日期和测量时间，`detectedDate` 必须为 `null` 且 `records.measurement.measuredAt` 必须为 `null`。归档日期由程序后处理决定，不由 AI 伪造。"
+    ]
+  },
+
+  "adaptiveExtraction": {
+    "title": "自适应提取规则",
+    "rules": [
+      "- 先识别截图来自哪个健康 APP，输出到 `detectedApp`；无法可靠识别来源时填 `null`。",
+      "- v15-A：优先把截图上真实可见的数据映射到现有核心 schema 字段，不新增 core 字段，不改变页面展示口径。",
+      "- v15-A：如果现有字段在截图中看不出来，填 `null` 或空数组，不要臆造、不要从其他图片推断。",
+      "- v15-A：如果某个 APP 的指标与核心字段语义相同但名称不同，使用 App Profile 的字段别名、单位换算和时间优先级映射到核心字段。",
+      "- 字段映射只能基于截图可见标签、数值、单位、页面标题和时间上下文；不要根据 APP 常识补全截图没有显示的数据。"
     ]
   },
 
@@ -71,7 +82,8 @@
       "- 体重、骨骼肌量、骨盐量、去脂体重统一输出 kg 数值。",
       "- 如果截图单位是斤，换算为 kg：`kg = 斤 * 0.5`。",
       "- 百分比字段只输出数字，不带 `%`。",
-      "- 无法可靠识别的字段填 `null`，不要臆造。"
+      "- 无法可靠识别的字段填 `null`，不要臆造。",
+      "- 只提取截图真实可见的 measurement 数据；字段别名和单位换算可参考 App Profile。"
     ]
   },
 
@@ -80,7 +92,7 @@
     "rules": [
       "活动明细写入 `records.activities`：",
       "- `time`：活动开始时间，优先 `HH:mm`；如果图片只给日期加时间，可保留可解析文本",
-      "- `type`：保留截图原始或明显活动类型；华为「自由训练」可写 `自由训练`，后续系统会归一为燃脂训练",
+      "- `type`：保留截图原始或明显活动类型名称；后续系统会做归一化处理",
       "- `detail`：把时长、消耗、距离、均速、心率等核心信息浓缩成一行中文",
       "",
       "当日活动总览写入 `records.dailyWorkoutSummary`：",
@@ -88,7 +100,8 @@
       "- `workoutDurationMinutes`：锻炼时长，单位分钟",
       "- `activeHours`：活动小时数，单位小时",
       "",
-      "如果同一张图既有总览又有明细，两部分都提取。不要把日总览拆成一条活动。"
+      "如果同一张图既有总览又有明细，两部分都提取。不要把日总览拆成一条活动。",
+      "只提取截图真实可见的 workout 数据；字段别名、活动热量/时长单位和时间优先级可参考 App Profile。"
     ]
   },
 
@@ -103,7 +116,8 @@
       "其他规则：",
       "- `records.totalCalories` 写当日截图内已记录总热量；没有就填 `null`。",
       "- `records.details` 写食物明细、份量、单项热量等可读文本，去掉明显重复项。",
-      "- 如果一个食物名里包含餐次，例如 `凉粉（早餐，1碗）`，保留原名，后续系统会推断餐次。"
+      "- 如果一个食物名里包含餐次，例如 `凉粉（早餐，1碗）`，保留原名，后续系统会推断餐次。",
+      "- 只提取截图真实可见的 nutrition 数据；没有可靠建议范围时填 `null`。"
     ]
   },
 
@@ -124,7 +138,8 @@
       "如果睡眠跨天但画面明确显示入睡月日和醒来月日，这不是日期冲突；使用入睡月日结合 Telegram 消息年份补全年份。",
       "如果只有页面顶部醒来日期，但时间轴明确显示前一天入睡日期，优先使用时间轴的入睡日期。",
       "提取睡眠健康指标：`sleepScore`、`sleepScorePercentile`、`deepSleepRatioPct`、`lightSleepRatioPct`、`remSleepRatioPct`、`deepSleepContinuityScore`、`wakeCount`、`breathingQualityScore`、`averageHeartRateBpm`、`hrvMs`、`averageSpo2Pct`、`averageRespiratoryRate`。",
-      "截图底部的睡眠解读写入 `analysisText`，建议内容写入 `suggestionText`；没有则填 `null`。"
+      "截图底部的睡眠解读写入 `analysisText`，建议内容写入 `suggestionText`；没有则填 `null`。",
+      "只提取截图真实可见的 sleep 数据；App 未展示的睡眠评分、心率、血氧等字段必须填 `null`。"
     ]
   }
 }

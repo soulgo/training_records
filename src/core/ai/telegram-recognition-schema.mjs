@@ -1,15 +1,18 @@
 export const RECOGNITION_SCHEMA_NAME = 'telegram_training_image';
-export const RECOGNITION_SCHEMA_VERSION = 'v1';
+export const RECOGNITION_SCHEMA_VERSION = 'v2';
 
 export function buildRecognitionSchema() {
   return {
     type: 'object',
     additionalProperties: false,
-    required: ['imageType', 'detectedDate', 'dateEvidence', 'records', 'confidence', 'warnings'],
+    required: ['imageType', 'detectedApp', 'detectedDate', 'dateEvidence', 'records', 'confidence', 'warnings'],
     properties: {
       imageType: {
         type: 'string',
         enum: ['measurement', 'workout', 'nutrition', 'sleep', 'unknown'],
+      },
+      detectedApp: {
+        type: ['string', 'null'],
       },
       detectedDate: {
         type: ['string', 'null'],
