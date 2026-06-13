@@ -21,7 +21,7 @@ repository_dispatch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;s
         <mxCell id="ext-cf" value="Cloudflare
 Worker / Durable Object" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#000000;strokeWidth=1" vertex="1" parent="g-ext"><mxGeometry x="1200" y="55" width="260" height="70" as="geometry"/></mxCell>
         <mxCell id="ext-domain" value="soulgo.chat
-DNS/CDN：待人工确认" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#000000;strokeWidth=1;dashed=1" vertex="1" parent="g-ext"><mxGeometry x="1500" y="55" width="260" height="70" as="geometry"/></mxCell>
+Cloudflare CDN 代理（橙云）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-ext"><mxGeometry x="1500" y="55" width="260" height="70" as="geometry"/></mxCell>
         <mxCell id="auto-cf-worker" value="cloudflare/telegram-sync-dispatch-worker.mjs
 校验 secret / 相册聚合 / dispatch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-auto"><mxGeometry x="40" y="245" width="330" height="90" as="geometry"/></mxCell>
         <mxCell id="auto-telegram-sync" value=".github/workflows/telegram-sync.yml
@@ -87,7 +87,7 @@ path: ./public" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;stroke
         <mxCell id="deploy-pages" value="actions/deploy-pages@v4
 GitHub Pages" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-deploy"><mxGeometry x="1710" y="1040" width="260" height="70" as="geometry"/></mxCell>
         <mxCell id="deploy-cname" value="source/CNAME -&gt; soulgo.chat
-GitHub Pages 设置：待人工确认" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=1;dashed=1" vertex="1" parent="g-deploy"><mxGeometry x="1500" y="1145" width="360" height="70" as="geometry"/></mxCell>
+GitHub Pages 自定义域名已启用" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=1" vertex="1" parent="g-deploy"><mxGeometry x="1500" y="1145" width="360" height="70" as="geometry"/></mxCell>
         <mxCell id="e1" value="webhook" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="ext-telegram" target="auto-cf-worker"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="e2" value="dispatch" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="auto-cf-worker" target="ext-github"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="e3" value="telegram_update" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="ext-github" target="auto-telegram-sync"><mxGeometry relative="1" as="geometry"/></mxCell>

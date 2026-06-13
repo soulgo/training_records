@@ -48,9 +48,10 @@ upload-pages-artifact" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7
 actions/deploy-pages@v4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=3" vertex="1" parent="d-runtime"><mxGeometry x="1550" y="470" width="270" height="70" as="geometry"/></mxCell>
         <mxCell id="d-domain" value="soulgo.chat
 source/CNAME 已确认
-DNS/CDN：待人工确认" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=1;dashed=1" vertex="1" parent="d-runtime"><mxGeometry x="1550" y="610" width="310" height="90" as="geometry"/></mxCell>
-        <mxCell id="d-cdn" value="Cloudflare DNS/CDN
-是否托管域名：待人工确认" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=1;dashed=1" vertex="1" parent="d-runtime"><mxGeometry x="1210" y="610" width="300" height="90" as="geometry"/></mxCell>
+Cloudflare CDN 代理（橙云）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=3" vertex="1" parent="d-runtime"><mxGeometry x="1550" y="610" width="310" height="90" as="geometry"/></mxCell>
+        <mxCell id="d-cdn" value="Cloudflare CDN
+CNAME → soulgo.github.io
+橙云代理 + Cache Rules + Always Online" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=3" vertex="1" parent="d-runtime"><mxGeometry x="1210" y="610" width="300" height="90" as="geometry"/></mxCell>
         <mxCell id="d-pg" value="PostgreSQL
 core / ingest / archive
 实例状态：待人工确认" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontColor=#000000;strokeWidth=1;dashed=1" vertex="1" parent="d-runtime"><mxGeometry x="710" y="610" width="330" height="90" as="geometry"/></mxCell>
@@ -69,7 +70,7 @@ AI_* TELEGRAM_* TRAINING_DB_* CLOUDFLARE_*
         <mxCell id="de10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="d-public" target="d-artifact"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="de11" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="d-artifact" target="d-pages"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="de12" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="d-pages" target="d-domain"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="de13" value="待人工确认" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666;dashed=1" edge="1" parent="1" source="d-cdn" target="d-domain"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="de13" value="CDN 代理" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="d-cdn" target="d-domain"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="de14" value="webhook" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="d-telegram" target="d-cf-worker"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="de15" value="media_group buffer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="d-cf-worker" target="d-do"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="de16" value="dispatch" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="d-cf-worker" target="d-github-api"><mxGeometry relative="1" as="geometry"/></mxCell>

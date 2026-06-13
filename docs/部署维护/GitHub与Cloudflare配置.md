@@ -545,7 +545,64 @@ Invoke-RestMethod `
 - `wrangler.toml` 推送到 GitHub 后，只有 `deploy-cloudflare-worker.yml` 成功运行，Cloudflare Worker 里的 Durable Object binding 才会真正更新
 - GitHub Secrets 修改不会触发 workflow；更新 `TELEGRAM_BOT_TOKEN` 后，`refresh-telegram-webhook.yml` 会在 6 小时内自动刷新，也可以手动运行立即生效
 
-## 8. SQL 文件约定
+## 8. Cloudflare CDN 代理（站点加速）
+
+`soulgo.chat` 已通过 Cloudflare 代理（橙云）加速 GitHub Pages 站点访问。DNS 托管在 Cloudflare（NS: jason/gemma），CNAME 指向 `soulgo.github.io` 并开启代理。
+
+详细方案见 [Cloudflare CDN 代理加速 v17](../优化重构/Cloudflare_CDN代理加速_v17/re_optimization_v17.md)。
+
+### DNS 配置
+
+| 类型 | 名称 | 目标 | 代理 | TTL |
+|------|------|------|------|-----|
+| CNAME | `@` | `soulgo.github.io` | **已代理（橙云）** | Auto |
+
+- SSL/TLS 模式：**Full (Strict)**（GitHub Pages 自带 Let's Encrypt 证书）
+- Always Use HTTPS：开启
+
+### 性能开关
+
+| 功能 | 路径 | 状态 |
+|------|------|------|
+| Auto Minify | Speed → Optimization | JS / CSS / HTML 已开启 |
+| Brotli | Speed → Optimization | 已开启 |
+| HTTP/3 (QUIC) | Network | 已开启 |
+| 0-RTT Connection Resumption | Speed → Optimization | 已开启 |
+| Early Hints | Speed → Optimization | 已开启 |
+
+### 缓存规则（Cache Rules）
+
+按优先级排列：
+
+| 规则 | 匹配条件 | Edge TTL | Browser TTL |
+|------|---------|----------|-------------|
+| Font Assets Long Cache | `woff`, `woff2`, `ttf`, `otf` | 1 年 | 1 年 |
+| Image Assets Long Cache | `jpg`, `jpeg`, `png`, `gif`, `webp`, `avif`, `svg`, `ico` | 30 天 | 30 天 |
+| CSS and JS Medium Cache | `css`, `js` | 7 天 | 7 天 |
+| HTML Short Cache SWR | `html`, `/`, 无扩展名路径 | Respect origin (10min) | 5 分钟 + `stale-while-revalidate=3600` |
+| Skip Non-Page Paths | `/api/`, `/.well-known/` | Bypass | Bypass |
+
+### Page Rules
+
+- `soulgo.chat/*`：Cache Level = Cache Everything, Edge Cache TTL = 2 hours, Always Online = On
+
+### 部署后清缓存
+
+每次 GitHub Pages 部署后，Cloudflare 边缘缓存需要刷新：
+
+- **手动方式**：Cloudflare Dashboard → Caching → Purge Everything
+- **自动方式**（可选）：在 `deploy-pages.yml` 末尾调用 Cloudflare Purge Cache API，需要额外的 GitHub Secret `CLOUDFLARE_ZONE_ID` 和 API Token 的 `Zone → Cache Purge → Purge` 权限
+
+### 回滚
+
+如果 CDN 代理出现问题，在 Cloudflare Dashboard → DNS → 将 CNAME 代理状态切回 **DNS only（灰云）**，1 分钟内流量直接回 GitHub Pages Fastly CDN。
+
+### 兼容性说明
+
+- Telegram Worker (`telegram-sync-dispatch`) 部署在独立的 `workers.dev` 子域，与站点 CDN 代理互不干扰
+- `source/CNAME` 中 `soulgo.chat` 保持不变，GitHub Pages 需要此文件识别自定义域名
+
+## 9. SQL 文件约定
 
 - 仓库当前只保留新库初始化脚本：[sql/pgsql17.sql](../../sql/pgsql17.sql)
 
