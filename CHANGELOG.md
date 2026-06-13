@@ -15,7 +15,8 @@
 
 ### Added
 
-- 新增 Dev 合并 Main 操作手册，明确 `dev` 合入 `main` 时的允许合并范围、生产数据保护路径、`source/_data/**` 派生数据边界、严格恢复脚本、测试清理和推送后 Actions 验证流程，方便后续快速执行“只合代码、不合 dev 数据”的发布合并。
+- 新增 Cloudflare CDN 代理加速方案 v17 并标记为已实施：`soulgo.chat` 通过 Cloudflare 橙云代理加速 GitHub Pages 访问，配置 CNAME → `soulgo.github.io`、SSL/TLS Full (Strict)、Auto Minify、Brotli、HTTP/3、分层缓存规则（字体 1 年、图片 30 天、CSS/JS 7 天、HTML 5 分钟 + stale-while-revalidate）和 Always Online。同步更新系统总览、GitHub 与 Cloudflare 配置、日常维护手册、常见问题排查和三份 drawio 架构图，移除所有 DNS/CDN「待人工确认」标记。
+- 新增 Dev 合并 Main 操作手册，明确 `dev` 合入 `main` 时的允许合并范围、生产数据保护路径、`source/_data/**` 派生数据边界、严格恢复脚本、测试清理和推送后 Actions 验证流程，方便后续快速执行”只合代码、不合 dev 数据”的发布合并。
 
 ### Fixed
 

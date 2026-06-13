@@ -67,7 +67,7 @@ Hexo generate 输出" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;
         <mxCell id="f-pages" value="GitHub Pages
 页面展示" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=3" vertex="1" parent="f-render"><mxGeometry x="1460" y="860" width="240" height="70" as="geometry"/></mxCell>
         <mxCell id="f-domain" value="soulgo.chat
-DNS/CDN：待人工确认" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=1;dashed=1" vertex="1" parent="f-render"><mxGeometry x="1740" y="860" width="260" height="70" as="geometry"/></mxCell>
+Cloudflare CDN 代理（橙云）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=3" vertex="1" parent="f-render"><mxGeometry x="1740" y="860" width="260" height="70" as="geometry"/></mxCell>
         <mxCell id="fe1" value="webhook" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="f-tg-photo" target="f-dispatch"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="fe2" value="repository_dispatch" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="f-dispatch" target="f-sync"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="fe3" value="poll/webhook" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="f-tg-text" target="f-sync"><mxGeometry relative="1" as="geometry"/></mxCell>
@@ -99,7 +99,7 @@ DNS/CDN：待人工确认" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1
         <mxCell id="fe29" value="static js" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="f-js-chart" target="f-public"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="fe30" value="build cache" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="f-hexo-cache" target="f-public"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="fe31" value="deploy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="f-public" target="f-pages"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="fe32" value="custom domain" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666;dashed=1" edge="1" parent="1" source="f-pages" target="f-domain"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="fe32" value="CDN 代理" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="f-pages" target="f-domain"><mxGeometry relative="1" as="geometry"/></mxCell>
         <mxCell id="fe33" value="normalized persist" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;strokeColor=#666666" edge="1" parent="1" source="f-ingest" target="f-core"><mxGeometry relative="1" as="geometry"/></mxCell>
       </root>
     </mxGraphModel>
