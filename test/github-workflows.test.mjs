@@ -332,6 +332,28 @@ test('telegram-sync workflows treat stored thought batches as database content c
   }
 });
 
+test('telegram-sync repository dispatch runs use unique concurrency groups for consecutive image batches', async () => {
+  const workflows = [
+    ['.github/workflows/telegram-sync.yml', 'telegram-sync'],
+    ['.github/workflows/telegram-sync-dev.yml', 'telegram-sync-dev'],
+  ];
+
+  for (const [workflowPath, groupName] of workflows) {
+    const workflow = await readWorkflow(workflowPath);
+    const expectedGroup = new RegExp(
+      `group:\\s*\\$\\{\\{\\s*github\\.event_name == 'repository_dispatch' && format\\('${escapeRegExp(groupName)}-\\{0\\}', github\\.run_id\\) \\|\\| '${escapeRegExp(groupName)}'\\s*\\}\\}`,
+    );
+
+    assert.match(workflow, expectedGroup);
+    assert.match(workflow, /cancel-in-progress:\s*false/);
+    assert.doesNotMatch(
+      workflow,
+      new RegExp(`concurrency:\\s*\\n\\s*group:\\s*${escapeRegExp(groupName)}\\s*\\n\\s*cancel-in-progress:\\s*false`),
+      `${workflowPath} must not put every Telegram dispatch into one fixed pending queue`,
+    );
+  }
+});
+
 test('telegram-sync workflow summary normalizes partial failure task status from raw result files', async () => {
   const workflows = [
     await readWorkflow('.github/workflows/telegram-sync.yml'),

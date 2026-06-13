@@ -16,7 +16,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: telegram-sync
+  group: ${{ github.event_name == 'repository_dispatch' && format('telegram-sync-{0}', github.run_id) || 'telegram-sync' }}
   cancel-in-progress: false
 
 jobs:
