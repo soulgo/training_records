@@ -173,6 +173,32 @@ test('PostgresTelegramBatchRepository persists batch envelope, messages, and rec
   assert.match(calls[2][0], /insert into ingest\.telegram_recognition/i);
 });
 
+test('PostgresTelegramBatchRepository stores null chat_id for Feishu string chat ids', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [] };
+    },
+  };
+  const repository = new PostgresTelegramBatchRepository(client);
+  const processedAt = new Date('2026-06-10T00:00:00.000Z');
+
+  await repository.upsertMessages({
+    batchId: 'feishu-batch-1',
+    messages: [{
+      messageId: 10,
+      updateId: 1,
+      chatId: 'oc_chat_1',
+      sourceChatId: 'oc_chat_1',
+      photos: [{ fileId: 'img_v3_1', fileUniqueId: 'img_v3_1' }],
+    }],
+  }, processedAt);
+
+  assert.match(calls[0][0], /insert into ingest\.telegram_message/i);
+  assert.equal(calls[0][1][4], null);
+});
+
 test('PostgresThoughtRepository persists thought mirror batches through core.thought SQL', async () => {
   const calls = [];
   const repository = new PostgresThoughtRepository({

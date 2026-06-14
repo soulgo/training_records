@@ -89,7 +89,7 @@ export class PostgresTelegramBatchRepository {
           batch.batchId,
           message.updateId,
           message.mediaGroupId ?? null,
-          message.chatId ?? null,
+          normalizeBigIntValue(message.chatId),
           message.caption ?? '',
           message.text ?? '',
           message.dateUnix ?? null,
@@ -144,3 +144,19 @@ export async function getLastProcessedTelegramUpdateId(client) {
   return Number(result.rows[0]?.last_processed_update_id ?? 0);
 }
 
+function normalizeBigIntValue(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return /^-?\d+$/.test(trimmed) ? trimmed : null;
+  }
+  return null;
+}

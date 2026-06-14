@@ -500,6 +500,60 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls.at(-1)[0], 'end');
 });
 
+test('persistNormalizedBatch stores Feishu image batches with nullable legacy chat id and Feishu source channel', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/insert into ingest\.telegram_message/i.test(sql) && typeof params?.[4] === 'string') {
+        throw new Error(`invalid input syntax for type bigint: "${params[4]}"`);
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'feishu-source-channel',
+      sourceChannel: 'feishu',
+      messages: normalizedBatch.messages.map((message) => ({
+        ...message,
+        chatId: 'oc_chat_1',
+        sourceChannel: 'feishu',
+        sourceChatId: 'oc_chat_1',
+      })),
+    },
+    sourceChannel: 'feishu',
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-06-14T00:00:00.000Z'),
+  });
+
+  const messageInsert = calls.find(([sql]) => /insert into ingest\.telegram_message/i.test(sql));
+  const summaryInsert = calls.find(([sql]) =>
+    /with\s+activity_summary/i.test(sql) && /insert into core\.training_day/i.test(sql)
+  );
+
+  assert.equal(result.status, 'stored');
+  assert.equal(messageInsert[1][4], null);
+  assert.equal(summaryInsert[1][2], 'feishu');
+});
+
 test('persistNormalizedBatch upserts measurement without deleting other core modules', async () => {
   const { calls, client } = createIncrementalPersistClient({
     activitySummary: { total_activities: 1, total_duration_seconds: 600, training_calories: 120, cycling_distance_km: 0 },
