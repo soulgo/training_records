@@ -24,8 +24,12 @@ on:
       - .github/workflows/deploy-pages.yml
       - .github/workflows/telegram-sync.yml
       - .github/workflows/telegram-sync-dev.yml
+      - .github/workflows/feishu-sync.yml
+      - .github/workflows/feishu-sync-dev.yml
       - .github/workflows/deploy-cloudflare-worker.yml
       - .github/workflows/deploy-cloudflare-worker-dev.yml
+      - .github/workflows/deploy-cloudflare-feishu-worker.yml
+      - .github/workflows/deploy-cloudflare-feishu-worker-dev.yml
       - .github/workflows/deploy-cloudflare-pages-dev.yml
       - .github/workflows/refresh-telegram-webhook.yml
       - .github/workflows/markdown-backup.yml
@@ -49,8 +53,12 @@ on:
       - .github/workflows/deploy-pages.yml
       - .github/workflows/telegram-sync.yml
       - .github/workflows/telegram-sync-dev.yml
+      - .github/workflows/feishu-sync.yml
+      - .github/workflows/feishu-sync-dev.yml
       - .github/workflows/deploy-cloudflare-worker.yml
       - .github/workflows/deploy-cloudflare-worker-dev.yml
+      - .github/workflows/deploy-cloudflare-feishu-worker.yml
+      - .github/workflows/deploy-cloudflare-feishu-worker-dev.yml
       - .github/workflows/deploy-cloudflare-pages-dev.yml
       - .github/workflows/refresh-telegram-webhook.yml
       - .github/workflows/markdown-backup.yml

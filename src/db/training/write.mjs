@@ -54,6 +54,7 @@ export async function persistNormalizedBatch(options) {
   }
 
   const batch = options.batch;
+  const sourceChannel = options.sourceChannel ?? batch.sourceChannel ?? 'telegram';
   const payloadHash = createHash('sha256').update(JSON.stringify(batch), 'utf8').digest('hex');
   const createClient =
     options.createClient ??
@@ -99,7 +100,7 @@ export async function persistNormalizedBatch(options) {
     if (isThoughtBatchKind(batch.kind) && batch.status === 'ready') {
       await new PostgresThoughtRepository(client).persistMirror(batch, processedAt);
     } else if (isTelegramImageBatch(batch) && batch.status === 'ready' && batch.archivedDate) {
-      await persistTelegramImageBatchIncremental(client, batch, processedAt);
+      await persistTelegramImageBatchIncremental(client, batch, processedAt, { sourceChannel });
     } else if (batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
       const existingDay = await readCoreDay(client, batch.archivedDate);
       const mergedDay = mergeBatchIntoDay(existingDay, batch);

@@ -33,10 +33,13 @@ export async function recognizeBatch(batch, env, options = {}) {
   const promptMetadata = await getRecognitionPromptMetadata();
   const systemPrompt = await loadRecognitionSystemPrompt(options.rawEnv ?? process.env);
   const fetchTelegramFileById = options.fetchTelegramFileById ?? null;
-  const imageInputMode = resolveRecognitionImageInputMode(options.rawEnv ?? process.env);
+  const fetchImageFileById = options.fetchImageFileById ?? fetchTelegramFileById;
+  const sourceChannel = options.sourceChannel ?? batch.sourceChannel ?? 'telegram';
+  const imageInputMode = resolveRecognitionImageInputMode(options.rawEnv ?? process.env, sourceChannel);
   const recognitionErrors = [];
   const recognitions = await mapWithConcurrency(batch.messages, env.aiConcurrency, async (message) => {
-    const fileId = message.photos.at(-1)?.fileId;
+    const photo = message.photos.at(-1);
+    const fileId = photo?.fileId;
     if (!fileId) {
       return null;
     }
@@ -46,9 +49,11 @@ export async function recognizeBatch(batch, env, options = {}) {
         mode: imageInputMode,
         botToken: env.botToken,
         fileId,
-        fetchTelegramFileById,
+        fetchImageFileById,
+        message,
+        photo,
       });
-      return await recognizeTelegramImageMessage({
+      const recognition = await recognizeTelegramImageMessage({
         aiProvider,
         message,
         imageUrl,
@@ -56,12 +61,13 @@ export async function recognizeBatch(batch, env, options = {}) {
         promptMetadata,
         env: options.rawEnv ?? process.env,
       });
+      return attachSourceMessageId(recognition, message);
     } catch (error) {
-      if (imageInputMode === 'auto' && shouldRetryRecognitionInline(error) && fetchTelegramFileById) {
-        const inlineImageUrl = await buildInlineTelegramImageUrl(fetchTelegramFileById, fileId);
+      if (imageInputMode === 'auto' && shouldRetryRecognitionInline(error) && fetchImageFileById) {
+        const inlineImageUrl = await buildInlineImageUrl(fetchImageFileById, fileId, { message, photo });
         if (inlineImageUrl) {
           try {
-            return await recognizeTelegramImageMessage({
+            const recognition = await recognizeTelegramImageMessage({
               aiProvider,
               message,
               imageUrl: inlineImageUrl,
@@ -69,6 +75,7 @@ export async function recognizeBatch(batch, env, options = {}) {
               promptMetadata,
               env: options.rawEnv ?? process.env,
             });
+            return attachSourceMessageId(recognition, message);
           } catch (inlineError) {
             const originalMessage = error instanceof Error ? error.message : String(error);
             const inlineMessage = inlineError instanceof Error ? inlineError.message : String(inlineError);
@@ -106,21 +113,25 @@ export async function recognizeBatch(batch, env, options = {}) {
   };
 }
 
-export function resolveRecognitionImageInputMode(env = process.env) {
-  const normalized = String(env.TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE ?? 'auto')
+export function resolveRecognitionImageInputMode(env = process.env, sourceChannel = 'telegram') {
+  const sourceSpecificMode =
+    sourceChannel === 'feishu'
+      ? env.FEISHU_RECOGNITION_IMAGE_INPUT_MODE
+      : env.TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE;
+  const normalized = String(sourceSpecificMode ?? env.TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE ?? 'auto')
     .trim()
     .toLowerCase();
   return ['inline', 'url', 'auto'].includes(normalized) ? normalized : 'auto';
 }
 
-async function resolveRecognitionImageUrl({ mode, botToken, fileId, fetchTelegramFileById }) {
+async function resolveRecognitionImageUrl({ mode, botToken, fileId, fetchImageFileById, message, photo }) {
   if (mode === 'inline') {
-    if (!fetchTelegramFileById) {
-      throw new Error('TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE=inline requires Telegram file download support');
+    if (!fetchImageFileById) {
+      throw new Error('recognition inline image input requires file download support');
     }
-    const inlineImageUrl = await buildInlineTelegramImageUrl(fetchTelegramFileById, fileId);
+    const inlineImageUrl = await buildInlineImageUrl(fetchImageFileById, fileId, { message, photo });
     if (!inlineImageUrl) {
-      throw new Error('Unable to build inline Telegram image input');
+      throw new Error('Unable to build inline image input');
     }
     return inlineImageUrl;
   }
@@ -282,6 +293,7 @@ export async function buildImageProcessingBatch({
   const persistedBatch = {
     ...analyzed,
     kind: batch.kind ?? analyzed.kind ?? 'image',
+    sourceChannel: batch.sourceChannel ?? analyzed.sourceChannel ?? 'telegram',
     updateIds: messages.map((message) => message.updateId).filter(Boolean),
     messages,
     recognitions,
@@ -427,9 +439,9 @@ export async function queueRecognitionFailureIfNeeded({
   return batch;
 }
 
-async function buildInlineTelegramImageUrl(fetchTelegramFileById, fileId) {
+async function buildInlineImageUrl(fetchImageFileById, fileId, context = {}) {
   try {
-    const file = await fetchTelegramFileById(fileId);
+    const file = await fetchImageFileById(fileId, context);
     const contentType = normalizeInlineImageContentType(file);
     if (!contentType || !(file?.data instanceof Uint8Array) || file.data.length === 0) {
       return null;
@@ -438,6 +450,16 @@ async function buildInlineTelegramImageUrl(fetchTelegramFileById, fileId) {
   } catch {
     return null;
   }
+}
+
+function attachSourceMessageId(recognition, message) {
+  if (!message?.sourceMessageId || recognition?.sourceMessageId) {
+    return recognition;
+  }
+  return {
+    ...recognition,
+    sourceMessageId: message.sourceMessageId,
+  };
 }
 
 function normalizeInlineImageContentType(file) {

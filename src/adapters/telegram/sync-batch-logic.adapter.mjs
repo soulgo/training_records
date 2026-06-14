@@ -824,6 +824,7 @@ function buildSkippedBatchResult(batch, {
     status: 'skipped',
     kind: batch.kind ?? 'image',
     batchId: batch.batchId,
+    sourceChannel: batch.sourceChannel ?? 'telegram',
     reason,
     failureCategory,
     failureReason: failureCategory ? reason : null,
@@ -842,6 +843,7 @@ function analyzeThoughtBatch(batch) {
   const body = batch.thought?.body?.trim() ?? '';
   const thoughtModule = normalizeThoughtModule(batch.thought?.thoughtModule);
   const hasMarkdownDocument = batchHasMarkdownDocuments(batch);
+  const sourceChannel = batch.sourceChannel ?? message?.sourceChannel ?? 'telegram';
 
   if (!body && !hasMarkdownDocument) {
     return buildSkippedBatchResult(batch, {
@@ -853,6 +855,7 @@ function analyzeThoughtBatch(batch) {
     status: 'ready',
     kind: 'thought',
     batchId: batch.batchId,
+    sourceChannel,
     archivedDate: null,
     warnings: [],
     issues: [],
@@ -861,7 +864,8 @@ function analyzeThoughtBatch(batch) {
       command: batch.thought?.command ?? '/thought',
       body,
       thoughtModule,
-      tags: getThoughtModuleTags(thoughtModule),
+      sourceChannel,
+      tags: getThoughtModuleTags(thoughtModule, { sourceChannel }),
       telegramMessageId: message?.messageId ?? null,
       telegramChatId: message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,
@@ -878,6 +882,7 @@ function analyzeThoughtEditBatch(batch) {
   const body = batch.thoughtEdit?.body?.trim() ?? '';
   const targetMessageId = normalizeMessageId(batch.thoughtEdit?.targetMessageId);
   const hasMarkdownDocument = batchHasMarkdownDocuments(batch);
+  const sourceChannel = batch.sourceChannel ?? message?.sourceChannel ?? 'telegram';
 
   if (!targetMessageId) {
     return buildSkippedBatchResult(batch, {
@@ -895,12 +900,14 @@ function analyzeThoughtEditBatch(batch) {
     status: 'ready',
     kind: 'thought_edit',
     batchId: batch.batchId,
+    sourceChannel,
     archivedDate: null,
     warnings: [],
     issues: [],
     confidence: 1,
     thoughtEdit: {
       command: batch.thoughtEdit?.command ?? '/thought',
+      sourceChannel,
       targetMessageId,
       body,
       thoughtModule: normalizeThoughtModuleOrNull(batch.thoughtEdit?.thoughtModule),
@@ -914,6 +921,7 @@ function analyzeThoughtEditBatch(batch) {
 function analyzeThoughtDeleteBatch(batch) {
   const message = batch.messages?.[0] ?? null;
   const targetMessageId = normalizeMessageId(batch.thoughtDelete?.targetMessageId);
+  const sourceChannel = batch.sourceChannel ?? message?.sourceChannel ?? 'telegram';
 
   if (!targetMessageId) {
     return buildSkippedBatchResult(batch, {
@@ -925,12 +933,14 @@ function analyzeThoughtDeleteBatch(batch) {
     status: 'ready',
     kind: 'thought_delete',
     batchId: batch.batchId,
+    sourceChannel,
     archivedDate: null,
     warnings: [],
     issues: [],
     confidence: 1,
     thoughtDelete: {
       command: batch.thoughtDelete?.command ?? '/随想删',
+      sourceChannel,
       targetMessageId,
       telegramChatId: message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,
@@ -950,17 +960,20 @@ function getThoughtSourceMessage(batch) {
 function analyzeAnalysisBatch(batch) {
   const message = batch.messages?.[0] ?? null;
   const question = batch.analysis?.question?.trim() ?? '';
+  const sourceChannel = batch.sourceChannel ?? message?.sourceChannel ?? 'telegram';
 
   return {
     status: 'ready',
     kind: 'analysis',
     batchId: batch.batchId,
+    sourceChannel,
     archivedDate: null,
     warnings: [],
     issues: [],
     confidence: 1,
     analysis: {
       command: batch.analysis?.command ?? '/analysis',
+      sourceChannel,
       question,
       telegramMessageId: message?.messageId ?? null,
       telegramChatId: message?.chatId ?? null,
@@ -971,17 +984,20 @@ function analyzeAnalysisBatch(batch) {
 
 function analyzeHelpBatch(batch) {
   const message = batch.messages?.[0] ?? null;
+  const sourceChannel = batch.sourceChannel ?? message?.sourceChannel ?? 'telegram';
 
   return {
     status: 'ready',
     kind: 'help',
     batchId: batch.batchId,
+    sourceChannel,
     archivedDate: null,
     warnings: [],
     issues: [],
     confidence: 1,
     help: {
       command: batch.help?.command ?? '/help',
+      sourceChannel,
       telegramMessageId: message?.messageId ?? null,
       telegramChatId: message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,

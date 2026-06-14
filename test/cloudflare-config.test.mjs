@@ -18,3 +18,37 @@ test('wrangler config binds Telegram album Durable Object without storing secret
   assert.doesNotMatch(config, /GITHUB_REPO/);
   assert.doesNotMatch(config, /GITHUB_TOKEN|TELEGRAM_SECRET_TOKEN/);
 });
+
+test('wrangler Feishu config binds image Durable Object without storing secrets', async () => {
+  const config = await readFile(new URL('wrangler.feishu.toml', rootDir), 'utf8');
+
+  assert.match(config, /^name\s*=\s*"feishu-sync-dispatch"/m);
+  assert.match(config, /^main\s*=\s*"cloudflare\/feishu-sync-dispatch-worker\.mjs"/m);
+  assert.match(config, /^compatibility_date\s*=\s*"\d{4}-\d{2}-\d{2}"/m);
+  assert.match(config, /pattern\s*=\s*"feishu\.soulgo\.chat"/);
+  assert.match(config, /custom_domain\s*=\s*true/);
+  assert.match(config, /GITHUB_DISPATCH_EVENT_TYPE\s*=\s*"feishu_update"/);
+  assert.match(config, /name\s*=\s*"FEISHU_IMAGE_BUFFER"/);
+  assert.match(config, /class_name\s*=\s*"FeishuImageBuffer"/);
+  assert.match(config, /new_sqlite_classes\s*=\s*\["FeishuImageBuffer"\]/);
+  assert.doesNotMatch(config, /GITHUB_OWNER/);
+  assert.doesNotMatch(config, /GITHUB_REPO/);
+  assert.doesNotMatch(config, /GITHUB_TOKEN|FEISHU_APP_SECRET|FEISHU_ENCRYPT_KEY|FEISHU_VERIFICATION_TOKEN/);
+});
+
+test('wrangler Feishu dev config dispatches to dev workflow without storing secrets', async () => {
+  const config = await readFile(new URL('wrangler.feishu-dev.toml', rootDir), 'utf8');
+
+  assert.match(config, /^name\s*=\s*"feishu-sync-dispatch-dev"/m);
+  assert.match(config, /^main\s*=\s*"cloudflare\/feishu-sync-dispatch-worker\.mjs"/m);
+  assert.match(config, /^compatibility_date\s*=\s*"\d{4}-\d{2}-\d{2}"/m);
+  assert.match(config, /pattern\s*=\s*"feishu-dev\.soulgo\.chat"/);
+  assert.match(config, /custom_domain\s*=\s*true/);
+  assert.match(config, /GITHUB_DISPATCH_EVENT_TYPE\s*=\s*"feishu_update_dev"/);
+  assert.match(config, /name\s*=\s*"FEISHU_IMAGE_BUFFER"/);
+  assert.match(config, /class_name\s*=\s*"FeishuImageBuffer"/);
+  assert.match(config, /new_sqlite_classes\s*=\s*\["FeishuImageBuffer"\]/);
+  assert.doesNotMatch(config, /GITHUB_OWNER/);
+  assert.doesNotMatch(config, /GITHUB_REPO/);
+  assert.doesNotMatch(config, /GITHUB_TOKEN|FEISHU_APP_SECRET|FEISHU_ENCRYPT_KEY|FEISHU_VERIFICATION_TOKEN/);
+});

@@ -15,8 +15,27 @@
 
 ### Added
 
+- 新增 `Deploy Cloudflare Feishu Worker (Dev)` 手动部署 workflow，用 `wrangler.feishu-dev.toml` 部署 `feishu-sync-dispatch-dev`，补齐飞书 dev 通道的 Worker 部署入口。
+- 新增 `tools/feishu-action-monitor.mjs`，当 `Feishu Sync` / `Feishu Sync (Dev)` 的 `repository_dispatch` workflow 失败时，会读取原始 `feishu_update(s)` payload 并向对应飞书 chat 回发失败阶段和 GitHub Actions run URL。
+
+### Fixed
+
+- 加固飞书图片 burst 缓冲：`FEISHU_IMAGE_BUFFER` 在 GitHub `repository_dispatch` 失败时不再清空已缓冲图片事件，会保留事件、记录安全诊断日志并按有限退避重新设置 alarm，方便在 Cloudflare tail 中定位 `feishu_update` / `feishu_update_dev` 是否成功派发。
+- 飞书同步 workflow 新增失败通知步骤，确保同步失败时飞书侧能收到 Action 失败回执；成功通知仍保持在同步/提交/推送之后、异步页面部署之前。
+
+## [1.2.9] - 2026-06-14
+
+### Added
+
+- 新增飞书消息通道 v18：飞书事件经独立 Cloudflare Worker 验签、3 秒图片 burst 缓冲和 `repository_dispatch: feishu_update` 进入 `Feishu Sync` workflow，再通过 `npm run sync:feishu` 复用现有 Telegram 同步主编排、AI 图片识别、随想入库、`/分析` 和 PostgreSQL 增量写入链路；飞书图片以内联 data URL 发送给 AI，core 子表写入 `source_channel='feishu'`。
+- 新增飞书部署文档 `docs/部署维护/飞书通道部署.md`，覆盖飞书开放平台权限/事件订阅、GitHub `FEISHU_*` 配置、Cloudflare `feishu-sync-dispatch` Worker Secret/Durable Object、部署命令和验收排查步骤。
 - 新增 Cloudflare CDN 代理加速方案 v17 并标记为已实施：`soulgo.chat` 通过 Cloudflare 橙云代理加速 GitHub Pages 访问，配置 CNAME → `soulgo.github.io`、SSL/TLS Full (Strict)、Auto Minify、Brotli、HTTP/3、分层缓存规则（字体 1 年、图片 30 天、CSS/JS 7 天、HTML 5 分钟 + stale-while-revalidate）和 Always Online。同步更新系统总览、GitHub 与 Cloudflare 配置、日常维护手册、常见问题排查和三份 drawio 架构图，移除所有 DNS/CDN「待人工确认」标记。
 - 新增 Dev 合并 Main 操作手册，明确 `dev` 合入 `main` 时的允许合并范围、生产数据保护路径、`source/_data/**` 派生数据边界、严格恢复脚本、测试清理和推送后 Actions 验证流程，方便后续快速执行”只合代码、不合 dev 数据”的发布合并。
+
+### Changed
+
+- 系统文档从 Telegram 单通道口径更新为 Telegram/飞书双消息通道口径，明确飞书只新增通道适配层和部署入口，不新增独立 ingest 表、不复制同步主流程；`core.thought.telegram_message_id` 仍是兼容字段名，飞书随想使用稳定数字代理 ID 并保留 source 元数据。
+- 同步项目包版本号到 `1.2.9`。
 
 ### Fixed
 
@@ -406,7 +425,14 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.2.9...HEAD
+[1.2.9]: https://github.com/soulgo/training_records/compare/v1.2.8...v1.2.9
+[1.2.8]: https://github.com/soulgo/training_records/compare/v1.2.7...v1.2.8
+[1.2.7]: https://github.com/soulgo/training_records/compare/v1.2.6...v1.2.7
+[1.2.6]: https://github.com/soulgo/training_records/compare/v1.2.5...v1.2.6
+[1.2.5]: https://github.com/soulgo/training_records/compare/v1.2.4...v1.2.5
+[1.2.4]: https://github.com/soulgo/training_records/compare/v1.2.3...v1.2.4
+[1.2.3]: https://github.com/soulgo/training_records/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/soulgo/training_records/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/soulgo/training_records/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/soulgo/training_records/compare/v1.1.9...v1.2.0

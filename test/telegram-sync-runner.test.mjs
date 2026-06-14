@@ -1199,6 +1199,7 @@ test('buildTelegramSyncReport exposes pending replay and archived date details f
         taskStatus: 'deferred',
         retryState: 'pending_replay',
         retryCount: 0,
+        chatIds: [],
         messageIds: [],
         updateIds: [],
         status: 'ready',

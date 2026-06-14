@@ -109,6 +109,7 @@ export async function runTelegramSync(options = {}) {
     ((input) =>
       persistNormalizedBatchToDatabase({
         ...input,
+        sourceChannel: input.sourceChannel ?? options.sourceChannel ?? 'telegram',
         env: options.env ?? process.env,
       }));
   const useDefaultPendingRecognitionStore =
@@ -182,9 +183,12 @@ export async function runTelegramSync(options = {}) {
   const shouldNotifyImmediately =
     shouldNotifyTelegramSyncResult(rawEnv) && notificationStage !== 'after_action';
   const resultPath = resolveTelegramSyncResultPath(rawEnv, activeRootDir, options.resultPath);
+  const resolveDispatchUpdates = options.resolveDispatchUpdates ?? resolveDispatchTelegramUpdates;
+  const groupUpdates = options.groupUpdates ?? groupTelegramUpdates;
+  const sourceChannel = options.sourceChannel ?? 'telegram';
 
   const dispatchUpdates = await measureSyncStage(timings, 'resolveUpdates', () =>
-    resolveDispatchTelegramUpdates({
+    resolveDispatchUpdates({
       repositoryDispatchEvent: options.repositoryDispatchEvent,
       githubEventName: env.githubEventName,
       githubEventPath: env.githubEventPath,
@@ -209,6 +213,7 @@ export async function runTelegramSync(options = {}) {
         const replayResult = await persistBatch({
           batch: pending.batch,
           processedAt: now,
+          sourceChannel: pending.batch?.sourceChannel ?? sourceChannel,
           env: options.env ?? process.env,
         });
         if (replayResult.status === 'stored' || replayResult.status === 'unchanged') {
@@ -249,7 +254,7 @@ export async function runTelegramSync(options = {}) {
     readExistingThoughtMessageKeys(thoughtsDir),
   );
   const grouped = measureSyncStageSync(timings, 'groupUpdates', () =>
-    groupTelegramUpdates(updates, { knownThoughtMessageKeys }),
+    groupUpdates(updates, { knownThoughtMessageKeys }),
   );
   const batchResults = [];
   let changed = replayStoredAny;
@@ -363,7 +368,7 @@ export async function runTelegramSync(options = {}) {
           env,
           persistBatch,
           appendPendingPersistenceBatch: appendPendingRecognitionBatch,
-          fetchTelegramFile: fetchTelegramFileById,
+          fetchTelegramFile: options.fetchMessageFile ?? fetchTelegramFileById,
         }),
       );
       changed ||= thoughtResult.changed;
@@ -376,6 +381,7 @@ export async function runTelegramSync(options = {}) {
         persistBatch({
           batch: persistedBatch,
           processedAt: now,
+          sourceChannel: persistedBatch.sourceChannel ?? sourceChannel,
           env: options.env ?? process.env,
         }),
       );
@@ -430,7 +436,7 @@ export async function runTelegramSync(options = {}) {
       await measureSyncStage(timings, 'sleepBackfill', () =>
         backfillCoreSleep({
           processedAt: now,
-          sourceChannel: 'telegram_sync',
+          sourceChannel: options.sleepBackfillSourceChannel ?? 'telegram_sync',
         }),
       );
     } catch (error) {
@@ -749,14 +755,24 @@ function loadRequiredEnv(env = process.env) {
     githubEventPath: env.GITHUB_EVENT_PATH?.trim() || '',
     pollLimit: Number.isFinite(pollLimit) && pollLimit > 0 ? pollLimit : 20,
     aiConcurrency: Number.isFinite(aiConcurrency) && aiConcurrency > 0 ? aiConcurrency : 3,
-    allowedChatIds: new Set(
-      allowedChatIdsRaw
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean)
-        .map(Number),
-    ),
+    allowedChatIds: parseAllowedChatIds(allowedChatIdsRaw),
   };
+}
+
+function parseAllowedChatIds(value) {
+  const ids = new Set();
+  for (const entry of String(value ?? '').split(',')) {
+    const trimmed = entry.trim();
+    if (!trimmed) {
+      continue;
+    }
+    ids.add(trimmed);
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric)) {
+      ids.add(numeric);
+    }
+  }
+  return ids;
 }
 
 async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }) {
