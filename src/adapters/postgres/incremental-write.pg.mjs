@@ -32,7 +32,7 @@ export async function persistTelegramImageBatchIncremental(client, batch, proces
   await insertCoreMeals(client, [day], rowOptions, processedAtIso);
   await insertCoreSleep(client, [day], rowOptions, processedAtIso);
 
-  await refreshCoreTrainingDaySummary(client, batch, processedAtIso);
+  await refreshCoreTrainingDaySummary(client, batch, processedAtIso, sourceChannel);
 }
 
 async function ensureCoreTrainingDayStub(client, archivedDate, batchId, processedAtIso, sourceChannel) {
@@ -81,7 +81,7 @@ function buildTelegramImageBatchDay(batch) {
   });
 }
 
-async function refreshCoreTrainingDaySummary(client, batch, processedAtIso) {
+async function refreshCoreTrainingDaySummary(client, batch, processedAtIso, sourceChannel) {
   const archivedDate = normalizeDateKey(batch.archivedDate);
   const hasBatchWorkoutSummary = Boolean(batch.workoutDailySummary && Object.keys(batch.workoutDailySummary).length > 0);
   const hasBatchNutrition = hasNutritionPayload(batch.nutrition);
@@ -248,7 +248,7 @@ async function refreshCoreTrainingDaySummary(client, batch, processedAtIso) {
     [
       archivedDate,
       batch.batchId,
-      'telegram',
+      sourceChannel,
       batch.workoutDailySummary?.activityCaloriesKcal != null ? Math.round(Number(batch.workoutDailySummary.activityCaloriesKcal)) : null,
       batch.workoutDailySummary?.workoutDurationMinutes != null ? Math.round(Number(batch.workoutDailySummary.workoutDurationMinutes)) : null,
       batch.workoutDailySummary?.activeHours != null ? Math.round(Number(batch.workoutDailySummary.activeHours)) : null,
