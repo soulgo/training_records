@@ -1,0 +1,218 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { createAiProvider } from '../../ai/provider.mjs';
+import {
+  fetchFeishuImageResource,
+  getFeishuTenantAccessToken,
+  groupFeishuUpdates,
+  resolveDispatchFeishuUpdates,
+  sendFeishuMessage,
+} from '../../adapters/feishu/index.mjs';
+import {
+  buildTelegramSyncReport,
+  createRecognitionAiProvider,
+  runTelegramSync,
+} from './telegram-sync.use-case.mjs';
+import { recognizeBatch } from './telegram-sync/image-processing.mjs';
+import {
+  notifyTelegramSyncResultFromFile,
+  notifyTelegramSyncResultFromReport,
+} from './telegram-sync/status.mjs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.resolve(__dirname, '..', '..', '..');
+
+export async function main() {
+  const result = await runFeishuSync();
+  process.stdout.write(JSON.stringify(buildFeishuSyncReport(result), null, 2));
+  process.stdout.write('\n');
+}
+
+export async function runFeishuSync(options = {}) {
+  const rawEnv = options.env ?? process.env;
+  const feishuConfig = loadFeishuEnv(rawEnv);
+  const sharedEnv = buildSharedSyncEnv(rawEnv);
+  const aiProvider = options.aiProvider ?? createAiProvider(sharedEnv);
+  const recognitionAiProvider =
+    options.recognitionAiProvider ?? createRecognitionAiProvider(sharedEnv, aiProvider);
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const getTenantAccessToken =
+    options.getFeishuTenantAccessToken ??
+    (() => getFeishuTenantAccessToken({
+      appId: feishuConfig.appId,
+      appSecret: feishuConfig.appSecret,
+      fetch: fetchImpl,
+      apiBaseUrl: feishuConfig.apiBaseUrl,
+      cacheKey: feishuConfig.appId,
+    }));
+  const fetchImageFileById =
+    options.fetchImageFileById ??
+    (async (imageKey, context = {}) => fetchFeishuImageResource({
+      appId: feishuConfig.appId,
+      appSecret: feishuConfig.appSecret,
+      tenantAccessToken: await getTenantAccessToken(),
+      messageId: context.message?.sourceMessageId,
+      imageKey,
+      fetch: fetchImpl,
+      apiBaseUrl: feishuConfig.apiBaseUrl,
+    }));
+  const sendMessage =
+    options.sendFeishuMessage ??
+    (async ({ chatId, text }) => sendFeishuMessage({
+      appId: feishuConfig.appId,
+      appSecret: feishuConfig.appSecret,
+      tenantAccessToken: await getTenantAccessToken(),
+      chatId,
+      text,
+      fetch: fetchImpl,
+      apiBaseUrl: feishuConfig.apiBaseUrl,
+    }));
+  const persistNormalizedBatch =
+    options.persistNormalizedBatch
+      ? (input) => options.persistNormalizedBatch({ ...input, sourceChannel: 'feishu' })
+      : undefined;
+
+  return runTelegramSync({
+    ...options,
+    rootDir: options.rootDir ?? rootDir,
+    env: sharedEnv,
+    sourceChannel: 'feishu',
+    sleepBackfillSourceChannel: 'feishu_sync',
+    resolveDispatchUpdates: ({ repositoryDispatchEvent, githubEventName, githubEventPath }) =>
+      resolveDispatchFeishuUpdates({
+        repositoryDispatchEvent,
+        githubEventName,
+        githubEventPath,
+      }),
+    groupUpdates: groupFeishuUpdates,
+    getLastProcessedUpdateId: options.getLastProcessedUpdateId ?? (async () => 0),
+    fetchTelegramUpdates: options.fetchTelegramUpdates ?? (async () => []),
+    recognizeBatch:
+      options.recognizeBatch ??
+      ((batch, env) => recognizeBatch(batch, env, {
+        aiProvider: recognitionAiProvider,
+        rawEnv: sharedEnv,
+        sourceChannel: 'feishu',
+        fetchImageFileById,
+      })),
+    persistNormalizedBatch,
+    sendTelegramMessage: sendMessage,
+    fetchMessageFile: fetchImageFileById,
+    aiProvider,
+    recognitionAiProvider,
+  });
+}
+
+export function buildFeishuSyncReport(result) {
+  const report = buildTelegramSyncReport(result);
+  return {
+    ...report,
+    batches: (report.batches ?? []).map((batch) => ({
+      ...batch,
+      taskId: String(batch.taskId ?? '').replace(/^telegram:/, 'feishu:'),
+      sourceId: String(batch.sourceId ?? '').replace(/^telegram:/, 'feishu:'),
+      sourceType: batch.sourceType === 'telegram_update' ? 'feishu_update' : batch.sourceType,
+    })),
+  };
+}
+
+export async function notifyFeishuSyncResultFromFile({
+  resultPath,
+  env = process.env,
+  sendMessage,
+  fetch: fetchImpl = globalThis.fetch,
+} = {}) {
+  const sharedEnv = buildSharedSyncEnv(env);
+  const sender = sendMessage ?? createFeishuMessageSender(env, fetchImpl);
+  return notifyTelegramSyncResultFromFile({
+    resultPath,
+    env: sharedEnv,
+    sendMessage: sender,
+  });
+}
+
+export async function notifyFeishuSyncResultFromReport({
+  report,
+  env = process.env,
+  sendMessage,
+  fetch: fetchImpl = globalThis.fetch,
+} = {}) {
+  const sharedEnv = buildSharedSyncEnv(env);
+  const sender = sendMessage ?? createFeishuMessageSender(env, fetchImpl);
+  return notifyTelegramSyncResultFromReport({
+    report,
+    env: sharedEnv,
+    sendMessage: sender,
+  });
+}
+
+function createFeishuMessageSender(env, fetchImpl) {
+  const config = loadFeishuEnv(env, { requireAllowedChatIds: false });
+  let tokenPromise = null;
+  return async ({ chatId, text }) => {
+    tokenPromise ??= getFeishuTenantAccessToken({
+      appId: config.appId,
+      appSecret: config.appSecret,
+      fetch: fetchImpl,
+      apiBaseUrl: config.apiBaseUrl,
+      cacheKey: config.appId,
+    });
+    return sendFeishuMessage({
+      tenantAccessToken: await tokenPromise,
+      chatId,
+      text,
+      fetch: fetchImpl,
+      apiBaseUrl: config.apiBaseUrl,
+    });
+  };
+}
+
+function loadFeishuEnv(env = process.env, options = {}) {
+  const appId = env.FEISHU_APP_ID;
+  const appSecret = env.FEISHU_APP_SECRET;
+  const allowedChatIds = env.FEISHU_ALLOWED_CHAT_IDS;
+  const required = [
+    ['FEISHU_APP_ID', appId],
+    ['FEISHU_APP_SECRET', appSecret],
+  ];
+  if (options.requireAllowedChatIds !== false) {
+    required.push(['FEISHU_ALLOWED_CHAT_IDS', allowedChatIds]);
+  }
+  for (const [name, value] of required) {
+    if (!value) {
+      throw new Error(`Missing required environment variable: ${name}`);
+    }
+  }
+
+  return {
+    appId,
+    appSecret,
+    allowedChatIds,
+    apiBaseUrl: String(env.FEISHU_API_BASE_URL ?? '').replace(/\/+$/, '') || undefined,
+  };
+}
+
+function buildSharedSyncEnv(env) {
+  return {
+    ...env,
+    // Placeholder only satisfies the shared Telegram env check; Feishu I/O is injected below.
+    TELEGRAM_BOT_TOKEN: env.TELEGRAM_BOT_TOKEN || 'feishu',
+    TELEGRAM_ALLOWED_CHAT_IDS: env.FEISHU_ALLOWED_CHAT_IDS ?? env.TELEGRAM_ALLOWED_CHAT_IDS,
+    TELEGRAM_SYNC_TRANSPORT: env.FEISHU_SYNC_TRANSPORT ?? 'webhook',
+    TELEGRAM_SYNC_NOTIFY: env.FEISHU_SYNC_NOTIFY ?? env.TELEGRAM_SYNC_NOTIFY,
+    TELEGRAM_SYNC_NOTIFY_STAGE: env.FEISHU_SYNC_NOTIFY_STAGE ?? env.TELEGRAM_SYNC_NOTIFY_STAGE,
+    TELEGRAM_SYNC_RESULT_PATH: env.FEISHU_SYNC_RESULT_PATH ?? env.TELEGRAM_SYNC_RESULT_PATH,
+    TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE:
+      env.FEISHU_RECOGNITION_IMAGE_INPUT_MODE ??
+      env.TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE ??
+      'inline',
+  };
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((error) => {
+    process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`);
+    process.exitCode = 1;
+  });
+}

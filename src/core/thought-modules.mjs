@@ -36,8 +36,12 @@ export function normalizeThoughtModuleOrNull(value) {
   return THOUGHT_MODULES[value]?.key ?? null;
 }
 
-export function getThoughtModuleTags(moduleKey) {
-  return [...(THOUGHT_MODULES[normalizeThoughtModule(moduleKey)]?.tags ?? THOUGHT_MODULES.workout.tags)];
+export function getThoughtModuleTags(moduleKey, options = {}) {
+  const tags = [...(THOUGHT_MODULES[normalizeThoughtModule(moduleKey)]?.tags ?? THOUGHT_MODULES.workout.tags)];
+  if (options.sourceChannel === 'feishu') {
+    return tags.map((tag) => tag === 'Telegram' ? '飞书' : tag);
+  }
+  return tags;
 }
 
 export function isThoughtBatchKind(kind) {

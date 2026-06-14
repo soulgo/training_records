@@ -12,29 +12,30 @@ import {
   insertCoreSleep,
 } from './core-row-writer.pg.mjs';
 
-export async function persistTelegramImageBatchIncremental(client, batch, processedAt) {
+export async function persistTelegramImageBatchIncremental(client, batch, processedAt, writeOptions = {}) {
   const day = buildTelegramImageBatchDay(batch);
   if (!day) {
     return;
   }
 
   const processedAtIso = processedAt.toISOString();
-  const options = {
+  const sourceChannel = writeOptions.sourceChannel ?? batch.sourceChannel ?? 'telegram';
+  const rowOptions = {
     batchId: batch.batchId,
     processedAt,
-    sourceChannel: 'telegram',
+    sourceChannel,
   };
 
-  await ensureCoreTrainingDayStub(client, day.date, batch.batchId, processedAtIso);
-  await insertCoreMeasurements(client, [day], options, processedAtIso);
-  await insertCoreActivities(client, [day], options, processedAtIso);
-  await insertCoreMeals(client, [day], options, processedAtIso);
-  await insertCoreSleep(client, [day], options, processedAtIso);
+  await ensureCoreTrainingDayStub(client, day.date, batch.batchId, processedAtIso, sourceChannel);
+  await insertCoreMeasurements(client, [day], rowOptions, processedAtIso);
+  await insertCoreActivities(client, [day], rowOptions, processedAtIso);
+  await insertCoreMeals(client, [day], rowOptions, processedAtIso);
+  await insertCoreSleep(client, [day], rowOptions, processedAtIso);
 
   await refreshCoreTrainingDaySummary(client, batch, processedAtIso);
 }
 
-async function ensureCoreTrainingDayStub(client, archivedDate, batchId, processedAtIso) {
+async function ensureCoreTrainingDayStub(client, archivedDate, batchId, processedAtIso, sourceChannel) {
   await client.query(
     `
       insert into core.training_day (
@@ -49,7 +50,7 @@ async function ensureCoreTrainingDayStub(client, archivedDate, batchId, processe
         source_channel = excluded.source_channel,
         updated_at = excluded.updated_at
     `,
-    [archivedDate, batchId, 'telegram', processedAtIso],
+    [archivedDate, batchId, sourceChannel, processedAtIso],
   );
 }
 

@@ -1,0 +1,17 @@
+name = "feishu-sync-dispatch-dev"
+main = "cloudflare/feishu-sync-dispatch-worker.mjs"
+compatibility_date = "2026-06-14"
+routes = [
+  { pattern = "feishu-dev.soulgo.chat", custom_domain = true }
+]
+
+[vars]
+GITHUB_DISPATCH_EVENT_TYPE = "feishu_update_dev"
+
+[[durable_objects.bindings]]
+name = "FEISHU_IMAGE_BUFFER"
+class_name = "FeishuImageBuffer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FeishuImageBuffer"]

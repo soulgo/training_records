@@ -49,6 +49,7 @@ export async function writeThoughtImageArtifacts({ batch, rootDir, fetchTelegram
   const draft = buildThoughtPost(batch);
   const artifactMessage = resolveThoughtArtifactMessage(batch);
   const thoughtModule = resolveThoughtArtifactModule(batch, draft.thoughtModule);
+  const sourceChannel = batch.sourceChannel ?? artifactMessage.sourceChannel ?? 'telegram';
   const photoPaths = await writeThoughtImageFiles({
     batch,
     rootDir,
@@ -64,7 +65,7 @@ export async function writeThoughtImageArtifacts({ batch, rootDir, fetchTelegram
     postPath: null,
     photoPaths,
     thoughtModule,
-    tags: thoughtModule ? getThoughtModuleTags(thoughtModule) : null,
+    tags: thoughtModule ? getThoughtModuleTags(thoughtModule, { sourceChannel }) : null,
   };
 }
 
@@ -241,18 +242,29 @@ function buildThoughtPost(batch, options = {}) {
   const thought = batch.thought ?? {};
   const message = resolveThoughtPostMessage(batch);
   const dateParts = formatThoughtDateParts(message.dateUnix);
-  const fileName = `${dateParts.date}-telegram-thought-${message.messageId}.md`;
+  const sourceChannel = thought.sourceChannel ?? message.sourceChannel ?? batch.sourceChannel ?? 'telegram';
+  const channelSlug = sourceChannel === 'feishu' ? 'feishu' : 'telegram';
+  const fileName = `${dateParts.date}-${channelSlug}-thought-${message.messageId}.md`;
   const thoughtModule = normalizeThoughtModule(thought.thoughtModule);
-  const tags = getThoughtModuleTags(thoughtModule);
+  const tags = thought.tags ?? getThoughtModuleTags(thoughtModule, { sourceChannel });
   const lines = [
     '---',
     `date: ${dateParts.dateTime}`,
     'tags:',
     ...tags.map((tag) => `  - ${tag}`),
     `thought_module: ${thoughtModule}`,
-    `telegram_message_id: ${message.messageId ?? ''}`,
-    `telegram_chat_id: ${message.chatId ?? ''}`,
   ];
+  if (sourceChannel !== 'telegram') {
+    lines.push(
+      `source_channel: ${sourceChannel}`,
+      `source_message_id: ${message.sourceMessageId ?? ''}`,
+      `source_chat_id: ${message.sourceChatId ?? message.chatId ?? ''}`,
+    );
+  }
+  lines.push(
+    `telegram_message_id: ${message.messageId ?? ''}`,
+    `telegram_chat_id: ${Number.isFinite(Number(message.chatId)) ? message.chatId : ''}`,
+  );
   if (options.photoPaths?.length) {
     lines.push('photos:');
     for (const photoPath of options.photoPaths) {
@@ -307,7 +319,7 @@ async function readThoughtPostPaths(thoughtsDir) {
 }
 
 function isThoughtPostPath(entryPath) {
-  return /(?:^|[/\\])[^/\\]+-telegram-thought-\d+\.md$/u.test(entryPath);
+  return /(?:^|[/\\])[^/\\]+-(?:telegram|feishu)-thought-\d+\.md$/u.test(entryPath);
 }
 
 function normalizeThoughtFrontMatter(parsed) {
@@ -437,10 +449,11 @@ async function writeThoughtImageFiles({
   const publicPaths = [];
 
   for (let index = 0; index < imageMessages.length; index += 1) {
-    const { photo } = imageMessages[index];
-    const file = await fetchTelegramFile(photo.fileId);
+    const { message, photo } = imageMessages[index];
+    const file = await fetchTelegramFile(photo.fileId, { message, photo });
     const extension = inferThoughtImageExtension(photo, file);
-    const imageFileName = `${dateParts.date}-telegram-thought-${sourceMessageId}-${index + 1}${extension}`;
+    const channelSlug = message.sourceChannel === 'feishu' ? 'feishu' : 'telegram';
+    const imageFileName = `${dateParts.date}-${channelSlug}-thought-${sourceMessageId}-${index + 1}${extension}`;
     const outputPath = path.join(outputDir, imageFileName);
     const publicPath = `/images/thoughts/${year}/${month}/${imageFileName}`;
 
@@ -492,7 +505,7 @@ function selectThoughtImagePhoto(message) {
 
   return (
     photos
-      .filter((photo) => photo.source === 'photo')
+      .filter((photo) => photo.source === 'photo' || photo.source === 'feishu_image')
       .toSorted((left, right) => thoughtPhotoScore(right) - thoughtPhotoScore(left))
       .at(0) ?? null
   );

@@ -36,6 +36,7 @@ export function buildTelegramSyncReport(result) {
         taskStatus: taskAudit.taskStatus,
         retryState: taskAudit.retryState,
         retryCount: taskAudit.retryCount,
+        chatIds: taskAudit.chatIds,
         messageIds: taskAudit.messageIds,
         updateIds: taskAudit.updateIds,
         status: batch.status,
@@ -97,6 +98,11 @@ function buildSyncTaskAuditFields(batch) {
   const messageIds = messages
     .map((message) => message?.messageId)
     .filter((messageId) => messageId !== null && messageId !== undefined);
+  const chatIds = [
+    ...new Set(messages
+      .map((message) => message?.chatId)
+      .filter((chatId) => chatId !== null && chatId !== undefined && chatId !== '')),
+  ];
   const updateIds = messages
     .map((message) => message?.updateId)
     .filter((updateId) => updateId !== null && updateId !== undefined);
@@ -108,6 +114,7 @@ function buildSyncTaskAuditFields(batch) {
     taskStatus: normalizeSyncTaskStatus(batch),
     retryState: normalizeSyncRetryState(batch),
     retryCount: normalizeSyncRetryCount(batch),
+    chatIds,
     messageIds,
     updateIds,
   };

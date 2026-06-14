@@ -100,8 +100,11 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
     '.github/workflows/deploy-pages.yml',
     '.github/workflows/telegram-sync.yml',
     '.github/workflows/telegram-sync-dev.yml',
+    '.github/workflows/feishu-sync.yml',
+    '.github/workflows/feishu-sync-dev.yml',
     '.github/workflows/deploy-cloudflare-worker.yml',
     '.github/workflows/deploy-cloudflare-worker-dev.yml',
+    '.github/workflows/deploy-cloudflare-feishu-worker.yml',
     '.github/workflows/deploy-cloudflare-pages-dev.yml',
     '.github/workflows/refresh-telegram-webhook.yml',
     '.github/workflows/markdown-backup.yml',
@@ -171,6 +174,35 @@ test('deploy-cloudflare-worker workflow refreshes Telegram webhook after deploym
   assert.match(workflow, /TELEGRAM_WEBHOOK_URL:\s*\$\{\{\s*vars\.TELEGRAM_WEBHOOK_URL\s*\}\}/);
   assert.match(workflow, /TELEGRAM_SECRET_TOKEN:\s*\$\{\{\s*secrets\.TELEGRAM_SECRET_TOKEN\s*\}\}/);
   assert.match(workflow, /run:\s*npm run telegram:webhook/);
+});
+
+test('deploy-cloudflare-feishu-worker workflow deploys on Feishu worker changes to main', async () => {
+  const workflow = await readWorkflow('.github/workflows/deploy-cloudflare-feishu-worker.yml');
+
+  assert.match(workflow, /name:\s*Deploy Cloudflare Feishu Worker/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- main/);
+  for (const expectedPath of [
+    'cloudflare/feishu-sync-dispatch-worker.mjs',
+    'wrangler.feishu.toml',
+    '.github/workflows/deploy-cloudflare-feishu-worker.yml',
+  ]) {
+    assert.match(workflow, new RegExp(`-\\s*${escapeRegExp(expectedPath)}`));
+  }
+  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
+  assert.match(workflow, /command:\s*deploy --config wrangler\.feishu\.toml/);
+});
+
+test('feishu-sync workflows expose source ids and chat ids in dispatch summaries', async () => {
+  for (const workflowPath of ['.github/workflows/feishu-sync.yml', '.github/workflows/feishu-sync-dev.yml']) {
+    const workflow = await readWorkflow(workflowPath);
+
+    assert.match(workflow, /- name: Write Feishu sync summary/);
+    assert.match(workflow, /GITHUB_STEP_SUMMARY/);
+    assert.match(workflow, /batchId \| sourceId \| chatIds \| taskStatus/);
+    assert.match(workflow, /batch\.sourceId/);
+    assert.match(workflow, /batch\.chatIds/);
+  }
 });
 
 test('refresh-telegram-webhook workflow supports manual and scheduled webhook refresh', async () => {

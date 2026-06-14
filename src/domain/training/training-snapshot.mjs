@@ -78,7 +78,7 @@ function isRenderableSnapshot(snapshot) {
 async function readBodyFeedbackFromMarkdown(rootDir) {
   const postsDir = path.join(rootDir, 'source', '_posts');
   const postPaths = await readDirRecursive(postsDir, {
-    filter: (entryPath) => /(?:^|[/\\])[^/\\]+-telegram-thought-\d+\.md$/u.test(entryPath),
+    filter: (entryPath) => /(?:^|[/\\])[^/\\]+-(?:telegram|feishu)-thought-\d+\.md$/u.test(entryPath),
   });
 
   const entries = [];
@@ -96,6 +96,9 @@ async function readBodyFeedbackFromMarkdown(rootDir) {
         body: String(parsed._content ?? '').trim(),
         telegramMessageId: toNumberOrNull(parsed.telegram_message_id),
         telegramChatId: toNumberOrNull(parsed.telegram_chat_id),
+        sourceChannel: parsed.source_channel ?? 'telegram',
+        sourceMessageId: parsed.source_message_id ?? null,
+        sourceChatId: parsed.source_chat_id ?? null,
         markdownPath: toPortableRelativePath(path.relative(rootDir, postPath)),
         source: 'markdown',
       });

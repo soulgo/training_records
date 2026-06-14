@@ -1,0 +1,32 @@
+name: Deploy Cloudflare Feishu Worker
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - cloudflare/feishu-sync-dispatch-worker.mjs
+      - wrangler.feishu.toml
+      - .github/workflows/deploy-cloudflare-feishu-worker.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-feishu-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy Feishu worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config wrangler.feishu.toml
