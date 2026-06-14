@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -9,6 +9,7 @@ import {
   normalizeFeishuMessage,
 } from '../src/adapters/feishu/index.mjs';
 import { recognizeBatch } from '../tools/telegram-sync-image-processing.mjs';
+import { notifyFeishuActionFailure } from '../tools/feishu-action-monitor.mjs';
 import { buildFeishuSyncReport, runFeishuSync } from '../tools/feishu-sync.mjs';
 
 test('normalizeFeishuMessage keeps Feishu source ids while exposing Telegram-compatible fields', () => {
@@ -217,6 +218,59 @@ test('runFeishuSync handles image and thought batches through the shared sync pi
   const report = buildFeishuSyncReport(result);
   assert.deepEqual(report.batches.map((batch) => batch.chatIds), [['oc_chat_1'], ['oc_chat_1']]);
   assert.match(report.batches[0].sourceId, /^feishu:chat:oc_chat_1:/);
+});
+
+test('feishu action monitor reports failed workflow stages to the original Feishu chat', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-action-monitor-'));
+  const eventPath = path.join(tempRoot, 'event.json');
+  const sentMessages = [];
+
+  await writeFile(
+    eventPath,
+    JSON.stringify({
+      client_payload: {
+        feishu_updates: [
+          createFeishuImageEvent({
+            eventId: 'evt-action-fail-1',
+            messageId: 'om_action_fail_1',
+            chatId: 'oc_chat_1',
+            imageKey: 'img_action_fail_1',
+            createTime: '1781398800000',
+          }),
+          createFeishuImageEvent({
+            eventId: 'evt-action-fail-2',
+            messageId: 'om_action_fail_2',
+            chatId: 'oc_chat_1',
+            imageKey: 'img_action_fail_2',
+            createTime: '1781398802000',
+          }),
+        ],
+      },
+    }),
+    'utf8',
+  );
+
+  const result = await notifyFeishuActionFailure({
+    env: {
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+      GITHUB_EVENT_PATH: eventPath,
+      GITHUB_SERVER_URL: 'https://github.com',
+      GITHUB_REPOSITORY: 'soulgo/training_records',
+      GITHUB_RUN_ID: '123456',
+      STEP_SYNC_OUTCOME: 'failure',
+    },
+    sendFeishuMessage: async (message) => {
+      sentMessages.push(message);
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(result.failureCategory, 'github_action');
+  assert.equal(result.failureStage, 'Sync Feishu updates');
+  assert.deepEqual(sentMessages.map((message) => message.chatId), ['oc_chat_1']);
+  assert.match(sentMessages[0].text, /GitHub Action 执行失败：Sync Feishu updates/);
+  assert.match(sentMessages[0].text, /https:\/\/github\.com\/soulgo\/training_records\/actions\/runs\/123456/);
 });
 
 function createRecognitionProvider(requestedImageUrls) {

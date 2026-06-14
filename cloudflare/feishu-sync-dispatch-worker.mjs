@@ -2,6 +2,8 @@ const GITHUB_API_BASE_URL = 'https://api.github.com';
 const DEFAULT_GITHUB_OWNER = 'soulgo';
 const DEFAULT_GITHUB_REPO = 'training_records';
 const IMAGE_BURST_BUFFER_DELAY_MS = 3_000;
+const IMAGE_BUFFER_RETRY_BASE_DELAY_MS = 10_000;
+const IMAGE_BUFFER_RETRY_MAX_DELAY_MS = 60_000;
 
 export default {
   async fetch(request, env) {
@@ -55,13 +57,45 @@ export class FeishuImageBuffer {
       return;
     }
 
-    const response = await dispatchFeishuUpdates({
-      fetchImpl: this.env.__dispatchFetchImpl ?? fetch,
-      env: this.env,
-      events,
-    });
-    if (response.ok) {
+    const logger = this.env.__logger ?? console;
+    const eventType = resolveGithubDispatchEventType(this.env);
+    try {
+      const response = await dispatchFeishuUpdates({
+        fetchImpl: this.env.__dispatchFetchImpl ?? fetch,
+        env: this.env,
+        events,
+      });
+      if (!response.ok) {
+        await scheduleImageBufferRetry({
+          state: this.state,
+          env: this.env,
+          logger,
+          eventType,
+          eventCount: events.length,
+          status: response.status,
+        });
+        return;
+      }
+
       await this.state.storage.delete('events');
+      await this.state.storage.delete('dispatchRetryCount');
+      logImageBufferDispatch(logger, {
+        ok: true,
+        eventType,
+        eventCount: events.length,
+        status: response.status,
+        retryCount: 0,
+      });
+    } catch (error) {
+      await scheduleImageBufferRetry({
+        state: this.state,
+        env: this.env,
+        logger,
+        eventType,
+        eventCount: events.length,
+        status: null,
+        error,
+      });
     }
   }
 }
@@ -308,7 +342,7 @@ function isFeishuEventLoggingDisabled(env) {
 
 async function dispatchFeishuUpdates({ fetchImpl, env, events }) {
   const { owner, repo } = resolveGithubRepository(env);
-  const eventType = env?.GITHUB_DISPATCH_EVENT_TYPE?.trim() || 'feishu_update';
+  const eventType = resolveGithubDispatchEventType(env);
   const clientPayload = events.length === 1
     ? { feishu_update: events[0] }
     : { feishu_updates: events };
@@ -337,6 +371,10 @@ function resolveGithubRepository(env) {
   };
 }
 
+function resolveGithubDispatchEventType(env) {
+  return env?.GITHUB_DISPATCH_EVENT_TYPE?.trim() || 'feishu_update';
+}
+
 function getImageBufferKey(event) {
   const message = event?.event?.message ?? null;
   if (!message || message.message_type !== 'image' || !message.chat_id) {
@@ -347,6 +385,52 @@ function getImageBufferKey(event) {
 
 async function readBufferedEvents(state) {
   return (await state.storage.get('events')) ?? [];
+}
+
+async function scheduleImageBufferRetry({
+  state,
+  env,
+  logger,
+  eventType,
+  eventCount,
+  status,
+  error,
+}) {
+  const retryCount = Number(await state.storage.get('dispatchRetryCount') ?? 0) + 1;
+  await state.storage.put('dispatchRetryCount', retryCount);
+  const retryDelayMs = calculateImageBufferRetryDelayMs(retryCount);
+  const nextAlarmAt = getNow(env) + retryDelayMs;
+  await setStateAlarm(state, nextAlarmAt);
+  logImageBufferDispatch(logger, {
+    ok: false,
+    eventType,
+    eventCount,
+    status,
+    retryCount,
+    retryDelayMs,
+    nextAlarmAt,
+    errorName: error instanceof Error ? error.name : null,
+  });
+}
+
+function calculateImageBufferRetryDelayMs(retryCount) {
+  const exponent = Math.max(0, Math.min(Number(retryCount) - 1, 6));
+  return Math.min(
+    IMAGE_BUFFER_RETRY_BASE_DELAY_MS * (2 ** exponent),
+    IMAGE_BUFFER_RETRY_MAX_DELAY_MS,
+  );
+}
+
+function getNow(env) {
+  return typeof env?.__now === 'function' ? env.__now() : Date.now();
+}
+
+function logImageBufferDispatch(logger, metadata) {
+  try {
+    logger?.log?.(`[feishu-image-buffer] ${JSON.stringify(metadata)}`);
+  } catch {
+    // Diagnostic logging must never affect buffered message delivery.
+  }
 }
 
 function compareFeishuEvents(left, right) {

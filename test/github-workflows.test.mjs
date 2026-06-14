@@ -105,6 +105,7 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
     '.github/workflows/deploy-cloudflare-worker.yml',
     '.github/workflows/deploy-cloudflare-worker-dev.yml',
     '.github/workflows/deploy-cloudflare-feishu-worker.yml',
+    '.github/workflows/deploy-cloudflare-feishu-worker-dev.yml',
     '.github/workflows/deploy-cloudflare-pages-dev.yml',
     '.github/workflows/refresh-telegram-webhook.yml',
     '.github/workflows/markdown-backup.yml',
@@ -193,6 +194,16 @@ test('deploy-cloudflare-feishu-worker workflow deploys on Feishu worker changes 
   assert.match(workflow, /command:\s*deploy --config wrangler\.feishu\.toml/);
 });
 
+test('deploy-cloudflare-feishu-worker-dev workflow deploys the dev Feishu worker manually', async () => {
+  const workflow = await readWorkflow('.github/workflows/deploy-cloudflare-feishu-worker-dev.yml');
+
+  assert.match(workflow, /name:\s*Deploy Cloudflare Feishu Worker \(Dev\)/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /push:/);
+  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
+  assert.match(workflow, /command:\s*deploy --config wrangler\.feishu-dev\.toml/);
+});
+
 test('feishu-sync workflows expose source ids and chat ids in dispatch summaries', async () => {
   for (const workflowPath of ['.github/workflows/feishu-sync.yml', '.github/workflows/feishu-sync-dev.yml']) {
     const workflow = await readWorkflow(workflowPath);
@@ -202,6 +213,36 @@ test('feishu-sync workflows expose source ids and chat ids in dispatch summaries
     assert.match(workflow, /batchId \| sourceId \| chatIds \| taskStatus/);
     assert.match(workflow, /batch\.sourceId/);
     assert.match(workflow, /batch\.chatIds/);
+  }
+});
+
+test('feishu-sync workflows report repository dispatch failures back to Feishu', async () => {
+  for (const workflowPath of ['.github/workflows/feishu-sync.yml', '.github/workflows/feishu-sync-dev.yml']) {
+    const workflow = await readWorkflow(workflowPath);
+
+    for (const [stepName, stepId] of [
+      ['Install dependencies', 'install'],
+      ['Sync Feishu updates', 'sync'],
+      ['Detect changes', 'detect'],
+      ['Commit sync results', 'commit'],
+      ['Push changes', 'push'],
+    ]) {
+      assert.match(
+        workflow,
+        new RegExp(`- name: ${escapeRegExp(stepName)}\\n\\s+id: ${stepId}`),
+        `${workflowPath} ${stepName} should have stable id ${stepId}`,
+      );
+    }
+
+    assert.match(workflow, /- name: Notify Feishu sync failure/);
+    assert.match(workflow, /if: failure\(\) && github\.event_name == 'repository_dispatch'/);
+    assert.match(workflow, /continue-on-error: true/);
+    assert.match(workflow, /node tools\/feishu-action-monitor\.mjs/);
+    assert.match(workflow, /STEP_INSTALL_OUTCOME: \$\{\{ steps\.install\.outcome \}\}/);
+    assert.match(workflow, /STEP_SYNC_OUTCOME: \$\{\{ steps\.sync\.outcome \}\}/);
+    assert.match(workflow, /STEP_DETECT_OUTCOME: \$\{\{ steps\.detect\.outcome \}\}/);
+    assert.match(workflow, /STEP_COMMIT_OUTCOME: \$\{\{ steps\.commit\.outcome \}\}/);
+    assert.match(workflow, /STEP_PUSH_OUTCOME: \$\{\{ steps\.push\.outcome \}\}/);
   }
 });
 

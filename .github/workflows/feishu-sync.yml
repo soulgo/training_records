@@ -183,3 +183,17 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-pages.yml/dispatches" \
             -d '{"ref":"main","inputs":{"strict_database_snapshot":"true"}}'
+
+      - name: Notify Feishu sync failure
+        if: failure() && github.event_name == 'repository_dispatch'
+        continue-on-error: true
+        env:
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          STEP_INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          STEP_SYNC_OUTCOME: ${{ steps.sync.outcome }}
+          STEP_DETECT_OUTCOME: ${{ steps.detect.outcome }}
+          STEP_COMMIT_OUTCOME: ${{ steps.commit.outcome }}
+          STEP_REBASE_OUTCOME: ${{ steps.rebase.outcome }}
+          STEP_PUSH_OUTCOME: ${{ steps.push.outcome }}
+        run: node tools/feishu-action-monitor.mjs

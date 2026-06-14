@@ -193,6 +193,43 @@ test('FeishuImageBuffer dispatches buffered image bursts with the plural payload
   assert.equal(await state.storage.get('events'), undefined);
 });
 
+test('FeishuImageBuffer keeps buffered events and schedules a retry when GitHub dispatch fails', async () => {
+  const logs = [];
+  const state = createDurableObjectState();
+  const event = createFeishuImageEvent({
+    eventId: 'evt-image-retry-1',
+    messageId: 'om_feishu_retry_1',
+    chatId: 'oc_chat_1',
+    imageKey: 'img_v3_retry_1',
+  });
+  const buffer = new FeishuImageBuffer(state, createEnv({
+    GITHUB_DISPATCH_EVENT_TYPE: 'feishu_update_dev',
+    __logger: {
+      log(message) {
+        logs.push(String(message));
+      },
+    },
+    __dispatchFetchImpl: async () => new Response('bad credentials', { status: 401 }),
+  }));
+
+  assert.equal((await buffer.fetch(createBufferRequest(event))).status, 202);
+  const firstAlarm = await state.storage.get('alarm');
+
+  await buffer.alarm();
+
+  assert.deepEqual(await state.storage.get('events'), [event]);
+  assert.equal(await state.storage.get('dispatchRetryCount'), 1);
+  assert.ok(await state.storage.get('alarm') > firstAlarm);
+
+  const dispatchLog = logs.find((line) => line.includes('[feishu-image-buffer]'));
+  assert.ok(dispatchLog);
+  assert.match(dispatchLog, /"eventType":"feishu_update_dev"/);
+  assert.match(dispatchLog, /"eventCount":1/);
+  assert.match(dispatchLog, /"status":401/);
+  assert.match(dispatchLog, /"retryCount":1/);
+  assert.doesNotMatch(dispatchLog, /github-token|bad credentials/);
+});
+
 function createFeishuRequest(event) {
   return new Request('https://worker.example.com', {
     method: 'POST',
