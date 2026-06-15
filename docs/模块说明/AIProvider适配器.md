@@ -25,7 +25,7 @@
 - 现有 Chat Completions 请求形状保持不变
 - 图片识别的 `response_format.json_schema` 保持不变
 - `/analysis` 的 prompt、输出格式和 reply 逻辑保持不变
-- `.github/workflows/telegram-sync.yml` 与 `.github/workflows/telegram-sync-dev.yml` 显式透传 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_*` 和 `TELEGRAM_RECOGNITION_CACHE_ENABLED`
+- `.github/workflows/telegram-sync.yml` 与 `.github/workflows/sync-dev.yml` 显式透传 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_*` 和 `TELEGRAM_RECOGNITION_CACHE_ENABLED`
 - Telegram 图片识别可用 `TELEGRAM_RECOGNITION_MODEL` 单独覆盖模型；`/analysis` 仍使用 `AI_MODEL`
 - 备用 AI 只作用于 Telegram 图片识别，不改变 `/analysis` 使用的 provider
 

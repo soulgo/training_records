@@ -121,6 +121,33 @@ test('handleTelegramWebhook dispatches with a configured GitHub event type', asy
   assert.equal(JSON.parse(calls[0].init.body).event_type, 'telegram_update_dev');
 });
 
+test('handleTelegramWebhook prefers the Telegram-specific dispatch event type', async () => {
+  const calls = [];
+  const response = await handleTelegramWebhook(
+    createTelegramRequest({
+      update_id: 129,
+      message: {
+        message_id: 9,
+      },
+    }),
+    {
+      ...createEnv(),
+      GITHUB_DISPATCH_EVENT_TYPE: 'legacy_dev_event',
+      GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM: 'telegram_update_dev',
+    },
+    {
+      fetchImpl: async (url, init) => {
+        calls.push({ url, init });
+        return new Response(null, { status: 204 });
+      },
+    },
+  );
+
+  assert.equal(response.status, 202);
+  assert.equal(calls.length, 1);
+  assert.equal(JSON.parse(calls[0].init.body).event_type, 'telegram_update_dev');
+});
+
 test('handleTelegramWebhook notifies Telegram when the GitHub token is missing', async () => {
   const calls = [];
   const request = createTelegramRequest({

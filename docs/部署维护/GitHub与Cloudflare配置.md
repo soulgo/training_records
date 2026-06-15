@@ -8,8 +8,9 @@
 - `.github/workflows/deploy-cloudflare-pages-dev.yml`
 - `.github/workflows/telegram-sync.yml`
 - `.github/workflows/feishu-sync.yml`
-- `.github/workflows/feishu-sync-dev.yml`
+- `.github/workflows/sync-dev.yml`
 - `.github/workflows/deploy-cloudflare-worker.yml`
+- `.github/workflows/deploy-cloudflare-worker-dev.yml`
 - `.github/workflows/deploy-cloudflare-feishu-worker.yml`
 - `.github/workflows/refresh-telegram-webhook.yml`
 
@@ -26,13 +27,13 @@
 #### `AI_API_KEY`
 
 - 用途：截图识别和 Telegram/飞书 `/analysis` 训练分析所用 AI 服务鉴权
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：是
 
 #### `TELEGRAM_RECOGNITION_FALLBACK_API_KEY`
 
 - 用途：Telegram 图片识别备用 AI 服务鉴权；主 AI timeout、HTTP 429/5xx、空内容或网络失败时使用
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否；只有同时配置 `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` 和 `TELEGRAM_RECOGNITION_FALLBACK_MODEL` 时才启用
 
 #### `TRAINING_DB_URL`
@@ -72,13 +73,13 @@ postgresql://training_writer:你的数据库密码@你的数据库公网IP或域
 #### `FEISHU_APP_ID`
 
 - 用途：飞书企业自建应用 App ID
-- 使用工作流：`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：启用飞书通道时必填
 
 #### `FEISHU_APP_SECRET`
 
 - 用途：飞书企业自建应用 App Secret，用于获取 tenant access token
-- 使用工作流：`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：启用飞书通道时必填
 
 飞书事件订阅的 `FEISHU_ENCRYPT_KEY` 和 `FEISHU_VERIFICATION_TOKEN` 不被 GitHub sync workflow 消费，应配置到飞书 Cloudflare Worker Secret，见本文 2.2 节。
@@ -88,14 +89,14 @@ postgresql://training_writer:你的数据库密码@你的数据库公网IP或域
 - `DEV_FEISHU_APP_ID`
 - `DEV_FEISHU_APP_SECRET`
 
-`feishu-sync-dev.yml` 会优先读取 Dev Secret，未配置时回退到生产 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`。
+`sync-dev.yml` 会优先读取 Dev Secret，未配置时回退到生产 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`。
 
 ### Variables
 
 #### `AI_BASE_URL`
 
 - 用途：截图识别和 Telegram/飞书 `/analysis` 训练分析的 AI 服务基础地址
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：是
 - 推荐值：
 
@@ -106,7 +107,7 @@ https://api.openai.com/v1
 #### `AI_MODEL`
 
 - 用途：截图识别和 Telegram/飞书 `/analysis` 训练分析模型名
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：是
 - 推荐值：
 
@@ -117,7 +118,7 @@ gpt-4.1
 #### `AI_PROVIDER`
 
 - 用途：选择 AI provider adapter
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否
 - 默认值：`openai-compatible`
 - 说明：当前只实现 OpenAI-compatible Chat Completions 协议
@@ -125,14 +126,14 @@ gpt-4.1
 #### `AI_TIMEOUT_MS`
 
 - 用途：AI 请求超时时间，单位毫秒
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否
 - 说明：未配置时沿用 provider 默认超时语义
 
 #### `AI_CONCURRENCY`
 
 - 用途：并发识别数量
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否
 - 推荐值：
 
@@ -143,7 +144,7 @@ gpt-4.1
 #### `TRAINING_ANALYSIS_GOAL`
 
 - 用途：覆盖 Telegram/飞书 `/analysis` / `/分析` 的长期训练目标
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否
 - 默认值：未配置时使用“增肌减腹：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪；不追求单纯掉体重或局部减脂。”
 - 推荐值：
@@ -155,26 +156,26 @@ gpt-4.1
 #### `TELEGRAM_ALLOWED_CHAT_IDS`
 
 - 用途：允许自动处理的 Telegram chat id 白名单
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`sync-dev.yml`
 - 是否必填：是
 
 #### `FEISHU_ALLOWED_CHAT_IDS`
 
 - 用途：允许自动处理的飞书 chat id 白名单
-- 使用工作流：`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：启用飞书通道时必填
 - 格式：多个 chat id 用逗号分隔，例如 `oc_xxx,oc_yyy`
 
 #### `DEV_FEISHU_ALLOWED_CHAT_IDS`
 
 - 用途：Dev 飞书同步白名单
-- 使用工作流：`feishu-sync-dev.yml`
+- 使用工作流：`sync-dev.yml`
 - 是否必填：否；未设置时回退到 `FEISHU_ALLOWED_CHAT_IDS`
 
 #### `TELEGRAM_POLL_LIMIT`
 
 - 用途：每轮轮询最多拉取多少条消息
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`sync-dev.yml`
 - 是否必填：否
 - 推荐值：
 
@@ -185,7 +186,7 @@ gpt-4.1
 #### `TRAINING_SNAPSHOT_SOURCE`
 
 - 用途：控制 Pages 构建时站点数据来自 `markdown` 还是 `database`
-- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否
 - 首次接入安全值：
 
@@ -204,7 +205,7 @@ database
 #### `TRAINING_DB_ENABLED`
 
 - 用途：控制 GitHub Actions 是否启用 PostgreSQL 主链路
-- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否
 - 首次接入安全值：
 
@@ -223,7 +224,7 @@ true
 #### `TRAINING_DB_TIMEOUT_MS`
 
 - 用途：数据库连接超时时间，单位毫秒
-- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否
 - 推荐值：
 
@@ -234,7 +235,7 @@ true
 #### `TRAINING_DB_APP_NAME`
 
 - 用途：PostgreSQL 连接应用名
-- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否
 - 推荐值：
 
@@ -245,14 +246,14 @@ training-records-dashboard
 #### `TELEGRAM_RECOGNITION_MODEL`
 
 - 用途：只覆盖消息通道图片识别模型；变量名沿用 Telegram 历史命名
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否
 - 默认值：未配置时使用 `AI_MODEL`
 
 #### `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL`
 
 - 用途：消息通道图片识别备用 AI 服务基础地址；变量名沿用 Telegram 历史命名
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否；启用备用 AI 时必填
 - 推荐格式：
 
@@ -263,13 +264,13 @@ https://api.openai.com/v1
 #### `TELEGRAM_RECOGNITION_FALLBACK_MODEL`
 
 - 用途：消息通道图片识别备用 AI 模型名；变量名沿用 Telegram 历史命名
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否；启用备用 AI 时必填
 
 #### `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS`
 
 - 用途：消息通道图片识别备用 AI 请求超时时间，单位毫秒；变量名沿用 Telegram 历史命名
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否；未配置时沿用 `AI_TIMEOUT_MS`
 - 推荐值：
 
@@ -280,7 +281,7 @@ https://api.openai.com/v1
 #### `TELEGRAM_RECOGNITION_CACHE_ENABLED`
 
 - 用途：控制消息通道图片识别是否读取数据库识别缓存；变量名沿用 Telegram 历史命名
-- 使用工作流：`telegram-sync.yml`、`telegram-sync-dev.yml`、`feishu-sync.yml`、`feishu-sync-dev.yml`
+- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
 - 是否必填：否
 - 推荐值：按线上缓存命中率观察决定；本轮不强制默认开启
 
@@ -542,10 +543,13 @@ npx wrangler deploy --config wrangler.feishu.toml
 - `repository_dispatch` 会写 GitHub Step Summary，按批次输出 `batchId`、`taskStatus`、`persistenceStatus`、`archivedDate`、图片计数、pending 状态、`failureDisposition` 和失败 message ids
 - 成功通知步骤名是 `Notify Feishu sync result`，会通过飞书 Open API 回发同步结果
 
-[`feishu-sync-dev.yml`](../../.github/workflows/feishu-sync-dev.yml) 用于 `dev` 分支飞书验证：
+[`sync-dev.yml`](../../.github/workflows/sync-dev.yml) 用于 `dev` 分支 Telegram/飞书统一验证：
 
 - checkout `dev`
+- `repository_dispatch` 监听 `telegram_update_dev` 与 `feishu_update_dev`
+- 手动运行时通过 `channel=telegram|feishu` 选择同步通道，默认 `telegram`
 - 固定 `TRAINING_DB_ENABLED=true`，使用 `DEV_TRAINING_DB_URL`
+- Telegram 使用 `DEV_TELEGRAM_BOT_TOKEN`
 - 优先读取 `DEV_FEISHU_APP_ID`、`DEV_FEISHU_APP_SECRET`、`DEV_FEISHU_ALLOWED_CHAT_IDS`，未配置时回退到生产飞书配置
 - DB 或文件内容变化后异步 dispatch `deploy-cloudflare-pages-dev.yml`
 
@@ -613,12 +617,13 @@ Invoke-RestMethod `
 3. 再配置 `TRAINING_DB_URL`、`TRAINING_SNAPSHOT_SOURCE`、`TRAINING_DB_TIMEOUT_MS`、`TRAINING_DB_APP_NAME`
 4. 先把 `TRAINING_DB_ENABLED` 设成 `false`
 5. 本地确认 PostgreSQL 链路和 pending replay 链路都正常后，再改成 `TRAINING_DB_ENABLED=true`，并把生产构建切到 `TRAINING_SNAPSHOT_SOURCE=database`
-6. 如果启用 Telegram webhook，再配置 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
-7. 再去 Cloudflare 配 `GITHUB_TOKEN`、`TELEGRAM_BOT_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`GITHUB_OWNER`、`GITHUB_REPO` 和 `TELEGRAM_ALBUM_BUFFER`
+6. 如果启用 Telegram/飞书 webhook，再配置 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
+7. 再去 Cloudflare 配生产 Telegram Worker 的 `GITHUB_TOKEN`、`TELEGRAM_BOT_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`GITHUB_OWNER`、`GITHUB_REPO` 和 `TELEGRAM_ALBUM_BUFFER`
 8. 再在 GitHub Actions 配 `TELEGRAM_SECRET_TOKEN` Secret 和 `TELEGRAM_WEBHOOK_URL` Variable
 9. 手动运行一次 `Deploy Cloudflare Worker` 或 `Refresh Telegram Webhook`
-10. 如果启用飞书通道，再按 [飞书通道部署](飞书通道部署.md) 配置飞书开放平台、GitHub `FEISHU_*`、飞书 Worker Secret 和 `FEISHU_IMAGE_BUFFER`
-11. 手动运行一次 `Deploy Cloudflare Feishu Worker`，把部署后的 Worker URL 填回飞书事件订阅 Request URL
+10. 如果启用 dev Telegram/飞书统一入口，再给 `sync-dispatch-dev` 配 `GITHUB_TOKEN`、`TELEGRAM_BOT_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`FEISHU_ENCRYPT_KEY`、`FEISHU_VERIFICATION_TOKEN`、`TELEGRAM_ALBUM_BUFFER` 和 `FEISHU_IMAGE_BUFFER`，并确认 GitHub 的 `DEV_TELEGRAM_SECRET_TOKEN` 与 Cloudflare 的 `TELEGRAM_SECRET_TOKEN` 值一致
+11. 如果启用生产飞书通道，再按 [飞书通道部署](飞书通道部署.md) 配置飞书开放平台、GitHub `FEISHU_*`、飞书 Worker Secret 和 `FEISHU_IMAGE_BUFFER`
+12. 手动运行一次 `Deploy Cloudflare Feishu Worker`，把部署后的 Worker URL 填回生产飞书事件订阅 Request URL；dev 飞书 Request URL 使用 `https://feishu-dev.soulgo.chat`
 
 ## 6. 验证方法
 
@@ -640,8 +645,8 @@ Invoke-RestMethod `
 
 - `telegram-sync.yml` 现在会直接访问 PostgreSQL
 - `feishu-sync.yml` 也会直接访问 PostgreSQL，并通过 `sourceChannel: 'feishu'` 写入 core 子表
-- `telegram-sync.yml` 与 `telegram-sync-dev.yml` 都会透传 AI provider、timeout、识别模型、识别备用 AI 和识别缓存变量；当前 provider adapter 仍只支持 OpenAI-compatible 协议
-- `feishu-sync.yml` 与 `feishu-sync-dev.yml` 复用上述 AI provider、识别模型、备用 AI 和识别缓存变量；飞书图片输入模式固定为 inline
+- `telegram-sync.yml` 与 `sync-dev.yml` 都会透传 AI provider、timeout、识别模型、识别备用 AI 和识别缓存变量；当前 provider adapter 仍只支持 OpenAI-compatible 协议
+- `feishu-sync.yml` 与 `sync-dev.yml` 复用上述 AI provider、识别模型、备用 AI 和识别缓存变量；飞书图片输入模式固定为 inline
 - Telegram `/thought` 虽然不走图片识别，但当前 `npm run sync:telegram` 入口仍会统一校验 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`，所以这些变量不能省
 - 飞书 `/随想` 当前支持新建和 DB-first 入库，不支持 Telegram Markdown 文档附件，也不承诺随想编辑/删除/移动完整可用
 - Telegram `/analysis` / `/分析` 不走图片识别、不写数据库、不提交仓库，但会读取现有 `TrainingSnapshot` 并调用 AI 回发建议，所以同样依赖 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 和 `TELEGRAM_BOT_TOKEN`
