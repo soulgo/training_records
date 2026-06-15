@@ -22,10 +22,10 @@ repository_dispatch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;s
 Worker / Durable Object" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#000000;strokeWidth=1" vertex="1" parent="g-ext"><mxGeometry x="1200" y="55" width="260" height="70" as="geometry"/></mxCell>
         <mxCell id="ext-domain" value="soulgo.chat
 Cloudflare CDN 代理（橙云）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-ext"><mxGeometry x="1500" y="55" width="260" height="70" as="geometry"/></mxCell>
-        <mxCell id="auto-cf-worker" value="cloudflare/telegram-sync-dispatch-worker.mjs
-校验 secret / 相册聚合 / dispatch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-auto"><mxGeometry x="40" y="245" width="330" height="90" as="geometry"/></mxCell>
-        <mxCell id="auto-telegram-sync" value=".github/workflows/telegram-sync.yml
-repository_dispatch / push / manual" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-auto"><mxGeometry x="410" y="245" width="310" height="90" as="geometry"/></mxCell>
+        <mxCell id="auto-cf-worker" value="cloudflare/sync-dispatch-worker.mjs
+判断 channel / 图片缓冲 / dispatch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-auto"><mxGeometry x="40" y="245" width="330" height="90" as="geometry"/></mxCell>
+        <mxCell id="auto-telegram-sync" value=".github/workflows/sync.yml
+channel=telegram|feishu" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-auto"><mxGeometry x="410" y="245" width="310" height="90" as="geometry"/></mxCell>
         <mxCell id="auto-ci" value=".github/workflows/ci-tests.yml
 npm test" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=1" vertex="1" parent="g-auto"><mxGeometry x="760" y="245" width="250" height="90" as="geometry"/></mxCell>
         <mxCell id="auto-pages" value=".github/workflows/deploy-pages.yml
@@ -35,7 +35,8 @@ setup / backfill / build / deploy" style="rounded=1;whiteSpace=wrap;html=1;fillC
         <mxCell id="auto-cf-deploy" value=".github/workflows/deploy-cloudflare-worker.yml
 wrangler deploy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=1" vertex="1" parent="g-auto"><mxGeometry x="1750" y="245" width="320" height="90" as="geometry"/></mxCell>
         <mxCell id="node-sync" value="tools/telegram-sync.mjs
-同步主入口" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDEDED;strokeColor=#666666;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-node"><mxGeometry x="40" y="470" width="260" height="80" as="geometry"/></mxCell>
+tools/feishu-sync.mjs
+同步入口" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDEDED;strokeColor=#666666;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-node"><mxGeometry x="40" y="470" width="260" height="80" as="geometry"/></mxCell>
         <mxCell id="node-sync-lib" value="tools/telegram-sync-lib.mjs
 分组 / 命令解析 / 批次归一" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDEDED;strokeColor=#666666;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-node"><mxGeometry x="340" y="470" width="300" height="80" as="geometry"/></mxCell>
         <mxCell id="node-ai" value="src/ai/provider.mjs
@@ -57,7 +58,7 @@ Hexo generate/server" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDEDED;
         <mxCell id="node-thoughts" value="tools/telegram-thoughts.mjs
 随想 Markdown / 图片" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDEDED;strokeColor=#666666;fontColor=#000000;strokeWidth=1" vertex="1" parent="g-node"><mxGeometry x="1380" y="595" width="280" height="70" as="geometry"/></mxCell>
         <mxCell id="data-md" value="训练记录.md
-人工源 / DB 失败回退" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-data"><mxGeometry x="40" y="775" width="240" height="70" as="geometry"/></mxCell>
+DB 派生备份 / 显式人工导入" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontColor=#000000;strokeWidth=3" vertex="1" parent="g-data"><mxGeometry x="40" y="775" width="240" height="70" as="geometry"/></mxCell>
         <mxCell id="data-posts" value="source/_posts + source/images
 随想与图片" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontColor=#000000;strokeWidth=1" vertex="1" parent="g-data"><mxGeometry x="320" y="775" width="270" height="70" as="geometry"/></mxCell>
         <mxCell id="data-source-json" value="source/_data/training.json
