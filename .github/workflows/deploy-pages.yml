@@ -89,3 +89,8 @@ jobs:
           fi
 
           cat "${response_file}"
+
+      - name: Report skipped Cloudflare cache purge
+        if: ${{ success() && (env.CLOUDFLARE_ZONE_ID == '' || env.CLOUDFLARE_API_TOKEN == '') }}
+        run: |
+          echo "::warning title=Cloudflare cache purge skipped::CLOUDFLARE_ZONE_ID or CLOUDFLARE_API_TOKEN is not configured; deployed pages may stay behind Cloudflare cache until TTL expiry."

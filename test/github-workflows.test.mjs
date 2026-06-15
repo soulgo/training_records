@@ -88,6 +88,12 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.doesNotMatch(workflow, /curl -fsSL/);
   assert.match(workflow, /::warning title=Cloudflare cache purge failed::/);
   assert.match(workflow, /Zone -> Cache Purge -> Purge permission/);
+  assert.match(workflow, /- name: Report skipped Cloudflare cache purge/);
+  assert.match(
+    workflow,
+    /if: \$\{\{ success\(\) && \(env\.CLOUDFLARE_ZONE_ID == '' \|\| env\.CLOUDFLARE_API_TOKEN == ''\) \}\}/,
+  );
+  assert.match(workflow, /::warning title=Cloudflare cache purge skipped::/);
   assert.ok(
     workflow.indexOf('- name: Purge Cloudflare cache') > workflow.indexOf('- name: Build and deploy site'),
     'Cloudflare cache should be purged only after the Pages deployment step finishes',
