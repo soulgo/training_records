@@ -22,22 +22,24 @@ Hexo 本地服务" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;str
 checkout / node 22 / npm ci / npm test" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=1" vertex="1" parent="d-actions"><mxGeometry x="750" y="70" width="300" height="80" as="geometry"/></mxCell>
         <mxCell id="d-pages-wf" value="deploy-pages.yml
 main push / workflow_dispatch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=3" vertex="1" parent="d-actions"><mxGeometry x="1090" y="70" width="290" height="80" as="geometry"/></mxCell>
-        <mxCell id="d-sync-wf" value="telegram-sync.yml
-repository_dispatch / push / manual" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=3" vertex="1" parent="d-actions"><mxGeometry x="1420" y="70" width="310" height="80" as="geometry"/></mxCell>
+        <mxCell id="d-sync-wf" value="sync.yml
+repository_dispatch / push / manual
+channel=telegram|feishu" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=3" vertex="1" parent="d-actions"><mxGeometry x="1420" y="70" width="310" height="80" as="geometry"/></mxCell>
         <mxCell id="d-cf-wf" value="deploy-cloudflare-worker.yml
 wrangler-action deploy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=1" vertex="1" parent="d-actions"><mxGeometry x="1760" y="70" width="290" height="80" as="geometry"/></mxCell>
         <mxCell id="d-sitebuild" value=".github/actions/site-build
 setup Node / cache / backfill / build / deploy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=3" vertex="1" parent="d-actions"><mxGeometry x="870" y="215" width="370" height="90" as="geometry"/></mxCell>
-        <mxCell id="d-telegram-script" value="npm run sync:telegram
+        <mxCell id="d-telegram-script" value="npm run sync:telegram / sync:feishu
 AI/DB/Markdown 同步" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=3" vertex="1" parent="d-actions"><mxGeometry x="1320" y="215" width="300" height="90" as="geometry"/></mxCell>
         <mxCell id="d-build-script" value="npm run build
 build:data + build:site" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontColor=#000000;strokeWidth=1" vertex="1" parent="d-actions"><mxGeometry x="1660" y="215" width="270" height="90" as="geometry"/></mxCell>
         <mxCell id="d-telegram" value="Telegram Bot API
 Webhook / getUpdates" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#000000;strokeWidth=1" vertex="1" parent="d-runtime"><mxGeometry x="50" y="470" width="260" height="70" as="geometry"/></mxCell>
         <mxCell id="d-cf-worker" value="Cloudflare Worker
-telegram-sync-dispatch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=3" vertex="1" parent="d-runtime"><mxGeometry x="350" y="470" width="280" height="70" as="geometry"/></mxCell>
-        <mxCell id="d-do" value="Durable Object
-TELEGRAM_ALBUM_BUFFER" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=1" vertex="1" parent="d-runtime"><mxGeometry x="350" y="590" width="280" height="70" as="geometry"/></mxCell>
+sync-dispatch-worker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=3" vertex="1" parent="d-runtime"><mxGeometry x="350" y="470" width="280" height="70" as="geometry"/></mxCell>
+        <mxCell id="d-do" value="Durable Objects
+TELEGRAM_ALBUM_BUFFER
+FEISHU_IMAGE_BUFFER" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1D5E7;strokeColor=#9673A6;fontColor=#000000;strokeWidth=1" vertex="1" parent="d-runtime"><mxGeometry x="350" y="590" width="280" height="70" as="geometry"/></mxCell>
         <mxCell id="d-github-api" value="GitHub API
 repository_dispatch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#000000;strokeWidth=1" vertex="1" parent="d-runtime"><mxGeometry x="670" y="470" width="260" height="70" as="geometry"/></mxCell>
         <mxCell id="d-public" value="public/

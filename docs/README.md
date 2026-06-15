@@ -23,6 +23,7 @@
 17. [V12 MCP 删除与数据库结构对齐](优化重构/MCP删除与数据库结构对齐_v12/README.md)
 18. [V13 数据统一与六边形架构重构](优化重构/数据统一与六边形架构重构_v13/README.md)
 19. [V15 自适应图片解析入库](优化重构/自适应图片解析入库_v15/README.md)
+20. [V21 docs 文档内容优化](优化重构/docs%20文档内容优化_v21/README.md)
 
 ## 文档目录
 
@@ -45,10 +46,11 @@
 - 文档与代码不一致时，以代码为准，并同步修正文档。
 - `训练数据解析.md` 是构建生成的排查输出，不作为长期维护手册。
 - `优化重构/` 下的方案、checklist 和 runbook 用于沉淀阶段性改造结论，不替代长期系统文档或源码事实。
-- V18 以后，Telegram 和飞书是两个消息通道；飞书通过适配器复用 Telegram 同步主编排、AI 图片识别、随想入库和分析链路，不复制一套业务流程。
+- V21 以后，main/dev 的 Telegram 和飞书都进入统一 Cloudflare Worker，再由 `sync.yml` / `sync-dev.yml` 在 GitHub Actions 内判断 channel；飞书通过适配器复用 Telegram 同步主编排、AI 图片识别、随想入库和分析链路，不复制一套业务流程。
 - V10/V11 以后，消息通道图片正常成功路径以数据库增量 upsert 为主；`训练记录.md` 和 `source/_posts` 由 DB -> Markdown 备份派生，不作为成功路径的即时写入目标。
 - Telegram 发送锻炼、体脂秤、饮食和睡眠图片的稳定链路，优先看 `训练系统/Telegram使用说明.md`、`训练系统/Telegram图片日期归档.md`、`训练系统/Telegram睡眠识别与入库说明.md`。
 - Telegram `/随想` 支持纯文本、图片 caption 和 Markdown 文档附件；Markdown 附件正文最大 5MB，详情见 `训练系统/Telegram使用说明.md` 和 `训练系统/随想模块维护.md`。
+- GitHub Actions、Cloudflare Worker、Pages、Telegram webhook 和飞书 Request URL 的配置优先看 `部署维护/GitHub与Cloudflare配置.md`；该文档先列参数，再解释用途。
 - 飞书发送训练图片、`/随想`、`/帮助` 和 `/分析` 的部署与验收优先看 `部署维护/飞书通道部署.md`；飞书文本随想是 DB-first，不即时生成 Markdown 帖。
 - 数据库 core 子表使用 `source_channel` 区分 `telegram`、`feishu`、`markdown_import` 等来源；`core.thought.telegram_message_id` 仍是兼容字段名，飞书会写入稳定数字代理 ID。
 - 修改图片识别字段、截图类型、APP Profile 或日期口径时，先看 `训练系统/Telegram图片识别Prompt维护.md`，再同步 schema、批次输出、数据库写入和测试。

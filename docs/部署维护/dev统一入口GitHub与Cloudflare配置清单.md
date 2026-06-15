@@ -1,90 +1,96 @@
 # Dev 统一入口 GitHub 与 Cloudflare 配置清单
 
-本文只写最终 dev 配置。目标是：Cloudflare dev 只保留一个 Worker，GitHub dev 同步只保留一个 Action。
+本文只写 dev 当前配置。完整参数解释见 [GitHub 与 Cloudflare 配置](GitHub与Cloudflare配置.md)。
 
-## 最终只保留这些
-
-| 平台 | 只保留 | 用途 |
-| --- | --- | --- |
-| Cloudflare Worker | `sync-dispatch-dev` | dev Telegram 和 dev 飞书共用同一个入口 |
-| GitHub sync workflow | `.github/workflows/sync-dev.yml` | 同一个 workflow 内判断走 Telegram 还是飞书 |
-| GitHub Worker deploy workflow | `.github/workflows/deploy-cloudflare-worker-dev.yml` | 只负责部署 `sync-dispatch-dev` 和刷新 dev Telegram webhook |
-| Wrangler 配置 | `wrangler.dev.toml` | 只部署 `cloudflare/sync-dispatch-worker.mjs` |
-
-dev Pages 预览仍由 `.github/workflows/deploy-cloudflare-pages-dev.yml` 负责，它是站点预览部署，不是 Telegram/飞书同步入口。
-
-## 入口地址
-
-| 渠道 | 填在哪里 | 地址 |
-| --- | --- | --- |
-| Telegram dev webhook | GitHub Variable `DEV_TELEGRAM_WEBHOOK_URL` | `https://feishu-dev.soulgo.chat/telegram` |
-| 飞书 dev Request URL | 飞书开放平台事件订阅 | `https://feishu-dev.soulgo.chat` |
-
-`/telegram` 路径只用于区分配置入口；统一 Worker 仍按 Telegram secret header 和飞书请求体结构判断渠道。
-
-## 1. GitHub 只配置这些参数
-
-进入 GitHub 仓库：
+dev 当前只保留一个消息入口：
 
 ```text
-Settings -> Secrets and variables -> Actions
+Telegram dev / 飞书 dev
+-> Cloudflare Worker sync-dispatch-dev
+-> .github/workflows/sync-dev.yml
+-> workflow 内判断 channel
+-> npm run sync:telegram 或 npm run sync:feishu
 ```
 
-### 1.1 Secrets
+## 1. 需要配置的参数
 
-| Secret | 必填 | 值 |
+### 1.1 GitHub Actions Secrets
+
+进入：
+
+```text
+Settings -> Secrets and variables -> Actions -> Secrets
+```
+
+| Secret | 必填 | 说明 |
 | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | 是 | Cloudflare API Token，用于部署 `sync-dispatch-dev` |
-| `CLOUDFLARE_ACCOUNT_ID` | 是 | Cloudflare Account ID |
-| `AI_API_KEY` | 是 | 图片识别和 `/analysis` 使用的 AI Key |
+| `CLOUDFLARE_API_TOKEN` | 是 | 部署 `sync-dispatch-dev` |
+| `CLOUDFLARE_ACCOUNT_ID` | 是 | Cloudflare account |
+| `CLOUDFLARE_PAGES_API_TOKEN` | 是 | 上传 dev Cloudflare Pages |
+| `AI_API_KEY` | 是 | 图片识别和 `/分析` |
 | `DEV_TRAINING_DB_URL` | 是 | dev PostgreSQL 连接串 |
 | `DEV_TELEGRAM_BOT_TOKEN` | 是 | dev Telegram Bot token |
-| `DEV_TELEGRAM_SECRET_TOKEN` | 是 | dev Telegram webhook secret，必须和 Cloudflare `TELEGRAM_SECRET_TOKEN` 完全一致 |
-| `DEV_FEISHU_APP_ID` | 飞书 dev 独立应用时必填 | dev 飞书应用 App ID |
-| `DEV_FEISHU_APP_SECRET` | 飞书 dev 独立应用时必填 | dev 飞书应用 App Secret |
+| `DEV_TELEGRAM_SECRET_TOKEN` | 是 | dev Telegram webhook secret，必须和 Cloudflare Worker `TELEGRAM_SECRET_TOKEN` 一致 |
+| `DEV_FEISHU_APP_ID` | 独立 dev 飞书应用时填 | 未填时 workflow 回退 `FEISHU_APP_ID` |
+| `DEV_FEISHU_APP_SECRET` | 独立 dev 飞书应用时填 | 未填时 workflow 回退 `FEISHU_APP_SECRET` |
+| `FEISHU_APP_ID` | dev 飞书未独立时必填 | 生产飞书应用 App ID |
+| `FEISHU_APP_SECRET` | dev 飞书未独立时必填 | 生产飞书应用 App Secret |
 | `TELEGRAM_RECOGNITION_FALLBACK_API_KEY` | 否 | 图片识别备用 AI Key |
 
-如果 dev 飞书复用生产飞书应用，可以不填 `DEV_FEISHU_APP_ID` / `DEV_FEISHU_APP_SECRET`，workflow 会回退到 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`。如果你要“dev 完全一套独立配置”，就填 `DEV_FEISHU_*`。
+### 1.2 GitHub Actions Variables
 
-`DEV_TELEGRAM_SECRET_TOKEN` 可以这样生成：
-
-```bash
-openssl rand -hex 32
-```
-
-### 1.2 Variables
-
-| Variable | 必填 | 值 |
+| Variable | 必填 | 建议值 / 说明 |
 | --- | --- | --- |
 | `DEV_TELEGRAM_WEBHOOK_URL` | 是 | `https://feishu-dev.soulgo.chat/telegram` |
-| `AI_BASE_URL` | 是 | AI 服务 base URL |
+| `AI_BASE_URL` | 是 | AI base URL |
 | `AI_MODEL` | 是 | 默认 AI 模型 |
-| `AI_PROVIDER` | 否 | 不填时默认 `openai-compatible` |
+| `AI_PROVIDER` | 否 | 默认 `openai-compatible` |
 | `AI_TIMEOUT_MS` | 否 | AI 请求超时 |
 | `AI_CONCURRENCY` | 否 | 图片识别并发 |
 | `TRAINING_DB_TIMEOUT_MS` | 否 | DB 连接超时 |
 | `TRAINING_SNAPSHOT_SOURCE` | 建议填 | 建议 `database` |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | Telegram dev 建议填 | 允许使用 dev Bot 的 Telegram chat id |
 | `TELEGRAM_POLL_LIMIT` | 否 | webhook 模式通常不用改 |
-| `DEV_TRAINING_DB_APP_NAME` | 否 | 可填 `training-records-dev` |
-| `DEV_FEISHU_ALLOWED_CHAT_IDS` | 飞书 dev 建议填 | dev 飞书 chat 白名单 |
+| `DEV_TRAINING_DB_APP_NAME` | 否 | 可填 `training-records-dev`；飞书 dev 未填时临时用 `sync-dev-feishu` |
+| `DEV_FEISHU_ALLOWED_CHAT_IDS` | 飞书 dev 建议填 | 未填时 workflow 回退 `FEISHU_ALLOWED_CHAT_IDS` |
+| `FEISHU_ALLOWED_CHAT_IDS` | dev 飞书未独立时必填 | 生产飞书 chat 白名单 |
 | `TELEGRAM_RECOGNITION_MODEL` | 否 | 图片识别模型覆盖 |
 | `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` | 否 | 备用 AI base URL |
 | `TELEGRAM_RECOGNITION_FALLBACK_MODEL` | 否 | 备用 AI 模型 |
 | `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS` | 否 | 备用 AI 超时 |
 | `TELEGRAM_RECOGNITION_CACHE_ENABLED` | 否 | 是否启用识别缓存 |
-| `TRAINING_ANALYSIS_GOAL` | 否 | `/analysis` 长期目标 |
-| `CLOUDFLARE_PAGES_DEV_PROJECT_NAME` | 否 | 不填时使用 `training-records-dev` |
+| `TRAINING_ANALYSIS_GOAL` | 否 | `/分析` 长期目标 |
+| `CLOUDFLARE_PAGES_DEV_PROJECT_NAME` | 否 | 默认 `training-records-dev` |
 
-## 2. Cloudflare 只配置这一个 Worker
+### 1.3 Cloudflare Worker Secrets
 
-Cloudflare Worker 名称：
+进入：
 
 ```text
-sync-dispatch-dev
+Cloudflare Dashboard -> Workers & Pages -> sync-dispatch-dev -> Settings -> Variables and Secrets
 ```
 
-`wrangler.dev.toml` 最终形态：
+| Secret | 必填 | 说明 |
+| --- | --- | --- |
+| `GITHUB_TOKEN` | 是 | PAT，用于调用 GitHub `repository_dispatch` |
+| `TELEGRAM_BOT_TOKEN` | 是 | 和 GitHub `DEV_TELEGRAM_BOT_TOKEN` 同值 |
+| `TELEGRAM_SECRET_TOKEN` | 是 | 和 GitHub `DEV_TELEGRAM_SECRET_TOKEN` 同值 |
+| `FEISHU_ENCRYPT_KEY` | 飞书 dev 必填 | 飞书事件订阅 Encrypt Key |
+| `FEISHU_VERIFICATION_TOKEN` | 飞书 dev 必填 | 飞书事件订阅 Verification Token |
+
+CLI 写入：
+
+```bash
+npx wrangler secret put GITHUB_TOKEN --config wrangler.dev.toml
+npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.dev.toml
+npx wrangler secret put TELEGRAM_SECRET_TOKEN --config wrangler.dev.toml
+npx wrangler secret put FEISHU_ENCRYPT_KEY --config wrangler.dev.toml
+npx wrangler secret put FEISHU_VERIFICATION_TOKEN --config wrangler.dev.toml
+```
+
+### 1.4 Wrangler 固定配置
+
+`wrangler.dev.toml` 必须指向统一 Worker：
 
 ```toml
 name = "sync-dispatch-dev"
@@ -108,7 +114,20 @@ name = "FEISHU_IMAGE_BUFFER"
 class_name = "FeishuImageBuffer"
 ```
 
-部署方式二选一：
+不要在 Cloudflare Dashboard 额外新增 `GITHUB_DISPATCH_EVENT_TYPE` 覆盖它。
+
+## 2. 参数解释
+
+- `DEV_TELEGRAM_WEBHOOK_URL` 填给 Telegram setWebhook，路径可以是 `/telegram`；Worker 实际按 Telegram secret header 判断 channel。
+- 飞书 dev Request URL 填 `https://feishu-dev.soulgo.chat`；飞书会在保存时发 URL verification，必须先配好 `FEISHU_ENCRYPT_KEY` 和 `FEISHU_VERIFICATION_TOKEN`。
+- `sync-dev.yml` 固定 checkout `dev`，固定 `TRAINING_DB_ENABLED=true`，数据库连接使用 `DEV_TRAINING_DB_URL`。
+- 手动运行 `Sync (Dev)` 时用 `channel=telegram|feishu`；webhook 触发时由 event type 决定 channel。
+- 飞书 dev 可以用独立应用，也可以回退生产飞书应用；独立验证更清晰，回退配置更少。
+- dev Pages 预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` 负责，不是消息入口。
+
+## 3. 部署
+
+部署 Worker：
 
 ```bash
 npx wrangler deploy --config wrangler.dev.toml
@@ -120,95 +139,23 @@ npx wrangler deploy --config wrangler.dev.toml
 Deploy Cloudflare Worker (Dev)
 ```
 
-部署成功后应看到统一 Worker 可通过这些地址访问：
-
-```text
-https://sync-dispatch-dev.1406221797.workers.dev
-https://feishu-dev.soulgo.chat/telegram
-https://feishu-dev.soulgo.chat
-```
-
-## 3. Cloudflare Worker Secrets
-
-进入：
-
-```text
-Cloudflare Dashboard -> Workers & Pages -> sync-dispatch-dev -> Settings -> Variables and Secrets
-```
-
-只在 `sync-dispatch-dev` 上配置这些 Secret：
-
-| Secret | 必填 | 值 |
-| --- | --- | --- |
-| `GITHUB_TOKEN` | 是 | GitHub PAT，用于调用 `repository_dispatch` |
-| `TELEGRAM_BOT_TOKEN` | 是 | 和 GitHub `DEV_TELEGRAM_BOT_TOKEN` 同值 |
-| `TELEGRAM_SECRET_TOKEN` | 是 | 和 GitHub `DEV_TELEGRAM_SECRET_TOKEN` 同值 |
-| `FEISHU_ENCRYPT_KEY` | 飞书 dev 必填 | 飞书 dev 应用事件订阅 Encrypt Key |
-| `FEISHU_VERIFICATION_TOKEN` | 飞书 dev 必填 | 飞书 dev 应用事件订阅 Verification Token |
-
-CLI 写入方式：
-
-```bash
-npx wrangler secret put GITHUB_TOKEN --config wrangler.dev.toml
-npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.dev.toml
-npx wrangler secret put TELEGRAM_SECRET_TOKEN --config wrangler.dev.toml
-npx wrangler secret put FEISHU_ENCRYPT_KEY --config wrangler.dev.toml
-npx wrangler secret put FEISHU_VERIFICATION_TOKEN --config wrangler.dev.toml
-```
-
-不要在 Cloudflare Dashboard 额外新增 `GITHUB_DISPATCH_EVENT_TYPE`。dev 统一 Worker 已经通过 `wrangler.dev.toml` 固定使用：
-
-```text
-GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM=telegram_update_dev
-GITHUB_DISPATCH_EVENT_TYPE_FEISHU=feishu_update_dev
-```
-
-## 4. Telegram dev 配置
-
-GitHub Variable：
-
-```text
-DEV_TELEGRAM_WEBHOOK_URL=https://feishu-dev.soulgo.chat/telegram
-```
-
-然后手动运行 GitHub Actions：
-
-```text
-Deploy Cloudflare Worker (Dev)
-```
-
 这个 workflow 会：
 
-1. 部署 `sync-dispatch-dev`
-2. 使用 `DEV_TELEGRAM_BOT_TOKEN`
-3. 使用 `DEV_TELEGRAM_WEBHOOK_URL`
-4. 使用 `DEV_TELEGRAM_SECRET_TOKEN`
-5. 刷新 dev Telegram webhook
+1. 部署 `sync-dispatch-dev`。
+2. 使用 `DEV_TELEGRAM_BOT_TOKEN`、`DEV_TELEGRAM_WEBHOOK_URL`、`DEV_TELEGRAM_SECRET_TOKEN`。
+3. 刷新 dev Telegram webhook。
 
-## 5. 飞书 dev 配置
-
-飞书开放平台 dev 应用：
+部署 dev Pages：
 
 ```text
-开发配置 -> 事件与回调 -> Request URL
+Deploy Cloudflare Pages (Dev)
 ```
 
-填写：
+该 workflow 会构建 dev 数据库快照，删除 `public/CNAME`，再上传到 Cloudflare Pages 项目。
 
-```text
-https://feishu-dev.soulgo.chat
-```
+## 4. 验证
 
-保存前确认 Cloudflare `sync-dispatch-dev` 已配置：
-
-```text
-FEISHU_ENCRYPT_KEY
-FEISHU_VERIFICATION_TOKEN
-```
-
-## 6. 最终验证
-
-### 6.1 Worker 路由
+Worker 探测：
 
 ```bash
 curl -i https://sync-dispatch-dev.1406221797.workers.dev/
@@ -216,7 +163,7 @@ curl -i https://feishu-dev.soulgo.chat/telegram
 curl -i https://feishu-dev.soulgo.chat
 ```
 
-预期都是：
+预期 `GET` 返回：
 
 ```text
 405 method_not_allowed
@@ -236,32 +183,24 @@ curl -i -X POST https://sync-dispatch-dev.1406221797.workers.dev/ \
 400 unknown_channel
 ```
 
-### 6.2 GitHub Actions
+GitHub Actions 验证：
 
-Telegram dev 发消息后，只应触发：
+| 操作 | 只应触发 | workflow 内 channel |
+| --- | --- | --- |
+| Telegram dev 发消息 | `Sync (Dev)` | `telegram` |
+| 飞书 dev 发消息 | `Sync (Dev)` | `feishu` |
 
-```text
-Sync (Dev)
+本地配置测试：
+
+```bash
+node --test test/github-workflows.test.mjs test/cloudflare-config.test.mjs
 ```
 
-飞书 dev 发消息后，也只应触发：
+## 5. 可以删除或停用的旧 dev 资源
 
-```text
-Sync (Dev)
-```
+确认上面验证通过后，旧 dev 资源不要再作为当前入口维护：
 
-区别只在 workflow 内部判断出的 channel：
-
-```text
-telegram -> npm run sync:telegram
-feishu   -> npm run sync:feishu
-```
-
-## 7. 可以删除或停用的旧 dev 资源
-
-确认上面验证通过后，只保留新入口。旧 dev 资源可以删除或停用：
-
-| 平台 | 删除 / 停用 |
+| 平台 | 旧资源 |
 | --- | --- |
 | Cloudflare Worker | `telegram-sync-dispatch-dev` |
 | Cloudflare Worker | `feishu-sync-dispatch-dev` |
@@ -270,20 +209,8 @@ feishu   -> npm run sync:feishu
 | GitHub workflow | `.github/workflows/deploy-cloudflare-feishu-worker-dev.yml` |
 | Wrangler config | `wrangler.feishu-dev.toml` |
 
-删除旧 Cloudflare Worker 前，先确认：
+删除旧 Cloudflare Worker 前，确认：
 
-- Telegram webhook 已指向 `https://feishu-dev.soulgo.chat/telegram`
-- 飞书 dev Request URL 已指向 `https://feishu-dev.soulgo.chat`
-- `feishu-dev.soulgo.chat` 没有绑定在旧 Worker 上
-
-## 8. 一句话总表
-
-| 要配的地方 | 最终值 |
-| --- | --- |
-| Cloudflare Worker | `sync-dispatch-dev` |
-| Telegram dev webhook | `https://feishu-dev.soulgo.chat/telegram` |
-| 飞书 dev Request URL | `https://feishu-dev.soulgo.chat` |
-| GitHub 同步 Action | `Sync (Dev)` / `.github/workflows/sync-dev.yml` |
-| GitHub Worker 部署 Action | `Deploy Cloudflare Worker (Dev)` / `.github/workflows/deploy-cloudflare-worker-dev.yml` |
-| Telegram dispatch type | `telegram_update_dev` |
-| 飞书 dispatch type | `feishu_update_dev` |
+- Telegram webhook 已指向 `https://feishu-dev.soulgo.chat/telegram`。
+- 飞书 dev Request URL 已指向 `https://feishu-dev.soulgo.chat`。
+- `feishu-dev.soulgo.chat` 没有绑定在旧 Worker 上。
