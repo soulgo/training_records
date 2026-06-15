@@ -76,20 +76,26 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /TRAINING_BUILD_ARCHIVE_WRITE:\s*false/);
   assert.match(workflow, /CLOUDFLARE_ZONE_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ZONE_ID\s*\}\}/);
   assert.match(workflow, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+  assert.match(workflow, /CLOUDFLARE_PAGES_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_PAGES_API_TOKEN\s*\}\}/);
   assert.match(workflow, /- name: Purge Cloudflare cache/);
   assert.match(
     workflow,
-    /if: \$\{\{ success\(\) && env\.CLOUDFLARE_ZONE_ID != '' && env\.CLOUDFLARE_API_TOKEN != '' \}\}/,
+    /if: \$\{\{ success\(\) && env\.CLOUDFLARE_ZONE_ID != '' && \(env\.CLOUDFLARE_API_TOKEN != '' \|\| env\.CLOUDFLARE_PAGES_API_TOKEN != ''\) \}\}/,
   );
   assert.match(workflow, /zones\/\$\{CLOUDFLARE_ZONE_ID\}\/purge_cache/);
   assert.match(workflow, /"purge_everything":true/);
   assert.doesNotMatch(workflow, /curl -fsSL/);
+  assert.match(workflow, /token_names=\(\)/);
+  assert.match(workflow, /token_names\+=\("CLOUDFLARE_API_TOKEN"\)/);
+  assert.match(workflow, /token_names\+=\("CLOUDFLARE_PAGES_API_TOKEN"\)/);
+  assert.match(workflow, /Cloudflare cache purged with \$\{token_name\}/);
+  assert.match(workflow, /Cloudflare cache purge retry/);
   assert.match(workflow, /::warning title=Cloudflare cache purge failed::/);
   assert.match(workflow, /Zone -> Cache Purge -> Purge permission/);
   assert.match(workflow, /- name: Report skipped Cloudflare cache purge/);
   assert.match(
     workflow,
-    /if: \$\{\{ success\(\) && \(env\.CLOUDFLARE_ZONE_ID == '' \|\| env\.CLOUDFLARE_API_TOKEN == ''\) \}\}/,
+    /if: \$\{\{ success\(\) && \(env\.CLOUDFLARE_ZONE_ID == '' \|\| \(env\.CLOUDFLARE_API_TOKEN == '' && env\.CLOUDFLARE_PAGES_API_TOKEN == ''\)\) \}\}/,
   );
   assert.match(workflow, /::warning title=Cloudflare cache purge skipped::/);
   assert.ok(
