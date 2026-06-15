@@ -28,6 +28,8 @@
 - 飞书同步 workflow 新增失败通知步骤，确保同步失败时飞书侧能收到 Action 失败回执；成功通知仍保持在同步/提交/推送之后、异步页面部署之前。
 - 修复飞书图片识别成功后因 `oc_...` 字符串 chat id 写入 PostgreSQL `bigint` 字段失败而进入 `pending_replay`、页面无更新的问题；旧 Telegram 兼容字段现在只写数字或 `null`，真实飞书 chat id 继续保留在 source 元数据和 Action summary 中，同时保留飞书图片批次的 `source_channel='feishu'`。
 - 修复飞书图片批次已成功入库但异步 Pages deploy 在严格数据库导出阶段因 PostgreSQL schema preflight 连接超时而失败、页面不更新的问题；`export:markdown` 现在会对瞬时 DB preflight 连接错误做有限重试，schema preflight 也只在 SQL 成功后标记为已执行，避免失败后跳过后续重试。
+- 修复 GitHub Pages 已部署新训练数据但 `soulgo.chat` 仍命中 Cloudflare 旧 HTML 缓存、导致飞书入库数据短时间不显示的问题；生产 Pages 部署成功后会在配置 `CLOUDFLARE_ZONE_ID` 和 `CLOUDFLARE_API_TOKEN` 时自动清理 Cloudflare 缓存。
+- 修复手动触发 `deploy-pages.yml` 时即使选择修复分支也仍固定 checkout `main`、导致无法在分支上验证 deploy 修复的问题；手动 deploy 现在会使用触发时选择的 ref。
 
 ## [1.2.9] - 2026-06-14
 

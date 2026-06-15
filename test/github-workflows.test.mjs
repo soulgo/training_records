@@ -65,6 +65,8 @@ test('deploy-pages workflow uses the shared site build action', async () => {
 
   assert.match(workflow, /- name: Checkout/);
   assert.match(workflow, /actions\/checkout@v4/);
+  assert.match(workflow, /fetch-depth:\s*0/);
+  assert.doesNotMatch(workflow, /ref:\s*main/);
   assert.match(workflow, /- name: Build and deploy site/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
@@ -74,6 +76,19 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /strict_database_snapshot:/);
   assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:/);
   assert.match(workflow, /TRAINING_BUILD_ARCHIVE_WRITE:\s*false/);
+  assert.match(workflow, /CLOUDFLARE_ZONE_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ZONE_ID\s*\}\}/);
+  assert.match(workflow, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+  assert.match(workflow, /- name: Purge Cloudflare cache/);
+  assert.match(
+    workflow,
+    /if: \$\{\{ success\(\) && env\.CLOUDFLARE_ZONE_ID != '' && env\.CLOUDFLARE_API_TOKEN != '' \}\}/,
+  );
+  assert.match(workflow, /zones\/\$\{CLOUDFLARE_ZONE_ID\}\/purge_cache/);
+  assert.match(workflow, /"purge_everything":true/);
+  assert.ok(
+    workflow.indexOf('- name: Purge Cloudflare cache') > workflow.indexOf('- name: Build and deploy site'),
+    'Cloudflare cache should be purged only after the Pages deployment step finishes',
+  );
 });
 
 test('ci-tests workflow runs npm run test:fast without deploying Pages', async () => {

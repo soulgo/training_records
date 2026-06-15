@@ -706,10 +706,10 @@ Invoke-RestMethod `
 
 ### 部署后清缓存
 
-每次 GitHub Pages 部署后，Cloudflare 边缘缓存需要刷新：
+每次 GitHub Pages 部署后，Cloudflare 边缘缓存需要刷新。生产 `deploy-pages.yml` 已在部署成功后自动调用 Cloudflare Purge Cache API：
 
 - **手动方式**：Cloudflare Dashboard → Caching → Purge Everything
-- **自动方式**（可选）：在 `deploy-pages.yml` 末尾调用 Cloudflare Purge Cache API，需要额外的 GitHub Secret `CLOUDFLARE_ZONE_ID` 和 API Token 的 `Zone → Cache Purge → Purge` 权限
+- **自动方式**：GitHub Secrets 需要同时配置 `CLOUDFLARE_ZONE_ID` 和具备 `Zone → Cache Purge → Purge` 权限的 `CLOUDFLARE_API_TOKEN`；缺少任一 secret 时自动跳过，保留手动清缓存作为兜底
 
 ### 回滚
 
