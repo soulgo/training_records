@@ -233,3 +233,80 @@ test('PostgresThoughtRepository persists thought mirror batches through core.tho
   assert.equal(calls[0][1][5], 'misc');
   assert.deepEqual(JSON.parse(calls[0][1][9]), ['/images/1.jpg']);
 });
+
+test('PostgresThoughtRepository does not create a thought when an edit target is missing', async () => {
+  const calls = [];
+  const repository = new PostgresThoughtRepository({
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from core\.thought/i.test(sql) && /where telegram_message_id = \$1/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+  });
+
+  const result = await repository.persistMirror(
+    {
+      kind: 'thought_edit',
+      batchId: 'thought-edit-999',
+      thoughtEdit: {
+        command: '/随想编',
+        targetMessageId: 501,
+        body: '应该更新目标正文',
+        thoughtModule: 'misc',
+        telegramChatId: 42,
+        storage: {
+          writeStatus: 'thought_edit_database_only',
+          markdownPath: null,
+          photoPaths: [],
+        },
+      },
+    },
+    new Date('2026-06-15T09:15:00.000Z'),
+  );
+
+  assert.deepEqual(result, { status: 'not_found', messageId: 501 });
+  assert.equal(calls.length, 1);
+  assert.match(calls[0][0], /from core\.thought/i);
+  assert.equal(calls[0][1][0], 501);
+  assert.equal(calls.some(([sql]) => /insert into core\.thought/i.test(sql)), false);
+});
+
+test('PostgresThoughtRepository does not create a thought when a move target is missing', async () => {
+  const calls = [];
+  const repository = new PostgresThoughtRepository({
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from core\.thought/i.test(sql) && /where telegram_message_id = \$1/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+  });
+
+  const result = await repository.persistMirror(
+    {
+      kind: 'thought_move',
+      batchId: 'thought-move-999',
+      thoughtMove: {
+        command: '/移动',
+        targetMessageId: 502,
+        thoughtModule: 'misc',
+        telegramChatId: 42,
+        storage: {
+          writeStatus: 'thought_move_database_only',
+          markdownPath: null,
+          photoPaths: [],
+        },
+      },
+    },
+    new Date('2026-06-15T09:20:00.000Z'),
+  );
+
+  assert.deepEqual(result, { status: 'not_found', messageId: 502 });
+  assert.equal(calls.length, 1);
+  assert.match(calls[0][0], /from core\.thought/i);
+  assert.equal(calls[0][1][0], 502);
+  assert.equal(calls.some(([sql]) => /insert into core\.thought/i.test(sql)), false);
+});

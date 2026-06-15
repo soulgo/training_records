@@ -54,8 +54,14 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
     }
 
     if (batch.kind === 'thought_edit') {
+      const targetMessageId = normalizePositiveInteger(batch.thoughtEdit?.targetMessageId);
+      const missingTarget = await this.getMissingTargetResult(targetMessageId);
+      if (missingTarget) {
+        return missingTarget;
+      }
+
       await this.save({
-        messageId: batch.thoughtEdit?.targetMessageId,
+        messageId: targetMessageId,
         chatId: batch.thoughtEdit?.telegramChatId,
         sourceBatchId: batch.batchId,
         command: batch.thoughtEdit?.command ?? '/thought',
@@ -88,8 +94,14 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
     }
 
     if (batch.kind === 'thought_move') {
+      const targetMessageId = normalizePositiveInteger(batch.thoughtMove?.targetMessageId);
+      const missingTarget = await this.getMissingTargetResult(targetMessageId);
+      if (missingTarget) {
+        return missingTarget;
+      }
+
       await this.save({
-        messageId: batch.thoughtMove?.targetMessageId,
+        messageId: targetMessageId,
         chatId: batch.thoughtMove?.telegramChatId,
         sourceBatchId: batch.batchId,
         command: batch.thoughtMove?.command ?? '/移动',
@@ -107,6 +119,14 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
 
   async markDeleted(thought) {
     return markThoughtMirrorDeleted(this.client, thought);
+  }
+
+  async getMissingTargetResult(messageId) {
+    if (!messageId) {
+      return { status: 'not_found', messageId: null };
+    }
+    const existing = await this.findByTelegramMessageId(messageId);
+    return existing ? null : { status: 'not_found', messageId };
   }
 }
 

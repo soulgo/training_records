@@ -45,7 +45,7 @@ jobs:
       - name: Checkout dev branch
         uses: actions/checkout@v4
         with:
-          ref: dev
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
 
       - name: Build dev site

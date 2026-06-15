@@ -196,6 +196,51 @@ test('telegram sync notifier reports skipped thought deletes as failures', async
   assert.doesNotMatch(sentMessages[0].text, /成功/);
 });
 
+test('telegram sync notifier reports missing thought edit targets as failures', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notifier-thought-edit-missing-'));
+  const resultPath = path.join(tempRoot, 'result.json');
+  const sentMessages = [];
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'thought_edit',
+          status: 'skipped',
+          batchId: 'thought-edit-409656527232593',
+          messages: [{ chatId: 42, messageId: 409656527232593 }],
+          thoughtWriteStatus: 'not_found',
+          persistenceStatus: 'not_found',
+          reason: 'target thought 501 not found',
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  const result = await notifyTelegramSyncResultFromFile({
+    resultPath,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+      TELEGRAM_SYNC_TRANSPORT: 'webhook',
+    },
+    sendMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9907 };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].replyToMessageId, 409656527232593);
+  assert.match(sentMessages[0].text, /随想更新失败/);
+  assert.match(sentMessages[0].text, /target thought 501 not found/);
+  assert.doesNotMatch(sentMessages[0].text, /成功/);
+  assert.doesNotMatch(sentMessages[0].text, /已入库/);
+});
+
 test('telegram sync notifier sends one reply for each image business batch in a burst dispatch', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notifier-burst-'));
   const resultPath = path.join(tempRoot, 'result.json');

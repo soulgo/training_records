@@ -1530,6 +1530,9 @@ test('persistNormalizedBatch mirrors thought create, edit, and delete batches in
       if (/select payload_hash\s+from ingest\.telegram_batch/i.test(sql)) {
         return { rows: [] };
       }
+      if (/from core\.thought/i.test(sql) && /where telegram_message_id = \$1/i.test(sql)) {
+        return { rows: [{ telegram_message_id: params[0] }] };
+      }
       return { rows: [] };
     },
     async end() {
@@ -1782,6 +1785,87 @@ test('persistNormalizedBatch mirrors thought create, edit, and delete batches in
   assert.equal(thoughtWrites[4][1][4], '更新正文但不改模块');
   assert.equal(thoughtWrites[4][1][5], null);
   assert.equal(thoughtWrites[4][1][6], null);
+});
+
+test('persistNormalizedBatch reports missing thought edit targets without inserting a core thought', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash\s+from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.thought/i.test(sql) && /where telegram_message_id = \$1/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: {
+      kind: 'thought_edit',
+      batchId: 'thought-edit-999',
+      status: 'ready',
+      archivedDate: null,
+      warnings: [],
+      issues: [],
+      confidence: 1,
+      updateIds: [909],
+      recognitions: [],
+      messages: [
+        {
+          updateId: 909,
+          messageId: 999,
+          mediaGroupId: null,
+          chatId: 42,
+          caption: '',
+          text: '/随想编 501 杂七杂八 编辑并移动后的正文',
+          dateUnix: 1781514900,
+          photos: [],
+        },
+      ],
+      thoughtEdit: {
+        command: '/随想编',
+        targetMessageId: 501,
+        body: '编辑并移动后的正文',
+        thoughtModule: 'misc',
+        tags: ['杂七杂八', '随想', 'Telegram'],
+        replacePhotos: false,
+        telegramChatId: 42,
+        messageDateUnix: 1781514900,
+        storage: {
+          writeStatus: 'thought_edit_database_only',
+          markdownPath: null,
+          photoPaths: null,
+        },
+      },
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-06-15T09:15:00.000Z'),
+  });
+
+  assert.deepEqual(result, {
+    status: 'not_found',
+    batchId: 'thought-edit-999',
+    messageId: 501,
+    archivedDate: null,
+  });
+  assert.equal(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)), true);
+  assert.equal(calls.some(([sql]) => /insert into core\.thought/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => sql === 'COMMIT'), true);
 });
 
 test('getLastProcessedTelegramUpdateId reads the max update id from ingest records', async () => {

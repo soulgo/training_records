@@ -97,8 +97,9 @@ export async function persistNormalizedBatch(options) {
     await telegramBatchRepository.upsertMessages(batch, processedAt);
     await telegramBatchRepository.upsertRecognitions(batch, processedAt);
 
+    let thoughtMirrorResult = null;
     if (isThoughtBatchKind(batch.kind) && batch.status === 'ready') {
-      await new PostgresThoughtRepository(client).persistMirror(batch, processedAt);
+      thoughtMirrorResult = await new PostgresThoughtRepository(client).persistMirror(batch, processedAt);
     } else if (isTelegramImageBatch(batch) && batch.status === 'ready' && batch.archivedDate) {
       await persistTelegramImageBatchIncremental(client, batch, processedAt, { sourceChannel });
     } else if (batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
@@ -112,6 +113,15 @@ export async function persistNormalizedBatch(options) {
 
     await client.query('COMMIT');
     transactionStarted = false;
+
+    if (thoughtMirrorResult?.status === 'not_found') {
+      return {
+        status: 'not_found',
+        batchId: batch.batchId,
+        messageId: thoughtMirrorResult.messageId ?? null,
+        archivedDate: batch.archivedDate ?? null,
+      };
+    }
 
     return {
       status: 'stored',
