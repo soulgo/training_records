@@ -25,31 +25,60 @@
 - 现有 Chat Completions 请求形状保持不变
 - 图片识别的 `response_format.json_schema` 保持不变
 - `/analysis` 的 prompt、输出格式和 reply 逻辑保持不变
-- `.github/workflows/telegram-sync.yml` 与 `.github/workflows/sync-dev.yml` 显式透传 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_*` 和 `TELEGRAM_RECOGNITION_CACHE_ENABLED`
+- `.github/workflows/sync.yml` 与 `.github/workflows/sync-dev.yml` 显式透传 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_*` 和 `TELEGRAM_RECOGNITION_CACHE_ENABLED`
 - Telegram 图片识别可用 `TELEGRAM_RECOGNITION_MODEL` 单独覆盖模型；`/analysis` 仍使用 `AI_MODEL`
 - 备用 AI 只作用于 Telegram 图片识别，不改变 `/analysis` 使用的 provider
 
-## 4. 错误分类
+## 4. 备用 AI
 
-- `AiProviderError`：provider 不支持或 provider 初始化失败
-- `AiSchemaError`：AI 返回内容不是有效 JSON 或不符合 schema
-- `timeout expired` 若来自识别缓存数据库读取，会被记录为 cache miss；若来自主 AI 请求且配置了备用 provider，会尝试备用 AI
+Telegram 图片识别支持独立备用 AI provider。它用于处理主 AI 临时不可用，不改变 `/analysis` 的 provider。
 
-## 5. 回滚方式
+启用条件：
+
+- GitHub Actions Secret `TELEGRAM_RECOGNITION_FALLBACK_API_KEY`
+- GitHub Actions Variable `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL`
+- GitHub Actions Variable `TELEGRAM_RECOGNITION_FALLBACK_MODEL`
+
+可选变量：
+
+- `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS`
+
+三项必填配置不完整时，备用 AI 不启用。主 AI 出现 timeout、HTTP 429/5xx、空内容或网络失败等可恢复错误时，图片识别会尝试备用 OpenAI-compatible provider。备用 AI 成功后，识别结果中的 model 和缓存 key 会按实际 provider 记录，避免缓存错配。
+
+## 5. 错误分类
+
+- `AiProviderError`：provider 不支持、provider 初始化失败或 AI 返回为空。
+- `AiSchemaError`：AI 返回不是合法 JSON，或不符合图片识别 schema。
+- `timeout expired` 若来自识别缓存数据库读取，会被记录为 cache miss；若来自主 AI 请求且配置了备用 provider，会尝试备用 AI。
+- schema 不匹配、无效 JSON 等结构问题不应被备用 provider 静默吞掉，仍按识别失败和失败分类处理。
+
+## 6. Schema 校验边界
+
+当前图片识别只做轻量 JSON 和 schema 校验，不引入大型 validator 依赖。
+
+- 合法识别结果的 normalize 行为不变。
+- 低置信度 skipped 逻辑不变。
+- `RecognitionResult` 现有字段不变。
+- batch shape 不变。
+- 校验只在图片识别解析阶段启用。
+
+修改 schema 字段时，应同步更新 `prompts/_source/`、`buildRecognitionSchema()`、批次分析、数据库/Markdown 写入和对应测试。
+
+## 7. 回滚方式
 
 - 删除 `AI_PROVIDER` 覆盖值即可回到默认兼容路径
 - 删除 `TELEGRAM_RECOGNITION_MODEL` 后，Telegram 图片识别会回到 `AI_MODEL`
 - 删除任一 `TELEGRAM_RECOGNITION_FALLBACK_*` 必填项后，Telegram 图片识别不会启用备用 AI
 - 删除 `TELEGRAM_RECOGNITION_CACHE_ENABLED` 后，识别缓存默认关闭
-- 如需完全回退代码适配层，可将调用点切回原有 Chat Completions 实现
+- 如需完全回退 schema 校验，可删除识别链路中的 validator 调用，回到原始 JSON.parse 行为
 
-## 6. 风险等级
+## 8. 风险等级
 
 中
 
-## 7. 验证
+## 9. 验证
 
 ```bash
-node --test test/ai-provider.test.mjs test/ai-recognition-service.test.mjs test/training-analysis.test.mjs test/telegram-sync-runner.test.mjs
+node --test test/ai-schema-validator.test.mjs test/ai-recognition-service.test.mjs test/training-analysis.test.mjs test/telegram-sync-runner.test.mjs
 node --test test/github-workflows.test.mjs
 ```

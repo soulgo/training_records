@@ -86,9 +86,9 @@
     - **Surface**: 部署维护文档。
     - **Proof**: 文档开头是 GitHub/Cloudflare 参数清单，后面才解释运行链路。
     - **Depends on**: Phase 1。
-  - [ ] 精简 `docs/部署维护/dev统一入口GitHub与Cloudflare配置清单.md`。
+  - [x] dev 统一入口清单已在 v22 中删除，当前 dev 参数统一维护在 `docs/部署维护/GitHub与Cloudflare配置.md`。
     - **Surface**: dev 配置清单。
-    - **Proof**: dev 参数先列出，旧 dev 资源只作为停用清单出现。
+    - **Proof**: dev 参数由长期配置文档维护，旧 dev 资源只在已实施留痕中出现。
     - **Depends on**: 主入口文档。
 
 ### Phase 3: 系统心智模型修正

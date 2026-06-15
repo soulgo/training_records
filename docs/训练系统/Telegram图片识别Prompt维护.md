@@ -28,6 +28,8 @@ node tools/prompt-generator.mjs
 - 日期、单位、空值和餐次口径要写成明确规则，避免让模型自由猜。
 - schema 字段名不要在 prompt 里改名；字段结构由 `buildRecognitionSchema()` 约束。
 - 当前图片识别 schema 版本是 `v2`，顶层必须包含 `detectedApp`；无法可靠识别 APP 来源时填 `null`。
+- AI 返回必须是合法 JSON 并符合识别 schema；空响应、无效 JSON 或缺少必需字段会按 `AiProviderError` / `AiSchemaError` 分类，不进入正常入库。
+- schema 校验只保护返回结构，不替代业务规则；低置信度、无日期、日期冲突等仍由同步批次逻辑判断。
 - 适配新健康 APP 时，优先补 `prompts/_source/app-profiles.json` 和 `test/fixtures/telegram-recognition/` 样例；不要为了单个 APP 改数据库表或页面展示。
 - 新增识别字段时，需要同步修改 schema、`analyzeTelegramBatch()`、数据库/Markdown 写入逻辑和测试。
 - 如果新增的是睡眠识别字段，还要同步更新 `core.sleep`、`archive.training_sleep` 和 `archive.training_day` 的睡眠汇总列。
