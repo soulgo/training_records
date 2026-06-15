@@ -543,6 +543,11 @@ function formatThoughtSyncNotification(batch) {
     ? `：${batch.persistenceError ?? batch.failureReason}`
     : '';
 
+  if (batch.status === 'skipped' || batch.status === 'ignored' || batch.status === 'failed') {
+    const reason = summarizeErrorText(batch.reason ?? batch.failureReason ?? batch.persistenceError ?? batch.status);
+    return `${formatThoughtActionLabel(batch.kind)}失败${reason ? `：${reason}` : ''}`;
+  }
+
   if (batch.thoughtWriteStatus === 'not_found') {
     return `${actionText}：目标随想不存在`;
   }
@@ -551,12 +556,7 @@ function formatThoughtSyncNotification(batch) {
 }
 
 function formatThoughtActionText(kind, status) {
-  const action = {
-    thought: '随想写入',
-    thought_edit: '随想更新',
-    thought_delete: '随想删除',
-    thought_move: '随想移动',
-  }[kind] ?? '随想处理';
+  const action = formatThoughtActionLabel(kind);
 
   if (status === 'duplicate') {
     return `${action}成功（重复消息已跳过）`;
@@ -568,6 +568,15 @@ function formatThoughtActionText(kind, status) {
     return `${action}失败`;
   }
   return `${action}成功`;
+}
+
+function formatThoughtActionLabel(kind) {
+  return {
+    thought: '随想写入',
+    thought_edit: '随想更新',
+    thought_delete: '随想删除',
+    thought_move: '随想移动',
+  }[kind] ?? '随想处理';
 }
 
 function formatThoughtPersistenceText(status) {

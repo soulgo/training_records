@@ -16,12 +16,18 @@ export function normalizeFeishuMessage(event, options = {}) {
   const imageKey = normalizeText(content.image_key);
   const text = normalizeFeishuTextContent(content, messageType);
   const messageId = options.messageId ?? buildStableSafeInteger(`feishu:message:${sourceMessageId || eventId}`);
+  const replySourceMessageId = normalizeText(message.parent_id) || normalizeText(message.root_id);
+  const replyToMessageId = replySourceMessageId
+    ? buildStableSafeInteger(`feishu:message:${replySourceMessageId}`)
+    : null;
 
   return {
     sourceChannel: 'feishu',
     eventId,
     updateId: options.updateId ?? buildStableSafeInteger(`feishu:event:${eventId || sourceMessageId}`),
     messageId,
+    replyToMessageId,
+    replySourceMessageId,
     sourceMessageId,
     chatId,
     sourceChatId: chatId,
@@ -58,6 +64,13 @@ export function groupFeishuUpdates(events, options = {}) {
         text: message.text,
         chat: { id: message.chatId },
         date: message.dateUnix,
+        ...(message.replyToMessageId
+          ? {
+              reply_to_message: {
+                message_id: message.replyToMessageId,
+              },
+            }
+          : {}),
         photo: message.imageKey
           ? [{
               file_id: message.imageKey,
@@ -191,6 +204,8 @@ function attachFeishuMessageMetadata(message, metadataByMessageId) {
     sourceChannel: 'feishu',
     sourceMessageId: metadata.sourceMessageId,
     sourceChatId: metadata.sourceChatId,
+    replySourceMessageId: metadata.replySourceMessageId,
+    replyToMessageId: metadata.replyToMessageId,
     eventId: metadata.eventId,
     senderId: metadata.senderId,
     messageType: metadata.messageType,

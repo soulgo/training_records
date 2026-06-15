@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -150,6 +150,47 @@ test('exportDerivedTrainingMarkdown runs database schema preflight before strict
     'end',
     'snapshot',
   ]);
+});
+
+test('exportDerivedTrainingMarkdown removes old Telegram and Feishu derived thought posts before export', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-thoughts-'));
+  const postsDir = path.join(tempRoot, 'source', '_posts');
+  const telegramPostPath = path.join(postsDir, '2026-06-01-telegram-thought-101.md');
+  const feishuPostPath = path.join(postsDir, '2026-06-01-feishu-thought-202.md');
+  const regularPostPath = path.join(postsDir, '2026-06-01-training-summary.md');
+
+  await mkdir(postsDir, { recursive: true });
+  await writeFile(telegramPostPath, 'old telegram thought', 'utf8');
+  await writeFile(feishuPostPath, 'old feishu thought', 'utf8');
+  await writeFile(regularPostPath, 'keep me', 'utf8');
+
+  await exportDerivedTrainingMarkdown({
+    rootDir: tempRoot,
+    buildTrainingSnapshot: async () => ({
+      generatedAt: '2026-06-12T00:00:00.000Z',
+      latest: {
+        measurement: null,
+        daily: { date: '2026-06-12' },
+      },
+      daily: [],
+      thoughts: [],
+      charts: {
+        weightKg: [],
+        bodyFatPct: [],
+        skeletalMuscleKg: [],
+        basalMetabolism: [],
+        visceralFatLevel: [],
+        intakeCalories: [],
+        trainingCalories: [],
+        cyclingDistanceKm: [],
+      },
+    }),
+    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-12\n',
+  });
+
+  await assert.rejects(access(telegramPostPath), /ENOENT/);
+  await assert.rejects(access(feishuPostPath), /ENOENT/);
+  assert.equal(await readFile(regularPostPath, 'utf8'), 'keep me');
 });
 
 test('exportDerivedTrainingMarkdown retries transient schema preflight connection timeouts', async () => {

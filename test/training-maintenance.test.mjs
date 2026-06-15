@@ -268,54 +268,70 @@ test('training maintenance import markdown remains an explicit legacy phase', as
   assert.equal(result.status, 'stored');
 });
 
-test('v8 maintenance guide documents inspect sync and migrate commands', async () => {
-  const guide = await readFile(
-    new URL('../docs/优化重构/部署与同步优化_v8/maintenance_scripts.md', import.meta.url),
+test('current maintenance docs and scripts document inspect sync and migrate commands', async () => {
+  const packageJson = JSON.parse(
+    await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+  );
+  const maintenanceGuide = await readFile(
+    new URL('../docs/部署维护/日常维护手册.md', import.meta.url),
     'utf8',
   );
 
-  assert.match(guide, /npm run maintenance:inspect/);
-  assert.match(guide, /npm run maintenance:sync/);
-  assert.match(guide, /--phase archive/);
-  assert.match(guide, /--phase markdown/);
-  assert.match(guide, /tools\/training-maintenance\.mjs export markdown/);
-  assert.match(guide, /npm run maintenance:migrate -- --dry-run/);
-  assert.match(guide, /npm run maintenance:migrate -- --confirm/);
+  assert.equal(packageJson.scripts['maintenance:inspect'], 'node tools/training-maintenance.mjs inspect');
+  assert.equal(packageJson.scripts['maintenance:sync'], 'node tools/training-maintenance.mjs sync');
+  assert.equal(packageJson.scripts['maintenance:migrate'], 'node tools/training-maintenance.mjs migrate');
+  assert.match(maintenanceGuide, /npm run sync:db/);
+  assert.match(maintenanceGuide, /npm run import:markdown/);
+  assert.match(maintenanceGuide, /npm run export:markdown/);
+  assert.match(maintenanceGuide, /npm run reconcile:markdown/);
+  assert.match(maintenanceGuide, /npm run backfill:core/);
+  assert.match(maintenanceGuide, /npm run backfill:thoughts/);
 });
 
-test('v8 overview links the maintenance guide and current CI/test controls', async () => {
-  const overview = await readFile(
-    new URL('../docs/优化重构/部署与同步优化_v8/re_optimization_v8.md', import.meta.url),
+test('current long-term docs cover maintenance phases and CI/test controls', async () => {
+  const packageJson = JSON.parse(
+    await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+  );
+  const interfaceManual = await readFile(
+    new URL('../docs/系统架构/内部接口手册.md', import.meta.url),
     'utf8',
   );
-  const deploy = await readFile(
-    new URL('../docs/优化重构/部署与同步优化_v8/deploy_and_build.md', import.meta.url),
+  const maintenanceGuide = await readFile(
+    new URL('../docs/部署维护/日常维护手册.md', import.meta.url),
     'utf8',
   );
-  const telegram = await readFile(
-    new URL('../docs/优化重构/部署与同步优化_v8/telegram_sync_refactor.md', import.meta.url),
+  const workflowGuide = await readFile(
+    new URL('../docs/部署维护/GitHub与Cloudflare配置.md', import.meta.url),
     'utf8',
   );
 
-  assert.match(overview, /maintenance_scripts\.md/);
-  assert.match(deploy, /sync_db_mode/);
-  assert.match(deploy, /full-test/);
-  assert.match(telegram, /taskStatus/);
-  assert.match(telegram, /failureDisposition/);
+  assert.match(packageJson.scripts['backfill:core'], /--phase archive/);
+  assert.match(packageJson.scripts['import:markdown'], /--phase markdown/);
+  assert.match(packageJson.scripts['reconcile:markdown'], /--phase markdown/);
+  assert.match(interfaceManual, /--phase markdown/);
+  assert.match(interfaceManual, /--phase all/);
+  assert.match(interfaceManual, /import:markdown/);
+  assert.match(interfaceManual, /export:markdown/);
+  assert.match(maintenanceGuide, /安全数据库修复/);
+  assert.match(workflowGuide, /sync\.yml/);
+  assert.match(workflowGuide, /sync-dev\.yml/);
+  assert.match(workflowGuide, /taskStatus/);
+  assert.match(workflowGuide, /failureDisposition/);
 });
 
-test('v8 overview documents the local document index and historical replacements', async () => {
-  const overview = await readFile(
-    new URL('../docs/优化重构/部署与同步优化_v8/re_optimization_v8.md', import.meta.url),
+test('current docs index points maintainers to long-term operational entries instead of deleted v8 docs', async () => {
+  const docsIndex = await readFile(
+    new URL('../docs/README.md', import.meta.url),
+    'utf8',
+  );
+  const maintenanceGuide = await readFile(
+    new URL('../docs/部署维护/日常维护手册.md', import.meta.url),
     'utf8',
   );
 
-  assert.match(overview, /deploy_and_build\.md/);
-  assert.match(overview, /telegram_sync_refactor\.md/);
-  assert.match(overview, /maintenance_scripts\.md/);
-  assert.match(overview, /checklist\.md/);
-  assert.match(overview, /构建性能优化_v7/);
-  assert.match(overview, /图片识别优化_v6/);
-  assert.match(overview, /系统优化重构_v5/);
-  assert.match(overview, /历史参考/);
+  assert.match(docsIndex, /部署维护\/日常维护手册\.md/);
+  assert.match(docsIndex, /系统架构.*内部接口/s);
+  assert.match(docsIndex, /数据流转\/数据流转说明\.md/);
+  assert.doesNotMatch(docsIndex, /部署与同步优化_v8/);
+  assert.doesNotMatch(maintenanceGuide, /部署与同步优化_v8/);
 });

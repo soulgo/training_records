@@ -32,6 +32,9 @@
 
 ### Fixed
 
+- 修复飞书 `/随想删` 删除已入库但页面仍显示的问题：`sync.yml` 和 `sync-dev.yml` 现在会把 `thought_edit`、`thought_delete`、`thought_move` 的 `ready + stored` 批次视为 DB-only 内容变化并异步触发严格数据库快照部署。
+- 修复飞书回复原 `/随想` 消息后发送 `/随想删` 无法定位目标的问题：飞书同步现在读取 `parent_id` / `root_id` 并转换为稳定数字代理 ID；无 id 且无回复目标时会返回失败原因，不再误报删除成功。
+- 修复 DB -> Markdown 导出只清理 `*-telegram-thought-*.md` 的问题；导出前会同时清理 `*-feishu-thought-*.md`，避免飞书旧随想备份残留在页面。
 - 加固飞书图片 burst 缓冲：`FEISHU_IMAGE_BUFFER` 在 GitHub `repository_dispatch` 失败时不再清空已缓冲图片事件，会保留事件、记录安全诊断日志并按有限退避重新设置 alarm，方便在 Cloudflare tail 中定位 `feishu_update` / `feishu_update_dev` 是否成功派发。
 - 飞书同步 workflow 新增失败通知步骤，确保同步失败时飞书侧能收到 Action 失败回执；成功通知仍保持在同步/提交/推送之后、异步页面部署之前。
 - 修复飞书图片识别成功后因 `oc_...` 字符串 chat id 写入 PostgreSQL `bigint` 字段失败而进入 `pending_replay`、页面无更新的问题；旧 Telegram 兼容字段现在只写数字或 `null`，真实飞书 chat id 继续保留在 source 元数据和 Action summary 中，同时保留飞书图片批次的 `source_channel='feishu'`。

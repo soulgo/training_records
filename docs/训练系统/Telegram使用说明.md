@@ -301,6 +301,7 @@ node --test test/telegram-sync.test.mjs test/telegram-sync-runner.test.mjs
 - `/随想删 126` 是直接按 id 删除
 - 删除时不需要写模块名
 - 删除后会把 `core.thought` 标记为 deleted；已存在的 Markdown 备份和图片 artifact 不作为事实源
+- 如果没有 id，也没有回复到可解析的原随想消息，系统会返回失败原因，不会提示删除成功
 
 ## 9. 移动随想
 
