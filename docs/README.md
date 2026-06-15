@@ -7,23 +7,18 @@
 1. [项目 README](../README.md)
 2. [系统总览](系统架构/系统总览.md)
 3. [数据流转说明](数据流转/数据流转说明.md)
-4. [训练记录生成与解析](训练系统/训练记录生成与解析.md)
-5. [Telegram 使用说明](训练系统/Telegram使用说明.md)
-6. [Telegram 睡眠识别与入库说明](训练系统/Telegram睡眠识别与入库说明.md)
-7. [Telegram 图片日期归档](训练系统/Telegram图片日期归档.md)
-8. [Telegram 图片识别 Prompt 维护](训练系统/Telegram图片识别Prompt维护.md)
-9. [GitHub 与 Cloudflare 配置](部署维护/GitHub与Cloudflare配置.md)
+4. [数据模型规范](数据模型规范.md)
+5. [训练记录生成与解析](训练系统/训练记录生成与解析.md)
+6. [Telegram 使用说明](训练系统/Telegram使用说明.md)
+7. [Telegram 睡眠识别与入库说明](训练系统/Telegram睡眠识别与入库说明.md)
+8. [Telegram 图片日期归档](训练系统/Telegram图片日期归档.md)
+9. [Telegram 图片识别 Prompt 维护](训练系统/Telegram图片识别Prompt维护.md)
 10. [飞书通道部署](部署维护/飞书通道部署.md)
-11. [日常维护手册](部署维护/日常维护手册.md)
-12. [Dev 合并 Main 操作手册](部署维护/dev合并main/README.md)
-13. [Dev 环境搭建步骤](dev_env/dev_environment_implementation.md)
-14. [常见问题排查](问题排查/常见问题排查.md)
-15. [V10 数据库唯一事实源与 Markdown 备份方案](优化重构/数据库唯一事实源与 markdown 备份_v10/数据库唯一事实源与Markdown备份方案.md)
-16. [V11 落地 checklist](优化重构/Telegram同步PostgreSQL提速与OpenAI兼容API_v11/checklist.md)
-17. [V12 MCP 删除与数据库结构对齐](优化重构/MCP删除与数据库结构对齐_v12/README.md)
-18. [V13 数据统一与六边形架构重构](优化重构/数据统一与六边形架构重构_v13/README.md)
-19. [V15 自适应图片解析入库](优化重构/自适应图片解析入库_v15/README.md)
-20. [V21 docs 文档内容优化](优化重构/docs%20文档内容优化_v21/README.md)
+11. [GitHub 与 Cloudflare 配置](部署维护/GitHub与Cloudflare配置.md)
+12. [日常维护手册](部署维护/日常维护手册.md)
+13. [Dev 合并 Main 操作手册](部署维护/dev合并main/README.md)
+14. [Dev 环境搭建步骤](dev_env/dev_environment_implementation.md)
+15. [常见问题排查](问题排查/常见问题排查.md)
 
 ## 文档目录
 
@@ -34,19 +29,18 @@
 | [训练系统](训练系统/) | 训练记录格式、消息通道使用、图片日期归档、随想、分析和 prompt 维护 |
 | [dev_env](dev_env/) | Dev Bot、Dev 数据库、Dev Worker 和 Cloudflare Pages 预览环境配置 |
 | [部署维护](部署维护/) | GitHub Actions、Cloudflare Worker、本地和线上维护 |
-| [模块说明](模块说明/) | AI provider、AI schema 校验等内部模块说明 |
+| [模块说明](模块说明/) | AI provider 等内部模块说明 |
 | [问题排查](问题排查/) | 同步、构建、日期、数据库、AI、部署常见问题 |
-| [优化重构](优化重构/) | 已实施或待实施的阶段性重构方案、checklist、验收 runbook |
+| [优化重构](优化重构/) | 已实施方案留痕和本次文档删除记录，不作为日常操作入口 |
 | [更新记录](更新记录/) | 版本记录维护说明 |
-| [历史归档](历史归档/) | 已完成或阶段性方案文档，不作为当前操作手册 |
 
 ## 当前事实源
 
 - 当前代码行为以源码、测试和工作流为准。
 - 文档与代码不一致时，以代码为准，并同步修正文档。
 - `训练数据解析.md` 是构建生成的排查输出，不作为长期维护手册。
-- `优化重构/` 下的方案、checklist 和 runbook 用于沉淀阶段性改造结论，不替代长期系统文档或源码事实。
-- V21 以后，main/dev 的 Telegram 和飞书都进入统一 Cloudflare Worker，再由 `sync.yml` / `sync-dev.yml` 在 GitHub Actions 内判断 channel；飞书通过适配器复用 Telegram 同步主编排、AI 图片识别、随想入库和分析链路，不复制一套业务流程。
+- `优化重构/` 下只保留少量已实施方案留痕和 v22 文档删除记录，不替代长期系统文档或源码事实。
+- main/dev 的 Telegram 和飞书都进入统一 Cloudflare Worker，再由 `sync.yml` / `sync-dev.yml` 在 GitHub Actions 内判断 channel；飞书通过适配器复用 Telegram 同步主编排、AI 图片识别、随想入库和分析链路，不复制一套业务流程。
 - V10/V11 以后，消息通道图片正常成功路径以数据库增量 upsert 为主；`训练记录.md` 和 `source/_posts` 由 DB -> Markdown 备份派生，不作为成功路径的即时写入目标。
 - Telegram 发送锻炼、体脂秤、饮食和睡眠图片的稳定链路，优先看 `训练系统/Telegram使用说明.md`、`训练系统/Telegram图片日期归档.md`、`训练系统/Telegram睡眠识别与入库说明.md`。
 - Telegram `/随想` 支持纯文本、图片 caption 和 Markdown 文档附件；Markdown 附件正文最大 5MB，详情见 `训练系统/Telegram使用说明.md` 和 `训练系统/随想模块维护.md`。
@@ -55,5 +49,5 @@
 - 数据库 core 子表使用 `source_channel` 区分 `telegram`、`feishu`、`markdown_import` 等来源；`core.thought.telegram_message_id` 仍是兼容字段名，飞书会写入稳定数字代理 ID。
 - 修改图片识别字段、截图类型、APP Profile 或日期口径时，先看 `训练系统/Telegram图片识别Prompt维护.md`，再同步 schema、批次输出、数据库写入和测试。
 - 睡眠数据相关说明优先看 `训练系统/Telegram睡眠识别与入库说明.md`、`训练系统/训练记录生成与解析.md` 与数据库 schema。
-- V9 及更早的优化文档保留为历史方案和验收背景；涉及 Markdown fallback、目标日期 Markdown 合并等旧口径时，以 V10/V11/V12/V13 和长期维护文档为准。
-- `历史归档/` 下文档只保留背景和方案脉络，日常维护优先阅读其它目录。
+- 已删除的旧方案和历史归档不再作为当前维护入口；需要追溯时使用 git history。
+- 保留的 v13/v18/v19/v20/v21/v22 只作为已实施背景和审核记录，日常维护以本 README 推荐路径为准。

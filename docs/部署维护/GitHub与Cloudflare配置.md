@@ -317,17 +317,13 @@ node --test test/github-workflows.test.mjs test/cloudflare-config.test.mjs
 git diff --check -- docs
 ```
 
-## 6. 旧入口处理
+## 6. 入口收敛规则
 
-以下资源不再作为当前 main/dev 入口：
+当前 main/dev 不再维护分散的 Telegram / 飞书同步入口，也不再维护单独的飞书 Wrangler 配置。所有消息入口都收敛到：
 
-| 旧口径 | 当前替代 |
-| --- | --- |
-| `.github/workflows/telegram-sync.yml` | `.github/workflows/sync.yml` |
-| `.github/workflows/feishu-sync.yml` | `.github/workflows/sync.yml` |
-| `.github/workflows/telegram-sync-dev.yml` | `.github/workflows/sync-dev.yml` |
-| `.github/workflows/feishu-sync-dev.yml` | `.github/workflows/sync-dev.yml` |
-| `wrangler.feishu.toml` / `wrangler.feishu-dev.toml` | `wrangler.toml` / `wrangler.dev.toml` |
-| 独立 Telegram Worker + 独立 Feishu Worker | 统一 Worker `cloudflare/sync-dispatch-worker.mjs` |
+- main：统一 Worker `feishu-sync-dispatch` + `.github/workflows/sync.yml`
+- dev：统一 Worker `sync-dispatch-dev` + `.github/workflows/sync-dev.yml`
+- Worker 入口文件：`cloudflare/sync-dispatch-worker.mjs`
+- 部署配置：`wrangler.toml` / `wrangler.dev.toml`
 
-历史方案可以留在 `docs/优化重构/`，但日常维护以本文、[日常维护手册](日常维护手册.md) 和 [系统总览](../系统架构/系统总览.md) 为准。
+v22 文档整理后，旧入口名称只允许出现在少量已实施方案留痕中。日常维护以本文、[日常维护手册](日常维护手册.md) 和 [系统总览](../系统架构/系统总览.md) 为准。

@@ -22,7 +22,7 @@
 | 静态站点 | Hexo 7、EJS、Stylus、Chart.js CDN |
 | 数据库 | PostgreSQL、`pg` |
 | 自动化 | GitHub Actions、GitHub Pages |
-| Telegram 入口 | Telegram Bot API、Cloudflare Worker、Durable Object |
+| 消息入口 | Telegram Bot API、飞书 Open API、Cloudflare Worker、Durable Object |
 | AI | OpenAI-compatible Chat Completions |
 
 ## 系统架构简述
@@ -32,12 +32,13 @@
 ```mermaid
 flowchart TD
   DB["PostgreSQL core.*"] --> S
-  TG["Telegram 图片/命令"] --> W["Cloudflare Worker"]
+  MSG["Telegram / 飞书 图片与命令"] --> W["统一 Cloudflare Worker"]
   W --> GH["GitHub repository_dispatch"]
-  GH --> SYNC["npm run sync:telegram"]
-  SYNC --> AI["AI 图片识别/分析"]
-  SYNC --> DB
-  SYNC -. "DB 失败" .-> Q["pending queue"]
+  GH --> SYNC["sync.yml / sync-dev.yml"]
+  SYNC --> CMD["npm run sync:telegram / sync:feishu"]
+  CMD --> AI["AI 图片识别/分析"]
+  CMD --> DB
+  CMD -. "DB 失败" .-> Q["pending queue"]
   DB --> BAK["Markdown Backup"]
   BAK --> A["训练记录.md / source/_posts"]
   S --> DATA["source/_data/training.json + dashboardView.json"]
@@ -75,7 +76,7 @@ flowchart TD
 - `source/_data/`：构建生成的 `training.json` 与 `dashboardView.json`。
 - `tools/`：CLI 入口和核心编排脚本。
 - `src/`：AI、Telegram、数据库、站点和任务等内部模块。
-- `cloudflare/`：Telegram webhook 转 GitHub dispatch 的 Worker。
+- `cloudflare/`：Telegram 和飞书 webhook 转 GitHub dispatch 的统一 Worker。
 - `sql/`：PostgreSQL 初始化 SQL。
 - `runtime/`：待补偿队列和归档失败日志。
 - `docs/`：维护文档入口。
@@ -135,7 +136,7 @@ npm run server
 | `MARKDOWN_BACKUP_ENABLED` | 是否启用 DB -> Markdown 定时备份 |
 | `MARKDOWN_BACKUP_FREQUENCY` | Markdown 备份频率，`weekly` 或 `daily` |
 
-完整配置见 [GitHub与Cloudflare配置](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/部署维护/GitHub与Cloudflare配置.md) 和 [日常维护手册](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/部署维护/日常维护手册.md)。
+完整配置见 [GitHub 与 Cloudflare 配置](docs/部署维护/GitHub与Cloudflare配置.md) 和 [日常维护手册](docs/部署维护/日常维护手册.md)。
 
 ## 训练记录流程
 
@@ -146,17 +147,17 @@ npm run server
 3. 执行 `npm run build` 生成静态站点。
 4. 只有确认 Markdown 是完整可信快照时，才显式执行 `npm run import:markdown`。
 
-Telegram 自动流程：
+消息通道自动流程：
 
-1. Telegram 消息进入 Cloudflare Worker。
-2. Worker 校验 secret；帮助消息直接回复，其它消息触发 GitHub `repository_dispatch`。
-3. `telegram-sync.yml` 执行 `npm run sync:telegram`。
-4. 图片批次调用 AI 识别；随想、Markdown 附件随想和分析按命令分支处理。
+1. Telegram 或飞书消息进入统一 Cloudflare Worker。
+2. Worker 校验 secret / 飞书签名；Telegram 帮助消息可直接回复，其它消息触发 GitHub `repository_dispatch`。
+3. `sync.yml` 或 `sync-dev.yml` 判断 channel，再执行 `npm run sync:telegram` 或 `npm run sync:feishu`。
+4. 图片批次调用 AI 识别；随想、Markdown 附件随想、帮助和分析按通道能力分支处理。
 5. 图片、随想和身体反馈写 PostgreSQL。
 6. PostgreSQL 失败时写 pending 队列。
 7. 内容变化后 workflow 只提交文件；站点构建部署由 push 或 DB-only 异步 deploy workflow 完成。
 
-详细规则见 [训练记录生成与解析](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/训练系统/训练记录生成与解析.md)。
+详细规则见 [训练记录生成与解析](docs/训练系统/训练记录生成与解析.md)。
 
 ## GitHub Pages 部署
 
@@ -173,9 +174,11 @@ Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` �
 | `ci-tests.yml` | 运行 `npm test` |
 | `deploy-pages.yml` | 构建并部署 GitHub Pages |
 | `deploy-cloudflare-pages-dev.yml` | 构建 dev 分支并部署 Cloudflare Pages 预览 |
-| `telegram-sync.yml` | 处理 Telegram 同步、提交内容变化，并在 DB-only 入库时异步触发站点部署 |
+| `sync.yml` | main Telegram / 飞书统一同步、提交内容变化，并在 DB-only 入库时异步触发站点部署 |
+| `sync-dev.yml` | dev Telegram / 飞书统一同步，并触发 dev Cloudflare Pages 预览部署 |
 | `markdown-backup.yml` | 按 GitHub Variables 控制定时从数据库导出 Markdown 备份 |
-| `deploy-cloudflare-worker.yml` | 部署 Cloudflare Worker，并刷新 Telegram webhook |
+| `deploy-cloudflare-worker.yml` | 部署 main 统一 Cloudflare Worker，并刷新 Telegram webhook |
+| `deploy-cloudflare-worker-dev.yml` | 部署 dev 统一 Cloudflare Worker，并刷新 dev Telegram webhook |
 | `refresh-telegram-webhook.yml` | 手动或每 6 小时刷新 Telegram webhook |
 
 共享构建 action：`.github/actions/site-build/action.yml`。
@@ -216,15 +219,17 @@ PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`
 
 ## 文档导航
 
-- [文档总览](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/README.md)
-- [系统总览](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/系统架构/系统总览.md)
-- [内部接口手册](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/系统架构/内部接口手册.md)
-- [数据流转说明](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/数据流转/数据流转说明.md)
-- [训练记录生成与解析](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/训练系统/训练记录生成与解析.md)
-- [Telegram 使用说明](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/训练系统/Telegram使用说明.md)
-- [GitHub 与 Cloudflare 配置](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/部署维护/GitHub与Cloudflare配置.md)
-- [日常维护手册](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/部署维护/日常维护手册.md)
-- [常见问题排查](/C:/Users/ljq90/Desktop/project_test/健身锻炼/docs/问题排查/常见问题排查.md)
+- [文档总览](docs/README.md)
+- [系统总览](docs/系统架构/系统总览.md)
+- [内部接口手册](docs/系统架构/内部接口手册.md)
+- [数据流转说明](docs/数据流转/数据流转说明.md)
+- [数据模型规范](docs/数据模型规范.md)
+- [训练记录生成与解析](docs/训练系统/训练记录生成与解析.md)
+- [Telegram 使用说明](docs/训练系统/Telegram使用说明.md)
+- [飞书通道部署](docs/部署维护/飞书通道部署.md)
+- [GitHub 与 Cloudflare 配置](docs/部署维护/GitHub与Cloudflare配置.md)
+- [日常维护手册](docs/部署维护/日常维护手册.md)
+- [常见问题排查](docs/问题排查/常见问题排查.md)
 
 ## FAQ
 
