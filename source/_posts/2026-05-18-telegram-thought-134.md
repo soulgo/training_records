@@ -1,10 +1,9 @@
 ---
-date: 2026-05-18 22:33:00
+date: 2026-05-18 14:33:21
 tags:
   - 训练
   - 随想
   - Telegram
-thought_module: workout
 telegram_message_id: 134
 telegram_chat_id: 6314355239
 ---

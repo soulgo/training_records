@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-13T02:56:53.520Z",
+  "generatedAt": "2026-06-12T07:09:51.376Z",
   "measurements": [
     {
       "date": "2026-05-06",
@@ -594,78 +594,6 @@
       "fatFreeMassKg": 55.9,
       "bodyAge": 30,
       "bodyType": "标准"
-    },
-    {
-      "date": "2026-06-08",
-      "archivedDate": "2026-06-08",
-      "measuredAt": "2026-06-08",
-      "bodyScore": null,
-      "weightKg": 72.3,
-      "bmi": 23.3,
-      "bodyFatPct": 22.1,
-      "skeletalMuscleKg": 60.8,
-      "visceralFatLevel": 8,
-      "basalMetabolismKcal": 1583,
-      "bodyWaterPct": 50.3,
-      "proteinPct": 23.5,
-      "boneMassKg": 5.88,
-      "fatFreeMassKg": 112.6,
-      "bodyAge": 30,
-      "bodyType": "标准型"
-    },
-    {
-      "date": "2026-06-09",
-      "archivedDate": "2026-06-09",
-      "measuredAt": "2026-06-09",
-      "bodyScore": null,
-      "weightKg": 71.55,
-      "bmi": 23,
-      "bodyFatPct": 22.1,
-      "skeletalMuscleKg": 60.3,
-      "visceralFatLevel": 8,
-      "basalMetabolismKcal": 1570,
-      "bodyWaterPct": 50.2,
-      "proteinPct": 23.7,
-      "boneMassKg": 5.83,
-      "fatFreeMassKg": 111.6,
-      "bodyAge": 30,
-      "bodyType": "标准型"
-    },
-    {
-      "date": "2026-06-10",
-      "archivedDate": "2026-06-10",
-      "measuredAt": "2026-06-10",
-      "bodyScore": null,
-      "weightKg": 71.35,
-      "bmi": 23,
-      "bodyFatPct": 22,
-      "skeletalMuscleKg": 30.1,
-      "visceralFatLevel": 8,
-      "basalMetabolismKcal": 1568,
-      "bodyWaterPct": 50.2,
-      "proteinPct": 23.7,
-      "boneMassKg": 2.91,
-      "fatFreeMassKg": 55.7,
-      "bodyAge": 30,
-      "bodyType": "标准型"
-    },
-    {
-      "date": "2026-06-11",
-      "archivedDate": "2026-06-11",
-      "measuredAt": "2026-06-11",
-      "bodyScore": null,
-      "weightKg": 71.2,
-      "bmi": 22.9,
-      "bodyFatPct": 22.3,
-      "skeletalMuscleKg": 29.85,
-      "visceralFatLevel": 8,
-      "basalMetabolismKcal": 1556,
-      "bodyWaterPct": 49.9,
-      "proteinPct": 23.8,
-      "boneMassKg": 2.885,
-      "fatFreeMassKg": 55.68,
-      "bodyAge": 30,
-      "bodyType": "标准型"
     }
   ]
 }

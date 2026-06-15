@@ -1,12 +1,27 @@
-name = "telegram-sync-dispatch"
-main = "cloudflare/telegram-sync-dispatch-worker.mjs"
-compatibility_date = "2026-05-14"
+name = "feishu-sync-dispatch"
+main = "cloudflare/sync-dispatch-worker.mjs"
+compatibility_date = "2026-06-15"
+workers_dev = true
+routes = [
+  { pattern = "feishu.soulgo.chat", custom_domain = true }
+]
 
+[vars]
+GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM = "telegram_update"
+GITHUB_DISPATCH_EVENT_TYPE_FEISHU = "feishu_update"
 
 [[durable_objects.bindings]]
 name = "TELEGRAM_ALBUM_BUFFER"
 class_name = "TelegramAlbumBuffer"
 
+[[durable_objects.bindings]]
+name = "FEISHU_IMAGE_BUFFER"
+class_name = "FeishuImageBuffer"
+
 [[migrations]]
 tag = "v1"
+new_sqlite_classes = ["FeishuImageBuffer"]
+
+[[migrations]]
+tag = "v2"
 new_sqlite_classes = ["TelegramAlbumBuffer"]
