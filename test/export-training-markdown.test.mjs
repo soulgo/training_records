@@ -152,6 +152,74 @@ test('exportDerivedTrainingMarkdown runs database schema preflight before strict
   ]);
 });
 
+test('exportDerivedTrainingMarkdown retries transient schema preflight connection timeouts', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
+  const calls = [];
+  let clientCount = 0;
+
+  await exportDerivedTrainingMarkdown({
+    rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TRAINING_DB_PREFLIGHT_RETRY_DELAY_MS: '1',
+    },
+    createClient() {
+      clientCount += 1;
+      const clientId = clientCount;
+      return {
+        async connect() {
+          calls.push(`connect:${clientId}`);
+          if (clientId === 1) {
+            throw new Error('timeout expired');
+          }
+        },
+        async query(sql) {
+          calls.push(`query:${clientId}:${sql}`);
+          return { rows: [] };
+        },
+        async end() {
+          calls.push(`end:${clientId}`);
+        },
+      };
+    },
+    ensureCoreSchema: async (client) => {
+      await client.query('alter table core.training_day add column if not exists sleep_total_minutes integer null');
+    },
+    buildTrainingSnapshot: async () => {
+      calls.push('snapshot');
+      return {
+        generatedAt: '2026-06-12T00:00:00.000Z',
+        latest: {
+          measurement: null,
+          daily: { date: '2026-06-12' },
+        },
+        daily: [],
+        charts: {
+          weightKg: [],
+          bodyFatPct: [],
+          skeletalMuscleKg: [],
+          basalMetabolism: [],
+          visceralFatLevel: [],
+          intakeCalories: [],
+          trainingCalories: [],
+          cyclingDistanceKm: [],
+        },
+      };
+    },
+    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-12\n',
+  });
+
+  assert.deepEqual(calls, [
+    'connect:1',
+    'end:1',
+    'connect:2',
+    'query:2:alter table core.training_day add column if not exists sleep_total_minutes integer null',
+    'end:2',
+    'snapshot',
+  ]);
+});
+
 test('exportDerivedTrainingMarkdown surfaces incomplete database snapshots', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const recordPath = path.join(tempRoot, '训练记录.md');

@@ -34,6 +34,7 @@ export async function exportDerivedTrainingMarkdown(options = {}) {
     env: snapshotOptions.env,
     createClient: options.createClient,
     ensureCoreSchema: options.ensureCoreSchema,
+    stderr: options.stderr,
   });
   const snapshot = await buildSnapshot(snapshotOptions);
 
@@ -68,15 +69,61 @@ async function runDatabaseSchemaPreflight(options = {}) {
         connectionTimeoutMillis: dbConfig.timeoutMs,
         application_name: dbConfig.appName,
       }));
-  const client = createClient(config);
   const ensureCoreSchema = options.ensureCoreSchema ?? ensureCoreSchemaDefault;
+  const maxAttempts = parsePositiveInteger(options.env?.TRAINING_DB_PREFLIGHT_MAX_ATTEMPTS, 3);
+  const retryDelayMs = parseNonNegativeInteger(options.env?.TRAINING_DB_PREFLIGHT_RETRY_DELAY_MS, 500);
 
-  try {
-    await client.connect();
-    await ensureCoreSchema(client);
-  } finally {
-    await client.end();
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const client = createClient(config);
+    try {
+      await client.connect();
+      await ensureCoreSchema(client);
+      return;
+    } catch (error) {
+      if (attempt >= maxAttempts || !isTransientDatabasePreflightError(error)) {
+        throw error;
+      }
+      options.stderr?.write?.(
+        `[training-db-export] schema preflight failed: ${formatErrorMessage(error)}; retrying (${attempt}/${maxAttempts})\n`,
+      );
+      await delay(retryDelayMs);
+    } finally {
+      await client.end();
+    }
   }
+}
+
+function isTransientDatabasePreflightError(error) {
+  const code = String(error?.code ?? '').trim();
+  if (['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EPIPE'].includes(code)) {
+    return true;
+  }
+
+  const message = formatErrorMessage(error);
+  return /timeout expired|connect timeout|connection timeout|terminating connection|connection terminated|too many connections|remaining connection slots/i.test(message);
+}
+
+function formatErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function parseNonNegativeInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback;
+}
+
+function delay(ms) {
+  if (!ms) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 async function exportThoughtMarkdownBackup({ rootDir, thoughts }) {
