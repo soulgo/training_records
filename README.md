@@ -174,8 +174,8 @@ Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` �
 | `ci-tests.yml` | 运行 `npm test` |
 | `deploy-pages.yml` | 构建并部署 GitHub Pages |
 | `deploy-cloudflare-pages-dev.yml` | 构建 dev 分支并部署 Cloudflare Pages 预览 |
-| `sync.yml` | main Telegram / 飞书统一同步、提交内容变化，并在 DB-only 入库时异步触发站点部署 |
-| `sync-dev.yml` | dev Telegram / 飞书统一同步，并触发 dev Cloudflare Pages 预览部署 |
+| `sync.yml` | main Telegram / 飞书统一同步、提交内容变化，并在图片、随想新增/编辑/删除/移动等 DB-only 入库时异步触发站点部署 |
+| `sync-dev.yml` | dev Telegram / 飞书统一同步，并在图片、随想新增/编辑/删除/移动等 DB-only 入库时触发 dev Cloudflare Pages 预览部署 |
 | `markdown-backup.yml` | 按 GitHub Variables 控制定时从数据库导出 Markdown 备份 |
 | `deploy-cloudflare-worker.yml` | 部署 main 统一 Cloudflare Worker，并刷新 Telegram webhook |
 | `deploy-cloudflare-worker-dev.yml` | 部署 dev 统一 Cloudflare Worker，并刷新 dev Telegram webhook |

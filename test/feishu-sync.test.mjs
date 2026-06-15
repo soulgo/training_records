@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  buildStableSafeInteger,
   groupFeishuUpdates,
   normalizeFeishuMessage,
 } from '../src/adapters/feishu/index.mjs';
@@ -85,6 +86,26 @@ test('groupFeishuUpdates reuses existing thought command parsing for Feishu text
   assert.equal(batch.kind, 'thought');
   assert.equal(batch.thought.body, '今天练腿后髋部有点紧');
   assert.equal(batch.messages[0].sourceMessageId, 'om_thought_1');
+});
+
+test('groupFeishuUpdates maps Feishu reply metadata to reply-based thought delete targets', () => {
+  const [batch] = groupFeishuUpdates([
+    createFeishuTextEvent({
+      eventId: 'evt-delete-1',
+      messageId: 'om_delete_1',
+      chatId: 'oc_chat_1',
+      text: '/随想删',
+      createTime: '1781398820000',
+      parentId: 'om_thought_1',
+    }),
+  ]);
+  const expectedTargetId = buildStableSafeInteger('feishu:message:om_thought_1');
+
+  assert.equal(batch.sourceChannel, 'feishu');
+  assert.equal(batch.kind, 'thought_delete');
+  assert.equal(batch.thoughtDelete.targetMessageId, expectedTargetId);
+  assert.equal(batch.thoughtDelete.replyToMessageId, expectedTargetId);
+  assert.equal(batch.messages[0].replyToMessageId, expectedTargetId);
 });
 
 test('recognizeBatch can send Feishu image bytes as inline AI input', async () => {
@@ -220,6 +241,49 @@ test('runFeishuSync handles image and thought batches through the shared sync pi
   assert.match(report.batches[0].sourceId, /^feishu:chat:oc_chat_1:/);
 });
 
+test('runFeishuSync handles reply-based Feishu thought delete batches through the shared pipeline', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-runner-delete-'));
+  const persisted = [];
+  const targetMessageId = buildStableSafeInteger('feishu:message:om_thought_1');
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: feishuSyncEnv(),
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuTextEvent({
+            eventId: 'evt-delete-1',
+            messageId: 'om_delete_1',
+            chatId: 'oc_chat_1',
+            text: '/随想删',
+            createTime: '1781398820000',
+            parentId: 'om_thought_1',
+          }),
+        ],
+      },
+    },
+    persistNormalizedBatch: async ({ batch, sourceChannel }) => {
+      persisted.push({ batch, sourceChannel });
+      return { status: 'stored', archivedDate: batch.archivedDate ?? null };
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.updatesFetched, 1);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_delete');
+  assert.equal(result.batchResults[0].status, 'ready');
+  assert.equal(result.batchResults[0].thoughtDelete.targetMessageId, targetMessageId);
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_delete_database_only');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0].sourceChannel, 'feishu');
+  assert.equal(persisted[0].batch.kind, 'thought_delete');
+  assert.equal(persisted[0].batch.thoughtDelete.targetMessageId, targetMessageId);
+});
+
 test('feishu action monitor reports failed workflow stages to the original Feishu chat', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-action-monitor-'));
   const eventPath = path.join(tempRoot, 'event.json');
@@ -322,7 +386,7 @@ function createFeishuImageEvent({ eventId, messageId, chatId, imageKey, createTi
   });
 }
 
-function createFeishuTextEvent({ eventId, messageId, chatId, text, createTime }) {
+function createFeishuTextEvent({ eventId, messageId, chatId, text, createTime, parentId, rootId }) {
   return createFeishuEvent({
     eventId,
     messageId,
@@ -330,10 +394,12 @@ function createFeishuTextEvent({ eventId, messageId, chatId, text, createTime })
     messageType: 'text',
     content: { text },
     createTime,
+    parentId,
+    rootId,
   });
 }
 
-function createFeishuEvent({ eventId, messageId, chatId, messageType, content, createTime }) {
+function createFeishuEvent({ eventId, messageId, chatId, messageType, content, createTime, parentId, rootId }) {
   return {
     schema: '2.0',
     header: {
@@ -355,6 +421,8 @@ function createFeishuEvent({ eventId, messageId, chatId, messageType, content, c
         message_type: messageType,
         content: JSON.stringify(content),
         create_time: createTime,
+        ...(parentId ? { parent_id: parentId } : {}),
+        ...(rootId ? { root_id: rootId } : {}),
       },
     },
   };

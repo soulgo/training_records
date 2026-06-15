@@ -132,7 +132,7 @@ async function exportThoughtMarkdownBackup({ rootDir, thoughts }) {
 
   const existingThoughtPosts = await readDirRecursive(postsDir, {
     ignoreMissing: true,
-    filter: (entryPath) => /(?:^|[/\\])[^/\\]+-telegram-thought-\d+\.md$/u.test(entryPath),
+    filter: (entryPath) => /(?:^|[/\\])[^/\\]+-(?:telegram|feishu)-thought-\d+\.md$/u.test(entryPath),
   });
   await Promise.all(existingThoughtPosts.map((postPath) => rm(postPath, { force: true })));
 

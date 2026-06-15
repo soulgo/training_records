@@ -406,32 +406,34 @@ test('telegram-sync workflows treat stored thought batches as database content c
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-workflow-detect-'));
   const resultPath = path.join(tempRoot, 'telegram-sync-result.json');
 
-  await writeFile(
-    resultPath,
-    JSON.stringify({
-      batches: [
-        {
-          kind: 'thought',
-          status: 'ready',
-          persistenceStatus: 'stored',
+  for (const kind of ['thought', 'thought_edit', 'thought_delete', 'thought_move']) {
+    await writeFile(
+      resultPath,
+      JSON.stringify({
+        batches: [
+          {
+            kind,
+            status: 'ready',
+            persistenceStatus: 'stored',
+          },
+        ],
+      }),
+      'utf8',
+    );
+
+    for (const workflow of workflows) {
+      const detectionScript = extractDatabaseContentDetectionScript(workflow);
+      const output = execFileSync(process.execPath, ['-e', detectionScript], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          SYNC_RESULT_PATH: resultPath,
+          TELEGRAM_SYNC_RESULT_PATH: resultPath,
         },
-      ],
-    }),
-    'utf8',
-  );
+      });
 
-  for (const workflow of workflows) {
-    const detectionScript = extractDatabaseContentDetectionScript(workflow);
-    const output = execFileSync(process.execPath, ['-e', detectionScript], {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        SYNC_RESULT_PATH: resultPath,
-        TELEGRAM_SYNC_RESULT_PATH: resultPath,
-      },
-    });
-
-    assert.match(output, /db_content_changed=true/);
+      assert.match(output, /db_content_changed=true/, `${kind} should trigger database content deploy`);
+    }
   }
 });
 
@@ -623,7 +625,7 @@ test('telegram-sync dev workflow leaves Pages deployment to the dev deploy workf
 });
 
 test('dev Worker config dispatches to the dev Telegram workflow event', async () => {
-  const config = await readFile(new URL('wrangler.dev.toml', rootDir), 'utf8');
+  const config = (await readFile(new URL('wrangler.dev.toml', rootDir), 'utf8')).replace(/\r\n?/g, '\n');
 
   assert.match(config, /name\s*=\s*"sync-dispatch-dev"/);
   assert.match(config, /main\s*=\s*"cloudflare\/sync-dispatch-worker\.mjs"/);

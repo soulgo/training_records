@@ -135,7 +135,9 @@ jobs:
             const batches = result.batchResults ?? result.batches ?? [];
             readyStoredContentBatches = batches.filter((batch) => {
               const kind = batch.kind ?? 'image';
-              return ['image', 'thought'].includes(kind) && batch.status === 'ready' && batch.persistenceStatus === 'stored';
+              return ['image', 'thought', 'thought_edit', 'thought_delete', 'thought_move'].includes(kind) &&
+                batch.status === 'ready' &&
+                batch.persistenceStatus === 'stored';
             }).length;
           } catch {}
           console.log(`readyStoredContentBatches=${readyStoredContentBatches}`);
