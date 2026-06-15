@@ -178,12 +178,21 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.match(workflow, /run_tests:\s*'true'/);
   assert.match(workflow, /deploy:\s*'false'/);
   assert.match(workflow, /rm -f public\/CNAME/);
-  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
-  assert.match(workflow, /apiToken:\s*\$\{\{\s*secrets\.CLOUDFLARE_PAGES_API_TOKEN\s*\}\}/);
-  assert.match(workflow, /accountId:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
-  assert.match(workflow, /--cwd public pages deploy \./);
+  assert.doesNotMatch(workflow, /cloudflare\/wrangler-action@v3/);
+  assert.match(workflow, /CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
+  assert.match(workflow, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+  assert.match(workflow, /CLOUDFLARE_PAGES_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_PAGES_API_TOKEN\s*\}\}/);
+  assert.match(workflow, /CLOUDFLARE_PAGES_DEV_PROJECT_NAME:\s*\$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\}/);
+  assert.match(workflow, /token_names=\(\)/);
+  assert.match(workflow, /token_names\+=\("CLOUDFLARE_API_TOKEN"\)/);
+  assert.match(workflow, /token_names\+=\("CLOUDFLARE_PAGES_API_TOKEN"\)/);
+  assert.match(workflow, /CLOUDFLARE_API_TOKEN="\$\{token_value\}"/);
+  assert.match(workflow, /npx --yes wrangler@3\.114\.14 --cwd public pages deploy \./);
+  assert.match(workflow, /else\s*\n\s*last_status=\$\?/);
+  assert.match(workflow, /Cloudflare Pages deploy retry/);
+  assert.match(workflow, /All configured Cloudflare tokens failed/);
   assert.doesNotMatch(workflow, /--config wrangler\.pages\.dev\.toml/);
-  assert.match(workflow, /--project-name \$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\}/);
+  assert.match(workflow, /--project-name "\$\{CLOUDFLARE_PAGES_DEV_PROJECT_NAME\}"/);
   assert.match(workflow, /--branch dev/);
 });
 
@@ -620,9 +629,11 @@ test('telegram-sync dev workflow leaves Pages deployment to the dev deploy workf
   assert.match(deployWorkflow, /- name: Build dev site/);
   assert.match(deployWorkflow, /- name: Remove production custom domain file/);
   assert.match(deployWorkflow, /- name: Deploy to Cloudflare Pages/);
+  assert.match(deployWorkflow, /token_names\+=\("CLOUDFLARE_API_TOKEN"\)/);
+  assert.match(deployWorkflow, /token_names\+=\("CLOUDFLARE_PAGES_API_TOKEN"\)/);
   assert.match(
     deployWorkflow,
-    /command: --cwd public pages deploy \. --project-name \$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_PROJECT_NAME \|\| 'training-records-dev'\s*\}\} --branch dev/,
+    /npx --yes wrangler@3\.114\.14 --cwd public pages deploy \. --project-name "\$\{CLOUDFLARE_PAGES_DEV_PROJECT_NAME\}" --branch dev/,
   );
   assert.doesNotMatch(deployWorkflow, /--config wrangler\.pages\.dev\.toml/);
 });
