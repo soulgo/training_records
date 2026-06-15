@@ -20,7 +20,8 @@ test('wrangler main config reuses the Feishu worker as the unified production en
   assert.match(config, /class_name\s*=\s*"TelegramAlbumBuffer"/);
   assert.match(config, /name\s*=\s*"FEISHU_IMAGE_BUFFER"/);
   assert.match(config, /class_name\s*=\s*"FeishuImageBuffer"/);
-  assert.match(config, /new_sqlite_classes\s*=\s*\["TelegramAlbumBuffer",\s*"FeishuImageBuffer"\]/);
+  assert.match(config, /tag\s*=\s*"v1"\s*\nnew_sqlite_classes\s*=\s*\["FeishuImageBuffer"\]/);
+  assert.match(config, /tag\s*=\s*"v2"\s*\nnew_sqlite_classes\s*=\s*\["TelegramAlbumBuffer"\]/);
   assert.doesNotMatch(config, /GITHUB_OWNER/);
   assert.doesNotMatch(config, /GITHUB_REPO/);
   assert.doesNotMatch(config, /GITHUB_TOKEN|TELEGRAM_SECRET_TOKEN|TELEGRAM_BOT_TOKEN|FEISHU_APP_SECRET|FEISHU_ENCRYPT_KEY|FEISHU_VERIFICATION_TOKEN/);

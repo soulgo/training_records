@@ -20,4 +20,8 @@ class_name = "FeishuImageBuffer"
 
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["TelegramAlbumBuffer", "FeishuImageBuffer"]
+new_sqlite_classes = ["FeishuImageBuffer"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["TelegramAlbumBuffer"]

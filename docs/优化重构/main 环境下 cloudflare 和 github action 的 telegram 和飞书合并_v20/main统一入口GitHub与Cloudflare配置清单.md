@@ -113,6 +113,14 @@ class_name = "TelegramAlbumBuffer"
 [[durable_objects.bindings]]
 name = "FEISHU_IMAGE_BUFFER"
 class_name = "FeishuImageBuffer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FeishuImageBuffer"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["TelegramAlbumBuffer"]
 ```
 
 部署方式二选一：
