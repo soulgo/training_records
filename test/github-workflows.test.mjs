@@ -65,6 +65,8 @@ test('deploy-pages workflow uses the shared site build action', async () => {
 
   assert.match(workflow, /- name: Checkout/);
   assert.match(workflow, /actions\/checkout@v4/);
+  assert.match(workflow, /ref:\s*\$\{\{\s*github\.ref_name\s*\}\}/);
+  assert.doesNotMatch(workflow, /ref:\s*main/);
   assert.match(workflow, /- name: Build and deploy site/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
@@ -168,7 +170,8 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.match(workflow, /TRAINING_DB_APP_NAME:\s*\$\{\{\s*vars\.DEV_TRAINING_DB_APP_NAME\s*\}\}/);
   assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:/);
   assert.match(workflow, /TRAINING_BUILD_ARCHIVE_WRITE:\s*false/);
-  assert.match(workflow, /ref:\s*dev/);
+  assert.match(workflow, /ref:\s*\$\{\{\s*github\.ref_name\s*\}\}/);
+  assert.doesNotMatch(workflow, /ref:\s*dev/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
   assert.match(workflow, /sync_db_mode:\s*'auto'/);

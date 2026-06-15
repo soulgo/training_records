@@ -887,6 +887,22 @@ async function handleThoughtSyncBatch({
       processedAt: now,
       env,
     });
+    if (persistResult.status === 'not_found') {
+      const targetMessageId = persistResult.messageId ?? getThoughtTargetMessageId(thoughtStorageBatch);
+      const reason = `target thought ${targetMessageId ?? 'unknown'} not found`;
+      return {
+        changed: false,
+        batchResult: {
+          ...baseBatchResult,
+          status: 'skipped',
+          reason,
+          thoughtWriteStatus: 'not_found',
+          persistenceStatus: 'not_found',
+          failureCategory: 'user_input',
+          failureReason: reason,
+        },
+      };
+    }
     return {
       changed: thoughtWriteResult.changed || persistResult.status === 'stored',
       batchResult: {
@@ -913,6 +929,15 @@ async function handleThoughtSyncBatch({
       },
     };
   }
+}
+
+function getThoughtTargetMessageId(batch) {
+  return (
+    batch.thoughtEdit?.targetMessageId ??
+    batch.thoughtDelete?.targetMessageId ??
+    batch.thoughtMove?.targetMessageId ??
+    null
+  );
 }
 
 async function prepareThoughtMarkdownBody({ batch, kind, fetchTelegramFile }) {

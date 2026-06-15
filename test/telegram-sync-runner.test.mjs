@@ -2902,6 +2902,51 @@ test('runTelegramSync uses markdown document content as an explicit thought edit
   assert.equal(persistedBatches[0].thoughtEdit.storage.markdownPath, null);
 });
 
+test('runTelegramSync reports missing database thought edit targets without marking the batch stored', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-edit-missing-db-'));
+  const persistedBatches = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 409656527232593,
+          date: Math.floor(new Date('2026-06-15T09:15:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/随想编 501 杂七杂八 编辑并移动后的正文',
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'not_found', messageId: batch.thoughtEdit.targetMessageId };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.equal(persistedBatches.length, 1);
+  assert.equal(persistedBatches[0].kind, 'thought_edit');
+  assert.equal(persistedBatches[0].thoughtEdit.targetMessageId, 501);
+  assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, 'misc');
+  assert.equal(persistedBatches[0].thoughtEdit.body, '编辑并移动后的正文');
+  assert.equal(result.changed, false);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batchResults[0].persistenceStatus, 'not_found');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'not_found');
+  assert.match(result.batchResults[0].reason, /target thought 501 not found/i);
+});
+
 test('runTelegramSync allows module-only explicit thought edit captions when markdown supplies the body', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-edit-md-module-'));
   const persistedBatches = [];
