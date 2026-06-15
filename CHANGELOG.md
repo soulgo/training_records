@@ -18,6 +18,10 @@
 - 新增 dev 统一同步入口 v19：`sync-dispatch-dev` 同时接收 Telegram webhook 和飞书事件回调，统一派发到 `.github/workflows/sync-dev.yml`，并由 `deploy-cloudflare-worker-dev.yml` 部署单一 dev Worker 和刷新 dev Telegram webhook。
 - 新增 `tools/feishu-action-monitor.mjs`，当 `Feishu Sync` / `Feishu Sync (Dev)` 的 `repository_dispatch` workflow 失败时，会读取原始 `feishu_update(s)` payload 并向对应飞书 chat 回发失败阶段和 GitHub Actions run URL。
 
+### Changed
+
+- 收敛 GitHub/Cloudflare、飞书通道、系统总览、数据流转与日常维护文档为当前 main/dev 入口口径，补齐生产 Pages 缓存刷新、统一 Worker、GitHub Actions 参数和 dev Cloudflare Pages 验证说明，降低飞书/Telegram 同步部署排查时的配置歧义。
+
 ### Removed
 
 - 删除旧 dev 双入口配置：`wrangler.feishu-dev.toml`、`telegram-sync-dev.yml`、`feishu-sync-dev.yml` 和 `deploy-cloudflare-feishu-worker-dev.yml`，dev Telegram 与飞书改为共用 `sync-dispatch-dev`。
@@ -27,6 +31,10 @@
 - 加固飞书图片 burst 缓冲：`FEISHU_IMAGE_BUFFER` 在 GitHub `repository_dispatch` 失败时不再清空已缓冲图片事件，会保留事件、记录安全诊断日志并按有限退避重新设置 alarm，方便在 Cloudflare tail 中定位 `feishu_update` / `feishu_update_dev` 是否成功派发。
 - 飞书同步 workflow 新增失败通知步骤，确保同步失败时飞书侧能收到 Action 失败回执；成功通知仍保持在同步/提交/推送之后、异步页面部署之前。
 - 修复飞书图片识别成功后因 `oc_...` 字符串 chat id 写入 PostgreSQL `bigint` 字段失败而进入 `pending_replay`、页面无更新的问题；旧 Telegram 兼容字段现在只写数字或 `null`，真实飞书 chat id 继续保留在 source 元数据和 Action summary 中，同时保留飞书图片批次的 `source_channel='feishu'`。
+- 修复飞书图片批次已成功入库但异步 Pages deploy 在严格数据库导出阶段因 PostgreSQL schema preflight 连接超时而失败、页面不更新的问题；`export:markdown` 现在会对瞬时 DB preflight 连接错误做有限重试，schema preflight 也只在 SQL 成功后标记为已执行，避免失败后跳过后续重试。
+- 修复 GitHub Pages 已部署新训练数据但 `soulgo.chat` 仍命中 Cloudflare 旧 HTML 缓存、导致飞书入库数据短时间不显示的问题；生产 Pages 部署成功后会在配置 `CLOUDFLARE_ZONE_ID` 和 `CLOUDFLARE_API_TOKEN` 时自动清理 Cloudflare 缓存。
+- 修复 Cloudflare purge API 权限不足时生产 Pages deploy 末尾失败的问题；清缓存步骤现在会输出 warning 并保留部署成功状态，避免站点已发布但 Action 被误判为失败。
+- 修复手动触发 `deploy-pages.yml` 时即使选择修复分支也仍固定 checkout `main`、导致无法在分支上验证 deploy 修复的问题；手动 deploy 现在会使用触发时选择的 ref。
 
 ## [1.2.9] - 2026-06-14
 

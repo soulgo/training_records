@@ -7,7 +7,6 @@ let executed = false;
 
 export async function ensureCoreSchema(client) {
   if (executed) return;
-  executed = true;
 
   await client.query(`
     alter table core.sleep add column if not exists total_sleep_minutes integer null;
@@ -33,4 +32,5 @@ export async function ensureCoreSchema(client) {
     alter table core.training_day add column if not exists rem_sleep_minutes integer null;
     alter table core.training_day add column if not exists awake_minutes integer null;
   `);
+  executed = true;
 }
