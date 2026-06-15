@@ -372,7 +372,9 @@ function resolveGithubRepository(env) {
 }
 
 function resolveGithubDispatchEventType(env) {
-  return env?.GITHUB_DISPATCH_EVENT_TYPE?.trim() || 'feishu_update';
+  return env?.GITHUB_DISPATCH_EVENT_TYPE_FEISHU?.trim() ||
+    env?.GITHUB_DISPATCH_EVENT_TYPE?.trim() ||
+    'feishu_update';
 }
 
 function getImageBufferKey(event) {

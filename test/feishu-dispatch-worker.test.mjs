@@ -126,6 +126,31 @@ test('handleFeishuWebhook dispatches encrypted Feishu events without Lark signat
   });
 });
 
+test('handleFeishuWebhook prefers the Feishu-specific dispatch event type', async () => {
+  const calls = [];
+  const event = createFeishuImageEvent({
+    eventId: 'evt-image-specific-event-type',
+    messageId: 'om_feishu_specific_event_type',
+    chatId: 'oc_chat_1',
+    imageKey: 'img_v3_specific_event_type',
+  });
+
+  const response = await handleFeishuWebhook(createFeishuRequest(event), createEnv({
+    GITHUB_DISPATCH_EVENT_TYPE: 'legacy_dev_event',
+    GITHUB_DISPATCH_EVENT_TYPE_FEISHU: 'feishu_update_dev',
+  }), {
+    skipSignatureVerification: true,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return new Response(null, { status: 204 });
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(JSON.parse(calls[0].init.body).event_type, 'feishu_update_dev');
+});
+
 test('handleFeishuWebhook logs Feishu event metadata with chat id for discovery', async () => {
   const logs = [];
   const event = createFeishuImageEvent({

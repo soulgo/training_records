@@ -320,7 +320,9 @@ async function safeReadText(response) {
 
 async function dispatchTelegramUpdates({ fetchImpl, env, updates }) {
   const { owner, repo } = resolveGithubRepository(env);
-  const eventType = env?.GITHUB_DISPATCH_EVENT_TYPE?.trim() || 'telegram_update';
+  const eventType = env?.GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM?.trim() ||
+    env?.GITHUB_DISPATCH_EVENT_TYPE?.trim() ||
+    'telegram_update';
   return fetchImpl(
     `${env.GITHUB_API_BASE_URL?.trim() || GITHUB_API_BASE_URL}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dispatches`,
     {
