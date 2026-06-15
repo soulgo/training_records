@@ -17,10 +17,10 @@ dev Pages 预览仍由 `.github/workflows/deploy-cloudflare-pages-dev.yml` 负�
 
 | 渠道 | 填在哪里 | 地址 |
 | --- | --- | --- |
-| Telegram dev webhook | GitHub Variable `DEV_TELEGRAM_WEBHOOK_URL` | `https://sync-dispatch-dev.1406221797.workers.dev/` |
+| Telegram dev webhook | GitHub Variable `DEV_TELEGRAM_WEBHOOK_URL` | `https://feishu-dev.soulgo.chat/telegram` |
 | 飞书 dev Request URL | 飞书开放平台事件订阅 | `https://feishu-dev.soulgo.chat` |
 
-不要给 Telegram 填 `feishu-dev.soulgo.chat`。这个自定义域名只给飞书 dev 用。
+`/telegram` 路径只用于区分配置入口；统一 Worker 仍按 Telegram secret header 和飞书请求体结构判断渠道。
 
 ## 1. GitHub 只配置这些参数
 
@@ -56,7 +56,7 @@ openssl rand -hex 32
 
 | Variable | 必填 | 值 |
 | --- | --- | --- |
-| `DEV_TELEGRAM_WEBHOOK_URL` | 是 | `https://sync-dispatch-dev.1406221797.workers.dev/` |
+| `DEV_TELEGRAM_WEBHOOK_URL` | 是 | `https://feishu-dev.soulgo.chat/telegram` |
 | `AI_BASE_URL` | 是 | AI 服务 base URL |
 | `AI_MODEL` | 是 | 默认 AI 模型 |
 | `AI_PROVIDER` | 否 | 不填时默认 `openai-compatible` |
@@ -120,11 +120,12 @@ npx wrangler deploy --config wrangler.dev.toml
 Deploy Cloudflare Worker (Dev)
 ```
 
-部署成功后应看到两个触发入口：
+部署成功后应看到统一 Worker 可通过这些地址访问：
 
 ```text
 https://sync-dispatch-dev.1406221797.workers.dev
-feishu-dev.soulgo.chat
+https://feishu-dev.soulgo.chat/telegram
+https://feishu-dev.soulgo.chat
 ```
 
 ## 3. Cloudflare Worker Secrets
@@ -167,7 +168,7 @@ GITHUB_DISPATCH_EVENT_TYPE_FEISHU=feishu_update_dev
 GitHub Variable：
 
 ```text
-DEV_TELEGRAM_WEBHOOK_URL=https://sync-dispatch-dev.1406221797.workers.dev/
+DEV_TELEGRAM_WEBHOOK_URL=https://feishu-dev.soulgo.chat/telegram
 ```
 
 然后手动运行 GitHub Actions：
@@ -211,6 +212,7 @@ FEISHU_VERIFICATION_TOKEN
 
 ```bash
 curl -i https://sync-dispatch-dev.1406221797.workers.dev/
+curl -i https://feishu-dev.soulgo.chat/telegram
 curl -i https://feishu-dev.soulgo.chat
 ```
 
@@ -270,7 +272,7 @@ feishu   -> npm run sync:feishu
 
 删除旧 Cloudflare Worker 前，先确认：
 
-- Telegram webhook 已指向 `https://sync-dispatch-dev.1406221797.workers.dev/`
+- Telegram webhook 已指向 `https://feishu-dev.soulgo.chat/telegram`
 - 飞书 dev Request URL 已指向 `https://feishu-dev.soulgo.chat`
 - `feishu-dev.soulgo.chat` 没有绑定在旧 Worker 上
 
@@ -279,7 +281,7 @@ feishu   -> npm run sync:feishu
 | 要配的地方 | 最终值 |
 | --- | --- |
 | Cloudflare Worker | `sync-dispatch-dev` |
-| Telegram dev webhook | `https://sync-dispatch-dev.1406221797.workers.dev/` |
+| Telegram dev webhook | `https://feishu-dev.soulgo.chat/telegram` |
 | 飞书 dev Request URL | `https://feishu-dev.soulgo.chat` |
 | GitHub 同步 Action | `Sync (Dev)` / `.github/workflows/sync-dev.yml` |
 | GitHub Worker 部署 Action | `Deploy Cloudflare Worker (Dev)` / `.github/workflows/deploy-cloudflare-worker-dev.yml` |

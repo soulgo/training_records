@@ -58,12 +58,12 @@ openssl rand -hex 32
 
 | Variable | 用途 |
 | --- | --- |
-| `DEV_TELEGRAM_WEBHOOK_URL` | `https://sync-dispatch-dev.<你的Workers子域名>.workers.dev/` |
+| `DEV_TELEGRAM_WEBHOOK_URL` | `https://feishu-dev.soulgo.chat/telegram` |
 | `DEV_TRAINING_DB_APP_NAME` | 可选，例如 `training-records-dev` |
 | `DEV_FEISHU_ALLOWED_CHAT_IDS` | 可选；未配置时回退 `FEISHU_ALLOWED_CHAT_IDS` |
 | `CLOUDFLARE_PAGES_DEV_PROJECT_NAME` | 可选；未配置时使用 `training-records-dev` |
 
-`<你的Workers子域名>` 是 Cloudflare Workers 子域名，不是 Dashboard 右侧的 32 位 Account ID。
+`/telegram` 路径只用于区分 Telegram webhook 配置；统一 Worker 仍按 Telegram secret header 和飞书请求体结构判断渠道。
 
 ## 步骤 4：复核统一 Worker 配置
 
@@ -113,6 +113,12 @@ Deploy Cloudflare Worker (Dev)
 https://sync-dispatch-dev.<你的Workers子域名>.workers.dev/
 ```
 
+Dev Telegram webhook 推荐使用自定义域路径：
+
+```text
+https://feishu-dev.soulgo.chat/telegram
+```
+
 ## 步骤 6：配置 Cloudflare Worker Secrets
 
 在 Cloudflare Dashboard 的 `sync-dispatch-dev -> Settings -> Variables and Secrets` 配置：
@@ -147,7 +153,7 @@ npm run telegram:webhook
 
 ```bash
 TELEGRAM_BOT_TOKEN="DEV_TELEGRAM_BOT_TOKEN" \
-TELEGRAM_WEBHOOK_URL="https://sync-dispatch-dev.<你的Workers子域名>.workers.dev/" \
+TELEGRAM_WEBHOOK_URL="https://feishu-dev.soulgo.chat/telegram" \
 TELEGRAM_SECRET_TOKEN="DEV_TELEGRAM_SECRET_TOKEN" \
 npm run telegram:webhook
 ```
