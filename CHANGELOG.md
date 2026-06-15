@@ -18,6 +18,10 @@
 - 新增 dev 统一同步入口 v19：`sync-dispatch-dev` 同时接收 Telegram webhook 和飞书事件回调，统一派发到 `.github/workflows/sync-dev.yml`，并由 `deploy-cloudflare-worker-dev.yml` 部署单一 dev Worker 和刷新 dev Telegram webhook。
 - 新增 `tools/feishu-action-monitor.mjs`，当 `Feishu Sync` / `Feishu Sync (Dev)` 的 `repository_dispatch` workflow 失败时，会读取原始 `feishu_update(s)` payload 并向对应飞书 chat 回发失败阶段和 GitHub Actions run URL。
 
+### Changed
+
+- 收敛 GitHub/Cloudflare、飞书通道、系统总览、数据流转与日常维护文档为当前 main/dev 入口口径，补齐生产 Pages 缓存刷新、统一 Worker、GitHub Actions 参数和 dev Cloudflare Pages 验证说明，降低飞书/Telegram 同步部署排查时的配置歧义。
+
 ### Removed
 
 - 删除旧 dev 双入口配置：`wrangler.feishu-dev.toml`、`telegram-sync-dev.yml`、`feishu-sync-dev.yml` 和 `deploy-cloudflare-feishu-worker-dev.yml`，dev Telegram 与飞书改为共用 `sync-dispatch-dev`。
