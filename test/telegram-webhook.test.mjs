@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildTelegramWebhookConfig, setTelegramWebhook } from '../tools/telegram-webhook.mjs';
+import {
+  buildTelegramWebhookConfig,
+  setTelegramWebhook,
+  setTelegramWebhookWithRetry,
+} from '../tools/telegram-webhook.mjs';
 
 test('buildTelegramWebhookConfig trims required env values and keeps safe defaults', () => {
   const config = buildTelegramWebhookConfig({
@@ -91,6 +95,45 @@ test('setTelegramWebhook throws with Telegram description when API rejects reque
       ),
     /Telegram setWebhook failed \(HTTP 401\): Unauthorized/,
   );
+});
+
+test('setTelegramWebhookWithRetry retries transient Telegram DNS failures', async () => {
+  const requests = [];
+  const result = await setTelegramWebhookWithRetry(
+    {
+      botToken: '123:secret-token',
+      webhookUrl: 'https://worker.example.com/',
+      secretToken: 'secret-header',
+      allowedUpdates: ['message'],
+      dropPendingUpdates: false,
+    },
+    {
+      baseDelayMs: 0,
+      maxAttempts: 2,
+      fetch: async (url, init) => {
+        requests.push({ url, init });
+        if (requests.length === 1) {
+          return jsonResponse(400, {
+            ok: false,
+            description: 'Bad Request: bad webhook: Failed to resolve host: Temporary failure in name resolution',
+          });
+        }
+        return jsonResponse(200, {
+          ok: true,
+          result: true,
+          description: 'Webhook was set',
+        });
+      },
+      stderr: { write() {} },
+    },
+  );
+
+  assert.equal(requests.length, 2);
+  assert.deepEqual(result, {
+    ok: true,
+    description: 'Webhook was set',
+    result: true,
+  });
 });
 
 function jsonResponse(status, body) {
