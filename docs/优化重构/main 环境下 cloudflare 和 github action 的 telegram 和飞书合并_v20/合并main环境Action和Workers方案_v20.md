@@ -172,3 +172,96 @@ curl -i -X POST https://feishu.soulgo.chat/ -H 'content-type: application/json' 
 
 先更新测试，确认 RED：当前 main 生产配置仍指向 `telegram-sync-dispatch` / `feishu-sync-dispatch`，缺少 `.github/workflows/sync.yml`，测试应失败。
 
+## Execution Result - 2026-06-15
+
+### Completed
+
+- 本地已从 `main` 创建 `codex/main-unified-sync` 分支并完成实现。
+- 已新增 `.github/workflows/sync.yml`，远端 GitHub Actions 已出现 `Sync (Main)`。
+- 已删除远端 main 当前 workflow 文件中的旧生产入口：
+  - `.github/workflows/telegram-sync.yml`
+  - `.github/workflows/feishu-sync.yml`
+  - `.github/workflows/deploy-cloudflare-feishu-worker.yml`
+- 已删除仓库中的 `wrangler.feishu.toml`，`wrangler.toml` 已改为统一 Worker `sync-dispatch`。
+- 已把 `.github/workflows/deploy-cloudflare-worker.yml` 改为只支持手动 `workflow_dispatch`，避免缺少 Cloudflare runtime secrets 时自动切流。
+- 已写入配置清单：`main统一入口GitHub与Cloudflare配置清单.md`。
+- 已更新部署维护文档顶部指针和飞书当前链路，提示 main 以 v20 清单为准。
+
+### Verification Evidence
+
+RED：
+
+```bash
+node --test test/cloudflare-config.test.mjs test/github-workflows.test.mjs
+```
+
+观察到正确失败：`wrangler.toml` 仍是 `telegram-sync-dispatch`、`wrangler.feishu.toml` 仍存在、`.github/workflows/sync.yml` 缺失、CI/Pages paths 仍指向旧 workflow。
+
+GREEN：
+
+```bash
+node --test test/cloudflare-config.test.mjs test/github-workflows.test.mjs
+node --test test/cloudflare-config.test.mjs test/github-workflows.test.mjs test/sync-dispatch-worker.test.mjs test/telegram-sync-dispatch-worker.test.mjs test/feishu-dispatch-worker.test.mjs
+npm test
+npx wrangler deploy --dry-run --config wrangler.toml
+```
+
+结果：
+
+- 目标 workflow/config 测试：29/29 通过。
+- 统一 Worker 相关测试：59/59 通过。
+- 全量测试：458/458 通过。
+- Wrangler dry-run 通过，识别到 `TELEGRAM_ALBUM_BUFFER`、`FEISHU_IMAGE_BUFFER`、`GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM=telegram_update`、`GITHUB_DISPATCH_EVENT_TYPE_FEISHU=feishu_update`。
+
+远端 GitHub：
+
+- 已推送到 `main`：
+  - `7d7bae2 chore: unify main sync worker and workflows`
+  - `477bcc7 chore: require manual main worker deploy`
+- `gh workflow list --all` 显示 `Sync (Main)` active，旧 production `Telegram Sync`、`Feishu Sync`、`Deploy Cloudflare Feishu Worker` 不再显示。
+- `gh api repos/soulgo/training_records/contents/.github/workflows?ref=main` 只列出 `sync.yml`、`sync-dev.yml` 和其它保留 workflow。
+- follow-up 的远端 CI run `27522928715` 成功。
+
+### Cloudflare Remote Status
+
+已完成：
+
+- `npx wrangler whoami` 已确认 Cloudflare OAuth 登录且具备 Workers write 权限。
+- 旧 Worker secret 名称已确认：
+  - `telegram-sync-dispatch`: `GITHUB_TOKEN`、`TELEGRAM_BOT_TOKEN`、`TELEGRAM_SECRET_TOKEN`
+  - `feishu-sync-dispatch`: `GITHUB_TOKEN`、`FEISHU_ENCRYPT_KEY`、`FEISHU_VERIFICATION_TOKEN`
+- GitHub Variable `TELEGRAM_WEBHOOK_URL` 仍保持旧值 `https://telegram-sync-dispatch.1406221797.workers.dev/`，没有切到缺 secret 的新入口。
+
+未完成：
+
+- `sync-dispatch` 没有保留在 Cloudflare 上，因为新 Worker 没有任何 runtime secrets。
+- 旧 Cloudflare Workers 暂未删除：
+  - `telegram-sync-dispatch`
+  - `feishu-sync-dispatch`
+
+安全回滚记录：
+
+- 第一次推送 main 后，GitHub 自动触发了一次旧版 `Deploy Cloudflare Worker` run `27522799967`，它创建了无 secrets 的 `sync-dispatch`。
+- 为避免生产飞书入口损坏，已临时恢复旧 `wrangler.feishu.toml` 并重新部署 `feishu-sync-dispatch`，把 `feishu.soulgo.chat` 切回旧飞书 Worker。
+- 已删除无 secrets 的 `sync-dispatch`。
+- 当前验证 `https://feishu.soulgo.chat/` 返回 `405 method_not_allowed`，旧飞书 Worker 已重新接管自定义域名。
+
+### Remaining Manual Step
+
+Cloudflare Worker Secrets 不能反读，所以无法自动把两个旧 Worker 的 secrets 合并到新 `sync-dispatch`。要完成 Cloudflare 统一入口，需要手动或通过安全环境变量向新 Worker 写入：
+
+```bash
+npx wrangler secret put GITHUB_TOKEN --config wrangler.toml
+npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.toml
+npx wrangler secret put TELEGRAM_SECRET_TOKEN --config wrangler.toml
+npx wrangler secret put FEISHU_ENCRYPT_KEY --config wrangler.toml
+npx wrangler secret put FEISHU_VERIFICATION_TOKEN --config wrangler.toml
+```
+
+之后再按清单执行：
+
+1. 手动运行 `Deploy Cloudflare Worker` 或本地执行 `npx wrangler deploy --config wrangler.toml`。
+2. 将 GitHub Variable `TELEGRAM_WEBHOOK_URL` 改为 `https://feishu.soulgo.chat/telegram`。
+3. 运行 `Refresh Telegram Webhook`。
+4. 验证 Telegram 和飞书都触发 `Sync (Main)`。
+5. 删除旧 Cloudflare Workers `telegram-sync-dispatch` 和 `feishu-sync-dispatch`。
