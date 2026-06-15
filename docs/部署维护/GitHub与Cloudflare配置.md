@@ -2,16 +2,16 @@
 
 本文件合并原 `github-settings.md` 与 `telegram-webhook-cloudflare.md`，用于一次性配置 GitHub Settings、GitHub Actions 和 Cloudflare Worker。
 
+> 2026-06-15 更新：main 环境 Telegram / 飞书入口已在 v20 合并为 `sync-dispatch` + `.github/workflows/sync.yml`。main 最终配置以 [main 统一入口 GitHub 与 Cloudflare 配置清单](../优化重构/main%20环境下%20cloudflare%20和%20github%20action%20的%20telegram%20和飞书合并_v20/main统一入口GitHub与Cloudflare配置清单.md) 为准；本文保留较多历史参数说明，若与 v20 清单冲突，以 v20 清单为准。
+
 ## 适用工作流
 
 - `.github/workflows/deploy-pages.yml`
 - `.github/workflows/deploy-cloudflare-pages-dev.yml`
-- `.github/workflows/telegram-sync.yml`
-- `.github/workflows/feishu-sync.yml`
+- `.github/workflows/sync.yml`
 - `.github/workflows/sync-dev.yml`
 - `.github/workflows/deploy-cloudflare-worker.yml`
 - `.github/workflows/deploy-cloudflare-worker-dev.yml`
-- `.github/workflows/deploy-cloudflare-feishu-worker.yml`
 - `.github/workflows/refresh-telegram-webhook.yml`
 
 ## 1. GitHub Settings

@@ -98,12 +98,10 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
     'sql/**',
 	    '.github/actions/site-build/action.yml',
 	    '.github/workflows/deploy-pages.yml',
-	    '.github/workflows/telegram-sync.yml',
+	    '.github/workflows/sync.yml',
 	    '.github/workflows/sync-dev.yml',
-	    '.github/workflows/feishu-sync.yml',
 	    '.github/workflows/deploy-cloudflare-worker.yml',
 	    '.github/workflows/deploy-cloudflare-worker-dev.yml',
-	    '.github/workflows/deploy-cloudflare-feishu-worker.yml',
 	    '.github/workflows/deploy-cloudflare-pages-dev.yml',
     '.github/workflows/refresh-telegram-webhook.yml',
     '.github/workflows/markdown-backup.yml',
@@ -175,21 +173,14 @@ test('deploy-cloudflare-worker workflow refreshes Telegram webhook after deploym
   assert.match(workflow, /run:\s*npm run telegram:webhook/);
 });
 
-test('deploy-cloudflare-feishu-worker workflow deploys on Feishu worker changes to main', async () => {
-  const workflow = await readWorkflow('.github/workflows/deploy-cloudflare-feishu-worker.yml');
-
-  assert.match(workflow, /name:\s*Deploy Cloudflare Feishu Worker/);
-  assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- main/);
-  for (const expectedPath of [
-    'cloudflare/feishu-sync-dispatch-worker.mjs',
-    'wrangler.feishu.toml',
+test('old production split sync and Feishu deploy workflows have been removed', async () => {
+  for (const workflowPath of [
+    '.github/workflows/telegram-sync.yml',
+    '.github/workflows/feishu-sync.yml',
     '.github/workflows/deploy-cloudflare-feishu-worker.yml',
   ]) {
-    assert.match(workflow, new RegExp(`-\\s*${escapeRegExp(expectedPath)}`));
+    await assert.rejects(access(new URL(workflowPath, rootDir), constants.F_OK));
   }
-  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
-  assert.match(workflow, /command:\s*deploy --config wrangler\.feishu\.toml/);
 });
 
 test('deploy-cloudflare-worker-dev workflow deploys the unified dev worker and refreshes Telegram webhook', async () => {
@@ -207,7 +198,7 @@ test('deploy-cloudflare-worker-dev workflow deploys the unified dev worker and r
 });
 
 test('feishu-sync workflows expose source ids and chat ids in dispatch summaries', async () => {
-  for (const workflowPath of ['.github/workflows/feishu-sync.yml', '.github/workflows/sync-dev.yml']) {
+  for (const workflowPath of ['.github/workflows/sync.yml', '.github/workflows/sync-dev.yml']) {
     const workflow = await readWorkflow(workflowPath);
 
     assert.match(workflow, /- name: Write Feishu sync summary/);
@@ -219,37 +210,21 @@ test('feishu-sync workflows expose source ids and chat ids in dispatch summaries
 });
 
 test('feishu-sync workflows report repository dispatch failures back to Feishu', async () => {
-  for (const workflowPath of ['.github/workflows/feishu-sync.yml', '.github/workflows/sync-dev.yml']) {
+  for (const workflowPath of ['.github/workflows/sync.yml', '.github/workflows/sync-dev.yml']) {
     const workflow = await readWorkflow(workflowPath);
 
-    if (workflowPath.endsWith('sync-dev.yml')) {
-      for (const [stepName, stepId] of [
-        ['Install dependencies', 'install'],
-        ['Sync updates', 'sync'],
-        ['Detect changes', 'detect'],
-        ['Commit sync results', 'commit'],
-        ['Push changes', 'push'],
-      ]) {
-        assert.match(
-          workflow,
-          new RegExp(`- name: ${escapeRegExp(stepName)}\\n\\s+id: ${stepId}`),
-          `${workflowPath} ${stepName} should have stable id ${stepId}`,
-        );
-      }
-    } else {
-      for (const [stepName, stepId] of [
-        ['Install dependencies', 'install'],
-        ['Sync Feishu updates', 'sync'],
-        ['Detect changes', 'detect'],
-        ['Commit sync results', 'commit'],
-        ['Push changes', 'push'],
-      ]) {
-        assert.match(
-          workflow,
-          new RegExp(`- name: ${escapeRegExp(stepName)}\\n\\s+id: ${stepId}`),
-          `${workflowPath} ${stepName} should have stable id ${stepId}`,
-        );
-      }
+    for (const [stepName, stepId] of [
+      ['Install dependencies', 'install'],
+      ['Sync updates', 'sync'],
+      ['Detect changes', 'detect'],
+      ['Commit sync results', 'commit'],
+      ['Push changes', 'push'],
+    ]) {
+      assert.match(
+        workflow,
+        new RegExp(`- name: ${escapeRegExp(stepName)}\\n\\s+id: ${stepId}`),
+        `${workflowPath} ${stepName} should have stable id ${stepId}`,
+      );
     }
 
     assert.match(workflow, /- name: Notify Feishu sync failure/);
@@ -295,7 +270,7 @@ test('deploy-pages workflow still triggers for site-relevant changes', async () 
     'prompts/**',
     '.github/actions/site-build/action.yml',
     '.github/workflows/deploy-pages.yml',
-    '.github/workflows/telegram-sync.yml',
+    '.github/workflows/sync.yml',
     'package.json',
     'package-lock.json',
   ]) {
@@ -303,15 +278,17 @@ test('deploy-pages workflow still triggers for site-relevant changes', async () 
   }
 });
 
-test('telegram-sync workflow notifies after sync and dispatches async site deploys', async () => {
-  const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
+test('main sync workflow notifies after sync and dispatches async site deploys', async () => {
+  const workflow = await readWorkflow('.github/workflows/sync.yml');
 
   assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
   assert.match(workflow, /db_content_changed=false/);
   assert.match(workflow, /db_content_changed=true/);
   assert.match(workflow, /git add 训练记录\.md source\/_posts source\/images/);
-  assert.match(workflow, /git commit -m "chore: sync Telegram updates"/);
-  assert.match(workflow, /- name: Run tests\s*\n\s*id: test\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.detect\.outputs\.content_changed == 'true'/);
+  assert.match(workflow, /echo "commit_message=chore: sync Telegram updates"/);
+  assert.match(workflow, /echo "commit_message=chore: sync Feishu updates"/);
+  assert.match(workflow, /git commit -m "\$\{\{ steps\.channel\.outputs\.commit_message \}\}"/);
+  assert.match(workflow, /- name: Run tests\s*\n\s*id: test\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.channel\.outputs\.channel == 'telegram' && steps\.detect\.outputs\.content_changed == 'true'/);
   assert.match(workflow, /run:\s*npm run test:fast/);
   assert.doesNotMatch(workflow, /- name: Build and deploy site snapshot/);
   assert.doesNotMatch(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
@@ -345,15 +322,15 @@ test('telegram-sync workflow notifies after sync and dispatches async site deplo
   );
 });
 
-test('telegram-sync workflow keeps change detection and maintenance gating intact', async () => {
-  const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
+test('main sync workflow keeps change detection and maintenance gating intact', async () => {
+  const workflow = await readWorkflow('.github/workflows/sync.yml');
 
   assert.match(workflow, /- name: Detect changes/);
   assert.match(workflow, /repo_changed=false/);
   assert.match(workflow, /content_changed=false/);
   assert.match(
     workflow,
-    /- name: Sync safe database repairs\n\s+if: github\.event_name != 'repository_dispatch'\n\s+run:\s*npm run sync:db/,
+    /- name: Sync safe database repairs\n\s+if: github\.event_name != 'repository_dispatch' && steps\.channel\.outputs\.channel == 'telegram'\n\s+run:\s*npm run sync:db/,
   );
   assert.doesNotMatch(workflow, /- name: Export markdown from database snapshot/);
   assert.doesNotMatch(workflow, /run:\s*npm run backfill:core/);
@@ -365,7 +342,7 @@ test('telegram-sync workflow keeps change detection and maintenance gating intac
 });
 
 test('telegram-sync workflows keep database-only detection without blocking on page rebuilds', async () => {
-  const prodWorkflow = await readWorkflow('.github/workflows/telegram-sync.yml');
+  const prodWorkflow = await readWorkflow('.github/workflows/sync.yml');
   const devWorkflow = await readWorkflow('.github/workflows/sync-dev.yml');
 
   for (const workflow of [prodWorkflow, devWorkflow]) {
@@ -389,7 +366,7 @@ test('telegram-sync workflows keep database-only detection without blocking on p
 
 test('telegram-sync workflows treat stored thought batches as database content changes', async () => {
   const workflows = [
-    await readWorkflow('.github/workflows/telegram-sync.yml'),
+    await readWorkflow('.github/workflows/sync.yml'),
     await readWorkflow('.github/workflows/sync-dev.yml'),
   ];
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-workflow-detect-'));
@@ -426,7 +403,7 @@ test('telegram-sync workflows treat stored thought batches as database content c
 
 test('telegram-sync repository dispatch runs use unique concurrency groups for consecutive image batches', async () => {
   const workflows = [
-    ['.github/workflows/telegram-sync.yml', 'telegram-sync'],
+    ['.github/workflows/sync.yml', 'sync'],
     ['.github/workflows/sync-dev.yml', 'sync-dev'],
   ];
 
@@ -448,7 +425,7 @@ test('telegram-sync repository dispatch runs use unique concurrency groups for c
 
 test('telegram-sync workflow summary normalizes partial failure task status from raw result files', async () => {
   const workflows = [
-    await readWorkflow('.github/workflows/telegram-sync.yml'),
+    await readWorkflow('.github/workflows/sync.yml'),
     await readWorkflow('.github/workflows/sync-dev.yml'),
   ];
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-workflow-summary-'));
@@ -525,6 +502,34 @@ test('markdown backup workflow exports database snapshots behind GitHub variable
   assert.match(workflow, /git push origin HEAD:"\$MARKDOWN_BACKUP_BRANCH"/);
 });
 
+test('main sync workflow handles production dispatches and writes main branch', async () => {
+  const workflow = await readWorkflow('.github/workflows/sync.yml');
+
+  assert.match(workflow, /name:\s*Sync \(Main\)/);
+  assert.match(workflow, /workflow_dispatch:\s*\n\s+inputs:\s*\n\s+channel:/);
+  assert.match(workflow, /type:\s*choice/);
+  assert.match(workflow, /default:\s*telegram/);
+  assert.match(workflow, /-\s*telegram/);
+  assert.match(workflow, /-\s*feishu/);
+  assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- main/);
+  assert.match(workflow, /repository_dispatch:\s*\n\s+types:\s*\n\s+- telegram_update\s*\n\s+- feishu_update/);
+  assert.doesNotMatch(workflow, /-\s*telegram_update_dev\s*(?:\n|$)/);
+  assert.doesNotMatch(workflow, /-\s*feishu_update_dev\s*(?:\n|$)/);
+  assert.match(workflow, /- name: Checkout main branch\s*\n\s+uses: actions\/checkout@v4\s*\n\s+with:\s*\n\s+ref:\s*main/);
+  assert.match(workflow, /permissions:\s*\n\s+contents:\s*write\s*\n\s+actions:\s*write/);
+  assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.TRAINING_DB_URL\s*\}\}/);
+  assert.match(workflow, /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.TELEGRAM_BOT_TOKEN\s*\}\}/);
+  assert.match(workflow, /FEISHU_APP_ID:\s*\$\{\{\s*secrets\.FEISHU_APP_ID\s*\}\}/);
+  assert.match(workflow, /FEISHU_ALLOWED_CHAT_IDS:\s*\$\{\{\s*vars\.FEISHU_ALLOWED_CHAT_IDS\s*\}\}/);
+  assert.match(workflow, /export TRAINING_DB_APP_NAME=sync-main-feishu/);
+  assert.match(workflow, /echo "commit_message=chore: sync Telegram updates"/);
+  assert.match(workflow, /echo "commit_message=chore: sync Feishu updates"/);
+  assert.match(workflow, /npm run \$\{\{ steps\.channel\.outputs\.sync_command \}\}/);
+  assert.match(workflow, /git add 训练记录\.md source\/_posts source\/images/);
+  assert.doesNotMatch(workflow, /git add -A/);
+  assert.match(workflow, /run:\s*git push origin HEAD:main/);
+});
+
 test('telegram-sync dev workflow only handles dev dispatches and writes dev branch', async () => {
   const workflow = await readWorkflow('.github/workflows/sync-dev.yml');
 
@@ -599,12 +604,12 @@ test('package fast tests skip the slow thought module page render and exposes sy
   assert.equal(packageJson.scripts['sync:db'], 'node tools/training-maintenance.mjs sync');
 });
 
-test('telegram-sync workflow reports repository dispatch failures back to Telegram', async () => {
-  const workflow = await readWorkflow('.github/workflows/telegram-sync.yml');
+test('main sync workflow reports repository dispatch failures back to Telegram', async () => {
+  const workflow = await readWorkflow('.github/workflows/sync.yml');
 
   for (const [stepName, stepId] of [
     ['Install dependencies', 'install'],
-    ['Sync Telegram updates', 'sync'],
+    ['Sync updates', 'sync'],
     ['Detect changes', 'detect'],
     ['Run tests', 'test'],
     ['Commit sync results', 'commit'],

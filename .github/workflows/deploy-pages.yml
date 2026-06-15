@@ -20,7 +20,7 @@ on:
       - prompts/**
       - .github/actions/site-build/action.yml
       - .github/workflows/deploy-pages.yml
-      - .github/workflows/telegram-sync.yml
+      - .github/workflows/sync.yml
       - package.json
       - package-lock.json
 
