@@ -85,6 +85,9 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   );
   assert.match(workflow, /zones\/\$\{CLOUDFLARE_ZONE_ID\}\/purge_cache/);
   assert.match(workflow, /"purge_everything":true/);
+  assert.doesNotMatch(workflow, /curl -fsSL/);
+  assert.match(workflow, /::warning title=Cloudflare cache purge failed::/);
+  assert.match(workflow, /Zone -> Cache Purge -> Purge permission/);
   assert.ok(
     workflow.indexOf('- name: Purge Cloudflare cache') > workflow.indexOf('- name: Build and deploy site'),
     'Cloudflare cache should be purged only after the Pages deployment step finishes',

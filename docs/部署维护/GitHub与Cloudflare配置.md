@@ -220,7 +220,7 @@ Telegram dev / Feishu dev
 | main | `.github/workflows/deploy-pages.yml` | GitHub Pages | `TRAINING_SNAPSHOT_SOURCE`，线上建议 `database` |
 | dev | `.github/workflows/deploy-cloudflare-pages-dev.yml` | Cloudflare Pages | `DEV_TRAINING_DB_URL` + `TRAINING_SNAPSHOT_SOURCE` |
 
-生产站点如果命中旧 HTML 缓存，当前可在 Cloudflare Dashboard 手动执行 `Caching -> Purge Everything`。不要把自动 purge 写成当前已启用能力，除非 workflow 已提交对应步骤。
+生产 Pages 部署成功后会自动尝试清理 Cloudflare 缓存；需要 GitHub Secrets 同时配置 `CLOUDFLARE_ZONE_ID` 和具备 `Zone -> Cache Purge -> Purge` 权限的 `CLOUDFLARE_API_TOKEN`。如果 secret 缺失或 token 权限不足，workflow 会输出 warning 但不会把 Pages deploy 标红，页面仍可能命中旧 HTML；可在 Cloudflare Dashboard -> Caching -> Purge Everything 手动刷新。
 
 ## 4. 部署和刷新
 
