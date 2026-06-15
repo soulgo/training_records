@@ -12,7 +12,7 @@
 - `src/ai/recognition-service.mjs`：识别缓存读取失败降级为 cache miss，继续调用 AI。
 - `src/ai/recognition-service.mjs`：主 AI 在 timeout、HTTP 429/5xx、空内容、网络失败等可恢复错误后，自动尝试备用 provider。
 - `tools/telegram-sync.mjs`：Telegram 图片识别支持独立备用 AI 配置，只影响图片识别，不影响 `/analysis`。
-- `.github/workflows/telegram-sync.yml` 和 `.github/workflows/sync-dev.yml`：已透传备用 AI 配置。
+- `.github/workflows/sync.yml` 和 `.github/workflows/sync-dev.yml`：已透传备用 AI 配置。
 
 ## 配置项
 

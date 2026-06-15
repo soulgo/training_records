@@ -1,752 +1,333 @@
-# GitHub + Cloudflare 统一配置清单
+# GitHub 与 Cloudflare 配置
 
-本文件合并原 `github-settings.md` 与 `telegram-webhook-cloudflare.md`，用于一次性配置 GitHub Settings、GitHub Actions 和 Cloudflare Worker。
+本文是当前 main/dev 的配置入口。先按清单配置参数，再读后面的参数解释和运行链路。
 
-## 适用工作流
+当前事实：
 
-- `.github/workflows/deploy-pages.yml`
-- `.github/workflows/deploy-cloudflare-pages-dev.yml`
-- `.github/workflows/telegram-sync.yml`
-- `.github/workflows/feishu-sync.yml`
-- `.github/workflows/sync-dev.yml`
-- `.github/workflows/deploy-cloudflare-worker.yml`
-- `.github/workflows/deploy-cloudflare-worker-dev.yml`
-- `.github/workflows/deploy-cloudflare-feishu-worker.yml`
-- `.github/workflows/refresh-telegram-webhook.yml`
+- main：Telegram 和飞书共用 Cloudflare Worker `feishu-sync-dispatch`，进入 `.github/workflows/sync.yml`。
+- dev：Telegram 和飞书共用 Cloudflare Worker `sync-dispatch-dev`，进入 `.github/workflows/sync-dev.yml`。
+- Worker 只负责接收 webhook、判断 channel、触发 GitHub `repository_dispatch`；真正同步在 GitHub Actions 里执行。
+- 生产站点由 GitHub Pages 部署；dev 预览由 Cloudflare Pages Direct Upload 部署。
 
-## 1. GitHub Settings
+## 1. 需要配置的参数
 
-### Secrets
+### 1.1 GitHub Actions Secrets
 
-#### `TELEGRAM_BOT_TOKEN`
-
-- 用途：Telegram Bot 轮询消息
-- 使用工作流：`telegram-sync.yml`
-- 是否必填：是
-
-#### `AI_API_KEY`
-
-- 用途：截图识别和 Telegram/飞书 `/analysis` 训练分析所用 AI 服务鉴权
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：是
-
-#### `TELEGRAM_RECOGNITION_FALLBACK_API_KEY`
-
-- 用途：Telegram 图片识别备用 AI 服务鉴权；主 AI timeout、HTTP 429/5xx、空内容或网络失败时使用
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否；只有同时配置 `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` 和 `TELEGRAM_RECOGNITION_FALLBACK_MODEL` 时才启用
-
-#### `TRAINING_DB_URL`
-
-- 用途：PostgreSQL 连接串
-- 使用工作流：`deploy-pages.yml`、`telegram-sync.yml`、`feishu-sync.yml`
-- 是否必填：当 `TRAINING_DB_ENABLED=true` 时必填
-- 推荐格式：
+进入 GitHub 仓库：
 
 ```text
-postgresql://training_writer:你的数据库密码@你的数据库公网IP或域名:5432/training_records
+Settings -> Secrets and variables -> Actions -> Secrets
 ```
 
-- 如果数据库启用了 SSL，再按实际情况追加 `?sslmode=require`
+| Secret | main | dev | 用途 |
+| --- | --- | --- | --- |
+| `AI_API_KEY` | 必填 | 共用 | 图片识别和 `/分析` 的 AI Key |
+| `TRAINING_DB_URL` | 必填 | 不用 | main PostgreSQL 连接串 |
+| `DEV_TRAINING_DB_URL` | 不用 | 必填 | dev PostgreSQL 连接串 |
+| `TELEGRAM_BOT_TOKEN` | 必填 | 不用 | main Telegram Bot |
+| `DEV_TELEGRAM_BOT_TOKEN` | 不用 | 必填 | dev Telegram Bot |
+| `TELEGRAM_SECRET_TOKEN` | 必填 | 不用 | main Telegram webhook secret，用于刷新 webhook |
+| `DEV_TELEGRAM_SECRET_TOKEN` | 不用 | 必填 | dev Telegram webhook secret，用于刷新 webhook |
+| `FEISHU_APP_ID` | 必填 | 可回退使用 | 飞书应用 App ID |
+| `FEISHU_APP_SECRET` | 必填 | 可回退使用 | 飞书应用 App Secret |
+| `DEV_FEISHU_APP_ID` | 不用 | 独立 dev 应用时填 | dev 飞书应用 App ID |
+| `DEV_FEISHU_APP_SECRET` | 不用 | 独立 dev 应用时填 | dev 飞书应用 App Secret |
+| `CLOUDFLARE_API_TOKEN` | 必填 | 必填 | Wrangler 部署 Worker |
+| `CLOUDFLARE_ACCOUNT_ID` | 必填 | 必填 | Cloudflare account |
+| `CLOUDFLARE_PAGES_API_TOKEN` | 不用 | 必填 | dev Cloudflare Pages Direct Upload |
+| `TELEGRAM_RECOGNITION_FALLBACK_API_KEY` | 可选 | 共用 | 图片识别备用 AI provider |
 
-#### `CLOUDFLARE_API_TOKEN`
+### 1.2 GitHub Actions Variables
 
-- 用途：让 GitHub Actions 调用 Wrangler 部署 Cloudflare Worker
-- 使用工作流：`deploy-cloudflare-worker.yml`、`deploy-cloudflare-feishu-worker.yml`
-- 是否必填：使用 Telegram 或飞书 webhook + Cloudflare Worker 时必填
-- 权限建议：至少能编辑当前账号下的 Workers Scripts
-
-#### `CLOUDFLARE_ACCOUNT_ID`
-
-- 用途：指定 Wrangler 要部署到哪个 Cloudflare 账号
-- 使用工作流：`deploy-cloudflare-worker.yml`、`deploy-cloudflare-feishu-worker.yml`
-- 是否必填：使用 Telegram 或飞书 webhook + Cloudflare Worker 时必填
-- 获取位置：Cloudflare Dashboard 右侧账号信息里的 Account ID
-
-#### `TELEGRAM_SECRET_TOKEN`
-
-- 用途：设置 Telegram webhook 时写入 `secret_token`，必须与 Cloudflare Worker 的 `TELEGRAM_SECRET_TOKEN` 一致
-- 使用工作流：`deploy-cloudflare-worker.yml`、`refresh-telegram-webhook.yml`
-- 是否必填：使用 Telegram webhook + Cloudflare Worker 时必填
-- 注意：这个值需要同时配置到 GitHub Actions Secret 和 Cloudflare Worker Secret；GitHub Actions 无法从 Cloudflare 反向读取 Secret 明文
-
-#### `FEISHU_APP_ID`
-
-- 用途：飞书企业自建应用 App ID
-- 使用工作流：`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：启用飞书通道时必填
-
-#### `FEISHU_APP_SECRET`
-
-- 用途：飞书企业自建应用 App Secret，用于获取 tenant access token
-- 使用工作流：`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：启用飞书通道时必填
-
-飞书事件订阅的 `FEISHU_ENCRYPT_KEY` 和 `FEISHU_VERIFICATION_TOKEN` 不被 GitHub sync workflow 消费，应配置到飞书 Cloudflare Worker Secret，见本文 2.2 节。
-
-#### Dev 飞书 Secret（可选）
-
-- `DEV_FEISHU_APP_ID`
-- `DEV_FEISHU_APP_SECRET`
-
-`sync-dev.yml` 会优先读取 Dev Secret，未配置时回退到生产 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`。
-
-### Variables
-
-#### `AI_BASE_URL`
-
-- 用途：截图识别和 Telegram/飞书 `/analysis` 训练分析的 AI 服务基础地址
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：是
-- 推荐值：
+进入：
 
 ```text
-https://api.openai.com/v1
+Settings -> Secrets and variables -> Actions -> Variables
 ```
 
-#### `AI_MODEL`
+| Variable | main | dev | 建议值 / 用途 |
+| --- | --- | --- | --- |
+| `TRAINING_DB_ENABLED` | 必填 | 固定由 workflow 设为 `true` | main 建议 `true` |
+| `TRAINING_DB_TIMEOUT_MS` | 可选 | 可选 | DB 连接超时，默认 `5000` |
+| `TRAINING_DB_APP_NAME` | 可选 | 不用 | main DB 连接 app name |
+| `DEV_TRAINING_DB_APP_NAME` | 不用 | 可选 | dev DB 连接 app name；飞书 dev 未填时 workflow 临时用 `sync-dev-feishu` |
+| `TRAINING_SNAPSHOT_SOURCE` | 建议填 | 建议填 | 线上建议 `database` |
+| `AI_PROVIDER` | 可选 | 共用 | 默认 `openai-compatible` |
+| `AI_BASE_URL` | 必填 | 共用 | AI OpenAI-compatible base URL |
+| `AI_MODEL` | 必填 | 共用 | 默认识别/分析模型 |
+| `AI_TIMEOUT_MS` | 可选 | 共用 | AI 请求超时 |
+| `AI_CONCURRENCY` | 可选 | 共用 | 图片识别并发，代码默认 `3` |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | 必填 | dev Telegram 建议填 | Telegram chat 白名单 |
+| `TELEGRAM_POLL_LIMIT` | 可选 | 可选 | poll 模式 limit；workflow webhook 模式通常不用改 |
+| `TELEGRAM_WEBHOOK_URL` | 必填 | 不用 | main Telegram webhook URL，当前应指向统一 Worker 的 Telegram 路径 |
+| `DEV_TELEGRAM_WEBHOOK_URL` | 不用 | 必填 | dev Telegram webhook URL，当前为 `https://feishu-dev.soulgo.chat/telegram` |
+| `FEISHU_ALLOWED_CHAT_IDS` | 必填 | 可回退使用 | main 飞书 chat 白名单 |
+| `DEV_FEISHU_ALLOWED_CHAT_IDS` | 不用 | 独立 dev 白名单时填 | dev 飞书 chat 白名单 |
+| `TELEGRAM_RECOGNITION_MODEL` | 可选 | 共用 | Telegram/共享图片识别模型覆盖 |
+| `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` | 可选 | 共用 | 备用 AI base URL |
+| `TELEGRAM_RECOGNITION_FALLBACK_MODEL` | 可选 | 共用 | 备用 AI 模型 |
+| `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS` | 可选 | 共用 | 备用 AI 超时 |
+| `TELEGRAM_RECOGNITION_CACHE_ENABLED` | 可选 | 共用 | 是否启用识别缓存 |
+| `TRAINING_ANALYSIS_GOAL` | 可选 | 共用 | `/分析` 长期目标 |
+| `CLOUDFLARE_PAGES_DEV_PROJECT_NAME` | 不用 | 可选 | dev Pages 项目名，默认 `training-records-dev` |
 
-- 用途：截图识别和 Telegram/飞书 `/analysis` 训练分析模型名
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：是
-- 推荐值：
+Markdown 备份 workflow 另有 Variables：
+
+| Variable | 建议值 | 用途 |
+| --- | --- | --- |
+| `MARKDOWN_BACKUP_ENABLED` | `false`，确认后改 `true` | 是否启用定时 DB -> Markdown 备份 |
+| `MARKDOWN_BACKUP_FREQUENCY` | `weekly` | `weekly` 或 `daily` |
+| `MARKDOWN_BACKUP_BRANCH` | `main` | 备份提交目标分支 |
+| `MARKDOWN_BACKUP_COMMIT` | `true` | 是否自动提交备份 |
+
+### 1.3 Cloudflare Worker Secrets
+
+进入：
 
 ```text
-gpt-4.1
+Cloudflare Dashboard -> Workers & Pages -> <Worker> -> Settings -> Variables and Secrets
 ```
 
-#### `AI_PROVIDER`
-
-- 用途：选择 AI provider adapter
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否
-- 默认值：`openai-compatible`
-- 说明：当前只实现 OpenAI-compatible Chat Completions 协议
-
-#### `AI_TIMEOUT_MS`
-
-- 用途：AI 请求超时时间，单位毫秒
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否
-- 说明：未配置时沿用 provider 默认超时语义
-
-#### `AI_CONCURRENCY`
-
-- 用途：并发识别数量
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否
-- 推荐值：
-
-```text
-3
-```
-
-#### `TRAINING_ANALYSIS_GOAL`
-
-- 用途：覆盖 Telegram/飞书 `/analysis` / `/分析` 的长期训练目标
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否
-- 默认值：未配置时使用“增肌减腹：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪；不追求单纯掉体重或局部减脂。”
-- 推荐值：
-
-```text
-增肌减腹：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪；不追求单纯掉体重或局部减脂。
-```
-
-#### `TELEGRAM_ALLOWED_CHAT_IDS`
-
-- 用途：允许自动处理的 Telegram chat id 白名单
-- 使用工作流：`telegram-sync.yml`、`sync-dev.yml`
-- 是否必填：是
-
-#### `FEISHU_ALLOWED_CHAT_IDS`
-
-- 用途：允许自动处理的飞书 chat id 白名单
-- 使用工作流：`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：启用飞书通道时必填
-- 格式：多个 chat id 用逗号分隔，例如 `oc_xxx,oc_yyy`
-
-#### `DEV_FEISHU_ALLOWED_CHAT_IDS`
-
-- 用途：Dev 飞书同步白名单
-- 使用工作流：`sync-dev.yml`
-- 是否必填：否；未设置时回退到 `FEISHU_ALLOWED_CHAT_IDS`
-
-#### `TELEGRAM_POLL_LIMIT`
-
-- 用途：每轮轮询最多拉取多少条消息
-- 使用工作流：`telegram-sync.yml`、`sync-dev.yml`
-- 是否必填：否
-- 推荐值：
-
-```text
-20
-```
-
-#### `TRAINING_SNAPSHOT_SOURCE`
-
-- 用途：控制 Pages 构建时站点数据来自 `markdown` 还是 `database`
-- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否
-- 首次接入安全值：
-
-```text
-markdown
-```
-
-- 生产稳态推荐值：
-
-```text
-database
-```
-
-- 说明：`markdown` 只适合首次 bootstrap、本地兼容构建或数据库尚未接通时使用。当前线上长期口径是 PostgreSQL `core.*` 作为唯一事实源。
-
-#### `TRAINING_DB_ENABLED`
-
-- 用途：控制 GitHub Actions 是否启用 PostgreSQL 主链路
-- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否
-- 首次接入安全值：
-
-```text
-false
-```
-
-- 生产稳态推荐值：
-
-```text
-true
-```
-
-- 说明：`false` 用于避免未配置数据库时误写或误读；正式 Telegram/飞书同步、页面数据库构建和 DB-only 部署需要启用 PostgreSQL。
-
-#### `TRAINING_DB_TIMEOUT_MS`
-
-- 用途：数据库连接超时时间，单位毫秒
-- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否
-- 推荐值：
-
-```text
-3000
-```
-
-#### `TRAINING_DB_APP_NAME`
-
-- 用途：PostgreSQL 连接应用名
-- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`、`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否
-- 推荐值：
-
-```text
-training-records-dashboard
-```
-
-#### `TELEGRAM_RECOGNITION_MODEL`
-
-- 用途：只覆盖消息通道图片识别模型；变量名沿用 Telegram 历史命名
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否
-- 默认值：未配置时使用 `AI_MODEL`
-
-#### `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL`
-
-- 用途：消息通道图片识别备用 AI 服务基础地址；变量名沿用 Telegram 历史命名
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否；启用备用 AI 时必填
-- 推荐格式：
-
-```text
-https://api.openai.com/v1
-```
-
-#### `TELEGRAM_RECOGNITION_FALLBACK_MODEL`
-
-- 用途：消息通道图片识别备用 AI 模型名；变量名沿用 Telegram 历史命名
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否；启用备用 AI 时必填
-
-#### `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS`
-
-- 用途：消息通道图片识别备用 AI 请求超时时间，单位毫秒；变量名沿用 Telegram 历史命名
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否；未配置时沿用 `AI_TIMEOUT_MS`
-- 推荐值：
-
-```text
-30000
-```
-
-#### `TELEGRAM_RECOGNITION_CACHE_ENABLED`
-
-- 用途：控制消息通道图片识别是否读取数据库识别缓存；变量名沿用 Telegram 历史命名
-- 使用工作流：`telegram-sync.yml`、`feishu-sync.yml`、`sync-dev.yml`
-- 是否必填：否
-- 推荐值：按线上缓存命中率观察决定；本轮不强制默认开启
-
-#### `TRAINING_BUILD_ARCHIVE_WRITE`
-
-- 用途：控制 `npm run build:data` 是否写入 `archive.*`
-- 使用工作流：`deploy-pages.yml`、`deploy-cloudflare-pages-dev.yml`
-- 是否必填：否
-- 可选值：`auto`、`true`、`false`
-- 当前 workflow 行为：两个 deploy workflow 固定设置为 `false`，避免站点部署构建重复写 archive；本地默认 `auto`
-
-#### `TELEGRAM_WEBHOOK_URL`
-
-- 用途：Telegram webhook 目标地址
-- 使用工作流：`deploy-cloudflare-worker.yml`、`refresh-telegram-webhook.yml`
-- 是否必填：使用 Telegram webhook + Cloudflare Worker 时必填
-- 当前默认 Worker URL：
-
-```text
-https://telegram-sync-dispatch.1406221797.workers.dev/
-```
-
-其中 `1406221797` 是 Cloudflare Workers 子域名，不是 `CLOUDFLARE_ACCOUNT_ID`。不要把 Dashboard 右侧的 32 位十六进制 Account ID 填到 `workers.dev` URL 中。
-
-#### `CLOUDFLARE_PAGES_DEV_PROJECT_NAME`
-
-- 用途：Dev 分支 Cloudflare Pages 预览项目名
-- 使用工作流：`deploy-cloudflare-pages-dev.yml`
-- 是否必填：否；未设置时使用 `training-records-dev`
-- 默认访问地址：
-
-```text
-https://training-records-dev.pages.dev
-```
-
-### 建议的初始值
-
-#### Secrets 模板
-
-```text
-TELEGRAM_BOT_TOKEN=你的 Telegram Bot Token
-AI_API_KEY=你的 AI 平台 API Key
-TELEGRAM_RECOGNITION_FALLBACK_API_KEY=你的备用 AI 平台 API Key
-TRAINING_DB_URL=postgresql://training_writer:你的数据库密码@你的数据库公网IP或域名:5432/training_records
-CLOUDFLARE_API_TOKEN=你的 Cloudflare API Token
-CLOUDFLARE_ACCOUNT_ID=你的 Cloudflare Account ID
-TELEGRAM_SECRET_TOKEN=你配置到 Cloudflare 的 TELEGRAM_SECRET_TOKEN
-FEISHU_APP_ID=你的飞书应用 App ID
-FEISHU_APP_SECRET=你的飞书应用 App Secret
-```
-
-#### Variables 模板
-
-```text
-AI_BASE_URL=https://api.openai.com/v1
-AI_MODEL=gpt-4.1
-AI_PROVIDER=openai-compatible
-AI_TIMEOUT_MS=
-AI_CONCURRENCY=3
-TRAINING_ANALYSIS_GOAL=增肌减腹：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪；不追求单纯掉体重或局部减脂。
-TELEGRAM_ALLOWED_CHAT_IDS=你的 Telegram Chat ID
-FEISHU_ALLOWED_CHAT_IDS=你的飞书 Chat ID
-TELEGRAM_POLL_LIMIT=20
-TELEGRAM_RECOGNITION_MODEL=
-TELEGRAM_RECOGNITION_FALLBACK_BASE_URL=
-TELEGRAM_RECOGNITION_FALLBACK_MODEL=
-TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS=
-TELEGRAM_RECOGNITION_CACHE_ENABLED=
-TRAINING_SNAPSHOT_SOURCE=markdown
-TRAINING_DB_ENABLED=false
-TRAINING_DB_TIMEOUT_MS=3000
-TRAINING_DB_APP_NAME=training-records-dashboard
-TRAINING_BUILD_ARCHIVE_WRITE=auto
-TELEGRAM_WEBHOOK_URL=https://telegram-sync-dispatch.1406221797.workers.dev/
-CLOUDFLARE_PAGES_DEV_PROJECT_NAME=training-records-dev
-```
-
-上面的 Variables 模板是首次 bootstrap 的安全起点。生产稳态确认 PostgreSQL 可读写后，应至少调整为：
-
-```text
-TRAINING_SNAPSHOT_SOURCE=database
-TRAINING_DB_ENABLED=true
-```
-
-## 2. Cloudflare Worker
-
-### 2.1 Telegram Worker 需要配置的变量与 Secret
-
-在 Cloudflare Worker 的 `Settings -> Variables and Secrets` 中配置：
-
-- Secret: `GITHUB_TOKEN`
-- Secret: `TELEGRAM_BOT_TOKEN`
-- Secret: `TELEGRAM_SECRET_TOKEN`
-- Variable: `GITHUB_OWNER`（可选；默认 `soulgo`）
-- Variable: `GITHUB_REPO`（可选；默认 `training_records`）
-- Durable Object binding: `TELEGRAM_ALBUM_BUFFER`
-
-当前仓库对应值：
-
-- `GITHUB_OWNER=soulgo`
-- `GITHUB_REPO=training_records`
-
-如果这两个变量未配置，当前 Worker 会回落到上述仓库默认值，避免 Telegram webhook 因变量缺失直接返回 500。若后续复制到其他仓库，必须显式配置这两个变量。
-
-`TELEGRAM_SECRET_TOKEN` 建议使用随机字符串，例如 PowerShell：
-
-```powershell
-[guid]::NewGuid().ToString('N')
-```
-
-说明：`/help`、`帮助` 等帮助消息只依赖 `TELEGRAM_SECRET_TOKEN` 和 `TELEGRAM_BOT_TOKEN`；普通同步消息仍依赖 `GITHUB_TOKEN` 才能 dispatch 到 GitHub Actions。如果缺少 `GITHUB_TOKEN` 或 GitHub dispatch 失败，Worker 会尽量用 `TELEGRAM_BOT_TOKEN` 回复原消息，说明“GitHub Action 未能启动”。
-
-### Worker 代码
-
-- 仓库内示例文件：[cloudflare/telegram-sync-dispatch-worker.mjs](../../cloudflare/telegram-sync-dispatch-worker.mjs)
-
-它会：
-
-1. 校验 Telegram webhook 请求头 `X-Telegram-Bot-Api-Secret-Token`
-2. 对 `/help`、`帮助`、`命令`、`指令`、`使用说明` 直接调用 Telegram `sendMessage` 回发命令清单，不触发 GitHub Actions
-3. 普通单条消息立即转发为 GitHub `repository_dispatch`
-4. 相册消息按 `chat_id + media_group_id` 进入 `TelegramAlbumBuffer`，缓冲 3 秒后再合并派发
-5. 触发类型固定为 `telegram_update`，payload 使用 `client_payload.telegram_updates`
-6. GitHub dispatch 失败时直接回发 Telegram，不会误报为系统写入成功
-
-如果没有配置 `TELEGRAM_ALBUM_BUFFER` 绑定，Worker 仍然会继续工作，但相册不会聚合，行为会退回为逐条 dispatch。
-
-排查信号：如果 Cloudflare 对一次“合并发送”的相册显示多条 POST，同时 GitHub Actions 里出现多次 `Telegram Sync`，并且日志里的 `batchId` 相同，通常就是 `TELEGRAM_ALBUM_BUFFER` Durable Object 绑定没有在已部署的 Worker 上生效。
-
-### Wrangler 配置
-
-仓库根目录已经提供 [`wrangler.toml`](../../wrangler.toml)，核心绑定长这样：
-
-```toml
-[[durable_objects.bindings]]
-name = "TELEGRAM_ALBUM_BUFFER"
-class_name = "TelegramAlbumBuffer"
-```
-
-并在迁移里声明新 class：
-
-```toml
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["TelegramAlbumBuffer"]
-```
-
-其中 `compatibility_date` 是 Cloudflare Workers 运行时兼容日期，不是训练记录日期，也不会参与图片日期识别。训练归档日期仍由 Telegram caption/text、截图 OCR 和同步逻辑自动决定。
-
-把 `wrangler.toml` push 到 GitHub 只会更新仓库文件，不会自动修改 Cloudflare 控制台。Cloudflare 上的 Worker、变量和 Durable Object binding 只有在 Wrangler 部署成功后才会变化。
-
-当前仓库已经提供 [`deploy-cloudflare-worker.yml`](../../.github/workflows/deploy-cloudflare-worker.yml)，它会在以下文件推到 `main` 后自动运行 `wrangler deploy`：
-
-- `wrangler.toml`
-- `cloudflare/**`
-- `.github/workflows/deploy-cloudflare-worker.yml`
-
-第一次使用前，需要先在 GitHub 仓库 `Settings -> Secrets and variables -> Actions -> Secrets` 添加：
-
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
-
-如果不想走 GitHub Actions，也可以在本地手动部署：
-
-```powershell
-npx wrangler deploy
-```
-
-### 2.2 飞书 Worker 需要配置的变量与 Secret
-
-飞书通道使用独立 Worker 和独立 Wrangler 配置：
-
-- Worker 代码：[cloudflare/feishu-sync-dispatch-worker.mjs](../../cloudflare/feishu-sync-dispatch-worker.mjs)
-- Wrangler 配置：[wrangler.feishu.toml](../../wrangler.feishu.toml)
-- 部署工作流：[deploy-cloudflare-feishu-worker.yml](../../.github/workflows/deploy-cloudflare-feishu-worker.yml)
-- 详细部署步骤：[飞书通道部署](飞书通道部署.md)
-
-在飞书 Worker 的 `Settings -> Variables and Secrets` 中配置：
-
-- Secret: `GITHUB_TOKEN`
-- Secret: `FEISHU_ENCRYPT_KEY`
-- Secret: `FEISHU_VERIFICATION_TOKEN`
-- Variable: `GITHUB_OWNER`（可选；默认 `soulgo`）
-- Variable: `GITHUB_REPO`（可选；默认 `training_records`）
-- Variable: `GITHUB_DISPATCH_EVENT_TYPE`（可选；默认 `feishu_update`）
-- Durable Object binding: `FEISHU_IMAGE_BUFFER`
-
-`wrangler.feishu.toml` 已固定：
+| Secret | main Worker `feishu-sync-dispatch` | dev Worker `sync-dispatch-dev` | 用途 |
+| --- | --- | --- | --- |
+| `GITHUB_TOKEN` | 必填 | 必填 | PAT，用于调用 GitHub `repository_dispatch` |
+| `TELEGRAM_BOT_TOKEN` | 必填 | 必填 | Worker 直接回复 Telegram `/帮助` 和 dispatch 失败通知 |
+| `TELEGRAM_SECRET_TOKEN` | 必填 | 必填 | 校验 Telegram webhook header |
+| `FEISHU_ENCRYPT_KEY` | 必填 | dev 飞书启用时必填 | 飞书事件加密与签名校验 |
+| `FEISHU_VERIFICATION_TOKEN` | 必填 | dev 飞书启用时必填 | 飞书 URL verification 和事件 token 校验 |
+
+可选 Worker Variables / Secrets：
+
+| 名称 | 默认值 | 用途 |
+| --- | --- | --- |
+| `GITHUB_OWNER` | `soulgo` | dispatch 目标 owner |
+| `GITHUB_REPO` | `training_records` | dispatch 目标 repo |
+| `GITHUB_API_BASE_URL` | `https://api.github.com` | GitHub API base URL |
+| `TELEGRAM_API_BASE_URL` | `https://api.telegram.org` | Telegram API base URL |
+| `FEISHU_EVENT_LOGGING` | `true` | 是否打印飞书事件元数据日志 |
+
+### 1.4 Wrangler 配置中的固定参数
+
+这些参数写在仓库配置里，不要在 Cloudflare Dashboard 再建同名覆盖项。
+
+main `wrangler.toml`：
 
 ```toml
 name = "feishu-sync-dispatch"
-main = "cloudflare/feishu-sync-dispatch-worker.mjs"
+main = "cloudflare/sync-dispatch-worker.mjs"
 
 [vars]
-GITHUB_DISPATCH_EVENT_TYPE = "feishu_update"
-
-[[durable_objects.bindings]]
-name = "FEISHU_IMAGE_BUFFER"
-class_name = "FeishuImageBuffer"
+GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM = "telegram_update"
+GITHUB_DISPATCH_EVENT_TYPE_FEISHU = "feishu_update"
 ```
 
-飞书 Worker 不保存 `FEISHU_APP_ID` 和 `FEISHU_APP_SECRET`。这两个值只给 GitHub Actions 的 `feishu-sync.yml` 使用，用于同步脚本下载飞书图片和发送飞书回执。Worker 只负责验签、token 校验、图片 burst 缓冲和 GitHub dispatch。
+dev `wrangler.dev.toml`：
 
-当前 `deploy-cloudflare-feishu-worker.yml` 只支持手动 `workflow_dispatch`，不会在 push 后自动部署。第一次部署前需要先配置 GitHub Secrets：
+```toml
+name = "sync-dispatch-dev"
+main = "cloudflare/sync-dispatch-worker.mjs"
 
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
-
-本地手动部署命令：
-
-```powershell
-npx wrangler deploy --config wrangler.feishu.toml
+[vars]
+GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM = "telegram_update_dev"
+GITHUB_DISPATCH_EVENT_TYPE_FEISHU = "feishu_update_dev"
 ```
 
-## 3. GitHub Actions 行为
+两个 Worker 都需要 Durable Object binding：
 
-[`telegram-sync.yml`](../../.github/workflows/telegram-sync.yml) 现在支持：
+| Binding | Class | 用途 |
+| --- | --- | --- |
+| `TELEGRAM_ALBUM_BUFFER` | `TelegramAlbumBuffer` | Telegram 连续图片缓冲 |
+| `FEISHU_IMAGE_BUFFER` | `FeishuImageBuffer` | 飞书连续图片缓冲 |
 
-- `repository_dispatch`
-- `push` 到 `main` 且仅限 `训练记录.md`
-- 手动 `workflow_dispatch`
+### 1.5 外部平台参数
 
-并且运行时使用 `TELEGRAM_SYNC_TRANSPORT=webhook`：
+| 平台 | main | dev |
+| --- | --- | --- |
+| Telegram webhook URL | `TELEGRAM_WEBHOOK_URL` 指向 main 统一 Worker 的 Telegram 路径 | `DEV_TELEGRAM_WEBHOOK_URL=https://feishu-dev.soulgo.chat/telegram` |
+| 飞书 Request URL | `https://feishu.soulgo.chat` | `https://feishu-dev.soulgo.chat` |
+| GitHub Pages custom domain | `source/CNAME=soulgo.chat` | 不使用生产 CNAME |
+| Cloudflare Pages project | 不使用 | `CLOUDFLARE_PAGES_DEV_PROJECT_NAME`，默认 `training-records-dev` |
 
-- `repository_dispatch` 时直接消费 webhook payload
-- `repository_dispatch` 使用快速路径：跳过全量 archive backfill、Markdown reconcile 和额外 export，只处理当前 Telegram payload、pending recognition 和 pending replay
-- `push` / 手动触发时不会再调用 `getUpdates`
-- `push` / 手动触发仍只执行安全数据库修复；Markdown reconcile/import/export 均为显式人工维护或备份 workflow
-- 由 `github-actions[bot]` 推送出来的同步提交会跳过二次 `Telegram Sync`
-- 仍然会重放待补偿批次，但不会即时刷新 Markdown
-- 正常 `ready + stored` 图片批次不写 `训练记录.md`；人工账本由 DB -> Markdown 备份 workflow 导出
-- Telegram main/dev workflow 会显式透传 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_*` 和 `TELEGRAM_RECOGNITION_CACHE_ENABLED`；未配置时 provider 仍为 `openai-compatible`，图片识别模型回落到 `AI_MODEL`
-- 如果完整配置了 `TELEGRAM_RECOGNITION_FALLBACK_API_KEY`、`TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` 和 `TELEGRAM_RECOGNITION_FALLBACK_MODEL`，Telegram 图片识别会在主 AI timeout、HTTP 429/5xx、空内容或网络失败后自动切到备用 AI；备用 AI 只影响图片识别，不影响 `/analysis`
-- 未显式开启 `TELEGRAM_SYNC_RUN_SLEEP_BACKFILL` 时，sleep backfill 只在 pending replay 或当前批次真实入库 sleep payload 后运行；非 sleep 图片不会触发
-- 当同步产生文件变化或 DB-only 训练数据变化时，会异步 dispatch `deploy-pages.yml` 并启用严格数据库快照模式；站点构建结果到对应 deploy workflow 查看
-- `repository_dispatch` 会写 GitHub Step Summary，按批次输出 `batchId`、`taskStatus`、`persistenceStatus`、`archivedDate`、图片计数、pending 状态、`failureDisposition` 和失败 message ids
-- 成功通知步骤名是 `Notify Telegram sync result`，用于表示同步结果通知，不代表每个业务批次都一定已完整入库
-- `repository_dispatch` 触发的同步如果在依赖安装、同步、测试、提交、rebase 或 push 阶段失败，会运行 `tools/telegram-action-monitor.mjs` 回发 Telegram。回复会包含失败阶段、`github_action` 分类和 GitHub Actions run URL。
+## 2. 参数解释
 
-[`deploy-pages.yml`](../../.github/workflows/deploy-pages.yml) 用于普通人工 push / 手动触发：
+### 2.1 GitHub Actions 参数
 
-- 在 `main` 的站点相关文件真正发生 push 后再部署
-- 不再因为一次 `Telegram Sync` 完成就无条件额外跑一次 Pages workflow
-- 固定设置 `TRAINING_BUILD_ARCHIVE_WRITE=false`，站点构建生成数据文件但不重复写 `archive.*`
+`sync.yml` 和 `sync-dev.yml` 的同步参数分三类：
 
-[`feishu-sync.yml`](../../.github/workflows/feishu-sync.yml) 支持：
+1. 数据库参数：`TRAINING_DB_*` 决定是否写 PostgreSQL、连接哪个库、构建时是否从数据库生成页面。
+2. AI 参数：`AI_*` 和 `TELEGRAM_RECOGNITION_*` 决定图片识别、备用 provider 和 `/分析`。
+3. 通道参数：`TELEGRAM_*` 与 `FEISHU_*` 决定消息来源校验、白名单、图片下载和回执发送。
 
-- `repository_dispatch: feishu_update`
-- 手动 `workflow_dispatch`
+main workflow 使用生产 Secrets；dev workflow 使用 `DEV_*`，飞书 dev 未配置时回退生产飞书 App 凭据和白名单。
 
-并且运行时使用 `FEISHU_SYNC_TRANSPORT=webhook`：
+`TELEGRAM_SYNC_TRANSPORT` 与 `FEISHU_SYNC_TRANSPORT` 在 workflow 中固定为 `webhook`，不需要手工配置。
 
-- `repository_dispatch` 时直接消费 `client_payload.feishu_updates`
-- `repository_dispatch` 使用包含 `github.run_id` 的唯一 concurrency group，避免连续发图时中间 pending run 被取消
-- 透传 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_ALLOWED_CHAT_IDS`，并把图片输入模式固定为 `FEISHU_RECOGNITION_IMAGE_INPUT_MODE=inline`
-- 复用 `AI_PROVIDER`、`AI_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_*` 和 `TELEGRAM_RECOGNITION_CACHE_ENABLED`
-- 正常 `ready + stored` 图片批次不写 `训练记录.md`；人工账本由 DB -> Markdown 备份 workflow 导出
-- 当同步产生文件变化或 DB-only 训练数据变化时，会异步 dispatch `deploy-pages.yml` 并启用严格数据库快照模式
-- `repository_dispatch` 会写 GitHub Step Summary，按批次输出 `batchId`、`taskStatus`、`persistenceStatus`、`archivedDate`、图片计数、pending 状态、`failureDisposition` 和失败 message ids
-- 成功通知步骤名是 `Notify Feishu sync result`，会通过飞书 Open API 回发同步结果
+### 2.2 Cloudflare Worker 参数
 
-[`sync-dev.yml`](../../.github/workflows/sync-dev.yml) 用于 `dev` 分支 Telegram/飞书统一验证：
+统一 Worker 的职责很窄：
 
-- checkout `dev`
-- `repository_dispatch` 监听 `telegram_update_dev` 与 `feishu_update_dev`
-- 手动运行时通过 `channel=telegram|feishu` 选择同步通道，默认 `telegram`
-- 固定 `TRAINING_DB_ENABLED=true`，使用 `DEV_TRAINING_DB_URL`
-- Telegram 使用 `DEV_TELEGRAM_BOT_TOKEN`
-- 优先读取 `DEV_FEISHU_APP_ID`、`DEV_FEISHU_APP_SECRET`、`DEV_FEISHU_ALLOWED_CHAT_IDS`，未配置时回退到生产飞书配置
-- DB 或文件内容变化后异步 dispatch `deploy-cloudflare-pages-dev.yml`
+1. 只接受 `POST`。
+2. 根据 Telegram secret header、飞书 Lark headers 或飞书请求体判断 channel。
+3. Telegram 校验 `TELEGRAM_SECRET_TOKEN`。
+4. 飞书校验 `FEISHU_ENCRYPT_KEY` 和 `FEISHU_VERIFICATION_TOKEN`。
+5. 使用 `GITHUB_TOKEN` 调 GitHub `repository_dispatch`。
 
-[`deploy-cloudflare-pages-dev.yml`](../../.github/workflows/deploy-cloudflare-pages-dev.yml) 用于 `dev` 分支在线预览：
+Worker 不做 AI 识别、不写数据库、不构建页面。
 
-- 调用共享 `site-build` 构建并运行快速测试
-- 删除 `public/CNAME`，避免 dev Pages 带上生产自定义域名
-- 使用固定 Wrangler 版本 direct upload `public/` 到 Cloudflare Pages
-- 默认项目名为 `training-records-dev`，可用 `CLOUDFLARE_PAGES_DEV_PROJECT_NAME` 覆盖
-- 固定设置 `TRAINING_BUILD_ARCHIVE_WRITE=false`，dev 预览构建不写 `archive.*`
+### 2.3 Dispatch event type
 
-## 4. 自动刷新 Telegram webhook
+不要再配置旧的单一 `GITHUB_DISPATCH_EVENT_TYPE` 作为当前主路径。当前统一 Worker 用分渠道变量：
 
-当前仓库已经提供自动刷新 webhook 的脚本和工作流：
+| 环境 | Telegram event type | Feishu event type | 接收 workflow |
+| --- | --- | --- | --- |
+| main | `telegram_update` | `feishu_update` | `.github/workflows/sync.yml` |
+| dev | `telegram_update_dev` | `feishu_update_dev` | `.github/workflows/sync-dev.yml` |
 
-- `npm run telegram:webhook`：调用 Telegram `setWebhook`
-- `deploy-cloudflare-worker.yml`：Worker 部署成功后自动刷新 webhook
-- `refresh-telegram-webhook.yml`：支持手动触发，并且每 6 小时自动刷新一次 webhook
+## 3. 当前运行链路
 
-这能覆盖更换 `TELEGRAM_BOT_TOKEN` 后忘记重新调用 `setWebhook` 的问题。GitHub Secrets 被修改时不会触发 workflow，所以更新 token 后有两种方式：
+### 3.1 main 同步
 
-1. 到 GitHub Actions 手动运行 `Refresh Telegram Webhook`
-2. 等待 `Refresh Telegram Webhook` 的 6 小时定时任务自动运行
-
-自动刷新依赖以下配置：
-
-- GitHub Actions Secret: `TELEGRAM_BOT_TOKEN`
-- GitHub Actions Secret: `TELEGRAM_SECRET_TOKEN`
-- GitHub Actions Variable: `TELEGRAM_WEBHOOK_URL`
-
-其中 `TELEGRAM_SECRET_TOKEN` 必须和 Cloudflare Worker Secret 里的同名值一致，否则 Telegram 会正常把请求发到 Worker，但 Worker 会因为 secret header 不匹配返回 `401 unauthorized`。
-
-如果需要本地手动兜底，也可以运行：
-
-```powershell
-$env:TELEGRAM_BOT_TOKEN = "你的 Telegram Bot Token"
-$env:TELEGRAM_WEBHOOK_URL = "https://telegram-sync-dispatch.1406221797.workers.dev/"
-$env:TELEGRAM_SECRET_TOKEN = "你配置到 Cloudflare 的 TELEGRAM_SECRET_TOKEN"
-npm run telegram:webhook
+```text
+Telegram / Feishu
+-> Cloudflare Worker feishu-sync-dispatch
+-> repository_dispatch telegram_update / feishu_update
+-> .github/workflows/sync.yml
+-> Determine sync channel
+-> npm run sync:telegram 或 npm run sync:feishu
+-> PostgreSQL / Markdown backup / async deploy
 ```
 
-等价的原始 Telegram API 请求是：
+`sync.yml` 手动触发时也使用 `channel=telegram|feishu` 判断通道。
 
-```powershell
-$botToken = "你的 Telegram Bot Token"
-$workerUrl = "https://telegram-sync-dispatch.1406221797.workers.dev/"
-$secret = "你配置到 Cloudflare 的 TELEGRAM_SECRET_TOKEN"
+### 3.2 dev 同步
 
-Invoke-RestMethod `
-  -Method Post `
-  -Uri "https://api.telegram.org/bot$botToken/setWebhook" `
-  -ContentType "application/json" `
-  -Body (@{
-    url = $workerUrl
-    secret_token = $secret
-    allowed_updates = @("message", "edited_message")
-    drop_pending_updates = $false
-  } | ConvertTo-Json)
+```text
+Telegram dev / Feishu dev
+-> Cloudflare Worker sync-dispatch-dev
+-> repository_dispatch telegram_update_dev / feishu_update_dev
+-> .github/workflows/sync-dev.yml
+-> Determine sync channel
+-> npm run sync:telegram 或 npm run sync:feishu
+-> dev PostgreSQL / async dev Pages deploy
 ```
 
-## 5. 推荐配置顺序
+`sync-dev.yml` 手动触发时也使用 `channel=telegram|feishu`。
 
-1. 先配置 `TELEGRAM_BOT_TOKEN`、`AI_API_KEY`
-2. 再配置 `AI_BASE_URL`、`AI_MODEL`、`AI_PROVIDER`、`AI_TIMEOUT_MS`、`AI_CONCURRENCY`、`TRAINING_ANALYSIS_GOAL`、`TELEGRAM_ALLOWED_CHAT_IDS`、`TELEGRAM_POLL_LIMIT`、`TELEGRAM_RECOGNITION_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_API_KEY`、`TELEGRAM_RECOGNITION_FALLBACK_BASE_URL`、`TELEGRAM_RECOGNITION_FALLBACK_MODEL`、`TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS`、`TELEGRAM_RECOGNITION_CACHE_ENABLED`
-3. 再配置 `TRAINING_DB_URL`、`TRAINING_SNAPSHOT_SOURCE`、`TRAINING_DB_TIMEOUT_MS`、`TRAINING_DB_APP_NAME`
-4. 先把 `TRAINING_DB_ENABLED` 设成 `false`
-5. 本地确认 PostgreSQL 链路和 pending replay 链路都正常后，再改成 `TRAINING_DB_ENABLED=true`，并把生产构建切到 `TRAINING_SNAPSHOT_SOURCE=database`
-6. 如果启用 Telegram/飞书 webhook，再配置 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
-7. 再去 Cloudflare 配生产 Telegram Worker 的 `GITHUB_TOKEN`、`TELEGRAM_BOT_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`GITHUB_OWNER`、`GITHUB_REPO` 和 `TELEGRAM_ALBUM_BUFFER`
-8. 再在 GitHub Actions 配 `TELEGRAM_SECRET_TOKEN` Secret 和 `TELEGRAM_WEBHOOK_URL` Variable
-9. 手动运行一次 `Deploy Cloudflare Worker` 或 `Refresh Telegram Webhook`
-10. 如果启用 dev Telegram/飞书统一入口，再给 `sync-dispatch-dev` 配 `GITHUB_TOKEN`、`TELEGRAM_BOT_TOKEN`、`TELEGRAM_SECRET_TOKEN`、`FEISHU_ENCRYPT_KEY`、`FEISHU_VERIFICATION_TOKEN`、`TELEGRAM_ALBUM_BUFFER` 和 `FEISHU_IMAGE_BUFFER`，并确认 GitHub 的 `DEV_TELEGRAM_SECRET_TOKEN` 与 Cloudflare 的 `TELEGRAM_SECRET_TOKEN` 值一致
-11. 如果启用生产飞书通道，再按 [飞书通道部署](飞书通道部署.md) 配置飞书开放平台、GitHub `FEISHU_*`、飞书 Worker Secret 和 `FEISHU_IMAGE_BUFFER`
-12. 手动运行一次 `Deploy Cloudflare Feishu Worker`，把部署后的 Worker URL 填回生产飞书事件订阅 Request URL；dev 飞书 Request URL 使用 `https://feishu-dev.soulgo.chat`
+### 3.3 站点部署
 
-## 6. 验证方法
+| 环境 | Workflow | 部署目标 | 数据来源 |
+| --- | --- | --- | --- |
+| main | `.github/workflows/deploy-pages.yml` | GitHub Pages | `TRAINING_SNAPSHOT_SOURCE`，线上建议 `database` |
+| dev | `.github/workflows/deploy-cloudflare-pages-dev.yml` | Cloudflare Pages | `DEV_TRAINING_DB_URL` + `TRAINING_SNAPSHOT_SOURCE` |
 
-1. 给 Bot 发一张新的锻炼/饮食/体脂秤/睡眠截图，应触发 1 次 `Telegram Sync`
-2. 给 Bot 发 2 张相册截图，应只触发 1 次 `Telegram Sync`
-3. 给 Bot 发一条 `/thought 今天训练后背阔发力更明显` 或 `/随想 今天训练后背阔发力更明显`，应触发 1 次 `Telegram Sync`，并收到“随想写入成功”反馈
-4. 给 Bot 发一条 `/analysis 今天怎么练` 或 `/分析 最近饮食怎么样`，应触发 1 次 `Telegram Sync`，并收到 Bot 回发的分析建议
-5. 给 Bot 发一条 `/help` 或 `帮助`，应直接收到命令清单，且不触发 `Telegram Sync`
-6. 直接编辑一条已经归档的 `/thought` / `/随想` 消息，应触发 1 次 `Telegram Sync`，并更新 `core.thought`
-7. 回复原随想消息发送 `/随想删`，或单独发送 `/随想删 126`，应触发 1 次 `Telegram Sync`，并在 `core.thought` 中软删除
-8. 在 Cloudflare Worker 请求日志确认收到了 `POST`
-9. 在 GitHub Actions 确认普通同步请求被 `repository_dispatch` 触发
-10. 临时使用无效的 Cloudflare `GITHUB_TOKEN` 验证时，应收到“GitHub Action 未能启动”反馈；恢复 token 后再继续测试
-11. 给飞书应用所在 chat 发送 `/帮助`，应触发 `Feishu Sync` 并收到飞书文本回复
-12. 给飞书应用所在 chat 发送 `/随想 今天训练后髋部有点紧`，应触发 `Feishu Sync`，并写入 `core.thought`
-13. 给飞书应用所在 chat 发送一张带日期的训练截图，应触发 `Feishu Sync`，图片以内联 data URL 送 AI 识别，并以 `source_channel='feishu'` 写入 core 子表
+生产 Pages 部署成功后会自动尝试清理 Cloudflare 缓存；需要 GitHub Secrets 同时配置 `CLOUDFLARE_ZONE_ID` 和具备 `Zone -> Cache Purge -> Purge` 权限的 `CLOUDFLARE_API_TOKEN`。如果 secret 缺失或 token 权限不足，workflow 会输出 warning 但不会把 Pages deploy 标红，页面仍可能命中旧 HTML；可在 Cloudflare Dashboard -> Caching -> Purge Everything 手动刷新。
 
-## 7. 当前实现下的重要说明
+## 4. 部署和刷新
 
-- `telegram-sync.yml` 现在会直接访问 PostgreSQL
-- `feishu-sync.yml` 也会直接访问 PostgreSQL，并通过 `sourceChannel: 'feishu'` 写入 core 子表
-- `telegram-sync.yml` 与 `sync-dev.yml` 都会透传 AI provider、timeout、识别模型、识别备用 AI 和识别缓存变量；当前 provider adapter 仍只支持 OpenAI-compatible 协议
-- `feishu-sync.yml` 与 `sync-dev.yml` 复用上述 AI provider、识别模型、备用 AI 和识别缓存变量；飞书图片输入模式固定为 inline
-- Telegram `/thought` 虽然不走图片识别，但当前 `npm run sync:telegram` 入口仍会统一校验 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`，所以这些变量不能省
-- 飞书 `/随想` 当前支持新建和 DB-first 入库，不支持 Telegram Markdown 文档附件，也不承诺随想编辑/删除/移动完整可用
-- Telegram `/analysis` / `/分析` 不走图片识别、不写数据库、不提交仓库，但会读取现有 `TrainingSnapshot` 并调用 AI 回发建议，所以同样依赖 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 和 `TELEGRAM_BOT_TOKEN`
-- 飞书 `/analysis` / `/分析` 走同一只读分析链路，回复通过飞书 Open API 发回原 chat
-- Telegram `/analysis` / `/分析` 默认长期目标是“增肌减腹”；如果配置了 `TRAINING_ANALYSIS_GOAL`，线上回复会优先使用该变量
-- `/analysis` 的数据来源跟随 `TRAINING_SNAPSHOT_SOURCE`；如果配置为 `database`，还需要保证 `TRAINING_DB_ENABLED`、`TRAINING_DB_URL` 和 PostgreSQL `core.*` 数据可用
-- PostgreSQL 失败时，Telegram 同步不会写 Markdown；会把待补偿批次写到 `runtime/telegram-sync-pending.ndjson`
-- PostgreSQL 成功时，Telegram 图片批次只增量写入当前批次和目标日期汇总，不会删除同日其它模块，也不会每次全量覆盖 `训练记录.md`
-- 对 `/thought` 来说，正文和模块信息以 `core.thought` 为准；图片只保留 `source/images/thoughts/` artifact，Markdown 文章由备份任务导出
-- `core.thought.telegram_message_id` 仍是历史兼容字段名；飞书会写入稳定数字代理 ID，真实飞书 `message_id/chat_id` 通过 source 元数据保留
-- 随想新增、编辑、删除、移动现在会回发成功反馈；如果数据库失败，反馈会明确说明“数据库待补偿”
-- 图片识别、随想和 `/analysis` 的失败反馈会尽量标注 `user_input`、`ai_service`、`telegram_api`、`database`、`github_action` 或 `system_bug`
-- 睡眠截图按醒来日期减一天归档，并写入 `core.sleep` 和 `core.training_day` 睡眠汇总；`archive.training_sleep` 只作为历史回填/维护兼容层
-- 默认 sleep backfill 不再由所有图片入库触发，只在真实 sleep 入库或显式 `TELEGRAM_SYNC_RUN_SLEEP_BACKFILL=true` 时运行
-- PostgreSQL 恢复后，后续同步会先重放待补偿批次
-- `deploy-pages.yml` 是否依赖 PostgreSQL，取决于 `TRAINING_SNAPSHOT_SOURCE`
-  - `markdown`：页面构建不依赖 PostgreSQL
-  - `database`：页面构建直接依赖 PostgreSQL
-- `deploy-pages.yml` 与 `deploy-cloudflare-pages-dev.yml` 固定 `TRAINING_BUILD_ARCHIVE_WRITE=false`；本地 `build:data` 默认 `auto`，在 `markdown` 快照下仍可写 archive，在 `database + strict` 下会跳过 archive 写库
-- `wrangler.toml` 推送到 GitHub 后，只有 `deploy-cloudflare-worker.yml` 成功运行，Cloudflare Worker 里的 Durable Object binding 才会真正更新
-- `wrangler.feishu.toml` 推送到 GitHub 后不会自动部署；需要手动运行 `Deploy Cloudflare Feishu Worker`
-- GitHub Secrets 修改不会触发 workflow；更新 `TELEGRAM_BOT_TOKEN` 后，`refresh-telegram-webhook.yml` 会在 6 小时内自动刷新，也可以手动运行立即生效
-
-## 8. Cloudflare CDN 代理（站点加速）
-
-`soulgo.chat` 已通过 Cloudflare 代理（橙云）加速 GitHub Pages 站点访问。DNS 托管在 Cloudflare（NS: jason/gemma），CNAME 指向 `soulgo.github.io` 并开启代理。
-
-详细方案见 [Cloudflare CDN 代理加速 v17](../优化重构/Cloudflare_CDN代理加速_v17/re_optimization_v17.md)。
-
-### DNS 配置
-
-| 类型 | 名称 | 目标 | 代理 | TTL |
-|------|------|------|------|-----|
-| CNAME | `@` | `soulgo.github.io` | **已代理（橙云）** | Auto |
-
-- SSL/TLS 模式：**Full (Strict)**（GitHub Pages 自带 Let's Encrypt 证书）
-- Always Use HTTPS：开启
-
-### 性能开关
-
-| 功能 | 路径 | 状态 |
-|------|------|------|
-| Auto Minify | Speed → Optimization | JS / CSS / HTML 已开启 |
-| Brotli | Speed → Optimization | 已开启 |
-| HTTP/3 (QUIC) | Network | 已开启 |
-| 0-RTT Connection Resumption | Speed → Optimization | 已开启 |
-| Early Hints | Speed → Optimization | 已开启 |
-
-### 缓存规则（Cache Rules）
-
-按优先级排列：
-
-| 规则 | 匹配条件 | Edge TTL | Browser TTL |
-|------|---------|----------|-------------|
-| Font Assets Long Cache | `woff`, `woff2`, `ttf`, `otf` | 1 年 | 1 年 |
-| Image Assets Long Cache | `jpg`, `jpeg`, `png`, `gif`, `webp`, `avif`, `svg`, `ico` | 30 天 | 30 天 |
-| CSS and JS Medium Cache | `css`, `js` | 7 天 | 7 天 |
-| HTML Short Cache SWR | `html`, `/`, 无扩展名路径 | Respect origin (10min) | 5 分钟 + `stale-while-revalidate=3600` |
-| Skip Non-Page Paths | `/api/`, `/.well-known/` | Bypass | Bypass |
-
-### Page Rules
-
-- `soulgo.chat/*`：Cache Level = Cache Everything, Edge Cache TTL = 2 hours, Always Online = On
-
-### 部署后清缓存
-
-每次 GitHub Pages 部署后，Cloudflare 边缘缓存需要刷新：
-
-- **手动方式**：Cloudflare Dashboard → Caching → Purge Everything
-- **自动方式**（可选）：在 `deploy-pages.yml` 末尾调用 Cloudflare Purge Cache API，需要额外的 GitHub Secret `CLOUDFLARE_ZONE_ID` 和 API Token 的 `Zone → Cache Purge → Purge` 权限
-
-### 回滚
-
-如果 CDN 代理出现问题，在 Cloudflare Dashboard → DNS → 将 CNAME 代理状态切回 **DNS only（灰云）**，1 分钟内流量直接回 GitHub Pages Fastly CDN。
-
-### 兼容性说明
-
-- Telegram Worker (`telegram-sync-dispatch`) 部署在独立的 `workers.dev` 子域，与站点 CDN 代理互不干扰
-- `source/CNAME` 中 `soulgo.chat` 保持不变，GitHub Pages 需要此文件识别自定义域名
-
-## 9. SQL 文件约定
-
-- 仓库当前只保留新库初始化脚本：[sql/pgsql17.sql](../../sql/pgsql17.sql)
-
-如果你已经在现有库里手工执行过升级 SQL，那么接下来只需要保证数据库结构已经包含：
-
-- `archive.*`
-- `ingest.*`
-- `core.*`
-
-然后执行：
+### 4.1 部署 main Worker
 
 ```bash
-npm run import:markdown
+npx wrangler deploy --config wrangler.toml
 ```
 
-或直接执行：
+或在 GitHub Actions 手动运行：
+
+```text
+Deploy Cloudflare Worker
+```
+
+该 workflow 会部署 `wrangler.toml` 指向的统一 Worker，并在部署后用 `TELEGRAM_WEBHOOK_URL` 刷新生产 Telegram webhook。
+
+### 4.2 部署 dev Worker
 
 ```bash
-npm run sync:telegram
+npx wrangler deploy --config wrangler.dev.toml
 ```
 
-验证链路是否正常。
+或在 GitHub Actions 手动运行：
+
+```text
+Deploy Cloudflare Worker (Dev)
+```
+
+该 workflow 会部署 `sync-dispatch-dev`，并在部署后用 `DEV_TELEGRAM_WEBHOOK_URL` 刷新 dev Telegram webhook。
+
+### 4.3 写入 Worker Secrets
+
+main：
+
+```bash
+npx wrangler secret put GITHUB_TOKEN --config wrangler.toml
+npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.toml
+npx wrangler secret put TELEGRAM_SECRET_TOKEN --config wrangler.toml
+npx wrangler secret put FEISHU_ENCRYPT_KEY --config wrangler.toml
+npx wrangler secret put FEISHU_VERIFICATION_TOKEN --config wrangler.toml
+```
+
+dev：
+
+```bash
+npx wrangler secret put GITHUB_TOKEN --config wrangler.dev.toml
+npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.dev.toml
+npx wrangler secret put TELEGRAM_SECRET_TOKEN --config wrangler.dev.toml
+npx wrangler secret put FEISHU_ENCRYPT_KEY --config wrangler.dev.toml
+npx wrangler secret put FEISHU_VERIFICATION_TOKEN --config wrangler.dev.toml
+```
+
+## 5. 验证
+
+### 5.1 Worker 路由
+
+```bash
+curl -i https://feishu.soulgo.chat
+curl -i https://feishu-dev.soulgo.chat
+```
+
+预期 `GET` 返回 `405 method_not_allowed`。如果返回 DNS、TLS、404 或静态页面，优先检查 Cloudflare custom domain route。
+
+未知 POST：
+
+```bash
+curl -i -X POST https://feishu-dev.soulgo.chat \
+  -H 'content-type: application/json' \
+  --data '{"hello":"world"}'
+```
+
+预期返回 `400 unknown_channel`。
+
+### 5.2 GitHub Actions
+
+| 操作 | 预期 workflow | 预期 channel |
+| --- | --- | --- |
+| main Telegram 发消息 | `Sync (Main)` | `telegram` |
+| main 飞书发消息 | `Sync (Main)` | `feishu` |
+| dev Telegram 发消息 | `Sync (Dev)` | `telegram` |
+| dev 飞书发消息 | `Sync (Dev)` | `feishu` |
+
+进入 run summary 检查：
+
+- Telegram: `Telegram sync result`
+- 飞书: `Feishu sync result`
+- 重点看 `batchId`、`taskStatus`、`persistenceStatus`、`archivedDate`、图片计数、pending、`failureDisposition`、failed message ids。
+
+### 5.3 本地文档/配置检查
+
+```bash
+node --test test/github-workflows.test.mjs test/cloudflare-config.test.mjs
+git diff --check -- docs
+```
+
+## 6. 旧入口处理
+
+以下资源不再作为当前 main/dev 入口：
+
+| 旧口径 | 当前替代 |
+| --- | --- |
+| `.github/workflows/telegram-sync.yml` | `.github/workflows/sync.yml` |
+| `.github/workflows/feishu-sync.yml` | `.github/workflows/sync.yml` |
+| `.github/workflows/telegram-sync-dev.yml` | `.github/workflows/sync-dev.yml` |
+| `.github/workflows/feishu-sync-dev.yml` | `.github/workflows/sync-dev.yml` |
+| `wrangler.feishu.toml` / `wrangler.feishu-dev.toml` | `wrangler.toml` / `wrangler.dev.toml` |
+| 独立 Telegram Worker + 独立 Feishu Worker | 统一 Worker `cloudflare/sync-dispatch-worker.mjs` |
+
+历史方案可以留在 `docs/优化重构/`，但日常维护以本文、[日常维护手册](日常维护手册.md) 和 [系统总览](../系统架构/系统总览.md) 为准。
