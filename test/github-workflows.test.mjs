@@ -164,6 +164,11 @@ test('deploy-cloudflare-worker workflow refreshes Telegram webhook after deploym
   assert.doesNotMatch(workflow, /push:/);
   assert.match(workflow, /cloudflare\/wrangler-action@v3/);
   assert.match(workflow, /command:\s*deploy/);
+  assert.match(workflow, /- name: Configure Telegram Worker secrets/);
+  assert.match(workflow, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+  assert.match(workflow, /CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
+  assert.match(workflow, /printf '%s' "\$TELEGRAM_BOT_TOKEN" \| npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler\.toml/);
+  assert.match(workflow, /printf '%s' "\$TELEGRAM_SECRET_TOKEN" \| npx wrangler secret put TELEGRAM_SECRET_TOKEN --config wrangler\.toml/);
   assert.match(workflow, /actions\/setup-node@v4/);
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /run:\s*npm ci/);

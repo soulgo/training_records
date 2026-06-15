@@ -9,7 +9,7 @@
 
 ### Target Outcome
 
-main 环境只保留一个 Cloudflare Worker 和一个同步 GitHub Action，由统一入口识别 Telegram / 飞书请求并派发到同一个 main workflow 内的分渠道同步步骤；旧生产 Telegram Worker、飞书 Worker、飞书 deploy workflow、Telegram/飞书独立 sync workflow 在验证后删除或停用。
+main 环境只保留一个 Cloudflare Worker 和一个同步 GitHub Action，由统一入口识别 Telegram / 飞书请求并派发到同一个 main workflow 内的分渠道同步步骤；旧生产 Telegram Worker、飞书 deploy workflow、Telegram/飞书独立 sync workflow 在验证后删除或停用。统一 Worker 复用既有 `feishu-sync-dispatch` 名称，以保留不可反读的飞书/GitHub Cloudflare secrets。
 
 ### Goal Definition
 
@@ -23,7 +23,7 @@ main 环境只保留一个 Cloudflare Worker 和一个同步 GitHub Action，由
   - 若后续要将 dev/main 配置抽象成生成脚本，可另开配置生成任务。
 - **Verification rule**: 本地测试通过，Wrangler dry-run / deploy 成功，GitHub Actions 只保留统一 main sync 入口，Cloudflare 只保留统一 main Worker 入口。
 - **Evidence source**: `node --test`、`npx wrangler deploy --dry-run`、`npx wrangler deploy`、`gh workflow list`、`npx wrangler deployments list` / Worker 列表。
-- **Pass criteria**: `wrangler.toml` 指向 `sync-dispatch` + `cloudflare/sync-dispatch-worker.mjs`；`.github/workflows/sync.yml` 监听 `telegram_update` 和 `feishu_update`；旧 main sync/deploy workflow 文件删除；配置清单写明 GitHub/Cloudflare/Telegram/飞书最终值。
+- **Pass criteria**: `wrangler.toml` 指向 `feishu-sync-dispatch` + `cloudflare/sync-dispatch-worker.mjs`；`.github/workflows/sync.yml` 监听 `telegram_update` 和 `feishu_update`；旧 main sync/deploy workflow 文件删除；配置清单写明 GitHub/Cloudflare/Telegram/飞书最终值。
 - **Confidence note**: dev v19 已覆盖统一入口 channel detection、body clone、双 Durable Object、分渠道 dispatch type；main 复用同一 Worker 源码，只替换生产资源名和事件类型。
 - **Judgment owner**: 自动化测试 + 远程部署状态 + 用户对飞书/Telegram 端到端消息的最终验收。
 
@@ -40,9 +40,9 @@ main 环境只保留一个 Cloudflare Worker 和一个同步 GitHub Action，由
 | Existing item | Decision | Reason |
 | --- | --- | --- |
 | `sync-dispatch-dev` 统一 Worker 设计 | keep / rewrite | 复用 channel detection 和 `request.clone().json()` 约束，生产只换资源名和事件类型。 |
-| `wrangler.dev.toml` 双 DO + 双 dispatch vars | rewrite | main 使用 `wrangler.toml`，目标 Worker 名为 `sync-dispatch`，dispatch type 为 `telegram_update` / `feishu_update`。 |
+| `wrangler.dev.toml` 双 DO + 双 dispatch vars | rewrite | main 使用 `wrangler.toml`，目标 Worker 复用 `feishu-sync-dispatch`，dispatch type 为 `telegram_update` / `feishu_update`。 |
 | `sync-dev.yml` 分渠道 workflow | keep / rewrite | 复用分渠道选择、summary、notify、failure monitor；main 额外保留 Telegram push / 手动场景的 `sync:db` 和 fast test 语义。 |
-| 删除 dev 旧资源 | rewrite | main 删除旧生产 workflows / `wrangler.feishu.toml`，远程删除 `telegram-sync-dispatch` 与 `feishu-sync-dispatch` 前必须先验证统一入口。 |
+| 删除 dev 旧资源 | rewrite | main 删除旧生产 workflows / `wrangler.feishu.toml`，远程只删除 `telegram-sync-dispatch`；`feishu-sync-dispatch` 升级为统一 Worker。 |
 
 ### Drift Diagnosis
 
@@ -55,14 +55,14 @@ main 环境只保留一个 Cloudflare Worker 和一个同步 GitHub Action，由
 ### Priority Rationale
 
 - 先用测试固定最终文件结构，避免 YAML/TOML 合并遗漏。
-- 再部署 `sync-dispatch` 并刷新 Telegram webhook，确保新入口可接流量。
+- 再部署升级后的 `feishu-sync-dispatch` 并刷新 Telegram webhook，确保新入口可接流量。
 - 最后删除旧 workflow 文件和旧 Cloudflare Workers，减少中断窗口。
 
 ### Assumptions and Open Decisions
 
 | Item | Status | Impact | Owner / Next step |
 | --- | --- | --- | --- |
-| main 统一 Worker 名称为 `sync-dispatch` | assumed | Cloudflare 资源和 GitHub 配置清单统一使用该名字 | 本方案执行 |
+| main 统一 Worker 复用 `feishu-sync-dispatch` | confirmed | 保留既有飞书/GitHub Worker secrets，避免因 Cloudflare secrets 不可反读而阻塞远程配置 | 本方案执行 |
 | 生产 Telegram webhook URL 使用 `https://feishu.soulgo.chat/telegram` | assumed | 复用现有飞书自定义域名，减少一个 public endpoint | 部署后更新 GitHub Variable 并刷新 webhook |
 | 飞书生产 Request URL 使用 `https://feishu.soulgo.chat` | confirmed | 保持现有飞书开放平台配置语义 | 部署统一 Worker 后保存/验证 |
 | Cloudflare / GitHub secrets 可读 | unresolved | GitHub 和 Cloudflare secret 值无法反读，只能复用已配置 secret 或由用户重填 | 本地/Actions 部署使用现有 secret；缺失项写入配置清单 |
@@ -72,10 +72,10 @@ main 环境只保留一个 Cloudflare Worker 和一个同步 GitHub Action，由
 合并后：
 
 ```text
-Telegram Webhook -> sync-dispatch -> repository_dispatch(telegram_update) -> sync.yml -> npm run sync:telegram
-飞书 Event       -> sync-dispatch -> repository_dispatch(feishu_update)   -> sync.yml -> npm run sync:feishu
+Telegram Webhook -> feishu-sync-dispatch -> repository_dispatch(telegram_update) -> sync.yml -> npm run sync:telegram
+飞书 Event       -> feishu-sync-dispatch -> repository_dispatch(feishu_update)   -> sync.yml -> npm run sync:feishu
 
-deploy-cloudflare-worker.yml -> wrangler.toml -> sync-dispatch
+deploy-cloudflare-worker.yml -> wrangler.toml -> feishu-sync-dispatch
 refresh-telegram-webhook.yml -> TELEGRAM_WEBHOOK_URL=https://feishu.soulgo.chat/telegram
 ```
 
@@ -89,7 +89,7 @@ refresh-telegram-webhook.yml -> TELEGRAM_WEBHOOK_URL=https://feishu.soulgo.chat/
   - 先写失败测试，再改 workflow / TOML。
   - 只覆盖生产统一入口，不调整业务同步逻辑。
 - **Todos**:
-  - [ ] 更新 `test/cloudflare-config.test.mjs`，要求 `wrangler.toml` 指向 `sync-dispatch` 并绑定两个 DO。
+  - [ ] 更新 `test/cloudflare-config.test.mjs`，要求 `wrangler.toml` 指向 `feishu-sync-dispatch` 并绑定两个 DO。
   - [ ] 更新 `test/github-workflows.test.mjs`，要求 `.github/workflows/sync.yml` 是 main 唯一同步入口。
 - **Exit proof**: 相关测试先因缺少统一 main 配置失败。
 - **Stop condition**: 如果测试揭示 main 缺少 v19 统一 Worker 源文件，先补回统一 Worker 源文件。
@@ -129,7 +129,7 @@ refresh-telegram-webhook.yml -> TELEGRAM_WEBHOOK_URL=https://feishu.soulgo.chat/
 - **Purpose**: 尽量完成 Cloudflare / GitHub 远程配置。
 - **Entry condition**: 本地测试通过，Cloudflare / GitHub CLI 已认证。
 - **Phase rules**:
-  - 先部署 `sync-dispatch`，再刷新 Telegram webhook。
+  - 先部署升级后的 `feishu-sync-dispatch`，再刷新 Telegram webhook。
   - 旧 Worker 删除前必须确认统一 Worker 可响应。
   - 不尝试反读 secret 值。
 - **Todos**:
@@ -139,7 +139,7 @@ refresh-telegram-webhook.yml -> TELEGRAM_WEBHOOK_URL=https://feishu.soulgo.chat/
   - [ ] 设置 GitHub Variable `TELEGRAM_WEBHOOK_URL=https://feishu.soulgo.chat/telegram`。
   - [ ] 运行或触发 `refresh-telegram-webhook.yml`。
   - [ ] 验证统一 Worker 405 / unknown_channel。
-  - [ ] 删除旧 Cloudflare Workers `telegram-sync-dispatch`、`feishu-sync-dispatch`。
+  - [ ] 删除旧 Cloudflare Worker `telegram-sync-dispatch`。
 - **Exit proof**: 远程命令输出显示统一 Worker 已部署，旧 Workers 已删除或明确列为阻塞。
 - **Stop condition**: 缺少认证、缺少 secret、分支保护阻止 workflow 文件落到 main，或统一入口验证失败。
 
@@ -148,7 +148,7 @@ refresh-telegram-webhook.yml -> TELEGRAM_WEBHOOK_URL=https://feishu.soulgo.chat/
 - `wrangler.feishu.toml` 删除后，所有测试和文档引用必须同步更新，否则 CI 会继续寻找旧文件。
 - `.github/workflows/deploy-pages.yml` 和 `ci-tests.yml` 的 paths 需要从 `telegram-sync.yml` / `feishu-sync.yml` 改为 `sync.yml`。
 - `refresh-telegram-webhook.yml` 不是旧同步入口，保留作为定时刷新兜底。
-- 远程 secret 值无法从 GitHub / Cloudflare 读取；如果 `sync-dispatch` 是新 Worker，Cloudflare Worker Secrets 需要重新写入或通过现有环境注入。
+- 远程 secret 值无法从 GitHub / Cloudflare 读取；因此 main 统一 Worker 复用既有 `feishu-sync-dispatch`，并由 deploy workflow 自动补写 Telegram secrets。
 
 ## Final Validation
 

@@ -4,10 +4,10 @@ import { readFile } from 'node:fs/promises';
 
 const rootDir = new URL('../', import.meta.url);
 
-test('wrangler main config routes Telegram and Feishu to production workflows without storing secrets', async () => {
+test('wrangler main config reuses the Feishu worker as the unified production entry without storing secrets', async () => {
   const config = await readFile(new URL('wrangler.toml', rootDir), 'utf8');
 
-  assert.match(config, /^name\s*=\s*"sync-dispatch"/m);
+  assert.match(config, /^name\s*=\s*"feishu-sync-dispatch"/m);
   assert.match(config, /^main\s*=\s*"cloudflare\/sync-dispatch-worker\.mjs"/m);
   assert.match(config, /^compatibility_date\s*=\s*"\d{4}-\d{2}-\d{2}"/m);
   assert.match(config, /^workers_dev\s*=\s*true/m);

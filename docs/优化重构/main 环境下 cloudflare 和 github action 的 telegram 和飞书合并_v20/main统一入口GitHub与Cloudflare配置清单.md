@@ -6,9 +6,9 @@
 
 | 平台 | 只保留 | 用途 |
 | --- | --- | --- |
-| Cloudflare Worker | `sync-dispatch` | main Telegram 和 main 飞书共用同一个入口 |
+| Cloudflare Worker | `feishu-sync-dispatch` | main Telegram 和 main 飞书共用同一个入口；复用既有飞书 Worker 名称以保留不可反读的飞书/GitHub secrets |
 | GitHub sync workflow | `.github/workflows/sync.yml` | 同一个 workflow 内判断走 Telegram 还是飞书 |
-| GitHub Worker deploy workflow | `.github/workflows/deploy-cloudflare-worker.yml` | 手动部署 `sync-dispatch` 并刷新 main Telegram webhook |
+| GitHub Worker deploy workflow | `.github/workflows/deploy-cloudflare-worker.yml` | 手动部署 `feishu-sync-dispatch` 并刷新 main Telegram webhook |
 | GitHub Telegram webhook refresh workflow | `.github/workflows/refresh-telegram-webhook.yml` | 手动 / 定时刷新 main Telegram webhook |
 | Wrangler 配置 | `wrangler.toml` | 只部署 `cloudflare/sync-dispatch-worker.mjs` |
 
@@ -35,7 +35,7 @@ Settings -> Secrets and variables -> Actions
 
 | Secret | 必填 | 值 |
 | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | 是 | Cloudflare API Token，用于部署 `sync-dispatch` |
+| `CLOUDFLARE_API_TOKEN` | 是 | Cloudflare API Token，用于部署 `feishu-sync-dispatch` |
 | `CLOUDFLARE_ACCOUNT_ID` | 是 | Cloudflare Account ID |
 | `AI_API_KEY` | 是 | 图片识别、随想和 `/analysis` 使用的 AI Key |
 | `TRAINING_DB_URL` | 是 | main PostgreSQL 连接串 |
@@ -86,13 +86,15 @@ gh variable set TELEGRAM_WEBHOOK_URL --body 'https://feishu.soulgo.chat/telegram
 Cloudflare Worker 名称：
 
 ```text
-sync-dispatch
+feishu-sync-dispatch
 ```
+
+这里刻意复用既有生产飞书 Worker 名称，而不是新建 `sync-dispatch`：Cloudflare Worker Secrets 不能反读，`feishu-sync-dispatch` 已经持有生产 `GITHUB_TOKEN`、`FEISHU_ENCRYPT_KEY` 和 `FEISHU_VERIFICATION_TOKEN`。部署 workflow 会把 GitHub 中已有的 `TELEGRAM_BOT_TOKEN` / `TELEGRAM_SECRET_TOKEN` 补写进去，然后把这个 Worker 升级为统一入口。
 
 `wrangler.toml` 最终形态：
 
 ```toml
-name = "sync-dispatch"
+name = "feishu-sync-dispatch"
 main = "cloudflare/sync-dispatch-worker.mjs"
 compatibility_date = "2026-06-15"
 workers_dev = true
@@ -119,7 +121,7 @@ class_name = "FeishuImageBuffer"
 npx wrangler deploy --config wrangler.toml
 ```
 
-或在 GitHub Actions 手动运行。运行前必须先完成第 3 节的 `sync-dispatch` Worker Secrets：
+或在 GitHub Actions 手动运行。这个 workflow 会先向 `feishu-sync-dispatch` 补写 Telegram Worker Secrets，再部署统一 Worker：
 
 ```text
 Deploy Cloudflare Worker
@@ -128,7 +130,7 @@ Deploy Cloudflare Worker
 部署成功后应看到统一 Worker 可通过这些地址访问：
 
 ```text
-https://sync-dispatch.<workers子域名>.workers.dev
+https://feishu-sync-dispatch.<workers子域名>.workers.dev
 https://feishu.soulgo.chat/telegram
 https://feishu.soulgo.chat
 ```
@@ -138,28 +140,27 @@ https://feishu.soulgo.chat
 进入：
 
 ```text
-Cloudflare Dashboard -> Workers & Pages -> sync-dispatch -> Settings -> Variables and Secrets
+Cloudflare Dashboard -> Workers & Pages -> feishu-sync-dispatch -> Settings -> Variables and Secrets
 ```
 
-只在 `sync-dispatch` 上配置这些 Secret：
+只在 `feishu-sync-dispatch` 上保留这些 Secret：
 
 | Secret | 必填 | 值 |
 | --- | --- | --- |
-| `GITHUB_TOKEN` | 是 | GitHub PAT，用于调用 `repository_dispatch` |
-| `TELEGRAM_BOT_TOKEN` | 是 | 和 GitHub `TELEGRAM_BOT_TOKEN` 同值 |
-| `TELEGRAM_SECRET_TOKEN` | 是 | 和 GitHub `TELEGRAM_SECRET_TOKEN` 同值 |
-| `FEISHU_ENCRYPT_KEY` | 飞书 main 必填 | 飞书 main 应用事件订阅 Encrypt Key |
-| `FEISHU_VERIFICATION_TOKEN` | 飞书 main 必填 | 飞书 main 应用事件订阅 Verification Token |
+| `GITHUB_TOKEN` | 是 | 既有飞书 Worker 已配置；用于调用 `repository_dispatch` |
+| `TELEGRAM_BOT_TOKEN` | 是 | Deploy workflow 会从 GitHub `TELEGRAM_BOT_TOKEN` 自动写入 |
+| `TELEGRAM_SECRET_TOKEN` | 是 | Deploy workflow 会从 GitHub `TELEGRAM_SECRET_TOKEN` 自动写入 |
+| `FEISHU_ENCRYPT_KEY` | 飞书 main 必填 | 既有飞书 Worker 已配置；飞书 main 应用事件订阅 Encrypt Key |
+| `FEISHU_VERIFICATION_TOKEN` | 飞书 main 必填 | 既有飞书 Worker 已配置；飞书 main 应用事件订阅 Verification Token |
 
 CLI 写入方式：
 
 ```bash
-npx wrangler secret put GITHUB_TOKEN --config wrangler.toml
 npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.toml
 npx wrangler secret put TELEGRAM_SECRET_TOKEN --config wrangler.toml
-npx wrangler secret put FEISHU_ENCRYPT_KEY --config wrangler.toml
-npx wrangler secret put FEISHU_VERIFICATION_TOKEN --config wrangler.toml
 ```
+
+通常不需要手动写 `GITHUB_TOKEN`、`FEISHU_ENCRYPT_KEY`、`FEISHU_VERIFICATION_TOKEN`，因为它们已经在既有 `feishu-sync-dispatch` 上。只有确认这些 secrets 不存在或需要轮换时才重新写入。
 
 不要在 Cloudflare Dashboard 额外新增 `GITHUB_DISPATCH_EVENT_TYPE`。main 统一 Worker 已经通过 `wrangler.toml` 固定使用：
 
@@ -194,7 +195,7 @@ Deploy Cloudflare Worker
 2. `TELEGRAM_WEBHOOK_URL`
 3. `TELEGRAM_SECRET_TOKEN`
 
-确认 `TELEGRAM_SECRET_TOKEN` 与 Cloudflare `sync-dispatch` Worker 的 `TELEGRAM_SECRET_TOKEN` 完全一致。
+确认 `TELEGRAM_SECRET_TOKEN` 与 Cloudflare `feishu-sync-dispatch` Worker 的 `TELEGRAM_SECRET_TOKEN` 完全一致。
 
 ## 5. 飞书 main 配置
 
@@ -210,7 +211,7 @@ Deploy Cloudflare Worker
 https://feishu.soulgo.chat
 ```
 
-保存前确认 Cloudflare `sync-dispatch` 已配置：
+保存前确认 Cloudflare `feishu-sync-dispatch` 已配置：
 
 ```text
 FEISHU_ENCRYPT_KEY
@@ -292,24 +293,24 @@ curl -i -X POST https://feishu.soulgo.chat/ \
 | 平台 | 删除 / 停用 |
 | --- | --- |
 | Cloudflare Worker | `telegram-sync-dispatch` |
-| Cloudflare Worker | `feishu-sync-dispatch` |
 | GitHub workflow | `.github/workflows/telegram-sync.yml` |
 | GitHub workflow | `.github/workflows/feishu-sync.yml` |
 | GitHub workflow | `.github/workflows/deploy-cloudflare-feishu-worker.yml` |
 | Wrangler config | `wrangler.feishu.toml` |
 
+不要删除 `feishu-sync-dispatch`。它已经从“旧飞书 Worker”升级为 main 统一 Worker。
+
 删除旧 Cloudflare Worker 前，先确认：
 
 - Telegram webhook 已指向 `https://feishu.soulgo.chat/telegram`。
 - 飞书 main Request URL 已指向 `https://feishu.soulgo.chat`。
-- `feishu.soulgo.chat` 已绑定在 `sync-dispatch` 上。
-- `sync-dispatch` 已配置所有 Cloudflare Worker Secrets。
+- `feishu.soulgo.chat` 已绑定在 `feishu-sync-dispatch` 上。
+- `feishu-sync-dispatch` 已配置所有 Cloudflare Worker Secrets。
 
 CLI 删除旧 Worker：
 
 ```bash
 npx wrangler delete telegram-sync-dispatch
-npx wrangler delete feishu-sync-dispatch
 ```
 
 不要删除这些源码文件：
@@ -325,7 +326,7 @@ cloudflare/feishu-sync-dispatch-worker.mjs
 
 | 要配的地方 | 最终值 |
 | --- | --- |
-| Cloudflare Worker | `sync-dispatch` |
+| Cloudflare Worker | `feishu-sync-dispatch` |
 | Telegram main webhook | `https://feishu.soulgo.chat/telegram` |
 | 飞书 main Request URL | `https://feishu.soulgo.chat` |
 | GitHub 同步 Action | `Sync (Main)` / `.github/workflows/sync.yml` |
