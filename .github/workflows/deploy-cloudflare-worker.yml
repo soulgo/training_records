@@ -2,13 +2,6 @@ name: Deploy Cloudflare Worker
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - wrangler.toml
-      - cloudflare/**
-      - .github/workflows/deploy-cloudflare-worker.yml
 
 permissions:
   contents: read

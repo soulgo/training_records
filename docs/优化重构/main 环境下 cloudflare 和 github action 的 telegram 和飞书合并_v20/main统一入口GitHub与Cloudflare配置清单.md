@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | Cloudflare Worker | `sync-dispatch` | main Telegram 和 main 飞书共用同一个入口 |
 | GitHub sync workflow | `.github/workflows/sync.yml` | 同一个 workflow 内判断走 Telegram 还是飞书 |
-| GitHub Worker deploy workflow | `.github/workflows/deploy-cloudflare-worker.yml` | 部署 `sync-dispatch` 并刷新 main Telegram webhook |
+| GitHub Worker deploy workflow | `.github/workflows/deploy-cloudflare-worker.yml` | 手动部署 `sync-dispatch` 并刷新 main Telegram webhook |
 | GitHub Telegram webhook refresh workflow | `.github/workflows/refresh-telegram-webhook.yml` | 手动 / 定时刷新 main Telegram webhook |
 | Wrangler 配置 | `wrangler.toml` | 只部署 `cloudflare/sync-dispatch-worker.mjs` |
 
@@ -119,7 +119,7 @@ class_name = "FeishuImageBuffer"
 npx wrangler deploy --config wrangler.toml
 ```
 
-或在 GitHub Actions 手动运行：
+或在 GitHub Actions 手动运行。运行前必须先完成第 3 节的 `sync-dispatch` Worker Secrets：
 
 ```text
 Deploy Cloudflare Worker
@@ -332,4 +332,3 @@ cloudflare/feishu-sync-dispatch-worker.mjs
 | GitHub Worker 部署 Action | `Deploy Cloudflare Worker` / `.github/workflows/deploy-cloudflare-worker.yml` |
 | Telegram dispatch type | `telegram_update` |
 | 飞书 dispatch type | `feishu_update` |
-

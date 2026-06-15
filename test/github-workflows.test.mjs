@@ -161,6 +161,7 @@ test('deploy-cloudflare-worker workflow refreshes Telegram webhook after deploym
 
   assert.match(workflow, /name:\s*Deploy Cloudflare Worker/);
   assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /push:/);
   assert.match(workflow, /cloudflare\/wrangler-action@v3/);
   assert.match(workflow, /command:\s*deploy/);
   assert.match(workflow, /actions\/setup-node@v4/);
