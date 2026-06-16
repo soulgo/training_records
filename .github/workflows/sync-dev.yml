@@ -364,8 +364,8 @@ jobs:
             if (run?.id) {
               process.stdout.write(String(run.id));
             }
-            NODE
-            )"
+          NODE
+          )"
             if [ -n "$deploy_run_id" ]; then
               break
             fi
