@@ -37,8 +37,8 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
   assert.match(action, /\$strict_database_snapshot" != "true"/);
   assert.match(action, /npm run export:markdown/);
   assert.ok(
-    action.indexOf('- name: Export database markdown for Hexo posts') > action.indexOf('- name: Sync safe database repairs'),
-    'database markdown export should run after safe database repairs',
+    action.indexOf('- name: Sync safe database repairs') > action.indexOf('- name: Export database markdown for Hexo posts'),
+    'safe database repairs should run after fresh database markdown export to avoid overwriting correct values with stale file data',
   );
   assert.ok(
     action.indexOf('- name: Run tests') > action.indexOf('- name: Export database markdown for Hexo posts'),
