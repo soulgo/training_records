@@ -7,6 +7,18 @@ on:
         description: Fail the build instead of falling back to Markdown when the database snapshot is unavailable.
         required: false
         default: 'false'
+      target_thought_id:
+        description: Optional thought id to verify on the deployed module page.
+        required: false
+        default: ''
+      target_thought_module:
+        description: Optional thought module key expected after a DB-only thought change.
+        required: false
+        default: ''
+      target_thought_path:
+        description: Optional deployed module page path to verify, such as /body-feedback/.
+        required: false
+        default: ''
   push:
     branches:
       - main
@@ -111,3 +123,39 @@ jobs:
         if: ${{ success() && (env.CLOUDFLARE_ZONE_ID == '' || (env.CLOUDFLARE_API_TOKEN == '' && env.CLOUDFLARE_PAGES_API_TOKEN == '')) }}
         run: |
           echo "::warning title=Cloudflare cache purge skipped::CLOUDFLARE_ZONE_ID and at least one Cloudflare API token are required; deployed pages may stay behind Cloudflare cache until TTL expiry."
+
+      - name: Verify deployed thought module page
+        if: ${{ success() && github.event_name == 'workflow_dispatch' && inputs.target_thought_id != '' && inputs.target_thought_path != '' }}
+        env:
+          TARGET_THOUGHT_ID: ${{ inputs.target_thought_id }}
+          TARGET_THOUGHT_MODULE: ${{ inputs.target_thought_module }}
+          TARGET_THOUGHT_PATH: ${{ inputs.target_thought_path }}
+        run: |
+          base_url="https://soulgo.chat"
+          normalized_path="/${TARGET_THOUGHT_PATH#/}"
+          normalized_path="${normalized_path%/}/"
+          target_url="${base_url}${normalized_path}"
+          page_file="$(mktemp)"
+
+          if curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$target_url" -o "$page_file" &&
+             grep -F "#${TARGET_THOUGHT_ID}" "$page_file" >/dev/null; then
+            {
+              echo "## Thought page verification"
+              echo ""
+              echo "- Result: found"
+              echo "- Thought id: ${TARGET_THOUGHT_ID}"
+              echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
+              echo "- URL: ${target_url}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "::warning title=Thought page verification failed::Thought #${TARGET_THOUGHT_ID} was not found on ${target_url} after deploy."
+          {
+            echo "## Thought page verification"
+            echo ""
+            echo "- Result: not found"
+            echo "- Thought id: ${TARGET_THOUGHT_ID}"
+            echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
+            echo "- URL: ${target_url}"
+          } >> "$GITHUB_STEP_SUMMARY"
