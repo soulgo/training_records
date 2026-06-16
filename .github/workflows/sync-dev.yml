@@ -352,20 +352,24 @@ jobs:
           deploy_run_id=""
           for attempt in $(seq 1 30); do
             sleep 5
-            runs_json="$(curl -fsSL \
+            runs_json_file="$(mktemp)"
+            curl -fsSL \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-cloudflare-pages-dev.yml/runs?branch=${workflow_branch}&event=workflow_dispatch&per_page=20")"
-            deploy_run_id="$(RUNS_JSON="$runs_json" DISPATCH_STARTED_AT="$dispatch_started_at" node <<'NODE'
-            const runs = JSON.parse(process.env.RUNS_JSON || '{}').workflow_runs ?? [];
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-cloudflare-pages-dev.yml/runs?branch=${workflow_branch}&event=workflow_dispatch&per_page=20" \
+              -o "$runs_json_file"
+            deploy_run_id="$(RUNS_JSON_FILE="$runs_json_file" DISPATCH_STARTED_AT="$dispatch_started_at" node <<'NODE'
+            const data = require('fs').readFileSync(process.env.RUNS_JSON_FILE, 'utf8');
+            const runs = JSON.parse(data || '{}').workflow_runs ?? [];
             const startedAt = Date.parse(process.env.DISPATCH_STARTED_AT || '');
             const run = runs.find((candidate) => Date.parse(candidate.created_at) >= startedAt - 5000);
             if (run?.id) {
               process.stdout.write(String(run.id));
             }
-            NODE
-            )"
+          NODE
+          )"
+            rm -f "$runs_json_file"
             if [ -n "$deploy_run_id" ]; then
               break
             fi
