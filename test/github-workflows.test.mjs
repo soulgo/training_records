@@ -74,7 +74,11 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /run_tests:\s*'true'/);
   assert.match(workflow, /deploy:\s*'true'/);
   assert.match(workflow, /strict_database_snapshot:/);
-  assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:/);
+  assert.match(workflow, /strict_database_snapshot:[\s\S]*?default:\s*'true'/);
+  assert.match(
+    workflow,
+    /TRAINING_SNAPSHOT_STRICT_DATABASE:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch' && inputs\.strict_database_snapshot \|\| 'true'\s*\}\}/,
+  );
   assert.match(workflow, /TRAINING_BUILD_ARCHIVE_WRITE:\s*false/);
   assert.match(workflow, /CLOUDFLARE_ZONE_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ZONE_ID\s*\}\}/);
   assert.match(workflow, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
@@ -176,11 +180,15 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.match(workflow, /name:\s*Deploy Cloudflare Pages \(Dev\)/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /strict_database_snapshot:/);
+  assert.match(workflow, /strict_database_snapshot:[\s\S]*?default:\s*'true'/);
   assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
   assert.match(workflow, /group:\s*cloudflare-pages-dev/);
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_URL\s*\}\}/);
   assert.match(workflow, /TRAINING_DB_APP_NAME:\s*\$\{\{\s*vars\.DEV_TRAINING_DB_APP_NAME\s*\}\}/);
-  assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:/);
+  assert.match(
+    workflow,
+    /TRAINING_SNAPSHOT_STRICT_DATABASE:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch' && inputs\.strict_database_snapshot \|\| 'true'\s*\}\}/,
+  );
   assert.match(workflow, /TRAINING_BUILD_ARCHIVE_WRITE:\s*false/);
   assert.match(workflow, /ref:\s*\$\{\{\s*github\.ref_name\s*\}\}/);
   assert.doesNotMatch(workflow, /ref:\s*dev/);

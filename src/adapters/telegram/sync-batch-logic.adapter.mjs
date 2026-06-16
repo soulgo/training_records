@@ -1423,7 +1423,7 @@ function parseThoughtEditCommand(text) {
 
   const trimmedStart = text.trimStart();
   const match = trimmedStart.match(
-    /^(\/(?:thought-edit|thoughtedit|edit-thought|编随想|随想编)(?:@[A-Za-z0-9_]+)?)(?=$|\s)([\s\S]*)$/u,
+    /^(\/(?:thought-edit|thoughtedit|edit-thought|编随想|随想编|随便编)(?:@[A-Za-z0-9_]+)?)(?=$|\s)([\s\S]*)$/u,
   );
   if (!match) {
     return null;

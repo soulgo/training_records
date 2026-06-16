@@ -22,7 +22,7 @@ const TELEGRAM_COMMAND_REGISTRY = Object.freeze([
   Object.freeze({
     name: 'explicit_edit',
     priority: 4,
-    aliases: ['/thought-edit', '/thoughtedit', '/edit-thought', '/编随想', '/随想编'],
+    aliases: ['/thought-edit', '/thoughtedit', '/edit-thought', '/编随想', '/随想编', '/随便编'],
   }),
   Object.freeze({
     name: 'edited_message',

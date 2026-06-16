@@ -32,6 +32,8 @@
 
 ### Fixed
 
+- 修复生产 Pages 手动或 push 触发 deploy 默认跳过数据库 Markdown 导出、导致 DB-only 随想从页面消失的问题：`deploy-pages.yml` 和 dev Cloudflare Pages deploy 现在默认使用严格数据库快照，只有显式选择关闭时才允许回退。
+- 修复飞书误输入 `/随便编 id 模块 内容` 时被当普通文本静默忽略、没有回执也不触发 deploy 的问题；该常见错字现在按 `/随想编` 解析为随想编辑/移动命令。
 - 增强飞书/Telegram `/随想编`、`/移动` 等 DB-only 随想变更后的生产 Pages 可观测性：`sync.yml` 会把已入库的目标随想 id、模块和目标页路径传给异步 `deploy-pages.yml`，部署后非阻塞校验目标模块页是否已包含该随想，并在 GitHub Actions summary/warning 中暴露结果，避免只看到“更新成功”却难以判断页面是否刷新。
 - 修复飞书 `/随想删` 删除已入库但页面仍显示的问题：`sync.yml` 和 `sync-dev.yml` 现在会把 `thought_edit`、`thought_delete`、`thought_move` 的 `ready + stored` 批次视为 DB-only 内容变化并异步触发严格数据库快照部署。
 - 修复飞书回复原 `/随想` 消息后发送 `/随想删` 无法定位目标的问题：飞书同步现在读取 `parent_id` / `root_id` 并转换为稳定数字代理 ID；无 id 且无回复目标时会返回失败原因，不再误报删除成功。

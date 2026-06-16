@@ -695,7 +695,7 @@ test('groups supported Telegram command aliases without changing routed batch sh
   assert.deepEqual(commandRegistry[1].aliases, ['/move', '/移动', '/thought', '/随想']);
   assert.deepEqual(commandRegistry[2].aliases, ['/thought-delete', '/thoughtdel', '/delete-thought', '/删随想', '/随想删']);
   assert.deepEqual(commandRegistry[3].aliases, ['/analysis', '/分析']);
-  assert.deepEqual(commandRegistry[4].aliases, ['/thought-edit', '/thoughtedit', '/edit-thought', '/编随想', '/随想编']);
+  assert.deepEqual(commandRegistry[4].aliases, ['/thought-edit', '/thoughtedit', '/edit-thought', '/编随想', '/随想编', '/随便编']);
   assert.deepEqual(commandRegistry[7].aliases, ['/thought', '/随想']);
 
   const fixtures = [
@@ -740,6 +740,15 @@ test('groups supported Telegram command aliases without changing routed batch sh
       targetMessageId: 130,
       body: '修订后的正文',
       thoughtModule: 'workout',
+    },
+    {
+      text: '/随便编 131 杂七杂八 修订后的正文',
+      kind: 'thought_edit',
+      payloadKey: 'thoughtEdit',
+      command: '/随便编',
+      targetMessageId: 131,
+      body: '修订后的正文',
+      thoughtModule: 'misc',
     },
     {
       text: '/thought-delete 126',

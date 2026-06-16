@@ -107,6 +107,25 @@ test('groupFeishuUpdates parses explicit Feishu thought edit module updates', ()
   assert.equal(batch.thoughtEdit.body, '新正文');
 });
 
+test('groupFeishuUpdates accepts /随便编 as a typo alias for explicit thought edits', () => {
+  const [batch] = groupFeishuUpdates([
+    createFeishuTextEvent({
+      eventId: 'evt-thought-edit-typo-1',
+      messageId: 'om_thought_edit_typo_1',
+      chatId: 'oc_chat_1',
+      text: '/随便编 338182848231024 杂七杂八 正式环境编辑移动2026-06-16 09:38:35',
+      createTime: '1781398810000',
+    }),
+  ]);
+
+  assert.equal(batch.sourceChannel, 'feishu');
+  assert.equal(batch.kind, 'thought_edit');
+  assert.equal(batch.thoughtEdit.command, '/随便编');
+  assert.equal(batch.thoughtEdit.targetMessageId, 338182848231024);
+  assert.equal(batch.thoughtEdit.thoughtModule, 'misc');
+  assert.equal(batch.thoughtEdit.body, '正式环境编辑移动2026-06-16 09:38:35');
+});
+
 test('groupFeishuUpdates rejects ambiguous /随想 id module body messages before creating a thought', () => {
   const [batch] = groupFeishuUpdates([
     createFeishuTextEvent({
