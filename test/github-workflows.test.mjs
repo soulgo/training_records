@@ -75,6 +75,10 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /deploy:\s*'true'/);
   assert.match(workflow, /strict_database_snapshot:/);
   assert.match(workflow, /strict_database_snapshot:[\s\S]*?default:\s*'true'/);
+  assert.match(workflow, /target_thought_id:/);
+  assert.match(workflow, /target_thought_module:/);
+  assert.match(workflow, /target_thought_path:/);
+  assert.match(workflow, /target_thought_expectation:/);
   assert.match(
     workflow,
     /TRAINING_SNAPSHOT_STRICT_DATABASE:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch' && inputs\.strict_database_snapshot \|\| 'true'\s*\}\}/,
@@ -111,9 +115,14 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /target_thought_id:/);
   assert.match(workflow, /target_thought_module:/);
   assert.match(workflow, /target_thought_path:/);
+  assert.match(workflow, /target_thought_expectation:/);
   assert.match(workflow, /- name: Verify deployed thought module page/);
   assert.match(workflow, /TARGET_THOUGHT_ID:\s*\$\{\{\s*inputs\.target_thought_id\s*\}\}/);
+  assert.match(workflow, /TARGET_THOUGHT_EXPECTATION:\s*\$\{\{\s*inputs\.target_thought_expectation\s*\}\}/);
+  assert.match(workflow, /expected="\$\{TARGET_THOUGHT_EXPECTATION:-present\}"/);
+  assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
   assert.match(workflow, /curl -fsSL --retry 6 --retry-delay 10/);
+  assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
   assert.match(workflow, /::warning title=Thought page verification failed::/);
   assert.match(workflow, /GITHUB_STEP_SUMMARY/);
   assert.ok(
@@ -211,6 +220,11 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.match(workflow, /else\s*\n\s*last_status=\$\?/);
   assert.match(workflow, /Cloudflare Pages deploy retry/);
   assert.match(workflow, /All configured Cloudflare tokens failed/);
+  assert.match(workflow, /- name: Verify deployed thought module page/);
+  assert.match(workflow, /CLOUDFLARE_PAGES_DEV_BASE_URL:\s*\$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_BASE_URL\s*\}\}/);
+  assert.match(workflow, /TARGET_THOUGHT_EXPECTATION:\s*\$\{\{\s*inputs\.target_thought_expectation\s*\}\}/);
+  assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
+  assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
   assert.doesNotMatch(workflow, /--config wrangler\.pages\.dev\.toml/);
   assert.match(workflow, /--project-name "\$\{CLOUDFLARE_PAGES_DEV_PROJECT_NAME\}"/);
   assert.match(workflow, /--branch dev/);
@@ -378,9 +392,11 @@ test('main sync workflow notifies after sync and dispatches async site deploys',
   assert.match(workflow, /actions\/workflows\/deploy-pages\.yml\/dispatches/);
   assert.match(workflow, /steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/);
   assert.match(workflow, /THOUGHT_CHECK_ID:\s*\$\{\{\s*steps\.detect\.outputs\.thought_check_id\s*\}\}/);
+  assert.match(workflow, /THOUGHT_CHECK_EXPECTATION:\s*\$\{\{\s*steps\.detect\.outputs\.thought_check_expectation\s*\}\}/);
   assert.match(workflow, /target_thought_id/);
   assert.match(workflow, /target_thought_module/);
   assert.match(workflow, /target_thought_path/);
+  assert.match(workflow, /target_thought_expectation/);
   assert.ok(
     workflow.indexOf('- name: Notify Telegram sync result') > workflow.indexOf('- name: Push changes'),
     'Telegram notification should run after push and before any asynchronous site deployment workflow',
@@ -507,6 +523,84 @@ test('main sync workflow passes stored thought edit targets to async deploy veri
   assert.match(output, /thought_check_id=590/);
   assert.match(output, /thought_check_module=body_feedback/);
   assert.match(output, /thought_check_path=\/body-feedback\//);
+});
+
+test('main sync workflow uses persisted thought module when edit command preserves the existing module', async () => {
+  const workflow = await readWorkflow('.github/workflows/sync.yml');
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-workflow-thought-check-'));
+  const resultPath = path.join(tempRoot, 'telegram-sync-result.json');
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'thought_edit',
+          status: 'ready',
+          persistenceStatus: 'stored',
+          persistedThoughtModule: 'misc',
+          thoughtEdit: {
+            targetMessageId: 592,
+            thoughtModule: null,
+          },
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  const detectionScript = extractDatabaseContentDetectionScript(workflow);
+  const output = execFileSync(process.execPath, ['-e', detectionScript], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      SYNC_RESULT_PATH: resultPath,
+    },
+  });
+
+  assert.match(output, /db_content_changed=true/);
+  assert.match(output, /thought_check_id=592/);
+  assert.match(output, /thought_check_module=misc/);
+  assert.match(output, /thought_check_path=\/misc\//);
+  assert.match(output, /thought_check_expectation=present/);
+});
+
+test('main sync workflow sends deleted thought targets as absent deploy checks', async () => {
+  const workflow = await readWorkflow('.github/workflows/sync.yml');
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-workflow-thought-delete-check-'));
+  const resultPath = path.join(tempRoot, 'telegram-sync-result.json');
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'thought_delete',
+          status: 'ready',
+          persistenceStatus: 'stored',
+          persistedThoughtModule: 'workout',
+          thoughtDelete: {
+            targetMessageId: 338182848231024,
+            thoughtModule: null,
+          },
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  const detectionScript = extractDatabaseContentDetectionScript(workflow);
+  const output = execFileSync(process.execPath, ['-e', detectionScript], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      SYNC_RESULT_PATH: resultPath,
+    },
+  });
+
+  assert.match(output, /db_content_changed=true/);
+  assert.match(output, /thought_check_id=338182848231024/);
+  assert.match(output, /thought_check_module=workout/);
+  assert.match(output, /thought_check_path=\/thoughts\//);
+  assert.match(output, /thought_check_expectation=absent/);
 });
 
 test('telegram-sync repository dispatch runs use unique concurrency groups for consecutive image batches', async () => {
@@ -683,7 +777,10 @@ test('telegram-sync dev workflow leaves Pages deployment to the dev deploy workf
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
-  assert.match(workflow, /-d '\{"ref":"dev","inputs":\{"strict_database_snapshot":"true"\}\}'/);
+  assert.match(workflow, /dispatch_body="\$\(node <<'NODE'/);
+  assert.match(workflow, /process\.stdout\.write\(JSON\.stringify\(\{ ref: 'dev', inputs \}\)\)/);
+  assert.match(workflow, /target_thought_expectation/);
+  assert.match(workflow, /-d "\$dispatch_body"/);
   assert.match(deployWorkflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
   assert.match(deployWorkflow, /workflow_dispatch:/);
   assert.match(deployWorkflow, /- name: Build dev site/);

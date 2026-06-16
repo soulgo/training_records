@@ -47,6 +47,28 @@ function getPagePath(basePath, pageNumber) {
   return `${normalizedBasePath}page/${pageNumber}/`;
 }
 
+function getThoughtSourceChannel(post) {
+  return String(post?.source_channel || '').trim() || 'telegram';
+}
+
+function getThoughtDisplayMeta(post) {
+  if (!post?.telegram_message_id) {
+    return null;
+  }
+  if (getThoughtSourceChannel(post) === 'feishu') {
+    return {
+      title: 'Feishu thought',
+      label: '飞书',
+      dataThoughtId: post.telegram_message_id,
+    };
+  }
+  return {
+    title: 'Telegram message id',
+    label: `#${post.telegram_message_id}`,
+    dataThoughtId: null,
+  };
+}
+
 const thoughtModuleEmptyTexts = {
   workout: '还没有锻炼随想。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/随想 锻炼 正文</code> 自动归档到这里。',
   misc: '还没有杂七杂八。你可以手工在 <code>source/_posts/</code> 下新增 Markdown，也可以通过 Telegram 发送 <code>/随想 杂七杂八 正文</code> 自动归档到这里。',
@@ -81,6 +103,7 @@ const excerptLimit = Number(page.thought_excerpt_limit || 180);
     <div class="thoughts-list">
       <% pagedThoughts.each(function(post) { %>
         <% const excerpt = getThoughtExcerpt(post, excerptLimit); %>
+        <% const thoughtDisplayMeta = getThoughtDisplayMeta(post); %>
         <article class="thought-card">
           <div class="thought-card__meta">
             <time datetime="<%= full_date(post.date) %>"><%= date(post.date, 'YYYY-MM-DD HH:mm') %></time>
@@ -92,8 +115,8 @@ const excerptLimit = Number(page.thought_excerpt_limit || 180);
                   <% }) %>
                 </div>
               <% } %>
-              <% if (post.telegram_message_id) { %>
-                <span class="thought-card__id" title="Telegram message id">#<%= post.telegram_message_id %></span>
+              <% if (thoughtDisplayMeta) { %>
+                <span class="thought-card__id" title="<%= thoughtDisplayMeta.title %>"<% if (thoughtDisplayMeta.dataThoughtId) { %> data-thought-id="<%= thoughtDisplayMeta.dataThoughtId %>"<% } %>><%= thoughtDisplayMeta.label %></span>
               <% } %>
             </div>
           </div>

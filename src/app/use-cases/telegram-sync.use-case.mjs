@@ -908,6 +908,8 @@ async function handleThoughtSyncBatch({
       batchResult: {
         ...baseBatchResult,
         persistenceStatus: persistResult.status,
+        persistedThoughtModule: persistResult.thoughtModule ?? null,
+        persistedThoughtMessageId: persistResult.messageId ?? getThoughtTargetMessageId(thoughtStorageBatch),
       },
     };
   } catch (error) {

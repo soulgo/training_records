@@ -567,6 +567,7 @@ create table if not exists core.thought (
   telegram_message_id bigint primary key,
   telegram_chat_id bigint null,
   source_batch_id text null,
+  source_channel text null,
   command text not null,
   body text not null,
   thought_module text not null default 'workout',
@@ -605,6 +606,7 @@ alter table core.training_day add column if not exists awake_minutes integer nul
 
 comment on table core.thought is '锻炼随想正文镜像表；图片仍保存在本地目录或后续对象存储，表内只保存引用';
 comment on column core.thought.telegram_message_id is '原 Telegram message_id，也是随想的稳定定位 ID';
+comment on column core.thought.source_channel is '来源通道，例如 telegram、feishu、markdown_import';
 comment on column core.thought.body is '随想正文文本，不包含图片二进制';
 comment on column core.thought.thought_module is '随想模块：workout 为锻炼随想，misc 为杂七杂八，body_feedback 为身体反馈；历史缺省按 workout 兼容';
 comment on column core.thought.markdown_path is '当前 Markdown 兼容层路径，例如 source/_posts/YYYY-MM-DD-telegram-thought-501.md';

@@ -2551,7 +2551,12 @@ telegram_chat_id: 42
     ],
     persistNormalizedBatch: async ({ batch }) => {
       persistedBatches.push(batch);
-      return { status: 'stored', archivedDate: batch.archivedDate };
+      return {
+        status: 'stored',
+        archivedDate: batch.archivedDate,
+        messageId: batch.thoughtEdit.targetMessageId,
+        thoughtModule: 'misc',
+      };
     },
     buildTrainingSnapshot: async () => {
       throw new Error('buildTrainingSnapshot should not run for thought-only sync');
@@ -2570,6 +2575,7 @@ telegram_chat_id: 42
   assert.equal(result.batchResults[0].kind, 'thought_edit');
   assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_edit_database_only');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batchResults[0].persistedThoughtModule, 'misc');
   assert.equal(persistedBatches[0].kind, 'thought_edit');
   assert.equal(persistedBatches[0].thoughtEdit.storage.markdownPath, null);
   assert.deepEqual(persistedBatches[0].thoughtEdit.storage.photoPaths, []);

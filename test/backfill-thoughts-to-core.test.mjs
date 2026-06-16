@@ -63,10 +63,11 @@ test('backfillThoughtsToCore imports telegram thought markdown into core.thought
   );
   assert.ok(thoughtInsert);
   assert.equal(thoughtInsert[1][0], 126);
-  assert.equal(thoughtInsert[1][4], '今天骑行 40公里。');
-  assert.equal(thoughtInsert[1][5], 'misc');
-  assert.equal(thoughtInsert[1][8], 'source/_posts/2026-05-17-telegram-thought-126.md');
-  assert.deepEqual(JSON.parse(thoughtInsert[1][9]), [
+  assert.equal(thoughtInsert[1][3], 'telegram');
+  assert.equal(thoughtInsert[1][5], '今天骑行 40公里。');
+  assert.equal(thoughtInsert[1][6], 'misc');
+  assert.equal(thoughtInsert[1][9], 'source/_posts/2026-05-17-telegram-thought-126.md');
+  assert.deepEqual(JSON.parse(thoughtInsert[1][10]), [
     '/images/thoughts/2026/05/2026-05-17-telegram-thought-126-1.jpg',
   ]);
 });
@@ -117,7 +118,8 @@ test('backfillThoughtsToCore treats legacy telegram thoughts without thought_mod
     ([sql]) => typeof sql === 'string' && /insert into core\.thought/i.test(sql),
   );
   assert.equal(result.status, 'stored');
-  assert.equal(thoughtInsert[1][5], 'workout');
+  assert.equal(thoughtInsert[1][3], 'telegram');
+  assert.equal(thoughtInsert[1][6], 'workout');
 });
 
 test('backfillThoughtsToCore defers instead of throwing when database is unavailable', async () => {

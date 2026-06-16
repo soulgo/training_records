@@ -36,34 +36,43 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
     }
 
     if (batch.kind === 'thought') {
+      const messageId = normalizePositiveInteger(batch.thought?.telegramMessageId);
+      const thoughtModule = normalizeThoughtModule(batch.thought?.thoughtModule);
+      const sourceChannel = batch.sourceChannel ?? 'telegram';
       await this.save({
-        messageId: batch.thought?.telegramMessageId,
+        messageId,
         chatId: batch.thought?.telegramChatId,
         sourceBatchId: batch.batchId,
+        sourceChannel,
         command: batch.thought?.command ?? '/thought',
         body: batch.thought?.body ?? '',
-        thoughtModule: normalizeThoughtModule(batch.thought?.thoughtModule),
-        tags: batch.thought?.tags ?? getThoughtModuleTags(batch.thought?.thoughtModule),
+        thoughtModule,
+        tags: batch.thought?.tags ?? getThoughtModuleTags(batch.thought?.thoughtModule, { sourceChannel }),
         messageDateUnix: batch.thought?.messageDateUnix ?? null,
         markdownPath: batch.thought?.storage?.markdownPath ?? null,
         imageRefs: batch.thought?.storage?.photoPaths ?? [],
         status: 'active',
         processedAt,
       });
-      return;
+      return { status: 'stored', messageId, thoughtModule };
     }
 
     if (batch.kind === 'thought_edit') {
       const targetMessageId = normalizePositiveInteger(batch.thoughtEdit?.targetMessageId);
-      const missingTarget = await this.getMissingTargetResult(targetMessageId);
-      if (missingTarget) {
-        return missingTarget;
+      const existing = await this.findByTelegramMessageId(targetMessageId);
+      if (!existing) {
+        return { status: 'not_found', messageId: targetMessageId };
       }
+      const thoughtModule =
+        normalizeThoughtModuleOrNull(batch.thoughtEdit?.thoughtModule) ??
+        normalizeThoughtModule(existing.thought_module);
+      const sourceChannel = batch.sourceChannel ?? existing.source_channel ?? 'telegram';
 
       await this.save({
         messageId: targetMessageId,
         chatId: batch.thoughtEdit?.telegramChatId,
         sourceBatchId: batch.batchId,
+        sourceChannel,
         command: batch.thoughtEdit?.command ?? '/thought',
         body: batch.thoughtEdit?.body ?? '',
         thoughtModule: normalizeThoughtModuleOrNull(batch.thoughtEdit?.thoughtModule),
@@ -74,14 +83,24 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
         status: 'active',
         processedAt,
       });
-      return;
+      return { status: 'stored', messageId: targetMessageId, thoughtModule };
     }
 
     if (batch.kind === 'thought_delete') {
+      const targetMessageId = normalizePositiveInteger(batch.thoughtDelete?.targetMessageId);
+      const existing = await this.findByTelegramMessageId(targetMessageId);
+      if (!existing) {
+        return { status: 'not_found', messageId: targetMessageId };
+      }
+      const thoughtModule =
+        normalizeThoughtModuleOrNull(batch.thoughtDelete?.thoughtModule) ??
+        normalizeThoughtModule(existing.thought_module);
+      const sourceChannel = batch.sourceChannel ?? existing.source_channel ?? 'telegram';
       await this.markDeleted({
-        messageId: batch.thoughtDelete?.targetMessageId,
+        messageId: targetMessageId,
         chatId: batch.thoughtDelete?.telegramChatId,
         sourceBatchId: batch.batchId,
+        sourceChannel,
         command: batch.thoughtDelete?.command ?? '/随想删',
         thoughtModule: normalizeThoughtModuleOrNull(batch.thoughtDelete?.thoughtModule),
         tags: batch.thoughtDelete?.tags ?? null,
@@ -90,20 +109,25 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
         deletedImageRefs: batch.thoughtDelete?.storage?.deletedPhotoPaths ?? [],
         processedAt,
       });
-      return;
+      return { status: 'stored', messageId: targetMessageId, thoughtModule };
     }
 
     if (batch.kind === 'thought_move') {
       const targetMessageId = normalizePositiveInteger(batch.thoughtMove?.targetMessageId);
-      const missingTarget = await this.getMissingTargetResult(targetMessageId);
-      if (missingTarget) {
-        return missingTarget;
+      const existing = await this.findByTelegramMessageId(targetMessageId);
+      if (!existing) {
+        return { status: 'not_found', messageId: targetMessageId };
       }
+      const thoughtModule =
+        normalizeThoughtModuleOrNull(batch.thoughtMove?.thoughtModule) ??
+        normalizeThoughtModule(existing.thought_module);
+      const sourceChannel = batch.sourceChannel ?? existing.source_channel ?? 'telegram';
 
       await this.save({
         messageId: targetMessageId,
         chatId: batch.thoughtMove?.telegramChatId,
         sourceBatchId: batch.batchId,
+        sourceChannel,
         command: batch.thoughtMove?.command ?? '/移动',
         body: null,
         thoughtModule: normalizeThoughtModuleOrNull(batch.thoughtMove?.thoughtModule),
@@ -114,6 +138,7 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
         status: 'active',
         processedAt,
       });
+      return { status: 'stored', messageId: targetMessageId, thoughtModule };
     }
   }
 
@@ -142,6 +167,7 @@ export async function persistThoughtToCore(client, thought) {
         telegram_message_id,
         telegram_chat_id,
         source_batch_id,
+        source_channel,
         command,
         body,
         thought_module,
@@ -153,18 +179,19 @@ export async function persistThoughtToCore(client, thought) {
         deleted_at,
         updated_at
       )
-      values ($1, $2, $3, $4, coalesce($5, ''), coalesce($6, 'workout'), coalesce($7::jsonb, '["训练","随想","Telegram"]'::jsonb), $8, $9, coalesce($10::jsonb, '[]'::jsonb), $11, null, $12)
+      values ($1, $2, $3, $4, $5, coalesce($6, ''), coalesce($7, 'workout'), coalesce($8::jsonb, '["训练","随想","Telegram"]'::jsonb), $9, $10, coalesce($11::jsonb, '[]'::jsonb), $12, null, $13)
       on conflict (telegram_message_id) do update set
         telegram_chat_id = coalesce(excluded.telegram_chat_id, core.thought.telegram_chat_id),
         source_batch_id = excluded.source_batch_id,
+        source_channel = coalesce(excluded.source_channel, core.thought.source_channel),
         command = excluded.command,
-        body = coalesce($5, core.thought.body),
-        thought_module = coalesce($6, core.thought.thought_module),
-        tags_json = coalesce($7::jsonb, core.thought.tags_json),
+        body = coalesce($6, core.thought.body),
+        thought_module = coalesce($7, core.thought.thought_module),
+        tags_json = coalesce($8::jsonb, core.thought.tags_json),
         message_date_unix = coalesce(excluded.message_date_unix, core.thought.message_date_unix),
         markdown_path = coalesce(excluded.markdown_path, core.thought.markdown_path),
         image_refs_json = case
-          when $10::jsonb is null then core.thought.image_refs_json
+          when $11::jsonb is null then core.thought.image_refs_json
           else excluded.image_refs_json
         end,
         status = excluded.status,
@@ -175,6 +202,7 @@ export async function persistThoughtToCore(client, thought) {
       messageId,
       normalizeBigIntValue(thought.chatId),
       thought.sourceBatchId ?? null,
+      normalizeSourceChannel(thought.sourceChannel),
       thought.command ?? '/thought',
       thought.body === null || thought.body === undefined
         ? null
@@ -205,6 +233,7 @@ async function markThoughtMirrorDeleted(client, thought) {
         telegram_message_id,
         telegram_chat_id,
         source_batch_id,
+        source_channel,
         command,
         body,
         thought_module,
@@ -216,12 +245,13 @@ async function markThoughtMirrorDeleted(client, thought) {
         deleted_at,
         updated_at
       )
-      values ($1, $2, $3, $4, '', coalesce($5, 'workout'), coalesce($6::jsonb, '["训练","随想","Telegram"]'::jsonb), $7, $8, $9::jsonb, 'deleted', $10, $11)
+      values ($1, $2, $3, $4, $5, '', coalesce($6, 'workout'), coalesce($7::jsonb, '["训练","随想","Telegram"]'::jsonb), $8, $9, $10::jsonb, 'deleted', $11, $12)
       on conflict (telegram_message_id) do update set
         telegram_chat_id = coalesce(excluded.telegram_chat_id, core.thought.telegram_chat_id),
         source_batch_id = excluded.source_batch_id,
+        source_channel = coalesce(excluded.source_channel, core.thought.source_channel),
         command = excluded.command,
-        thought_module = coalesce($5, core.thought.thought_module),
+        thought_module = coalesce($6, core.thought.thought_module),
         markdown_path = coalesce(excluded.markdown_path, core.thought.markdown_path),
         image_refs_json = excluded.image_refs_json,
         status = excluded.status,
@@ -232,6 +262,7 @@ async function markThoughtMirrorDeleted(client, thought) {
       messageId,
       normalizeBigIntValue(thought.chatId),
       thought.sourceBatchId ?? null,
+      normalizeSourceChannel(thought.sourceChannel),
       thought.command ?? '/随想删',
       normalizeThoughtModuleOrNull(thought.thoughtModule),
       thought.tags ? JSON.stringify(thought.tags) : null,
@@ -268,4 +299,9 @@ function normalizePositiveInteger(value) {
 function normalizeBigIntValue(value) {
   const number = Number(value);
   return Number.isInteger(number) ? number : null;
+}
+
+function normalizeSourceChannel(value) {
+  const text = String(value ?? '').trim();
+  return text || null;
 }

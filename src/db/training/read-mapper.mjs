@@ -327,10 +327,16 @@ function normalizeThoughtRow(row) {
     tags: Array.isArray(row.tags_json) ? row.tags_json : [],
     telegramMessageId: toNullableNumber(row.telegram_message_id),
     telegramChatId: toNullableNumber(row.telegram_chat_id),
+    sourceChannel: normalizeSourceChannel(row.source_channel),
     markdownPath: row.markdown_path ?? null,
     imageRefs: Array.isArray(row.image_refs_json) ? row.image_refs_json : [],
     source: 'database',
   };
+}
+
+function normalizeSourceChannel(value) {
+  const text = String(value ?? '').trim();
+  return text || 'telegram';
 }
 
 function normalizeBodyFeedbackDateParts(messageDateUnix, updatedAt) {

@@ -31,6 +31,9 @@ export async function ensureCoreSchema(client) {
     alter table core.training_day add column if not exists light_sleep_minutes integer null;
     alter table core.training_day add column if not exists rem_sleep_minutes integer null;
     alter table core.training_day add column if not exists awake_minutes integer null;
+
+    alter table core.thought add column if not exists source_channel text null;
+    comment on column core.thought.source_channel is '来源通道，例如 telegram、feishu、markdown_import';
   `);
   executed = true;
 }
