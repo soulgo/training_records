@@ -107,6 +107,24 @@ test('groupFeishuUpdates parses explicit Feishu thought edit module updates', ()
   assert.equal(batch.thoughtEdit.body, '新正文');
 });
 
+test('groupFeishuUpdates parses explicit Feishu thought edits moving to body feedback', () => {
+  const [batch] = groupFeishuUpdates([
+    createFeishuTextEvent({
+      eventId: 'evt-thought-edit-body-feedback-1',
+      messageId: 'om_thought_edit_body_feedback_1',
+      chatId: 'oc_chat_1',
+      text: '/随想编 1442054985160403 身体反馈 正式 2026 年 6 月 16 日 12:33:38',
+      createTime: '1781398810000',
+    }),
+  ]);
+
+  assert.equal(batch.sourceChannel, 'feishu');
+  assert.equal(batch.kind, 'thought_edit');
+  assert.equal(batch.thoughtEdit.targetMessageId, 1442054985160403);
+  assert.equal(batch.thoughtEdit.thoughtModule, 'body_feedback');
+  assert.equal(batch.thoughtEdit.body, '正式 2026 年 6 月 16 日 12:33:38');
+});
+
 test('groupFeishuUpdates accepts /随便编 as a typo alias for explicit thought edits', () => {
   const [batch] = groupFeishuUpdates([
     createFeishuTextEvent({
@@ -520,6 +538,48 @@ test('feishu action monitor reports failed workflow stages to the original Feish
   assert.deepEqual(sentMessages.map((message) => message.chatId), ['oc_chat_1']);
   assert.match(sentMessages[0].text, /GitHub Action 执行失败：Sync Feishu updates/);
   assert.match(sentMessages[0].text, /https:\/\/github\.com\/soulgo\/training_records\/actions\/runs\/123456/);
+});
+
+test('feishu action monitor reports deploy wait failures as site refresh failures', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-action-monitor-deploy-'));
+  const eventPath = path.join(tempRoot, 'event.json');
+  const sentMessages = [];
+  await writeFile(
+    eventPath,
+    JSON.stringify({
+      client_payload: {
+        feishu_updates: [
+          createFeishuTextEvent({
+            eventId: 'evt-action-deploy-fail-1',
+            messageId: 'om_action_deploy_fail_1',
+            chatId: 'oc_chat_1',
+            text: '/随想编 1442054985160403 身体反馈 正式 2026 年 6 月 16 日 12:33:38',
+            createTime: '1781398800000',
+          }),
+        ],
+      },
+    }),
+    'utf8',
+  );
+
+  const result = await notifyFeishuActionFailure({
+    env: {
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+      GITHUB_EVENT_PATH: eventPath,
+      GITHUB_SERVER_URL: 'https://github.com',
+      GITHUB_REPOSITORY: 'soulgo/training_records',
+      GITHUB_RUN_ID: '123458',
+      STEP_DEPLOY_OUTCOME: 'failure',
+    },
+    sendFeishuMessage: async (message) => {
+      sentMessages.push(message);
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(result.failureStage, '站点部署/页面刷新');
+  assert.match(sentMessages[0].text, /GitHub Action 执行失败：站点部署\/页面刷新/);
 });
 
 function createRecognitionProvider(requestedImageUrls) {

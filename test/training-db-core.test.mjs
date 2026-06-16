@@ -189,6 +189,64 @@ test('readTrainingSnapshotFromDatabaseClient preserves thought source channels f
   assert.equal(snapshot.thoughts[0].body, '飞书随想正文');
 });
 
+test('readTrainingSnapshotFromDatabaseClient keeps only the latest row for a duplicated thought id', async () => {
+  const client = {
+    async query(sql) {
+      if (/from core\.training_day/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.(measurement|activity|meal|sleep)/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.thought/i.test(sql)) {
+        return {
+          rows: [
+            {
+              telegram_message_id: 1442054985160403,
+              telegram_chat_id: null,
+              source_channel: 'feishu',
+              body: '旧模块正文',
+              command: '/随想',
+              thought_module: 'misc',
+              tags_json: ['杂七杂八', '随想', '飞书'],
+              message_date_unix: 1781573700,
+              markdown_path: 'source/_posts/2026-06-16-feishu-thought-1442054985160403.md',
+              image_refs_json: [],
+              updated_at: '2026-06-16T09:35:00.000+08:00',
+            },
+            {
+              telegram_message_id: 1442054985160403,
+              telegram_chat_id: null,
+              source_channel: 'feishu',
+              body: '正式 2026 年 6 月 16 日 12:33:38',
+              command: '/随想编',
+              thought_module: 'body_feedback',
+              tags_json: ['身体反馈', '随想', '飞书'],
+              message_date_unix: 1781584418,
+              markdown_path: 'source/_posts/2026-06-16-feishu-thought-1442054985160403.md',
+              image_refs_json: [],
+              updated_at: '2026-06-16T12:33:38.000+08:00',
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+  };
+
+  const snapshot = await readTrainingSnapshotFromDatabaseClient(
+    client,
+    new Date('2026-06-16T05:00:00.000Z'),
+  );
+
+  assert.equal(snapshot.thoughts.length, 1);
+  assert.equal(snapshot.thoughts[0].telegramMessageId, 1442054985160403);
+  assert.equal(snapshot.thoughts[0].thoughtModule, 'body_feedback');
+  assert.equal(snapshot.thoughts[0].body, '正式 2026 年 6 月 16 日 12:33:38');
+  assert.equal(snapshot.bodyFeedback.length, 1);
+  assert.equal(snapshot.bodyFeedback[0].telegramMessageId, 1442054985160403);
+});
+
 test('readTrainingSnapshotFromDatabaseClient prefers core sleep rows over day sleep summary for sleep cards', async () => {
   const client = {
     async query(sql) {

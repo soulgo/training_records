@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -130,14 +130,22 @@ async function exportThoughtMarkdownBackup({ rootDir, thoughts }) {
   const postsDir = path.join(rootDir, 'source', '_posts');
   await mkdir(postsDir, { recursive: true });
 
-  const existingThoughtPosts = await readDirRecursive(postsDir, {
+  const candidatePosts = await readDirRecursive(postsDir, {
     ignoreMissing: true,
-    filter: (entryPath) => /(?:^|[/\\])[^/\\]+-(?:telegram|feishu)-thought-\d+\.md$/u.test(entryPath),
+    filter: (entryPath) => /\.md$/u.test(entryPath),
   });
+  const existingThoughtPosts = [];
+  for (const postPath of candidatePosts) {
+    if (isDerivedThoughtPostName(postPath) || await hasThoughtFrontMatter(postPath)) {
+      existingThoughtPosts.push(postPath);
+    }
+  }
   await Promise.all(existingThoughtPosts.map((postPath) => rm(postPath, { force: true })));
 
-  const activeThoughts = (thoughts ?? [])
-    .filter((thought) => thought?.telegramMessageId && String(thought.body ?? '').trim())
+  const activeThoughts = dedupeThoughtsByTelegramMessageId(
+    (thoughts ?? [])
+      .filter((thought) => thought?.telegramMessageId && String(thought.body ?? '').trim()),
+  )
     .sort((left, right) =>
       `${left.date} ${left.time ?? ''} ${left.telegramMessageId}`.localeCompare(
         `${right.date} ${right.time ?? ''} ${right.telegramMessageId}`,
@@ -158,6 +166,52 @@ async function exportThoughtMarkdownBackup({ rootDir, thoughts }) {
     exportedCount: activeThoughts.length,
     removedCount: existingThoughtPosts.length,
   };
+}
+
+function isDerivedThoughtPostName(entryPath) {
+  return /(?:^|[/\\])[^/\\]+-(?:telegram|feishu)-thought-\d+\.md$/u.test(entryPath);
+}
+
+async function hasThoughtFrontMatter(postPath) {
+  let content = '';
+  try {
+    content = await readFile(postPath, 'utf8');
+  } catch {
+    return false;
+  }
+
+  const frontMatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---/u)?.[1] ?? '';
+  return /\btelegram_message_id\s*:\s*\d+/u.test(frontMatter) &&
+    hasThoughtTag(frontMatter);
+}
+
+function hasThoughtTag(frontMatter) {
+  return /(?:^|\n)\s*-\s*随想\s*(?:\n|$)/u.test(frontMatter) ||
+    /\btags\s*:\s*\[[^\]]*随想[^\]]*\]/u.test(frontMatter);
+}
+
+function dedupeThoughtsByTelegramMessageId(thoughts) {
+  const thoughtsById = new Map();
+  for (const thought of thoughts) {
+    const key = String(thought.telegramMessageId ?? '').trim();
+    if (!key) {
+      continue;
+    }
+
+    const existing = thoughtsById.get(key);
+    if (!existing || compareThoughtRecency(thought, existing) >= 0) {
+      thoughtsById.set(key, thought);
+    }
+  }
+  return [...thoughtsById.values()];
+}
+
+function compareThoughtRecency(left, right) {
+  return getThoughtRecencyKey(left).localeCompare(getThoughtRecencyKey(right));
+}
+
+function getThoughtRecencyKey(thought) {
+  return `${thought.date ?? ''} ${normalizeThoughtTime(thought.time) ?? ''} ${thought.telegramMessageId ?? ''}`;
 }
 
 function renderThoughtPost(thought, { date, time, sourceChannel }) {

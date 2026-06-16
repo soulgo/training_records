@@ -124,6 +124,8 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
   assert.match(workflow, /curl -fsSL --retry 6 --retry-delay 10/);
   assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
+  assert.match(workflow, /module_paths=\("\/thoughts\/" "\/misc\/" "\/body-feedback\/"\)/);
+  assert.match(workflow, /Unexpected thought #\$\{TARGET_THOUGHT_ID\}/);
   assert.match(workflow, /::error title=Thought page verification failed::/);
   assert.match(workflow, /GITHUB_STEP_SUMMARY/);
   assert.ok(
@@ -226,6 +228,8 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.match(workflow, /TARGET_THOUGHT_EXPECTATION:\s*\$\{\{\s*inputs\.target_thought_expectation\s*\}\}/);
   assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
   assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
+  assert.match(workflow, /module_paths=\("\/thoughts\/" "\/misc\/" "\/body-feedback\/"\)/);
+  assert.match(workflow, /Unexpected thought #\$\{TARGET_THOUGHT_ID\}/);
   assert.match(workflow, /::error title=Thought page verification failed::/);
   assert.doesNotMatch(workflow, /--config wrangler\.pages\.dev\.toml/);
   assert.match(workflow, /--project-name "\$\{CLOUDFLARE_PAGES_DEV_PROJECT_NAME\}"/);
@@ -790,6 +794,7 @@ test('telegram-sync dev workflow waits for the dev deploy workflow', async () =>
   assert.match(workflow, /dispatch_body="\$\(node <<'NODE'/);
   assert.match(workflow, /process\.stdout\.write\(JSON\.stringify\(\{ ref: 'dev', inputs \}\)\)/);
   assert.match(workflow, /target_thought_expectation/);
+  assert.match(workflow, /- name: Trigger and wait for async dev site deploy\n\s+id: deploy/);
   assert.match(workflow, /-d "\$dispatch_body"/);
   const deployStep = workflow.slice(
     workflow.indexOf('- name: Trigger and wait for async dev site deploy'),
@@ -799,6 +804,7 @@ test('telegram-sync dev workflow waits for the dev deploy workflow', async () =>
   assert.match(deployStep, /dispatch_started_at=/);
   assert.match(deployStep, /actions\/workflows\/deploy-cloudflare-pages-dev\.yml\/runs/);
   assert.match(deployStep, /Deploy workflow failed/);
+  assert.match(workflow, /STEP_DEPLOY_OUTCOME: \$\{\{ steps\.deploy\.outcome \}\}/);
   assert.match(deployWorkflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
   assert.match(deployWorkflow, /workflow_dispatch:/);
   assert.match(deployWorkflow, /- name: Build dev site/);
@@ -840,6 +846,7 @@ test('main sync workflow reports repository dispatch failures back to Telegram',
     ['Commit sync results', 'commit'],
     ['Rebase on latest main', 'rebase'],
     ['Push changes', 'push'],
+    ['Trigger and wait for site deploy', 'deploy'],
   ]) {
     assert.match(
       workflow,
@@ -856,6 +863,7 @@ test('main sync workflow reports repository dispatch failures back to Telegram',
   assert.match(workflow, /node tools\/telegram-sync-notify\.mjs/);
   assert.match(workflow, /node tools\/telegram-action-monitor\.mjs/);
   assert.match(workflow, /STEP_INSTALL_OUTCOME: \$\{\{ steps\.install\.outcome \}\}/);
+  assert.match(workflow, /STEP_DEPLOY_OUTCOME: \$\{\{ steps\.deploy\.outcome \}\}/);
   assert.match(workflow, /- name: Trigger and wait for site deploy/);
   const deployStep = workflow.slice(
     workflow.indexOf('- name: Trigger and wait for site deploy'),

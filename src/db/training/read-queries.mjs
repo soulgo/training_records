@@ -193,6 +193,7 @@ export const BODY_FEEDBACK_QUERY = `
   from core.thought
   where status = 'active'
   order by coalesce(message_date_unix, extract(epoch from updated_at)) asc,
+    updated_at asc,
     telegram_message_id asc
 `;
 

@@ -157,11 +157,26 @@ test('exportDerivedTrainingMarkdown removes old Telegram and Feishu derived thou
   const postsDir = path.join(tempRoot, 'source', '_posts');
   const telegramPostPath = path.join(postsDir, '2026-06-01-telegram-thought-101.md');
   const feishuPostPath = path.join(postsDir, '2026-06-01-feishu-thought-202.md');
+  const legacyPostPath = path.join(postsDir, '2026-06-01-body-feedback-note.md');
   const regularPostPath = path.join(postsDir, '2026-06-01-training-summary.md');
 
   await mkdir(postsDir, { recursive: true });
   await writeFile(telegramPostPath, 'old telegram thought', 'utf8');
   await writeFile(feishuPostPath, 'old feishu thought', 'utf8');
+  await writeFile(
+    legacyPostPath,
+    `---
+date: 2026-06-01 10:00:00
+tags:
+  - 随想
+  - 飞书
+telegram_message_id: 303
+---
+
+legacy thought
+`,
+    'utf8',
+  );
   await writeFile(regularPostPath, 'keep me', 'utf8');
 
   await exportDerivedTrainingMarkdown({
@@ -190,7 +205,79 @@ test('exportDerivedTrainingMarkdown removes old Telegram and Feishu derived thou
 
   await assert.rejects(access(telegramPostPath), /ENOENT/);
   await assert.rejects(access(feishuPostPath), /ENOENT/);
+  await assert.rejects(access(legacyPostPath), /ENOENT/);
   assert.equal(await readFile(regularPostPath, 'utf8'), 'keep me');
+});
+
+test('exportDerivedTrainingMarkdown exports only the latest thought for a duplicated id', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-dedupe-thoughts-'));
+  const oldPostPath = path.join(
+    tempRoot,
+    'source',
+    '_posts',
+    '2026-06-15-feishu-thought-1442054985160403.md',
+  );
+  const expectedPostPath = path.join(
+    tempRoot,
+    'source',
+    '_posts',
+    '2026-06-16-feishu-thought-1442054985160403.md',
+  );
+
+  const result = await exportDerivedTrainingMarkdown({
+    rootDir: tempRoot,
+    buildTrainingSnapshot: async () => ({
+      generatedAt: '2026-06-16T04:33:38.000Z',
+      latest: {
+        measurement: null,
+        daily: { date: '2026-06-16' },
+      },
+      daily: [],
+      thoughts: [
+        {
+          date: '2026-06-15',
+          time: '18:00',
+          body: '旧模块正文',
+          thoughtModule: 'misc',
+          tags: ['杂七杂八', '随想', '飞书'],
+          telegramMessageId: 1442054985160403,
+          telegramChatId: null,
+          sourceChannel: 'feishu',
+          imageRefs: [],
+        },
+        {
+          date: '2026-06-16',
+          time: '12:33:38',
+          body: '正式 2026 年 6 月 16 日 12:33:38',
+          thoughtModule: 'body_feedback',
+          tags: ['身体反馈', '随想', '飞书'],
+          telegramMessageId: 1442054985160403,
+          telegramChatId: null,
+          sourceChannel: 'feishu',
+          imageRefs: [],
+        },
+      ],
+      charts: {
+        weightKg: [],
+        bodyFatPct: [],
+        skeletalMuscleKg: [],
+        basalMetabolism: [],
+        visceralFatLevel: [],
+        intakeCalories: [],
+        trainingCalories: [],
+        cyclingDistanceKm: [],
+      },
+    }),
+    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-16\n',
+  });
+
+  await assert.rejects(access(oldPostPath), /ENOENT/);
+  const post = await readFile(expectedPostPath, 'utf8');
+  assert.equal(result.thoughts.exportedCount, 1);
+  assert.match(post, /thought_module: body_feedback/);
+  assert.match(post, /  - 身体反馈/);
+  assert.match(post, /正式 2026 年 6 月 16 日 12:33:38/);
+  assert.doesNotMatch(post, /旧模块正文/);
 });
 
 test('exportDerivedTrainingMarkdown writes Feishu thought posts with source metadata', async () => {
