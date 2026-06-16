@@ -21,7 +21,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: ${{ github.event_name == 'repository_dispatch' && format('sync-dev-{0}', github.run_id) || 'sync-dev' }}
+  group: sync-dev
   cancel-in-progress: false
 
 jobs:
