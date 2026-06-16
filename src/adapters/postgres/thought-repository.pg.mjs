@@ -74,7 +74,7 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
         sourceBatchId: batch.batchId,
         sourceChannel,
         command: batch.thoughtEdit?.command ?? '/thought',
-        body: batch.thoughtEdit?.body ?? '',
+        body: batch.thoughtEdit?.body ?? null,
         thoughtModule: normalizeThoughtModuleOrNull(batch.thoughtEdit?.thoughtModule),
         tags: batch.thoughtEdit?.tags ?? null,
         messageDateUnix: batch.thoughtEdit?.messageDateUnix ?? null,

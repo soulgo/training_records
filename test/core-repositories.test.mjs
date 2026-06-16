@@ -276,6 +276,53 @@ test('PostgresThoughtRepository reports the effective module when editing withou
   assert.equal(calls.some(([sql]) => /insert into core\.thought/i.test(sql)), true);
 });
 
+test('PostgresThoughtRepository passes null body for module-only thought edits to preserve existing content', async () => {
+  const calls = [];
+  const repository = new PostgresThoughtRepository({
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from core\.thought/i.test(sql) && /where telegram_message_id = \$1/i.test(sql)) {
+        return {
+          rows: [{
+            telegram_message_id: params[0],
+            thought_module: 'misc',
+            body: '现有的随想内容',
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+  });
+
+  const result = await repository.persistMirror(
+    {
+      kind: 'thought_edit',
+      batchId: 'thought-edit-593',
+      thoughtEdit: {
+        command: '/随想编',
+        targetMessageId: 593,
+        body: null,
+        thoughtModule: 'body_feedback',
+        telegramChatId: 42,
+        storage: {
+          writeStatus: 'thought_edit_database_only',
+          markdownPath: null,
+          photoPaths: null,
+        },
+      },
+    },
+    new Date('2026-06-16T02:19:00.000Z'),
+  );
+
+  assert.deepEqual(result, { status: 'stored', messageId: 593, thoughtModule: 'body_feedback' });
+  const upsertCall = calls.find(([sql]) => /insert into core\.thought/i.test(sql));
+  assert.ok(upsertCall, 'expected an upsert query');
+  const bodyParam = upsertCall[1][5];
+  assert.equal(bodyParam, null, 'body parameter should be null so coalesce preserves existing body');
+  const moduleParam = upsertCall[1][6];
+  assert.equal(moduleParam, 'body_feedback', 'thought_module parameter should be body_feedback');
+});
+
 test('PostgresThoughtRepository does not create a thought when an edit target is missing', async () => {
   const calls = [];
   const repository = new PostgresThoughtRepository({
