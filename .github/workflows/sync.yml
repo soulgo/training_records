@@ -381,8 +381,9 @@ jobs:
               -H "Authorization: Bearer ${GITHUB_TOKEN}" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-pages.yml/runs?branch=${workflow_branch}&event=workflow_dispatch&per_page=20")"
-            deploy_run_id="$(RUNS_JSON="$runs_json" DISPATCH_STARTED_AT="$dispatch_started_at" node <<'NODE'
-            const runs = JSON.parse(process.env.RUNS_JSON || '{}').workflow_runs ?? [];
+            deploy_run_id="$(printf '%s' "$runs_json" | DISPATCH_STARTED_AT="$dispatch_started_at" node <<'NODE'
+            const data = require('fs').readFileSync(0, 'utf8');
+            const runs = JSON.parse(data || '{}').workflow_runs ?? [];
             const startedAt = Date.parse(process.env.DISPATCH_STARTED_AT || '');
             const run = runs.find((candidate) => Date.parse(candidate.created_at) >= startedAt - 5000);
             if (run?.id) {
