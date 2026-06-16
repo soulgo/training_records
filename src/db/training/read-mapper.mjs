@@ -114,7 +114,9 @@ export function buildTrainingSnapshotFromRows({
     };
   });
 
-  const thoughts = filteredBodyFeedbackRows.map(normalizeThoughtRow);
+  const thoughts = dedupeThoughtsByTelegramMessageId(
+    filteredBodyFeedbackRows.map(normalizeThoughtRow),
+  );
   return {
     ...buildTrainingSnapshotFromDaily(
       daily,
@@ -123,6 +125,35 @@ export function buildTrainingSnapshotFromRows({
     thoughts,
     bodyFeedback: thoughts.filter((entry) => entry.thoughtModule === 'body_feedback'),
   };
+}
+
+function dedupeThoughtsByTelegramMessageId(thoughts) {
+  const thoughtsWithoutId = [];
+  const thoughtsById = new Map();
+
+  for (const thought of thoughts) {
+    const messageId = thought.telegramMessageId;
+    if (!messageId) {
+      thoughtsWithoutId.push(thought);
+      continue;
+    }
+
+    const existing = thoughtsById.get(messageId);
+    if (!existing || compareThoughtRecency(thought, existing) >= 0) {
+      thoughtsById.set(messageId, thought);
+    }
+  }
+
+  return [...thoughtsWithoutId, ...thoughtsById.values()]
+    .sort((left, right) => getThoughtRecencyKey(left).localeCompare(getThoughtRecencyKey(right)));
+}
+
+function compareThoughtRecency(left, right) {
+  return getThoughtRecencyKey(left).localeCompare(getThoughtRecencyKey(right));
+}
+
+function getThoughtRecencyKey(thought) {
+  return `${thought.date ?? ''} ${thought.time ?? ''} ${thought.telegramMessageId ?? ''}`;
 }
 
 function filterRowsByDateWindow(rows, key, dateFrom, dateTo) {

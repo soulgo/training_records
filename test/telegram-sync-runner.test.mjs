@@ -3698,7 +3698,7 @@ test('telegram action monitor reports the failed workflow stage to the original 
   assert.match(sentMessages[0].text, /https:\/\/github\.com\/soulgo\/training_records\/actions\/runs\/123456/);
 });
 
-test('telegram action monitor ignores site deployment stages outside telegram sync', async () => {
+test('telegram action monitor reports deploy wait failures as site refresh failures', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-action-monitor-pages-'));
   const eventPath = path.join(tempRoot, 'event.json');
   const sentMessages = [];
@@ -3728,7 +3728,7 @@ test('telegram action monitor ignores site deployment stages outside telegram sy
       GITHUB_REPOSITORY: 'soulgo/training_records',
       GITHUB_RUN_ID: '123457',
       TELEGRAM_BOT_TOKEN: 'token',
-      STEP_PAGES_DEPLOY_OUTCOME: 'failure',
+      STEP_DEPLOY_OUTCOME: 'failure',
     },
     sendTelegramMessage: async (message) => {
       sentMessages.push(message);
@@ -3737,8 +3737,8 @@ test('telegram action monitor ignores site deployment stages outside telegram sy
   });
 
   assert.equal(result.notified, true);
-  assert.equal(result.failureStage, 'Unknown workflow stage');
-  assert.match(sentMessages[0].text, /GitHub Action 执行失败：Unknown workflow stage/);
+  assert.equal(result.failureStage, '站点部署/页面刷新');
+  assert.match(sentMessages[0].text, /GitHub Action 执行失败：站点部署\/页面刷新/);
 });
 
 test('runTelegramSync ignores removed /ai assistant commands without side effects', async () => {

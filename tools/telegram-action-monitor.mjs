@@ -12,6 +12,7 @@ const stepLabels = [
   ['commit', 'Commit sync results'],
   ['rebase', 'Rebase on latest main'],
   ['push', 'Push changes'],
+  ['deploy', '站点部署/页面刷新'],
 ];
 
 export async function main() {

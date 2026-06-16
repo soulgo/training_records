@@ -32,6 +32,8 @@
 
 ### Fixed
 
+- 修复飞书/Telegram `/随想编 id 模块 内容` 和 `/移动 id 模块` 后同一随想 ID 可能同时出现在新旧模块页的问题；数据库快照与 Markdown 导出现在会按 `telegramMessageId` 去重，只保留最新有效记录，并在导出前清理带随想 front matter 的旧派生 Markdown。
+- 加强随想 DB-only 变更后的部署验收：生产和 dev 部署 workflow 现在会检查 `/thoughts/`、`/misc/`、`/body-feedback/` 三个模块页，确保目标 ID 只出现在目标模块，删除时从所有模块消失；同步 workflow 也会把部署等待失败识别为“站点部署/页面刷新”，不再回传 `Unknown workflow stage`。
 - 修复生产 Pages 手动或 push 触发 deploy 默认跳过数据库 Markdown 导出、导致 DB-only 随想从页面消失的问题：`deploy-pages.yml` 和 dev Cloudflare Pages deploy 现在默认使用严格数据库快照，只有显式选择关闭时才允许回退。
 - 修复飞书误输入 `/随便编 id 模块 内容` 时被当普通文本静默忽略、没有回执也不触发 deploy 的问题；该常见错字现在按 `/随想编` 解析为随想编辑/移动命令。
 - 增强飞书/Telegram `/随想编`、`/移动` 等 DB-only 随想变更后的生产 Pages 成功语义：`sync.yml` / `sync-dev.yml` 会把已入库的目标随想 id、模块和目标页路径传给部署 workflow，并等待下游 deploy 完成；目标页面校验失败、下游部署失败或超时都会让同步 Action 失败，避免只看到“更新成功”但页面仍未刷新。

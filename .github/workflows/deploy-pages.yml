@@ -143,6 +143,7 @@ jobs:
           normalized_path="${normalized_path%/}/"
           target_url="${base_url}${normalized_path}"
           page_file="$(mktemp)"
+          module_paths=("/thoughts/" "/misc/" "/body-feedback/")
           expected="${TARGET_THOUGHT_EXPECTATION:-present}"
           if [ "$expected" != "absent" ]; then
             expected="present"
@@ -170,6 +171,58 @@ jobs:
 
           if { [ "$expected" = "present" ] && [ "$found" = "true" ]; } ||
              { [ "$expected" = "absent" ] && [ "$found" = "false" ]; }; then
+            for module_path in "${module_paths[@]}"; do
+              module_url="${base_url}${module_path}"
+              module_file="$(mktemp)"
+              if ! curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$module_url" -o "$module_file"; then
+                echo "::error title=Thought page verification failed::Could not fetch ${module_url} after deploy."
+                {
+                  echo "## Thought page verification"
+                  echo ""
+                  echo "- Result: fetch failed"
+                  echo "- Expected: ${expected}"
+                  echo "- Thought id: ${TARGET_THOUGHT_ID}"
+                  echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
+                  echo "- URL: ${module_url}"
+                } >> "$GITHUB_STEP_SUMMARY"
+                exit 1
+              fi
+
+              module_found=false
+              if grep -F "#${TARGET_THOUGHT_ID}" "$module_file" >/dev/null ||
+                 grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$module_file" >/dev/null; then
+                module_found=true
+              fi
+
+              if [ "$expected" = "present" ] && [ "$module_path" != "$normalized_path" ] && [ "$module_found" = "true" ]; then
+                echo "::error title=Thought page verification failed::Unexpected thought #${TARGET_THOUGHT_ID} on ${module_url}; expected it only on ${target_url}."
+                {
+                  echo "## Thought page verification"
+                  echo ""
+                  echo "- Result: duplicate"
+                  echo "- Expected: present only on ${target_url}"
+                  echo "- Thought id: ${TARGET_THOUGHT_ID}"
+                  echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
+                  echo "- Unexpected URL: ${module_url}"
+                } >> "$GITHUB_STEP_SUMMARY"
+                exit 1
+              fi
+
+              if [ "$expected" = "absent" ] && [ "$module_found" = "true" ]; then
+                echo "::error title=Thought page verification failed::Unexpected thought #${TARGET_THOUGHT_ID} on ${module_url}; expected it absent from all thought module pages."
+                {
+                  echo "## Thought page verification"
+                  echo ""
+                  echo "- Result: duplicate"
+                  echo "- Expected: absent from all thought module pages"
+                  echo "- Thought id: ${TARGET_THOUGHT_ID}"
+                  echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
+                  echo "- Unexpected URL: ${module_url}"
+                } >> "$GITHUB_STEP_SUMMARY"
+                exit 1
+              fi
+            done
+
             {
               echo "## Thought page verification"
               echo ""

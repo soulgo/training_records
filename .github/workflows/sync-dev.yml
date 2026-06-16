@@ -313,6 +313,7 @@ jobs:
         run: node tools/feishu-sync-notify.mjs
 
       - name: Trigger and wait for async dev site deploy
+        id: deploy
         if: success() && github.event_name == 'repository_dispatch' && (steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true')
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -411,6 +412,7 @@ jobs:
           STEP_DETECT_OUTCOME: ${{ steps.detect.outcome }}
           STEP_COMMIT_OUTCOME: ${{ steps.commit.outcome }}
           STEP_PUSH_OUTCOME: ${{ steps.push.outcome }}
+          STEP_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
         run: node tools/telegram-action-monitor.mjs
 
       - name: Notify Feishu sync failure
@@ -424,4 +426,5 @@ jobs:
           STEP_DETECT_OUTCOME: ${{ steps.detect.outcome }}
           STEP_COMMIT_OUTCOME: ${{ steps.commit.outcome }}
           STEP_PUSH_OUTCOME: ${{ steps.push.outcome }}
+          STEP_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
         run: node tools/feishu-action-monitor.mjs
