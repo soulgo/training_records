@@ -42,6 +42,7 @@
 - 修复 GitHub Pages 已部署新训练数据但 `soulgo.chat` 仍命中 Cloudflare 旧 HTML 缓存、导致飞书入库数据短时间不显示的问题；生产 Pages 部署成功后会在配置 `CLOUDFLARE_ZONE_ID` 和 `CLOUDFLARE_API_TOKEN` 时自动清理 Cloudflare 缓存。
 - 修复 Cloudflare purge API 权限不足时生产 Pages deploy 末尾失败的问题；清缓存步骤现在会输出 warning 并保留部署成功状态，避免站点已发布但 Action 被误判为失败。
 - 修复飞书/Telegram `/随想编` 或 `/移动` 指向不存在目标 id 时仍通过 PostgreSQL upsert 创建新 `core.thought` 并误报成功的问题；同步现在会先校验目标随想存在，缺失时返回 `not_found`、发送失败通知，且不会触发 DB-only 页面部署。
+- 修复飞书/Telegram 误把 `/随想 id 模块 正文` 当作新随想写入并回成功的问题；该歧义输入现在会跳过入库并提示使用 `/随想编 id 模块 内容`，同时飞书 DB-only 随想编辑/移动会保留飞书标签。
 - 修复手动触发 `deploy-pages.yml` 或 `deploy-cloudflare-pages-dev.yml` 时即使选择修复分支也仍固定 checkout `main`/`dev`、导致无法在分支上验证 deploy 修复的问题；手动 deploy 现在会使用触发时选择的 ref。
 
 ## [1.2.9] - 2026-06-14

@@ -11,7 +11,7 @@ import {
 } from '../src/adapters/feishu/index.mjs';
 import { recognizeBatch } from '../tools/telegram-sync-image-processing.mjs';
 import { notifyFeishuActionFailure } from '../tools/feishu-action-monitor.mjs';
-import { buildFeishuSyncReport, runFeishuSync } from '../tools/feishu-sync.mjs';
+import { buildFeishuSyncReport, notifyFeishuSyncResultFromFile, runFeishuSync } from '../tools/feishu-sync.mjs';
 
 test('normalizeFeishuMessage keeps Feishu source ids while exposing Telegram-compatible fields', () => {
   const normalized = normalizeFeishuMessage(createFeishuImageEvent({
@@ -86,6 +86,42 @@ test('groupFeishuUpdates reuses existing thought command parsing for Feishu text
   assert.equal(batch.kind, 'thought');
   assert.equal(batch.thought.body, '今天练腿后髋部有点紧');
   assert.equal(batch.messages[0].sourceMessageId, 'om_thought_1');
+});
+
+test('groupFeishuUpdates parses explicit Feishu thought edit module updates', () => {
+  const [batch] = groupFeishuUpdates([
+    createFeishuTextEvent({
+      eventId: 'evt-thought-edit-1',
+      messageId: 'om_thought_edit_1',
+      chatId: 'oc_chat_1',
+      text: '/随想编 272 杂七杂八 新正文',
+      createTime: '1781398810000',
+    }),
+  ]);
+
+  assert.equal(batch.sourceChannel, 'feishu');
+  assert.equal(batch.kind, 'thought_edit');
+  assert.equal(batch.thoughtEdit.sourceChannel, 'feishu');
+  assert.equal(batch.thoughtEdit.targetMessageId, 272);
+  assert.equal(batch.thoughtEdit.thoughtModule, 'misc');
+  assert.equal(batch.thoughtEdit.body, '新正文');
+});
+
+test('groupFeishuUpdates rejects ambiguous /随想 id module body messages before creating a thought', () => {
+  const [batch] = groupFeishuUpdates([
+    createFeishuTextEvent({
+      eventId: 'evt-thought-ambiguous-1',
+      messageId: 'om_thought_ambiguous_1',
+      chatId: 'oc_chat_1',
+      text: '/随想 272 杂七杂八 新正文',
+      createTime: '1781398810000',
+    }),
+  ]);
+
+  assert.equal(batch.sourceChannel, 'feishu');
+  assert.equal(batch.kind, 'thought');
+  assert.equal(batch.thought.sourceChannel, 'feishu');
+  assert.equal(batch.thought.invalidReason, '疑似编辑命令，请使用 /随想编 id 模块 内容');
 });
 
 test('groupFeishuUpdates maps Feishu reply metadata to reply-based thought delete targets', () => {
@@ -239,6 +275,136 @@ test('runFeishuSync handles image and thought batches through the shared sync pi
   const report = buildFeishuSyncReport(result);
   assert.deepEqual(report.batches.map((batch) => batch.chatIds), [['oc_chat_1'], ['oc_chat_1']]);
   assert.match(report.batches[0].sourceId, /^feishu:chat:oc_chat_1:/);
+});
+
+test('runFeishuSync persists explicit Feishu thought edit module updates through the shared pipeline', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-runner-edit-'));
+  const persisted = [];
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: feishuSyncEnv(),
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuTextEvent({
+            eventId: 'evt-edit-1',
+            messageId: 'om_edit_1',
+            chatId: 'oc_chat_1',
+            text: '/随想编 272 杂七杂八 新正文',
+            createTime: '1781398820000',
+          }),
+        ],
+      },
+    },
+    persistNormalizedBatch: async ({ batch, sourceChannel }) => {
+      persisted.push({ batch, sourceChannel });
+      return { status: 'stored', archivedDate: batch.archivedDate ?? null };
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.updatesFetched, 1);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].status, 'ready');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_edit_database_only');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0].sourceChannel, 'feishu');
+  assert.equal(persisted[0].batch.kind, 'thought_edit');
+  assert.equal(persisted[0].batch.thoughtEdit.sourceChannel, 'feishu');
+  assert.equal(persisted[0].batch.thoughtEdit.targetMessageId, 272);
+  assert.equal(persisted[0].batch.thoughtEdit.thoughtModule, 'misc');
+  assert.equal(persisted[0].batch.thoughtEdit.body, '新正文');
+  assert.deepEqual(persisted[0].batch.thoughtEdit.tags, ['杂七杂八', '随想', '飞书']);
+});
+
+test('runFeishuSync skips ambiguous /随想 id module body messages without persistence', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-runner-ambiguous-'));
+  const persisted = [];
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: feishuSyncEnv(),
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuTextEvent({
+            eventId: 'evt-ambiguous-1',
+            messageId: 'om_ambiguous_1',
+            chatId: 'oc_chat_1',
+            text: '/随想 272 杂七杂八 新正文',
+            createTime: '1781398820000',
+          }),
+        ],
+      },
+    },
+    persistNormalizedBatch: async ({ batch, sourceChannel }) => {
+      persisted.push({ batch, sourceChannel });
+      return { status: 'stored', archivedDate: batch.archivedDate ?? null };
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.updatesFetched, 1);
+  assert.equal(persisted.length, 0);
+  assert.equal(result.changed, false);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought');
+  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batchResults[0].persistenceStatus ?? null, null);
+  assert.match(result.batchResults[0].reason, /疑似编辑命令/);
+  assert.doesNotMatch(result.batchResults[0].reason, /写入成功/);
+});
+
+test('Feishu sync notifier reports skipped ambiguous thoughts as failures', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-notify-ambiguous-'));
+  const resultPath = path.join(tempRoot, 'result.json');
+  const sent = [];
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'thought',
+          status: 'skipped',
+          batchId: 'thought-ambiguous-1',
+          messages: [{ chatId: 'oc_chat_1', messageId: 272 }],
+          reason: '疑似编辑命令，请使用 /随想编 id 模块 内容',
+          failureCategory: 'user_input',
+          failureReason: '疑似编辑命令，请使用 /随想编 id 模块 内容',
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  const result = await notifyFeishuSyncResultFromFile({
+    resultPath,
+    env: {
+      FEISHU_SYNC_NOTIFY: 'true',
+      FEISHU_SYNC_TRANSPORT: 'webhook',
+      FEISHU_APP_ID: 'cli_a',
+      FEISHU_APP_SECRET: 'secret',
+      FEISHU_ALLOWED_CHAT_IDS: 'oc_chat_1',
+    },
+    sendMessage: async (message) => {
+      sent.push(message);
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].chatId, 'oc_chat_1');
+  assert.match(sent[0].text, /随想写入失败/);
+  assert.match(sent[0].text, /\/随想编 id 模块 内容/);
+  assert.doesNotMatch(sent[0].text, /成功/);
+  assert.doesNotMatch(sent[0].text, /已入库/);
 });
 
 test('runFeishuSync handles reply-based Feishu thought delete batches through the shared pipeline', async () => {

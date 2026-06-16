@@ -1166,6 +1166,51 @@ test('groups legacy /随想 id module messages as thought move commands', async 
   assert.equal(batches[0].thoughtMove.thoughtModule, 'misc');
 });
 
+test('keeps module-prefixed /随想 messages as new thoughts', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 425,
+      message: {
+        message_id: 715,
+        date: 1_746_748_900,
+        chat: { id: 42 },
+        text: '/随想 杂七杂八 新随想正文',
+      },
+    },
+  ]);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought');
+  assert.equal(batches[0].thought.thoughtModule, 'misc');
+  assert.equal(batches[0].thought.body, '新随想正文');
+});
+
+test('marks /随想 id module body messages as invalid instead of creating new thoughts', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    {
+      update_id: 426,
+      message: {
+        message_id: 716,
+        date: 1_746_748_900,
+        chat: { id: 42 },
+        text: '/随想 175 杂七杂八 新正文',
+      },
+    },
+  ]);
+
+  assert.equal(batches.length, 1);
+  assert.equal(batches[0].kind, 'thought');
+  assert.equal(batches[0].thought.invalidReason, '疑似编辑命令，请使用 /随想编 id 模块 内容');
+});
+
 test('skips thought move commands without a target module', async () => {
   const lib = await importTelegramSyncLib();
 

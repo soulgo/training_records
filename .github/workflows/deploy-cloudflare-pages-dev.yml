@@ -61,9 +61,43 @@ jobs:
         run: rm -f public/CNAME
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: '3.114.14'
-          command: --cwd public pages deploy . --project-name ${{ vars.CLOUDFLARE_PAGES_DEV_PROJECT_NAME || 'training-records-dev' }} --branch dev
+        shell: bash
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_PAGES_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN }}
+          CLOUDFLARE_PAGES_DEV_PROJECT_NAME: ${{ vars.CLOUDFLARE_PAGES_DEV_PROJECT_NAME || 'training-records-dev' }}
+        run: |
+          if [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "::error title=Cloudflare Pages deploy failed::CLOUDFLARE_ACCOUNT_ID secret is required."
+            exit 1
+          fi
+
+          token_names=()
+          if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            token_names+=("CLOUDFLARE_API_TOKEN")
+          fi
+          if [ -n "${CLOUDFLARE_PAGES_API_TOKEN:-}" ] && [ "${CLOUDFLARE_PAGES_API_TOKEN}" != "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            token_names+=("CLOUDFLARE_PAGES_API_TOKEN")
+          fi
+
+          if [ "${#token_names[@]}" -eq 0 ]; then
+            echo "::error title=Cloudflare Pages deploy failed::CLOUDFLARE_API_TOKEN or CLOUDFLARE_PAGES_API_TOKEN secret is required."
+            exit 1
+          fi
+
+          last_status=1
+          for token_name in "${token_names[@]}"; do
+            token_value="${!token_name}"
+            echo "Deploying Cloudflare Pages with ${token_name}."
+            if CLOUDFLARE_API_TOKEN="${token_value}" npx --yes wrangler@3.114.14 --cwd public pages deploy . --project-name "${CLOUDFLARE_PAGES_DEV_PROJECT_NAME}" --branch dev; then
+              echo "Cloudflare Pages deployed with ${token_name}."
+              exit 0
+            else
+              last_status=$?
+            fi
+            echo "::notice title=Cloudflare Pages deploy retry::${token_name} failed; trying the next configured token if available."
+          done
+
+          echo "::error title=Cloudflare Pages deploy failed::All configured Cloudflare tokens failed. Check that at least one token has Pages edit access to the dev project."
+          exit "${last_status}"

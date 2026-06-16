@@ -688,6 +688,7 @@ function buildThoughtBatchFromMessages(messages) {
       body: parsedThought.body,
       thoughtModule: normalizeThoughtModule(parsedThought.moduleKey),
       sourceMessageId: message.messageId,
+      invalidReason: parsedThought.invalidReason,
     },
   };
 }
@@ -844,6 +845,13 @@ function analyzeThoughtBatch(batch) {
   const thoughtModule = normalizeThoughtModule(batch.thought?.thoughtModule);
   const hasMarkdownDocument = batchHasMarkdownDocuments(batch);
   const sourceChannel = batch.sourceChannel ?? message?.sourceChannel ?? 'telegram';
+
+  if (batch.thought?.invalidReason) {
+    return buildSkippedBatchResult(batch, {
+      reason: batch.thought.invalidReason,
+      failureCategory: 'user_input',
+    });
+  }
 
   if (!body && !hasMarkdownDocument) {
     return buildSkippedBatchResult(batch, {
@@ -1527,13 +1535,26 @@ function parseThoughtMoveCommand(text) {
 }
 
 function buildThoughtCommandPayload(command, rawBody) {
+  const invalidReason = getAmbiguousThoughtEditReason(rawBody);
   const parsedBody = parseThoughtModuleBody(rawBody);
   return {
     command,
     body: parsedBody.body,
     moduleKey: parsedBody.moduleKey,
     moduleExplicit: parsedBody.moduleExplicit,
+    invalidReason,
   };
+}
+
+function getAmbiguousThoughtEditReason(rawBody) {
+  const body = String(rawBody ?? '').trim();
+  const match = body.match(/^(\d+)\s+(\S+)\s+([\s\S]+)$/u);
+  if (!match) {
+    return null;
+  }
+  return resolveThoughtModuleLabel(match[2])
+    ? '疑似编辑命令，请使用 /随想编 id 模块 内容'
+    : null;
 }
 
 function parseThoughtModuleBody(rawBody) {
