@@ -33,6 +33,7 @@
 
 ### Fixed
 
+- 修复 `/随想编 id 模块`（仅修改模块、不带正文）被误拒为"empty thought body"的问题：`analyzeThoughtEditBatch` 现在在指定了有效模块时允许空正文；`persistMirror` 的 `thought_edit` 分支改为传递 `null`（而非空字符串）作为 body，使 SQL `coalesce` 保留原有正文，与 `thought_move` 行为一致。
 - 修复 dev 部署工作流验证步骤因 Cloudflare CDN 传播延迟而报错的问题：`deploy-cloudflare-pages-dev.yml` 现在会从 wrangler 输出中捕获部署专属 URL（如 `https://xxx.training-records-dev.pages.dev`），用该 URL 进行随想页面验证（部署专属 URL 立即可用，不受 CDN 传播延迟影响）；验证通过后还会等待生产别名 URL 传播并尝试确认。
 - 修复随想 `/移动` 或 `/随想编` 切换模块后部署页面仍显示在旧模块的问题：site-build action 现在先从数据库导出新鲜 Markdown（清理旧文件）再执行 `sync:db` 回填，避免 `backfillThoughtsToCore` 从旧磁盘文件读到过时的 `thought_module` 并覆盖数据库中已正确更新的值。
 - 修复飞书/Telegram `/随想编 id 模块 内容` 和 `/移动 id 模块` 后同一随想 ID 可能同时出现在新旧模块页的问题；数据库快照与 Markdown 导出现在会按 `telegramMessageId` 去重，只保留最新有效记录，并在导出前清理带随想 front matter 的旧派生 Markdown。

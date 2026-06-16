@@ -898,7 +898,8 @@ function analyzeThoughtEditBatch(batch) {
     });
   }
 
-  if (!body && !hasMarkdownDocument) {
+  const hasExplicitModule = Boolean(batch.thoughtEdit?.thoughtModule);
+  if (!body && !hasMarkdownDocument && !hasExplicitModule) {
     return buildSkippedBatchResult(batch, {
       reason: 'empty thought body',
     });
@@ -917,7 +918,7 @@ function analyzeThoughtEditBatch(batch) {
       command: batch.thoughtEdit?.command ?? '/thought',
       sourceChannel,
       targetMessageId,
-      body,
+      body: body || (hasMarkdownDocument ? body : null),
       thoughtModule: normalizeThoughtModuleOrNull(batch.thoughtEdit?.thoughtModule),
       replacePhotos: Boolean(batch.thoughtEdit?.replacePhotos),
       telegramChatId: message?.chatId ?? null,
