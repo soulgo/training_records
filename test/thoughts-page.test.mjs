@@ -540,6 +540,55 @@ telegram_chat_id:
   });
 });
 
+test('thoughts page treats legacy Feishu-tagged thoughts as Feishu when source_channel is missing', () => {
+  withSharedSiteFixture(() => {
+    const thoughtPostPath = path.join(rootDir, 'source', '_posts', '2026-06-16-feishu-thought-338182848231025.md');
+    const originalThoughtPost = readOptionalFile(thoughtPostPath);
+
+    try {
+      writeFileSync(
+        thoughtPostPath,
+        `---
+date: 2026-06-16 10:25:00
+tags:
+  - 训练
+  - 随想
+  - 飞书
+thought_module: workout
+source_message_id: om_feishu_message_2
+source_chat_id: oc_feishu_chat_2
+telegram_message_id: 338182848231025
+telegram_chat_id:
+---
+
+历史飞书随想正文
+`,
+        'utf8',
+      );
+
+      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+
+      const thoughtsIndex = readFileSync(path.join(rootDir, 'public', 'thoughts', 'index.html'), 'utf8');
+
+      assert.match(thoughtsIndex, /历史飞书随想正文/);
+      assert.doesNotMatch(thoughtsIndex, /#338182848231025/);
+      assert.match(
+        thoughtsIndex,
+        /<span class="thought-card__id"[^>]*title="Feishu thought"[^>]*data-thought-id="338182848231025"[^>]*>飞书<\/span>/,
+      );
+    } finally {
+      restoreOptionalFile(thoughtPostPath, originalThoughtPost);
+    }
+  });
+});
+
 function readOptionalFile(targetPath) {
   try {
     return readFileSync(targetPath, 'utf8');
