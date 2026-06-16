@@ -47,8 +47,16 @@ function getPagePath(basePath, pageNumber) {
   return `${normalizedBasePath}page/${pageNumber}/`;
 }
 
+function hasThoughtTag(post, tagName) {
+  return Boolean(post?.tags?.findOne && post.tags.findOne({ name: tagName }));
+}
+
 function getThoughtSourceChannel(post) {
-  return String(post?.source_channel || '').trim() || 'telegram';
+  const explicitChannel = String(post?.source_channel || '').trim();
+  if (explicitChannel) {
+    return explicitChannel;
+  }
+  return hasThoughtTag(post, '飞书') ? 'feishu' : 'telegram';
 }
 
 function getThoughtDisplayMeta(post) {
@@ -57,8 +65,8 @@ function getThoughtDisplayMeta(post) {
   }
   if (getThoughtSourceChannel(post) === 'feishu') {
     return {
-      title: 'Feishu thought',
-      label: '飞书',
+      title: 'Feishu thought id',
+      label: `#${post.telegram_message_id}`,
       dataThoughtId: post.telegram_message_id,
     };
   }

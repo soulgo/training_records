@@ -312,9 +312,8 @@ jobs:
           FEISHU_SYNC_RESULT_PATH: ${{ runner.temp }}/feishu-sync-result.json
         run: node tools/feishu-sync-notify.mjs
 
-      - name: Trigger async dev site deploy
+      - name: Trigger and wait for async dev site deploy
         if: success() && github.event_name == 'repository_dispatch' && (steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true')
-        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
           THOUGHT_CHECK_ID: ${{ steps.detect.outputs.thought_check_id }}
@@ -322,6 +321,9 @@ jobs:
           THOUGHT_CHECK_PATH: ${{ steps.detect.outputs.thought_check_path }}
           THOUGHT_CHECK_EXPECTATION: ${{ steps.detect.outputs.thought_check_expectation }}
         run: |
+          workflow_file="deploy-cloudflare-pages-dev.yml"
+          workflow_branch="dev"
+          dispatch_started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           dispatch_body="$(node <<'NODE'
           const inputs = { strict_database_snapshot: 'true' };
           for (const [envName, inputName] of [
@@ -345,6 +347,59 @@ jobs:
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-cloudflare-pages-dev.yml/dispatches" \
             -d "$dispatch_body"
+
+          deploy_run_id=""
+          for attempt in $(seq 1 30); do
+            sleep 5
+            runs_json="$(curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-cloudflare-pages-dev.yml/runs?branch=${workflow_branch}&event=workflow_dispatch&per_page=20")"
+            deploy_run_id="$(RUNS_JSON="$runs_json" DISPATCH_STARTED_AT="$dispatch_started_at" node <<'NODE'
+            const runs = JSON.parse(process.env.RUNS_JSON || '{}').workflow_runs ?? [];
+            const startedAt = Date.parse(process.env.DISPATCH_STARTED_AT || '');
+            const run = runs.find((candidate) => Date.parse(candidate.created_at) >= startedAt - 5000);
+            if (run?.id) {
+              process.stdout.write(String(run.id));
+            }
+            NODE
+            )"
+            if [ -n "$deploy_run_id" ]; then
+              break
+            fi
+          done
+
+          if [ -z "$deploy_run_id" ]; then
+            echo "::error title=Deploy workflow not found::Could not find the workflow_dispatch run for ${workflow_file} after dispatch."
+            exit 1
+          fi
+
+          echo "Waiting for deploy workflow run ${deploy_run_id}."
+          for attempt in $(seq 1 90); do
+            run_json="$(curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${deploy_run_id}")"
+            status="$(RUN_JSON="$run_json" node -e "const run = JSON.parse(process.env.RUN_JSON); process.stdout.write(run.status || '');")"
+            conclusion="$(RUN_JSON="$run_json" node -e "const run = JSON.parse(process.env.RUN_JSON); process.stdout.write(run.conclusion || '');")"
+            html_url="$(RUN_JSON="$run_json" node -e "const run = JSON.parse(process.env.RUN_JSON); process.stdout.write(run.html_url || '');")"
+
+            if [ "$status" = "completed" ]; then
+              if [ "$conclusion" = "success" ]; then
+                echo "Deploy workflow succeeded: ${html_url}"
+                exit 0
+              fi
+              echo "::error title=Deploy workflow failed::Deploy workflow ${deploy_run_id} completed with conclusion ${conclusion}. ${html_url}"
+              exit 1
+            fi
+
+            sleep 10
+          done
+
+          echo "::error title=Deploy workflow timed out::Deploy workflow ${deploy_run_id} did not complete in time."
+          exit 1
 
       - name: Notify Telegram sync failure
         if: failure() && github.event_name == 'repository_dispatch' && steps.channel.outputs.channel == 'telegram'
