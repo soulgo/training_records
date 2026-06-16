@@ -151,6 +151,7 @@ jobs:
           console.log(`thought_check_id=${thoughtCheck?.id ?? ''}`);
           console.log(`thought_check_module=${thoughtCheck?.module ?? ''}`);
           console.log(`thought_check_path=${thoughtCheck?.path ?? ''}`);
+          console.log(`thought_check_expectation=${thoughtCheck?.expectation ?? ''}`);
 
           function resolveThoughtCheck(batch) {
             if (batch?.status !== 'ready' || batch?.persistenceStatus !== 'stored') {
@@ -164,19 +165,23 @@ jobs:
                 ? batch.thoughtEdit
                 : kind === 'thought_move'
                   ? batch.thoughtMove
-                  : null;
+                  : kind === 'thought_delete'
+                    ? batch.thoughtDelete
+                    : null;
             if (!payload) {
               return null;
             }
 
             const id = payload.targetMessageId ?? payload.telegramMessageId ?? null;
-            const module = normalizeThoughtModule(payload.thoughtModule);
+            const module = normalizeThoughtModule(payload.thoughtModule) ??
+              normalizeThoughtModule(batch.persistedThoughtModule);
             const path = {
               workout: '/thoughts/',
               misc: '/misc/',
               body_feedback: '/body-feedback/',
             }[module] ?? null;
-            return id && module && path ? { id, module, path } : null;
+            const expectation = kind === 'thought_delete' ? 'absent' : 'present';
+            return id && module && path ? { id, module, path, expectation } : null;
           }
 
           function normalizeThoughtModule(value) {
@@ -339,6 +344,7 @@ jobs:
           THOUGHT_CHECK_ID: ${{ steps.detect.outputs.thought_check_id }}
           THOUGHT_CHECK_MODULE: ${{ steps.detect.outputs.thought_check_module }}
           THOUGHT_CHECK_PATH: ${{ steps.detect.outputs.thought_check_path }}
+          THOUGHT_CHECK_EXPECTATION: ${{ steps.detect.outputs.thought_check_expectation }}
         run: |
           dispatch_body="$(node <<'NODE'
           const inputs = { strict_database_snapshot: 'true' };
@@ -346,6 +352,7 @@ jobs:
             ['THOUGHT_CHECK_ID', 'target_thought_id'],
             ['THOUGHT_CHECK_MODULE', 'target_thought_module'],
             ['THOUGHT_CHECK_PATH', 'target_thought_path'],
+            ['THOUGHT_CHECK_EXPECTATION', 'target_thought_expectation'],
           ]) {
             const value = String(process.env[envName] ?? '').trim();
             if (value) {

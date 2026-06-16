@@ -126,6 +126,12 @@ export async function persistNormalizedBatch(options) {
     return {
       status: 'stored',
       batchId: batch.batchId,
+      ...(thoughtMirrorResult
+        ? {
+            messageId: thoughtMirrorResult.messageId ?? null,
+            thoughtModule: thoughtMirrorResult.thoughtModule ?? null,
+          }
+        : {}),
       archivedDate: batch.archivedDate ?? null,
     };
   } catch (error) {

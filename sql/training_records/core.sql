@@ -162,6 +162,7 @@ CREATE TABLE "core"."thought" (
   "telegram_message_id" int8 NOT NULL,
   "telegram_chat_id" int8,
   "source_batch_id" text COLLATE "pg_catalog"."default",
+  "source_channel" text COLLATE "pg_catalog"."default",
   "command" text COLLATE "pg_catalog"."default" NOT NULL,
   "body" text COLLATE "pg_catalog"."default" NOT NULL,
   "thought_module" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'workout'::text,
@@ -175,6 +176,7 @@ CREATE TABLE "core"."thought" (
 )
 ;
 COMMENT ON COLUMN "core"."thought"."telegram_message_id" IS '原 Telegram message_id，也是随想的稳定定位 ID';
+COMMENT ON COLUMN "core"."thought"."source_channel" IS '来源通道，例如 telegram、feishu、markdown_import';
 COMMENT ON COLUMN "core"."thought"."body" IS '随想正文文本，不包含图片二进制';
 COMMENT ON COLUMN "core"."thought"."thought_module" IS '随想模块：workout 为锻炼随想，misc 为杂七杂八，body_feedback 为身体反馈；历史缺省按 workout 兼容';
 COMMENT ON COLUMN "core"."thought"."markdown_path" IS '当前 Markdown 兼容层路径，例如 source/_posts/YYYY-MM-DD-telegram-thought-501.md';

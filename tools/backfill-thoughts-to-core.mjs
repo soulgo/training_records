@@ -118,6 +118,7 @@ function normalizeThoughtMarkdown(parsed, postPath, activeRootDir) {
     messageId: telegramMessageId,
     chatId: telegramChatId,
     sourceBatchId: null,
+    sourceChannel: 'telegram',
     body,
     command: '/thought',
     thoughtModule,

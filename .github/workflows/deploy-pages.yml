@@ -19,6 +19,10 @@ on:
         description: Optional deployed module page path to verify, such as /body-feedback/.
         required: false
         default: ''
+      target_thought_expectation:
+        description: Whether the target thought should be present or absent on the deployed module page.
+        required: false
+        default: 'present'
   push:
     branches:
       - main
@@ -130,19 +134,25 @@ jobs:
           TARGET_THOUGHT_ID: ${{ inputs.target_thought_id }}
           TARGET_THOUGHT_MODULE: ${{ inputs.target_thought_module }}
           TARGET_THOUGHT_PATH: ${{ inputs.target_thought_path }}
+          TARGET_THOUGHT_EXPECTATION: ${{ inputs.target_thought_expectation }}
         run: |
           base_url="https://soulgo.chat"
           normalized_path="/${TARGET_THOUGHT_PATH#/}"
           normalized_path="${normalized_path%/}/"
           target_url="${base_url}${normalized_path}"
           page_file="$(mktemp)"
+          expected="${TARGET_THOUGHT_EXPECTATION:-present}"
+          if [ "$expected" != "absent" ]; then
+            expected="present"
+          fi
 
-          if curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$target_url" -o "$page_file" &&
-             grep -F "#${TARGET_THOUGHT_ID}" "$page_file" >/dev/null; then
+          if ! curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$target_url" -o "$page_file"; then
+            echo "::warning title=Thought page verification failed::Could not fetch ${target_url} after deploy."
             {
               echo "## Thought page verification"
               echo ""
-              echo "- Result: found"
+              echo "- Result: fetch failed"
+              echo "- Expected: ${expected}"
               echo "- Thought id: ${TARGET_THOUGHT_ID}"
               echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
               echo "- URL: ${target_url}"
@@ -150,11 +160,32 @@ jobs:
             exit 0
           fi
 
-          echo "::warning title=Thought page verification failed::Thought #${TARGET_THOUGHT_ID} was not found on ${target_url} after deploy."
+          found=false
+          if grep -F "#${TARGET_THOUGHT_ID}" "$page_file" >/dev/null ||
+             grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$page_file" >/dev/null; then
+            found=true
+          fi
+
+          if { [ "$expected" = "present" ] && [ "$found" = "true" ]; } ||
+             { [ "$expected" = "absent" ] && [ "$found" = "false" ]; }; then
+            {
+              echo "## Thought page verification"
+              echo ""
+              echo "- Result: ${found}"
+              echo "- Expected: ${expected}"
+              echo "- Thought id: ${TARGET_THOUGHT_ID}"
+              echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
+              echo "- URL: ${target_url}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "::warning title=Thought page verification failed::Thought #${TARGET_THOUGHT_ID} expected ${expected} on ${target_url}, found=${found}."
           {
             echo "## Thought page verification"
             echo ""
-            echo "- Result: not found"
+            echo "- Result: ${found}"
+            echo "- Expected: ${expected}"
             echo "- Thought id: ${TARGET_THOUGHT_ID}"
             echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
             echo "- URL: ${target_url}"

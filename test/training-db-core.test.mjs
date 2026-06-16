@@ -143,6 +143,52 @@ test('readTrainingSnapshotFromDatabaseClient normalizes archived dates before gr
   assert.ok(queries.some((sql) => /from core\.sleep/i.test(sql)));
 });
 
+test('readTrainingSnapshotFromDatabaseClient preserves thought source channels from core.thought', async () => {
+  const queries = [];
+  const client = {
+    async query(sql) {
+      queries.push(sql);
+      if (/from core\.training_day/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.(measurement|activity|meal|sleep)/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.thought/i.test(sql)) {
+        return {
+          rows: [
+            {
+              telegram_message_id: 338182848231024,
+              telegram_chat_id: null,
+              source_channel: 'feishu',
+              body: '飞书随想正文',
+              command: '/随想',
+              thought_module: 'workout',
+              tags_json: ['训练', '随想', '飞书'],
+              message_date_unix: 1781576400,
+              markdown_path: 'source/_posts/2026-06-16-feishu-thought-338182848231024.md',
+              image_refs_json: [],
+              updated_at: '2026-06-16T10:20:00.000+08:00',
+            },
+          ],
+        };
+      }
+      throw new Error(`Unexpected SQL: ${sql}`);
+    },
+  };
+
+  const snapshot = await readTrainingSnapshotFromDatabaseClient(
+    client,
+    new Date('2026-06-16T02:30:00.000Z'),
+  );
+
+  assert.ok(queries.some((sql) => /source_channel/i.test(sql)));
+  assert.equal(snapshot.thoughts.length, 1);
+  assert.equal(snapshot.thoughts[0].sourceChannel, 'feishu');
+  assert.equal(snapshot.thoughts[0].telegramMessageId, 338182848231024);
+  assert.equal(snapshot.thoughts[0].body, '飞书随想正文');
+});
+
 test('readTrainingSnapshotFromDatabaseClient prefers core sleep rows over day sleep summary for sleep cards', async () => {
   const client = {
     async query(sql) {
@@ -1767,24 +1813,25 @@ test('persistNormalizedBatch mirrors thought create, edit, and delete batches in
   );
   assert.equal(thoughtWrites.length, 5);
   assert.equal(thoughtWrites[0][1][0], 501);
-  assert.equal(thoughtWrites[0][1][4], '今天训练后臀部发力更明显');
-  assert.equal(thoughtWrites[0][1][5], 'misc');
-  assert.equal(thoughtWrites[0][1][8], 'source/_posts/2026-05-14-telegram-thought-501.md');
-  assert.deepEqual(JSON.parse(thoughtWrites[0][1][9]), [
+  assert.equal(thoughtWrites[0][1][3], 'telegram');
+  assert.equal(thoughtWrites[0][1][5], '今天训练后臀部发力更明显');
+  assert.equal(thoughtWrites[0][1][6], 'misc');
+  assert.equal(thoughtWrites[0][1][9], 'source/_posts/2026-05-14-telegram-thought-501.md');
+  assert.deepEqual(JSON.parse(thoughtWrites[0][1][10]), [
     '/images/thoughts/2026/05/2026-05-14-telegram-thought-501-1.jpg',
   ]);
-  assert.equal(thoughtWrites[1][1][4], '更新后的正文');
-  assert.equal(thoughtWrites[1][1][5], 'misc');
-  assert.equal(thoughtWrites[1][1][9], '[]');
+  assert.equal(thoughtWrites[1][1][5], '更新后的正文');
+  assert.equal(thoughtWrites[1][1][6], 'misc');
+  assert.equal(thoughtWrites[1][1][10], '[]');
   assert.match(thoughtWrites[2][0], /status = excluded\.status/i);
-  assert.deepEqual(JSON.parse(thoughtWrites[2][1][8]), [
+  assert.deepEqual(JSON.parse(thoughtWrites[2][1][9]), [
     '/images/thoughts/2026/05/2026-05-14-telegram-thought-501-1.jpg',
   ]);
-  assert.equal(thoughtWrites[3][1][4], null);
-  assert.equal(thoughtWrites[3][1][5], 'misc');
-  assert.equal(thoughtWrites[4][1][4], '更新正文但不改模块');
-  assert.equal(thoughtWrites[4][1][5], null);
+  assert.equal(thoughtWrites[3][1][5], null);
+  assert.equal(thoughtWrites[3][1][6], 'misc');
+  assert.equal(thoughtWrites[4][1][5], '更新正文但不改模块');
   assert.equal(thoughtWrites[4][1][6], null);
+  assert.equal(thoughtWrites[4][1][7], null);
 });
 
 test('persistNormalizedBatch reports missing thought edit targets without inserting a core thought', async () => {
@@ -1866,6 +1913,87 @@ test('persistNormalizedBatch reports missing thought edit targets without insert
   assert.equal(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)), true);
   assert.equal(calls.some(([sql]) => /insert into core\.thought/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => sql === 'COMMIT'), true);
+});
+
+test('persistNormalizedBatch returns the effective thought module for database-only edits', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash\s+from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.thought/i.test(sql) && /where telegram_message_id = \$1/i.test(sql)) {
+        return {
+          rows: [{
+            telegram_message_id: params[0],
+            thought_module: 'misc',
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: {
+      kind: 'thought_edit',
+      batchId: 'thought-edit-592',
+      status: 'ready',
+      archivedDate: null,
+      warnings: [],
+      issues: [],
+      confidence: 1,
+      updateIds: [592],
+      recognitions: [],
+      messages: [
+        {
+          updateId: 592,
+          messageId: 592,
+          mediaGroupId: null,
+          chatId: 42,
+          caption: '',
+          text: '/随想编 592 更新正文',
+          dateUnix: 1781576340,
+          photos: [],
+        },
+      ],
+      thoughtEdit: {
+        command: '/随想编',
+        targetMessageId: 592,
+        body: '更新正文',
+        thoughtModule: null,
+        replacePhotos: false,
+        telegramChatId: 42,
+        messageDateUnix: 1781576340,
+        storage: {
+          writeStatus: 'thought_edit_database_only',
+          markdownPath: null,
+          photoPaths: null,
+        },
+      },
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-06-16T02:19:00.000Z'),
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.equal(result.batchId, 'thought-edit-592');
+  assert.equal(result.messageId, 592);
+  assert.equal(result.thoughtModule, 'misc');
+  assert.equal(calls.some(([sql]) => /insert into core\.thought/i.test(sql)), true);
 });
 
 test('getLastProcessedTelegramUpdateId reads the max update id from ingest records', async () => {

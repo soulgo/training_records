@@ -181,6 +181,7 @@ export const BODY_FEEDBACK_QUERY = `
   select
     telegram_message_id,
     telegram_chat_id,
+    source_channel,
     body,
     command,
     thought_module,

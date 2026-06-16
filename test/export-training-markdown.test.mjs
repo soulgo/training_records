@@ -193,6 +193,58 @@ test('exportDerivedTrainingMarkdown removes old Telegram and Feishu derived thou
   assert.equal(await readFile(regularPostPath, 'utf8'), 'keep me');
 });
 
+test('exportDerivedTrainingMarkdown writes Feishu thought posts with source metadata', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-feishu-thoughts-'));
+  const expectedPostPath = path.join(
+    tempRoot,
+    'source',
+    '_posts',
+    '2026-06-16-feishu-thought-338182848231024.md',
+  );
+
+  await exportDerivedTrainingMarkdown({
+    rootDir: tempRoot,
+    buildTrainingSnapshot: async () => ({
+      generatedAt: '2026-06-16T02:20:00.000Z',
+      latest: {
+        measurement: null,
+        daily: { date: '2026-06-16' },
+      },
+      daily: [],
+      thoughts: [
+        {
+          date: '2026-06-16',
+          time: '10:20',
+          body: '飞书随想正文',
+          thoughtModule: 'workout',
+          tags: ['训练', '随想', '飞书'],
+          telegramMessageId: 338182848231024,
+          telegramChatId: null,
+          sourceChannel: 'feishu',
+          imageRefs: [],
+        },
+      ],
+      charts: {
+        weightKg: [],
+        bodyFatPct: [],
+        skeletalMuscleKg: [],
+        basalMetabolism: [],
+        visceralFatLevel: [],
+        intakeCalories: [],
+        trainingCalories: [],
+        cyclingDistanceKm: [],
+      },
+    }),
+    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-16\n',
+  });
+
+  const post = await readFile(expectedPostPath, 'utf8');
+  assert.match(post, /source_channel: feishu/);
+  assert.match(post, /telegram_message_id: 338182848231024/);
+  assert.match(post, /telegram_chat_id:\s*\n/);
+  assert.match(post, /飞书随想正文/);
+});
+
 test('exportDerivedTrainingMarkdown retries transient schema preflight connection timeouts', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const calls = [];

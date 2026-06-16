@@ -147,9 +147,11 @@ async function exportThoughtMarkdownBackup({ rootDir, thoughts }) {
   for (const thought of activeThoughts) {
     const date = thought.date || formatDateFromUnix(thought.messageDateUnix) || '1970-01-01';
     const time = normalizeThoughtTime(thought.time) ?? '00:00:00';
-    const fileName = `${date}-telegram-thought-${thought.telegramMessageId}.md`;
+    const sourceChannel = normalizeThoughtSourceChannel(thought.sourceChannel);
+    const channelSlug = sourceChannel === 'feishu' ? 'feishu' : 'telegram';
+    const fileName = `${date}-${channelSlug}-thought-${thought.telegramMessageId}.md`;
     const postPath = path.join(postsDir, fileName);
-    await writeFile(postPath, renderThoughtPost(thought, { date, time }), 'utf8');
+    await writeFile(postPath, renderThoughtPost(thought, { date, time, sourceChannel }), 'utf8');
   }
 
   return {
@@ -158,20 +160,25 @@ async function exportThoughtMarkdownBackup({ rootDir, thoughts }) {
   };
 }
 
-function renderThoughtPost(thought, { date, time }) {
+function renderThoughtPost(thought, { date, time, sourceChannel }) {
   const thoughtModule = normalizeThoughtModule(thought.thoughtModule);
   const tags = Array.isArray(thought.tags) && thought.tags.length > 0
     ? thought.tags
-    : getThoughtModuleTags(thoughtModule);
+    : getThoughtModuleTags(thoughtModule, { sourceChannel });
   const lines = [
     '---',
     `date: ${date} ${time}`,
     'tags:',
     ...tags.map((tag) => `  - ${tag}`),
     `thought_module: ${thoughtModule}`,
+  ];
+  if (sourceChannel !== 'telegram') {
+    lines.push(`source_channel: ${sourceChannel}`);
+  }
+  lines.push(
     `telegram_message_id: ${thought.telegramMessageId ?? ''}`,
     `telegram_chat_id: ${thought.telegramChatId ?? ''}`,
-  ];
+  );
   if (Array.isArray(thought.imageRefs) && thought.imageRefs.length > 0) {
     lines.push('photos:');
     for (const photoPath of thought.imageRefs) {
@@ -180,6 +187,10 @@ function renderThoughtPost(thought, { date, time }) {
   }
   lines.push('---', '', String(thought.body ?? '').trim(), '');
   return lines.join('\n');
+}
+
+function normalizeThoughtSourceChannel(value) {
+  return String(value ?? '').trim() === 'feishu' ? 'feishu' : 'telegram';
 }
 
 function normalizeThoughtTime(value) {
