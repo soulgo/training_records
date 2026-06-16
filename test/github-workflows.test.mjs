@@ -120,6 +120,7 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /- name: Verify deployed thought module page/);
   assert.match(workflow, /TARGET_THOUGHT_ID:\s*\$\{\{\s*inputs\.target_thought_id\s*\}\}/);
   assert.match(workflow, /TARGET_THOUGHT_EXPECTATION:\s*\$\{\{\s*inputs\.target_thought_expectation\s*\}\}/);
+  assert.match(workflow, /CLOUDFLARE_PAGES_BASE_URL:\s*\$\{\{\s*vars\.CLOUDFLARE_PAGES_BASE_URL\s*\}\}/);
   assert.match(workflow, /expected="\$\{TARGET_THOUGHT_EXPECTATION:-present\}"/);
   assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
   assert.match(workflow, /curl -fsSL --retry 6 --retry-delay 10/);
@@ -224,7 +225,7 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.match(workflow, /Cloudflare Pages deploy retry/);
   assert.match(workflow, /All configured Cloudflare tokens failed/);
   assert.match(workflow, /- name: Verify deployed thought module page/);
-  assert.match(workflow, /CLOUDFLARE_PAGES_DEV_BASE_URL:\s*\$\{\{\s*vars\.CLOUDFLARE_PAGES_DEV_BASE_URL\s*\}\}/);
+  assert.match(workflow, /CLOUDFLARE_PAGES_BASE_URL:\s*\$\{\{\s*vars\.CLOUDFLARE_PAGES_BASE_URL\s*\}\}/);
   assert.match(workflow, /TARGET_THOUGHT_EXPECTATION:\s*\$\{\{\s*inputs\.target_thought_expectation\s*\}\}/);
   assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
   assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
