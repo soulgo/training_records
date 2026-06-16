@@ -70,7 +70,8 @@ Settings -> Secrets and variables -> Actions -> Variables
 | `TELEGRAM_RECOGNITION_CACHE_ENABLED` | 可选 | 共用 | 是否启用识别缓存 |
 | `TRAINING_ANALYSIS_GOAL` | 可选 | 共用 | `/分析` 长期目标 |
 | `CLOUDFLARE_PAGES_DEV_PROJECT_NAME` | 不用 | 可选 | dev Pages 项目名，默认 `training-records-dev` |
-| `CLOUDFLARE_PAGES_BASE_URL` | 必填 | 必填 | 部署后随想页面验证的 base URL，当前值 `https://soulgo.chat`；main 和 dev 共用 |
+| `CLOUDFLARE_PAGES_BASE_URL` | 必填 | 不用 | main 部署后随想页面验证的 base URL，当前值 `https://soulgo.chat` |
+| `CLOUDFLARE_PAGES_DEV_BASE_URL` | 不用 | 必填 | dev 部署后随想页面验证的 base URL，当前值 `https://training-records-dev.pages.dev` |
 
 Markdown 备份 workflow 另有 Variables：
 
