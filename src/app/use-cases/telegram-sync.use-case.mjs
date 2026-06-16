@@ -1083,6 +1083,7 @@ function buildDatabaseOnlyThoughtWriteResult(batch, kind) {
     batch.thoughtMove ??
     {};
   const thoughtModule = normalizeThoughtModuleOrNull(thought.thoughtModule);
+  const sourceChannel = thought.sourceChannel ?? batch.sourceChannel;
   return {
     changed: false,
     status: `${kind}_database_only`,
@@ -1090,7 +1091,7 @@ function buildDatabaseOnlyThoughtWriteResult(batch, kind) {
     photoPaths: null,
     deletedPhotoPaths: [],
     thoughtModule,
-    tags: thoughtModule ? getThoughtModuleTags(thoughtModule) : null,
+    tags: thoughtModule ? getThoughtModuleTags(thoughtModule, { sourceChannel }) : null,
   };
 }
 
