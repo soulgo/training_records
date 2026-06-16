@@ -125,11 +125,11 @@ jobs:
           TARGET_THOUGHT_MODULE: ${{ inputs.target_thought_module }}
           TARGET_THOUGHT_PATH: ${{ inputs.target_thought_path }}
           TARGET_THOUGHT_EXPECTATION: ${{ inputs.target_thought_expectation }}
-          CLOUDFLARE_PAGES_BASE_URL: ${{ vars.CLOUDFLARE_PAGES_BASE_URL }}
+          CLOUDFLARE_PAGES_DEV_BASE_URL: ${{ vars.CLOUDFLARE_PAGES_DEV_BASE_URL }}
         run: |
-          base_url="${CLOUDFLARE_PAGES_BASE_URL:-}"
+          base_url="${CLOUDFLARE_PAGES_DEV_BASE_URL:-}"
           if [ -z "$base_url" ]; then
-            echo "::error title=Thought page verification skipped::CLOUDFLARE_PAGES_BASE_URL is required to verify dev thought pages."
+            echo "::error title=Thought page verification skipped::CLOUDFLARE_PAGES_DEV_BASE_URL is required to verify dev thought pages."
             exit 1
           fi
           base_url="${base_url%/}"

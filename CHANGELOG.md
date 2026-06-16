@@ -24,7 +24,7 @@
 - 收敛 GitHub/Cloudflare、飞书通道、系统总览、数据流转与日常维护文档为当前 main/dev 入口口径，补齐生产 Pages 缓存刷新、统一 Worker、GitHub Actions 参数和 dev Cloudflare Pages 验证说明，降低飞书/Telegram 同步部署排查时的配置歧义。
 - 精简 README 与 docs 推荐阅读路径，只保留当前维护入口，并统一 Telegram/飞书共用 Worker、`sync.yml`、`sync-dev.yml` 与当前部署 workflow 口径。
 - 将 AI 备用方案、AI 返回 schema 校验、Telegram 命令优先级等仍有维护价值的信息合并进长期维护文档，避免小文档分散维护。
-- 统一 main 和 dev 部署 workflow 的随想页面验证 base URL：原 dev 的 `CLOUDFLARE_PAGES_DEV_BASE_URL` 和 main 硬编码的 `https://soulgo.chat` 合并为单一 GitHub 变量 `CLOUDFLARE_PAGES_BASE_URL`，两个环境的 deploy workflow、测试断言和配置文档统一读取该变量。
+- 统一 main 和 dev 部署 workflow 的随想页面验证 base URL 配置方式：main `deploy-pages.yml` 从硬编码 `https://soulgo.chat` 改为读取 GitHub 变量 `CLOUDFLARE_PAGES_BASE_URL`，dev 继续使用独立的 `CLOUDFLARE_PAGES_DEV_BASE_URL`；两个环境各有专属变量，配置文档同步补齐说明。
 
 ### Removed
 
