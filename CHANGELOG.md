@@ -32,6 +32,7 @@
 
 ### Fixed
 
+- 增强飞书/Telegram `/随想编`、`/移动` 等 DB-only 随想变更后的生产 Pages 可观测性：`sync.yml` 会把已入库的目标随想 id、模块和目标页路径传给异步 `deploy-pages.yml`，部署后非阻塞校验目标模块页是否已包含该随想，并在 GitHub Actions summary/warning 中暴露结果，避免只看到“更新成功”却难以判断页面是否刷新。
 - 修复飞书 `/随想删` 删除已入库但页面仍显示的问题：`sync.yml` 和 `sync-dev.yml` 现在会把 `thought_edit`、`thought_delete`、`thought_move` 的 `ready + stored` 批次视为 DB-only 内容变化并异步触发严格数据库快照部署。
 - 修复飞书回复原 `/随想` 消息后发送 `/随想删` 无法定位目标的问题：飞书同步现在读取 `parent_id` / `root_id` 并转换为稳定数字代理 ID；无 id 且无回复目标时会返回失败原因，不再误报删除成功。
 - 修复 DB -> Markdown 导出只清理 `*-telegram-thought-*.md` 的问题；导出前会同时清理 `*-feishu-thought-*.md`，避免飞书旧随想备份残留在页面。

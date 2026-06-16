@@ -86,7 +86,11 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   );
   assert.match(workflow, /zones\/\$\{CLOUDFLARE_ZONE_ID\}\/purge_cache/);
   assert.match(workflow, /"purge_everything":true/);
-  assert.doesNotMatch(workflow, /curl -fsSL/);
+  const purgeStep = workflow.slice(
+    workflow.indexOf('- name: Purge Cloudflare cache'),
+    workflow.indexOf('- name: Report skipped Cloudflare cache purge'),
+  );
+  assert.doesNotMatch(purgeStep, /curl -fsSL/);
   assert.match(workflow, /token_names=\(\)/);
   assert.match(workflow, /token_names\+=\("CLOUDFLARE_API_TOKEN"\)/);
   assert.match(workflow, /token_names\+=\("CLOUDFLARE_PAGES_API_TOKEN"\)/);
@@ -100,6 +104,14 @@ test('deploy-pages workflow uses the shared site build action', async () => {
     /if: \$\{\{ success\(\) && \(env\.CLOUDFLARE_ZONE_ID == '' \|\| \(env\.CLOUDFLARE_API_TOKEN == '' && env\.CLOUDFLARE_PAGES_API_TOKEN == ''\)\) \}\}/,
   );
   assert.match(workflow, /::warning title=Cloudflare cache purge skipped::/);
+  assert.match(workflow, /target_thought_id:/);
+  assert.match(workflow, /target_thought_module:/);
+  assert.match(workflow, /target_thought_path:/);
+  assert.match(workflow, /- name: Verify deployed thought module page/);
+  assert.match(workflow, /TARGET_THOUGHT_ID:\s*\$\{\{\s*inputs\.target_thought_id\s*\}\}/);
+  assert.match(workflow, /curl -fsSL --retry 6 --retry-delay 10/);
+  assert.match(workflow, /::warning title=Thought page verification failed::/);
+  assert.match(workflow, /GITHUB_STEP_SUMMARY/);
   assert.ok(
     workflow.indexOf('- name: Purge Cloudflare cache') > workflow.indexOf('- name: Build and deploy site'),
     'Cloudflare cache should be purged only after the Pages deployment step finishes',
@@ -357,7 +369,10 @@ test('main sync workflow notifies after sync and dispatches async site deploys',
   assert.match(workflow, /- name: Trigger async site deploy/);
   assert.match(workflow, /actions\/workflows\/deploy-pages\.yml\/dispatches/);
   assert.match(workflow, /steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/);
-  assert.match(workflow, /-d '\{"ref":"main","inputs":\{"strict_database_snapshot":"true"\}\}'/);
+  assert.match(workflow, /THOUGHT_CHECK_ID:\s*\$\{\{\s*steps\.detect\.outputs\.thought_check_id\s*\}\}/);
+  assert.match(workflow, /target_thought_id/);
+  assert.match(workflow, /target_thought_module/);
+  assert.match(workflow, /target_thought_path/);
   assert.ok(
     workflow.indexOf('- name: Notify Telegram sync result') > workflow.indexOf('- name: Push changes'),
     'Telegram notification should run after push and before any asynchronous site deployment workflow',
@@ -447,6 +462,43 @@ test('telegram-sync workflows treat stored thought batches as database content c
       assert.match(output, /db_content_changed=true/, `${kind} should trigger database content deploy`);
     }
   }
+});
+
+test('main sync workflow passes stored thought edit targets to async deploy verification', async () => {
+  const workflow = await readWorkflow('.github/workflows/sync.yml');
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-workflow-thought-check-'));
+  const resultPath = path.join(tempRoot, 'feishu-sync-result.json');
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'thought_edit',
+          status: 'ready',
+          persistenceStatus: 'stored',
+          thoughtEdit: {
+            targetMessageId: 590,
+            thoughtModule: 'body_feedback',
+          },
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  const detectionScript = extractDatabaseContentDetectionScript(workflow);
+  const output = execFileSync(process.execPath, ['-e', detectionScript], {
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      SYNC_RESULT_PATH: resultPath,
+    },
+  });
+
+  assert.match(output, /db_content_changed=true/);
+  assert.match(output, /thought_check_id=590/);
+  assert.match(output, /thought_check_module=body_feedback/);
+  assert.match(output, /thought_check_path=\/body-feedback\//);
 });
 
 test('telegram-sync repository dispatch runs use unique concurrency groups for consecutive image batches', async () => {
