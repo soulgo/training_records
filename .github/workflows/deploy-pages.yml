@@ -118,15 +118,17 @@ jobs:
             last_http_status="${http_status}"
           done
 
-          echo "::warning title=Cloudflare cache purge failed::Cloudflare purge failed with all configured tokens; last HTTP status ${last_http_status}. Check that the token has Zone -> Cache Purge -> Purge permission."
+          echo "::error title=Cloudflare cache purge failed::Cloudflare purge failed with all configured tokens; last HTTP status ${last_http_status}. Check that the token has Zone -> Cache Purge -> Purge permission."
           if [ -n "${last_response_file}" ]; then
             cat "${last_response_file}" || true
           fi
+          exit 1
 
       - name: Report skipped Cloudflare cache purge
         if: ${{ success() && (env.CLOUDFLARE_ZONE_ID == '' || (env.CLOUDFLARE_API_TOKEN == '' && env.CLOUDFLARE_PAGES_API_TOKEN == '')) }}
         run: |
-          echo "::warning title=Cloudflare cache purge skipped::CLOUDFLARE_ZONE_ID and at least one Cloudflare API token are required; deployed pages may stay behind Cloudflare cache until TTL expiry."
+          echo "::error title=Cloudflare cache purge skipped::CLOUDFLARE_ZONE_ID and at least one Cloudflare API token are required; deployed pages may stay behind Cloudflare cache until TTL expiry."
+          exit 1
 
       - name: Verify deployed thought module page
         if: ${{ success() && github.event_name == 'workflow_dispatch' && inputs.target_thought_id != '' && inputs.target_thought_path != '' }}
@@ -147,7 +149,7 @@ jobs:
           fi
 
           if ! curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$target_url" -o "$page_file"; then
-            echo "::warning title=Thought page verification failed::Could not fetch ${target_url} after deploy."
+            echo "::error title=Thought page verification failed::Could not fetch ${target_url} after deploy."
             {
               echo "## Thought page verification"
               echo ""
@@ -157,7 +159,7 @@ jobs:
               echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
               echo "- URL: ${target_url}"
             } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            exit 1
           fi
 
           found=false
@@ -180,7 +182,7 @@ jobs:
             exit 0
           fi
 
-          echo "::warning title=Thought page verification failed::Thought #${TARGET_THOUGHT_ID} expected ${expected} on ${target_url}, found=${found}."
+          echo "::error title=Thought page verification failed::Thought #${TARGET_THOUGHT_ID} expected ${expected} on ${target_url}, found=${found}."
           {
             echo "## Thought page verification"
             echo ""
@@ -190,3 +192,4 @@ jobs:
             echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
             echo "- URL: ${target_url}"
           } >> "$GITHUB_STEP_SUMMARY"
+          exit 1

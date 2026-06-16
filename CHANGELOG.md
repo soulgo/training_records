@@ -34,7 +34,7 @@
 
 - 修复生产 Pages 手动或 push 触发 deploy 默认跳过数据库 Markdown 导出、导致 DB-only 随想从页面消失的问题：`deploy-pages.yml` 和 dev Cloudflare Pages deploy 现在默认使用严格数据库快照，只有显式选择关闭时才允许回退。
 - 修复飞书误输入 `/随便编 id 模块 内容` 时被当普通文本静默忽略、没有回执也不触发 deploy 的问题；该常见错字现在按 `/随想编` 解析为随想编辑/移动命令。
-- 增强飞书/Telegram `/随想编`、`/移动` 等 DB-only 随想变更后的生产 Pages 可观测性：`sync.yml` 会把已入库的目标随想 id、模块和目标页路径传给异步 `deploy-pages.yml`，部署后非阻塞校验目标模块页是否已包含该随想，并在 GitHub Actions summary/warning 中暴露结果，避免只看到“更新成功”却难以判断页面是否刷新。
+- 增强飞书/Telegram `/随想编`、`/移动` 等 DB-only 随想变更后的生产 Pages 成功语义：`sync.yml` / `sync-dev.yml` 会把已入库的目标随想 id、模块和目标页路径传给部署 workflow，并等待下游 deploy 完成；目标页面校验失败、下游部署失败或超时都会让同步 Action 失败，避免只看到“更新成功”但页面仍未刷新。
 - 修复飞书 `/随想删` 删除已入库但页面仍显示的问题：`sync.yml` 和 `sync-dev.yml` 现在会把 `thought_edit`、`thought_delete`、`thought_move` 的 `ready + stored` 批次视为 DB-only 内容变化并异步触发严格数据库快照部署。
 - 修复飞书回复原 `/随想` 消息后发送 `/随想删` 无法定位目标的问题：飞书同步现在读取 `parent_id` / `root_id` 并转换为稳定数字代理 ID；无 id 且无回复目标时会返回失败原因，不再误报删除成功。
 - 修复 DB -> Markdown 导出只清理 `*-telegram-thought-*.md` 的问题；导出前会同时清理 `*-feishu-thought-*.md`，避免飞书旧随想备份残留在页面。
@@ -43,7 +43,8 @@
 - 修复飞书图片识别成功后因 `oc_...` 字符串 chat id 写入 PostgreSQL `bigint` 字段失败而进入 `pending_replay`、页面无更新的问题；旧 Telegram 兼容字段现在只写数字或 `null`，真实飞书 chat id 继续保留在 source 元数据和 Action summary 中，同时保留飞书图片批次的 `source_channel='feishu'`。
 - 修复飞书图片批次已成功入库但异步 Pages deploy 在严格数据库导出阶段因 PostgreSQL schema preflight 连接超时而失败、页面不更新的问题；`export:markdown` 现在会对瞬时 DB preflight 连接错误做有限重试，schema preflight 也只在 SQL 成功后标记为已执行，避免失败后跳过后续重试。
 - 修复 GitHub Pages 已部署新训练数据但 `soulgo.chat` 仍命中 Cloudflare 旧 HTML 缓存、导致飞书入库数据短时间不显示的问题；生产 Pages 部署成功后会在配置 `CLOUDFLARE_ZONE_ID` 和 `CLOUDFLARE_API_TOKEN` 时自动清理 Cloudflare 缓存。
-- 修复 Cloudflare purge API 权限不足时生产 Pages deploy 末尾失败的问题；清缓存步骤现在会输出 warning 并保留部署成功状态，避免站点已发布但 Action 被误判为失败。
+- 修复 Cloudflare purge API 缺失或权限不足时生产 Pages deploy 仍显示成功的问题；清缓存步骤现在会以 error 失败，避免站点已发布但 Cloudflare 仍命中旧 HTML 缓存时被误判为页面已刷新。
+- 修复飞书随想列表页只显示“飞书”而不显示可操作 ID 的问题；飞书随想现在和 Telegram 随想一样显示 `#ID`，并保留 `data-thought-id` 供部署校验使用，方便继续按 ID 编辑、移动和删除。
 - 修复飞书/Telegram `/随想编` 或 `/移动` 指向不存在目标 id 时仍通过 PostgreSQL upsert 创建新 `core.thought` 并误报成功的问题；同步现在会先校验目标随想存在，缺失时返回 `not_found`、发送失败通知，且不会触发 DB-only 页面部署。
 - 修复飞书/Telegram 误把 `/随想 id 模块 正文` 当作新随想写入并回成功的问题；该歧义输入现在会跳过入库并提示使用 `/随想编 id 模块 内容`，同时飞书 DB-only 随想编辑/移动会保留飞书标签。
 - 修复手动触发 `deploy-pages.yml` 或 `deploy-cloudflare-pages-dev.yml` 时即使选择修复分支也仍固定 checkout `main`/`dev`、导致无法在分支上验证 deploy 修复的问题；手动 deploy 现在会使用触发时选择的 ref。

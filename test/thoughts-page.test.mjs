@@ -490,7 +490,7 @@ telegram_chat_id: 42
   });
 });
 
-test('thoughts page hides Feishu proxy ids while keeping a deploy verification marker', () => {
+test('thoughts page shows Feishu thought ids for follow-up commands', () => {
   withSharedSiteFixture(() => {
     const thoughtPostPath = path.join(rootDir, 'source', '_posts', '2026-06-16-feishu-thought-338182848231024.md');
     const originalThoughtPost = readOptionalFile(thoughtPostPath);
@@ -529,10 +529,9 @@ telegram_chat_id:
       const thoughtsIndex = readFileSync(path.join(rootDir, 'public', 'thoughts', 'index.html'), 'utf8');
 
       assert.match(thoughtsIndex, /飞书随想正文/);
-      assert.doesNotMatch(thoughtsIndex, /#338182848231024/);
       assert.match(
         thoughtsIndex,
-        /<span class="thought-card__id"[^>]*title="Feishu thought"[^>]*data-thought-id="338182848231024"[^>]*>飞书<\/span>/,
+        /<span class="thought-card__id"[^>]*title="Feishu thought id"[^>]*data-thought-id="338182848231024"[^>]*>#338182848231024<\/span>/,
       );
     } finally {
       restoreOptionalFile(thoughtPostPath, originalThoughtPost);
@@ -578,10 +577,9 @@ telegram_chat_id:
       const thoughtsIndex = readFileSync(path.join(rootDir, 'public', 'thoughts', 'index.html'), 'utf8');
 
       assert.match(thoughtsIndex, /历史飞书随想正文/);
-      assert.doesNotMatch(thoughtsIndex, /#338182848231025/);
       assert.match(
         thoughtsIndex,
-        /<span class="thought-card__id"[^>]*title="Feishu thought"[^>]*data-thought-id="338182848231025"[^>]*>飞书<\/span>/,
+        /<span class="thought-card__id"[^>]*title="Feishu thought id"[^>]*data-thought-id="338182848231025"[^>]*>#338182848231025<\/span>/,
       );
     } finally {
       restoreOptionalFile(thoughtPostPath, originalThoughtPost);

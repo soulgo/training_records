@@ -104,14 +104,15 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /token_names\+=\("CLOUDFLARE_PAGES_API_TOKEN"\)/);
   assert.match(workflow, /Cloudflare cache purged with \$\{token_name\}/);
   assert.match(workflow, /Cloudflare cache purge retry/);
-  assert.match(workflow, /::warning title=Cloudflare cache purge failed::/);
+  assert.match(workflow, /::error title=Cloudflare cache purge failed::/);
+  assert.match(purgeStep, /exit 1/);
   assert.match(workflow, /Zone -> Cache Purge -> Purge permission/);
   assert.match(workflow, /- name: Report skipped Cloudflare cache purge/);
   assert.match(
     workflow,
     /if: \$\{\{ success\(\) && \(env\.CLOUDFLARE_ZONE_ID == '' \|\| \(env\.CLOUDFLARE_API_TOKEN == '' && env\.CLOUDFLARE_PAGES_API_TOKEN == ''\)\) \}\}/,
   );
-  assert.match(workflow, /::warning title=Cloudflare cache purge skipped::/);
+  assert.match(workflow, /::error title=Cloudflare cache purge skipped::/);
   assert.match(workflow, /target_thought_id:/);
   assert.match(workflow, /target_thought_module:/);
   assert.match(workflow, /target_thought_path:/);
@@ -123,7 +124,7 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
   assert.match(workflow, /curl -fsSL --retry 6 --retry-delay 10/);
   assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
-  assert.match(workflow, /::warning title=Thought page verification failed::/);
+  assert.match(workflow, /::error title=Thought page verification failed::/);
   assert.match(workflow, /GITHUB_STEP_SUMMARY/);
   assert.ok(
     workflow.indexOf('- name: Purge Cloudflare cache') > workflow.indexOf('- name: Build and deploy site'),
@@ -225,6 +226,7 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.match(workflow, /TARGET_THOUGHT_EXPECTATION:\s*\$\{\{\s*inputs\.target_thought_expectation\s*\}\}/);
   assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
   assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
+  assert.match(workflow, /::error title=Thought page verification failed::/);
   assert.doesNotMatch(workflow, /--config wrangler\.pages\.dev\.toml/);
   assert.match(workflow, /--project-name "\$\{CLOUDFLARE_PAGES_DEV_PROJECT_NAME\}"/);
   assert.match(workflow, /--branch dev/);
@@ -358,7 +360,7 @@ test('deploy-pages workflow still triggers for site-relevant changes', async () 
   }
 });
 
-test('main sync workflow notifies after sync and dispatches async site deploys', async () => {
+test('main sync workflow notifies after sync and waits for site deploy completion', async () => {
   const workflow = await readWorkflow('.github/workflows/sync.yml');
 
   assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
@@ -388,7 +390,7 @@ test('main sync workflow notifies after sync and dispatches async site deploys',
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
-  assert.match(workflow, /- name: Trigger async site deploy/);
+  assert.match(workflow, /- name: Trigger and wait for site deploy/);
   assert.match(workflow, /actions\/workflows\/deploy-pages\.yml\/dispatches/);
   assert.match(workflow, /steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/);
   assert.match(workflow, /THOUGHT_CHECK_ID:\s*\$\{\{\s*steps\.detect\.outputs\.thought_check_id\s*\}\}/);
@@ -397,13 +399,21 @@ test('main sync workflow notifies after sync and dispatches async site deploys',
   assert.match(workflow, /target_thought_module/);
   assert.match(workflow, /target_thought_path/);
   assert.match(workflow, /target_thought_expectation/);
+  const deployStep = workflow.slice(
+    workflow.indexOf('- name: Trigger and wait for site deploy'),
+    workflow.indexOf('- name: Notify Telegram sync failure'),
+  );
+  assert.doesNotMatch(deployStep, /continue-on-error:\s*true/);
+  assert.match(deployStep, /dispatch_started_at=/);
+  assert.match(deployStep, /actions\/workflows\/deploy-pages\.yml\/runs/);
+  assert.match(deployStep, /Deploy workflow failed/);
   assert.ok(
     workflow.indexOf('- name: Notify Telegram sync result') > workflow.indexOf('- name: Push changes'),
     'Telegram notification should run after push and before any asynchronous site deployment workflow',
   );
   assert.ok(
-    workflow.indexOf('- name: Trigger async site deploy') > workflow.indexOf('- name: Notify Telegram sync result'),
-    'Async deploy should be triggered only after Telegram has been notified',
+    workflow.indexOf('- name: Trigger and wait for site deploy') > workflow.indexOf('- name: Notify Telegram sync result'),
+    'Site deploy should be triggered only after Telegram has been notified',
   );
 });
 
@@ -758,7 +768,7 @@ test('telegram-sync dev workflow only handles dev dispatches and writes dev bran
   assert.match(workflow, /run:\s*git push origin HEAD:dev/);
 });
 
-test('telegram-sync dev workflow leaves Pages deployment to the dev deploy workflow', async () => {
+test('telegram-sync dev workflow waits for the dev deploy workflow', async () => {
   const workflow = await readWorkflow('.github/workflows/sync-dev.yml');
   const deployWorkflow = await readWorkflow('.github/workflows/deploy-cloudflare-pages-dev.yml');
 
@@ -766,7 +776,7 @@ test('telegram-sync dev workflow leaves Pages deployment to the dev deploy workf
   assert.doesNotMatch(workflow, /- name: Remove production custom domain file/);
   assert.doesNotMatch(workflow, /- name: Deploy dev site to Cloudflare Pages/);
   assert.doesNotMatch(workflow, /STEP_PAGES_DEPLOY_OUTCOME/);
-  assert.match(workflow, /- name: Trigger async dev site deploy/);
+  assert.match(workflow, /- name: Trigger and wait for async dev site deploy/);
   assert.match(workflow, /actions\/workflows\/deploy-cloudflare-pages-dev\.yml\/dispatches/);
   assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
   assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
@@ -781,6 +791,14 @@ test('telegram-sync dev workflow leaves Pages deployment to the dev deploy workf
   assert.match(workflow, /process\.stdout\.write\(JSON\.stringify\(\{ ref: 'dev', inputs \}\)\)/);
   assert.match(workflow, /target_thought_expectation/);
   assert.match(workflow, /-d "\$dispatch_body"/);
+  const deployStep = workflow.slice(
+    workflow.indexOf('- name: Trigger and wait for async dev site deploy'),
+    workflow.indexOf('- name: Notify Telegram sync failure'),
+  );
+  assert.doesNotMatch(deployStep, /continue-on-error:\s*true/);
+  assert.match(deployStep, /dispatch_started_at=/);
+  assert.match(deployStep, /actions\/workflows\/deploy-cloudflare-pages-dev\.yml\/runs/);
+  assert.match(deployStep, /Deploy workflow failed/);
   assert.match(deployWorkflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
   assert.match(deployWorkflow, /workflow_dispatch:/);
   assert.match(deployWorkflow, /- name: Build dev site/);
@@ -838,8 +856,12 @@ test('main sync workflow reports repository dispatch failures back to Telegram',
   assert.match(workflow, /node tools\/telegram-sync-notify\.mjs/);
   assert.match(workflow, /node tools\/telegram-action-monitor\.mjs/);
   assert.match(workflow, /STEP_INSTALL_OUTCOME: \$\{\{ steps\.install\.outcome \}\}/);
-  assert.match(workflow, /- name: Trigger async site deploy/);
-  assert.match(workflow, /continue-on-error: true/);
+  assert.match(workflow, /- name: Trigger and wait for site deploy/);
+  const deployStep = workflow.slice(
+    workflow.indexOf('- name: Trigger and wait for site deploy'),
+    workflow.indexOf('- name: Notify Telegram sync failure'),
+  );
+  assert.doesNotMatch(deployStep, /continue-on-error:\s*true/);
   assert.doesNotMatch(workflow, /STEP_SITE_BUILD_OUTCOME/);
   assert.doesNotMatch(workflow, /STEP_PAGES_DEPLOY_OUTCOME/);
 }

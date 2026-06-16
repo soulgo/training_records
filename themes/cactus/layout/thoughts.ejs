@@ -65,8 +65,8 @@ function getThoughtDisplayMeta(post) {
   }
   if (getThoughtSourceChannel(post) === 'feishu') {
     return {
-      title: 'Feishu thought',
-      label: '飞书',
+      title: 'Feishu thought id',
+      label: `#${post.telegram_message_id}`,
       dataThoughtId: post.telegram_message_id,
     };
   }

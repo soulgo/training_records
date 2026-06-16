@@ -129,8 +129,8 @@ jobs:
         run: |
           base_url="${CLOUDFLARE_PAGES_DEV_BASE_URL:-}"
           if [ -z "$base_url" ]; then
-            echo "::warning title=Thought page verification skipped::CLOUDFLARE_PAGES_DEV_BASE_URL is required to verify dev thought pages."
-            exit 0
+            echo "::error title=Thought page verification skipped::CLOUDFLARE_PAGES_DEV_BASE_URL is required to verify dev thought pages."
+            exit 1
           fi
           base_url="${base_url%/}"
           normalized_path="/${TARGET_THOUGHT_PATH#/}"
@@ -143,8 +143,8 @@ jobs:
           fi
 
           if ! curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$target_url" -o "$page_file"; then
-            echo "::warning title=Thought page verification failed::Could not fetch ${target_url} after deploy."
-            exit 0
+            echo "::error title=Thought page verification failed::Could not fetch ${target_url} after deploy."
+            exit 1
           fi
 
           found=false
@@ -158,4 +158,5 @@ jobs:
             exit 0
           fi
 
-          echo "::warning title=Thought page verification failed::Thought #${TARGET_THOUGHT_ID} expected ${expected} on ${target_url}, found=${found}."
+          echo "::error title=Thought page verification failed::Thought #${TARGET_THOUGHT_ID} expected ${expected} on ${target_url}, found=${found}."
+          exit 1
