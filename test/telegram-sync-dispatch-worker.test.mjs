@@ -675,6 +675,207 @@ test('SyncDispatchQueue matches workflow runs by queue task id instead of first 
   assert.equal(await state.storage.get('processing'), undefined);
 });
 
+test('SyncDispatchQueue uses short task ids that do not expose Feishu payload content', async () => {
+  const state = createDurableObjectState();
+  const dispatched = [];
+  const queue = new SyncDispatchQueue(state, {
+    ...createEnv(),
+    GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+    GITHUB_SYNC_REF: 'dev',
+    __now: () => 1_000,
+    __dispatchFetchImpl: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
+        dispatched.push(JSON.parse(init.body));
+        return new Response(null, { status: 204 });
+      }
+      if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
+        const taskId = dispatched[0].inputs.queue_task_id;
+        return Response.json({
+          workflow_runs: [
+            {
+              id: 301,
+              name: `Sync queue task ${taskId}`,
+              created_at: '2026-06-17T00:00:01Z',
+              event: 'workflow_dispatch',
+            },
+          ],
+        });
+      }
+      return Response.json({
+        id: 301,
+        status: 'completed',
+        conclusion: 'success',
+      });
+    },
+  });
+
+  assert.equal((await queue.fetch(createQueueRequest({
+    event_type: 'feishu_update_dev',
+    client_payload: {
+      feishu_updates: [
+        createFeishuQueueEvent({
+          eventId: 'evt-short-id-1',
+          messageId: 'om_short_id_1',
+          token: 'sensitive-feishu-token',
+          text: '/随想编 3 身体反馈 不应该出现在 queue task id',
+        }),
+        createFeishuQueueEvent({
+          eventId: 'evt-short-id-2',
+          messageId: 'om_short_id_2',
+          token: 'another-sensitive-token',
+          text: '/随想编 4 杂七杂八 也不应该出现在 queue task id',
+          createTime: '1781680302000',
+        }),
+      ],
+    },
+    source: { channel: 'feishu', sortKey: '1781680301000' },
+  }))).status, 202);
+
+  await queue.alarm();
+
+  const taskId = dispatched[0].inputs.queue_task_id;
+  assert.match(taskId, /^feishu:1781680301000:feishu_update_dev:[a-f0-9]{16}$/);
+  assert.ok(taskId.length < 80);
+  assert.doesNotMatch(taskId, /sensitive-feishu-token|不应该出现在|om_short_id/);
+});
+
+test('SyncDispatchQueue matches legacy long queue task ids when GitHub truncates the run title', async () => {
+  const state = createDurableObjectState();
+  const dispatched = [];
+  const legacyPayload = {
+    event_type: 'feishu_update_dev',
+    client_payload: {
+      feishu_update: createFeishuQueueEvent({
+        eventId: 'evt-legacy-truncated',
+        messageId: 'om_legacy_truncated',
+        text: `/随想编 3 身体反馈 ${'长内容'.repeat(120)}`,
+      }),
+    },
+    source: { channel: 'feishu', sortKey: '1781680401000' },
+  };
+  const legacyTaskId = [
+    legacyPayload.source.channel,
+    legacyPayload.source.sortKey,
+    legacyPayload.event_type,
+    JSON.stringify(legacyPayload.client_payload),
+  ].join(':');
+  await state.storage.put('processing', {
+    task: {
+      id: legacyTaskId,
+      eventType: legacyPayload.event_type,
+      clientPayload: legacyPayload.client_payload,
+      source: legacyPayload.source,
+      notification: null,
+      enqueuedAt: 1_000,
+      attempts: 0,
+    },
+    phase: 'wait_for_run',
+    attempts: 0,
+    dispatchStartedAt: '2026-06-17T00:00:00Z',
+  });
+
+  const queue = new SyncDispatchQueue(state, {
+    ...createEnv(),
+    GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+    GITHUB_SYNC_REF: 'dev',
+    __now: () => 1_000,
+    __dispatchFetchImpl: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
+        dispatched.push(JSON.parse(init.body));
+        return new Response(null, { status: 204 });
+      }
+      if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
+        return Response.json({
+          workflow_runs: [
+            {
+              id: 401,
+              display_title: `Sync queue task ${legacyTaskId}`.slice(0, 494),
+              created_at: '2026-06-17T00:00:01Z',
+              event: 'workflow_dispatch',
+            },
+          ],
+        });
+      }
+      return Response.json({
+        id: 401,
+        status: 'completed',
+        conclusion: 'success',
+      });
+    },
+  });
+
+  await queue.alarm();
+
+  assert.equal(dispatched.length, 0);
+  assert.equal(await state.storage.get('processing'), undefined);
+});
+
+test('SyncDispatchQueue continues after matching a truncated legacy Feishu run title', async () => {
+  const state = createDurableObjectState();
+  const dispatched = [];
+  const completedRunIds = [];
+  const queue = new SyncDispatchQueue(state, {
+    ...createEnv(),
+    GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+    GITHUB_SYNC_REF: 'dev',
+    __now: () => 1_000,
+    __dispatchFetchImpl: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
+        dispatched.push(JSON.parse(init.body));
+        return new Response(null, { status: 204 });
+      }
+      if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
+        const taskId = JSON.parse(dispatched.at(-1).inputs.dispatch_payload).client_payload.queue_task_id;
+        const runId = dispatched.length === 1 ? 501 : 502;
+        return Response.json({
+          workflow_runs: [
+            {
+              id: runId,
+              display_title: `Sync queue task ${taskId}`.slice(0, 494),
+              created_at: '2026-06-17T00:00:01Z',
+              event: 'workflow_dispatch',
+            },
+          ],
+        });
+      }
+      const runId = Number(urlText.match(/\/actions\/runs\/(\d+)/)?.[1]);
+      completedRunIds.push(runId);
+      return Response.json({
+        id: runId,
+        status: 'completed',
+        conclusion: 'success',
+      });
+    },
+  });
+
+  for (const [index, sortKey] of ['1781680501000', '1781680502000'].entries()) {
+    assert.equal((await queue.fetch(createQueueRequest({
+      event_type: 'feishu_update_dev',
+      client_payload: {
+        feishu_update: createFeishuQueueEvent({
+          eventId: `evt-continue-${index + 1}`,
+          messageId: `om_continue_${index + 1}`,
+          text: `/随想编 ${index + 3} 身体反馈 ${'长内容'.repeat(120)}`,
+          createTime: sortKey,
+        }),
+      },
+      source: { channel: 'feishu', sortKey },
+    }))).status, 202);
+  }
+
+  for (let i = 0; i < 6; i += 1) {
+    await queue.alarm();
+  }
+
+  assert.equal(dispatched.length, 2);
+  assert.deepEqual(completedRunIds, [501, 502]);
+  assert.deepEqual(await state.storage.get('queue'), []);
+  assert.equal(await state.storage.get('processing'), undefined);
+});
+
 test('SyncDispatchQueue keeps concurrent enqueues instead of overwriting the middle task', async () => {
   const state = createDurableObjectState();
   const queue = new SyncDispatchQueue(state, {
@@ -1014,6 +1215,37 @@ function createQueueRequest(payload) {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
   });
+}
+
+function createFeishuQueueEvent({
+  eventId,
+  messageId,
+  text,
+  token = 'verification-token',
+  chatId = 'oc_queue_chat',
+  createTime = '1781680301000',
+}) {
+  return {
+    schema: '2.0',
+    header: {
+      event_id: eventId,
+      token,
+      create_time: String(Number(createTime) + 500),
+      event_type: 'im.message.receive_v1',
+      tenant_key: 'tenant-key',
+      app_id: 'cli_test',
+    },
+    event: {
+      message: {
+        chat_id: chatId,
+        chat_type: 'p2p',
+        content: JSON.stringify({ text }),
+        create_time: createTime,
+        message_id: messageId,
+        message_type: 'text',
+      },
+    },
+  };
 }
 
 function createSyncDispatchQueueNamespace(enqueued) {
