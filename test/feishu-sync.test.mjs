@@ -314,6 +314,52 @@ test('runFeishuSync handles image and thought batches through the shared sync pi
   assert.match(report.batches[0].sourceId, /^feishu:chat:oc_chat_1:/);
 });
 
+test('runFeishuSync consumes queued workflow dispatch payloads in webhook mode', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-workflow-dispatch-'));
+  const dispatchPath = path.join(tempRoot, 'queued-dispatch-event.json');
+  const persisted = [];
+  await writeFile(
+    dispatchPath,
+    JSON.stringify({
+      action: 'feishu_update_dev',
+      client_payload: {
+        feishu_updates: [
+          createFeishuTextEvent({
+            eventId: 'evt-workflow-edit-1',
+            messageId: 'om_workflow_edit_1',
+            chatId: 'oc_chat_1',
+            text: '/随想编 272 杂七杂八 workflow dispatch 正文',
+            createTime: '1781398820000',
+          }),
+        ],
+      },
+    }),
+    'utf8',
+  );
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: {
+      ...feishuSyncEnv(),
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_EVENT_PATH: dispatchPath,
+    },
+    persistNormalizedBatch: async ({ batch, sourceChannel }) => {
+      persisted.push({ batch, sourceChannel });
+      return { status: 'stored', archivedDate: batch.archivedDate ?? null };
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.updatesFetched, 1);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0].sourceChannel, 'feishu');
+});
+
 test('runFeishuSync persists explicit Feishu thought edit module updates through the shared pipeline', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-runner-edit-'));
   const persisted = [];
@@ -538,6 +584,50 @@ test('feishu action monitor reports failed workflow stages to the original Feish
   assert.deepEqual(sentMessages.map((message) => message.chatId), ['oc_chat_1']);
   assert.match(sentMessages[0].text, /GitHub Action 执行失败：Sync Feishu updates/);
   assert.match(sentMessages[0].text, /https:\/\/github\.com\/soulgo\/training_records\/actions\/runs\/123456/);
+});
+
+test('feishu action monitor reports queued workflow dispatch failures to the original Feishu chat', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-action-monitor-workflow-dispatch-'));
+  const eventPath = path.join(tempRoot, 'queued-dispatch-event.json');
+  const sentMessages = [];
+  await writeFile(
+    eventPath,
+    JSON.stringify({
+      action: 'feishu_update_dev',
+      client_payload: {
+        feishu_updates: [
+          createFeishuImageEvent({
+            eventId: 'evt-action-workflow-fail-1',
+            messageId: 'om_action_workflow_fail_1',
+            chatId: 'oc_chat_1',
+            imageKey: 'img_action_workflow_fail_1',
+            createTime: '1781398800000',
+          }),
+        ],
+      },
+    }),
+    'utf8',
+  );
+
+  const result = await notifyFeishuActionFailure({
+    env: {
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_EVENT_PATH: eventPath,
+      GITHUB_SERVER_URL: 'https://github.com',
+      GITHUB_REPOSITORY: 'soulgo/training_records',
+      GITHUB_RUN_ID: '123460',
+      STEP_SYNC_OUTCOME: 'failure',
+    },
+    sendFeishuMessage: async (message) => {
+      sentMessages.push(message);
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(result.failureCategory, 'github_action');
+  assert.deepEqual(sentMessages.map((message) => message.chatId), ['oc_chat_1']);
+  assert.match(sentMessages[0].text, /GitHub Action 执行失败：Sync Feishu updates/);
 });
 
 test('feishu action monitor reports deploy wait failures as site refresh failures', async () => {

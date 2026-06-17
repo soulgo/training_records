@@ -6,6 +6,7 @@ import {
   resolveDispatchFeishuUpdates,
   sendFeishuMessage,
 } from '../src/adapters/feishu/index.mjs';
+import { isDispatchEventName } from '../src/adapters/telegram/polling.transport.mjs';
 
 const stepLabels = [
   ['install', 'Install dependencies'],
@@ -24,8 +25,8 @@ export async function main() {
 
 export async function notifyFeishuActionFailure(options = {}) {
   const env = options.env ?? process.env;
-  if (env.GITHUB_EVENT_NAME !== 'repository_dispatch') {
-    return { notified: false, reason: 'not_repository_dispatch' };
+  if (!isDispatchEventName(env.GITHUB_EVENT_NAME)) {
+    return { notified: false, reason: 'not_dispatch_event' };
   }
 
   const updates = await resolveDispatchFeishuUpdates({

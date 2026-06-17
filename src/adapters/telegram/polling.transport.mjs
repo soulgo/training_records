@@ -25,7 +25,7 @@ export async function resolveDispatchTelegramUpdates({
 }) {
   const eventPayload =
     repositoryDispatchEvent ??
-    (githubEventName === 'repository_dispatch' && githubEventPath
+    (isDispatchEventName(githubEventName) && githubEventPath
       ? await readGithubEventFile(githubEventPath)
       : null);
 
@@ -41,6 +41,10 @@ export async function resolveDispatchTelegramUpdates({
     return clientPayload.telegram_updates;
   }
   return [];
+}
+
+export function isDispatchEventName(value) {
+  return value === 'repository_dispatch' || value === 'workflow_dispatch';
 }
 
 async function readGithubEventFile(eventPath) {

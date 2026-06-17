@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { isDispatchEventName } from '../telegram/polling.transport.mjs';
 
 export async function resolveDispatchFeishuUpdates({
   repositoryDispatchEvent,
@@ -7,7 +8,7 @@ export async function resolveDispatchFeishuUpdates({
 }) {
   const eventPayload =
     repositoryDispatchEvent ??
-    (githubEventName === 'repository_dispatch' && githubEventPath
+    (isDispatchEventName(githubEventName) && githubEventPath
       ? await readGithubEventFile(githubEventPath)
       : null);
 

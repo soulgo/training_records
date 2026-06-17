@@ -68,6 +68,53 @@ test('telegram sync entrypoint ignores empty repository dispatch payloads in web
   assert.equal(report.updatesFetched, 0);
 });
 
+test('telegram sync entrypoint consumes queued workflow dispatch payloads in webhook mode', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-workflow-dispatch-'));
+  const dispatchPath = path.join(tempRoot, 'queued-dispatch-event.json');
+  await writeFile(
+    dispatchPath,
+    JSON.stringify({
+      action: 'telegram_update_dev',
+      client_payload: {
+        telegram_updates: [
+          {
+            update_id: 902,
+            message: {
+              message_id: 126,
+              date: 1781665850,
+              chat: { id: 42 },
+              text: '/随想编 126 杂七杂八 测试 workflow dispatch',
+            },
+          },
+        ],
+      },
+    }),
+    'utf8',
+  );
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv({
+      TELEGRAM_SYNC_TRANSPORT: 'webhook',
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_EVENT_PATH: dispatchPath,
+    }),
+    getLastProcessedUpdateId: async () => 900,
+    readPendingRecognitionBatches: async () => [],
+    persistNormalizedBatch: async ({ batch }) => ({
+      status: 'stored',
+      messageId: batch.thoughtEdit.targetMessageId,
+      thoughtModule: batch.thoughtEdit.thoughtModule,
+    }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.updatesFetched, 1);
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+});
+
 test('does not persist telegram artifacts when no updates were fetched and nothing changed', () => {
   assert.equal(
     shouldPersistTelegramArtifacts({
@@ -3696,6 +3743,52 @@ test('telegram action monitor reports the failed workflow stage to the original 
   assert.equal(sentMessages[0].replyToMessageId, 77);
   assert.match(sentMessages[0].text, /GitHub Action 执行失败：Sync Telegram updates/);
   assert.match(sentMessages[0].text, /https:\/\/github\.com\/soulgo\/training_records\/actions\/runs\/123456/);
+});
+
+test('telegram action monitor reports queued workflow dispatch failures to the original telegram message', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-action-monitor-workflow-dispatch-'));
+  const eventPath = path.join(tempRoot, 'queued-dispatch-event.json');
+  const sentMessages = [];
+  await writeFile(
+    eventPath,
+    JSON.stringify({
+      action: 'telegram_update_dev',
+      client_payload: {
+        telegram_updates: [
+          {
+            update_id: 903,
+            message: {
+              message_id: 79,
+              chat: { id: 42 },
+            },
+          },
+        ],
+      },
+    }),
+    'utf8',
+  );
+
+  const result = await notifyTelegramActionFailure({
+    env: {
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_EVENT_PATH: eventPath,
+      GITHUB_SERVER_URL: 'https://github.com',
+      GITHUB_REPOSITORY: 'soulgo/training_records',
+      GITHUB_RUN_ID: '123459',
+      TELEGRAM_BOT_TOKEN: 'token',
+      STEP_SYNC_OUTCOME: 'failure',
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(result.failureCategory, 'github_action');
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].chatId, 42);
+  assert.equal(sentMessages[0].replyToMessageId, 79);
 });
 
 test('telegram action monitor reports deploy wait failures as site refresh failures', async () => {

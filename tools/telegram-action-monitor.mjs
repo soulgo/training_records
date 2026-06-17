@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDispatchEventName } from '../src/adapters/telegram/polling.transport.mjs';
 
 const TELEGRAM_API_BASE_URL = 'https://api.telegram.org';
 
@@ -22,8 +23,8 @@ export async function main() {
 
 export async function notifyTelegramActionFailure(options = {}) {
   const env = options.env ?? process.env;
-  if (env.GITHUB_EVENT_NAME !== 'repository_dispatch') {
-    return { notified: false, reason: 'not_repository_dispatch' };
+  if (!isDispatchEventName(env.GITHUB_EVENT_NAME)) {
+    return { notified: false, reason: 'not_dispatch_event' };
   }
 
   const updates = await readRepositoryDispatchUpdates(env.GITHUB_EVENT_PATH);
