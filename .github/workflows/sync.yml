@@ -86,6 +86,9 @@ jobs:
           }));
           NODE
             echo "GITHUB_EVENT_PATH=$GITHUB_EVENT_PATH" >> "$GITHUB_ENV"
+            echo "SYNC_DISPATCH_PAYLOAD<<SYNC_DISPATCH_PAYLOAD_EOF" >> "$GITHUB_ENV"
+            echo "$DISPATCH_PAYLOAD" >> "$GITHUB_ENV"
+            echo "SYNC_DISPATCH_PAYLOAD_EOF" >> "$GITHUB_ENV"
             EVENT_TYPE="$(node -e "const data=JSON.parse(process.env.DISPATCH_PAYLOAD || '{}'); process.stdout.write(data.action || '')")"
           elif [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             IS_WEBHOOK_DISPATCH=true

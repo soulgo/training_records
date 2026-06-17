@@ -79,11 +79,12 @@ export async function runFeishuSync(options = {}) {
     env: sharedEnv,
     sourceChannel: 'feishu',
     sleepBackfillSourceChannel: 'feishu_sync',
-    resolveDispatchUpdates: ({ repositoryDispatchEvent, githubEventName, githubEventPath }) =>
+    resolveDispatchUpdates: ({ repositoryDispatchEvent, githubEventName, githubEventPath, dispatchPayload }) =>
       resolveDispatchFeishuUpdates({
         repositoryDispatchEvent,
         githubEventName,
         githubEventPath,
+        dispatchPayload,
       }),
     groupUpdates: groupFeishuUpdates,
     getLastProcessedUpdateId: options.getLastProcessedUpdateId ?? (async () => 0),
