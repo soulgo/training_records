@@ -675,6 +675,103 @@ test('SyncDispatchQueue matches workflow runs by queue task id instead of first 
   assert.equal(await state.storage.get('processing'), undefined);
 });
 
+test('SyncDispatchQueue dead-letters Feishu tasks when workflow runs never appear and continues', async () => {
+  const state = createDurableObjectState();
+  const dispatched = [];
+  const feishuMessages = [];
+  let now = 1_000;
+  const queue = new SyncDispatchQueue(state, {
+    ...createEnv(),
+    GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+    GITHUB_SYNC_REF: 'dev',
+    GITHUB_RUN_LOOKUP_TIMEOUT_MS: '30000',
+    FEISHU_APP_ID: 'feishu-app-id',
+    FEISHU_APP_SECRET: 'feishu-app-secret',
+    __now: () => now,
+    __dispatchFetchImpl: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
+        dispatched.push(JSON.parse(init.body));
+        return new Response(null, { status: 204 });
+      }
+      if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
+        if (dispatched.length < 2) {
+          return Response.json({ workflow_runs: [] });
+        }
+        const taskId = dispatched[1].inputs.queue_task_id;
+        return Response.json({
+          workflow_runs: [
+            {
+              id: 601,
+              name: `Sync queue task ${taskId}`,
+              created_at: new Date(now).toISOString(),
+              event: 'workflow_dispatch',
+            },
+          ],
+        });
+      }
+      if (urlText.includes('/actions/runs/601')) {
+        return Response.json({
+          id: 601,
+          status: 'completed',
+          conclusion: 'success',
+        });
+      }
+      if (urlText.endsWith('/open-apis/auth/v3/tenant_access_token/internal')) {
+        return Response.json({
+          code: 0,
+          tenant_access_token: 'tenant-token',
+        });
+      }
+      if (urlText.includes('/open-apis/im/v1/messages')) {
+        feishuMessages.push(JSON.parse(init.body));
+        return Response.json({ code: 0, data: { message_id: 'om_notice_1' } });
+      }
+      throw new Error(`unexpected fetch: ${urlText}`);
+    },
+  });
+
+  for (const [index, sortKey] of ['1781680601000', '1781680602000'].entries()) {
+    const event = createFeishuQueueEvent({
+      eventId: `evt-timeout-${index + 1}`,
+      messageId: `om_timeout_${index + 1}`,
+      text: `/随想编 ${index + 3} 身体反馈 超时恢复${index + 1}`,
+      createTime: sortKey,
+    });
+    assert.equal((await queue.fetch(createQueueRequest({
+      event_type: 'feishu_update_dev',
+      client_payload: { feishu_update: event },
+      source: { channel: 'feishu', sortKey },
+      notification: {
+        channel: 'feishu',
+        chatId: event.event.message.chat_id,
+        sourceMessageId: event.event.message.message_id,
+      },
+    }))).status, 202);
+  }
+
+  await queue.alarm();
+  assert.equal(dispatched.length, 1);
+  assert.equal((await state.storage.get('processing')).phase, 'wait_for_run');
+
+  now += 40_000;
+  await queue.alarm();
+
+  const deadLetters = await state.storage.get('deadLetters');
+  assert.equal(deadLetters.length, 1);
+  assert.match(deadLetters[0].error, /github_workflow_run_not_found/);
+  assert.equal(feishuMessages.length, 1);
+  assert.equal(feishuMessages[0].receive_id, 'oc_queue_chat');
+  assert.match(JSON.parse(feishuMessages[0].content).text, /GitHub Action 未能启动/);
+
+  await queue.alarm();
+  assert.equal(dispatched.length, 2);
+  assert.equal(JSON.parse(dispatched[1].inputs.dispatch_payload).client_payload.feishu_update.header.event_id, 'evt-timeout-2');
+
+  await queue.alarm();
+  assert.equal(await state.storage.get('processing'), undefined);
+});
+
 test('SyncDispatchQueue uses short task ids that do not expose Feishu payload content', async () => {
   const state = createDurableObjectState();
   const dispatched = [];

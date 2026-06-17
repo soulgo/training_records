@@ -6,6 +6,7 @@ const QUEUE_KEY = 'queue';
 const PROCESSING_KEY = 'processing';
 const DEAD_LETTER_KEY = 'deadLetters';
 const POLL_DELAY_MS = 10_000;
+const DEFAULT_RUN_LOOKUP_TIMEOUT_MS = 120_000;
 const RETRY_BASE_DELAY_MS = 10_000;
 const RETRY_MAX_DELAY_MS = 60_000;
 const MAX_ATTEMPTS = 5;
@@ -13,6 +14,7 @@ const PAYLOAD_HASH_LENGTH = 16;
 const LEGACY_LONG_TASK_ID_LENGTH = 240;
 const LEGACY_TRUNCATED_TITLE_MIN_LENGTH = 120;
 const TELEGRAM_API_BASE_URL = 'https://api.telegram.org';
+const FEISHU_API_BASE_URL = 'https://open.feishu.cn';
 const QUEUE_TABLE = 'sync_dispatch_queue';
 const PROCESSING_TABLE = 'sync_dispatch_processing';
 
@@ -138,6 +140,10 @@ export class SyncDispatchQueue {
         task: processing.task,
       });
       if (!runId) {
+        if (hasWorkflowRunLookupTimedOut({ env: this.env, processing })) {
+          await this.deadLetter(processing, 'github_workflow_run_not_found_after_dispatch');
+          return;
+        }
         await this.storeProcessing(processing, POLL_DELAY_MS);
         return;
       }
@@ -189,6 +195,24 @@ export class SyncDispatchQueue {
       env: this.env,
       task: processing.task,
       reason: summarizeError(error),
+    });
+    await this.deleteProcessing();
+    await setStateAlarm(this.state, getNow(this.env));
+  }
+
+  async deadLetter(processing, reason) {
+    const deadLetters = await readArray(this.state, DEAD_LETTER_KEY);
+    deadLetters.push({
+      task: processing.task,
+      failedAt: new Date(getNow(this.env)).toISOString(),
+      error: reason,
+    });
+    await this.state.storage.put(DEAD_LETTER_KEY, deadLetters.slice(-100));
+    await notifyTaskNotStarted({
+      fetchImpl: this.env.__dispatchFetchImpl ?? fetch,
+      env: this.env,
+      task: processing.task,
+      reason,
     });
     await this.deleteProcessing();
     await setStateAlarm(this.state, getNow(this.env));
@@ -323,6 +347,7 @@ export function buildFeishuDispatchPayload({ env, events }) {
   const clientPayload = events.length === 1
     ? { feishu_update: events[0] }
     : { feishu_updates: events };
+  const firstMessage = findFirstFeishuMessage(events);
   return {
     event_type: eventType,
     client_payload: clientPayload,
@@ -330,6 +355,11 @@ export function buildFeishuDispatchPayload({ env, events }) {
       channel: 'feishu',
       sortKey: resolveFeishuSortKey(events[0]),
     },
+    notification: firstMessage?.chat_id ? {
+      channel: 'feishu',
+      chatId: firstMessage.chat_id,
+      sourceMessageId: firstMessage.message_id,
+    } : null,
   };
 }
 
@@ -519,6 +549,16 @@ function findFirstTelegramMessage(updates) {
   return null;
 }
 
+function findFirstFeishuMessage(events) {
+  for (const event of events ?? []) {
+    const message = event?.event?.message ?? null;
+    if (message) {
+      return message;
+    }
+  }
+  return null;
+}
+
 function resolveFeishuSortKey(event) {
   return event?.event?.message?.create_time ??
     event?.header?.create_time ??
@@ -528,7 +568,13 @@ function resolveFeishuSortKey(event) {
 
 async function notifyTaskNotStarted({ fetchImpl, env, task, reason }) {
   const notification = task?.notification;
-  if (notification?.channel !== 'telegram' || !notification.chatId) {
+  if (!notification?.channel || !notification.chatId) {
+    return null;
+  }
+  if (notification.channel === 'feishu') {
+    return notifyFeishuTaskNotStarted({ fetchImpl, env, notification, reason });
+  }
+  if (notification.channel !== 'telegram') {
     return null;
   }
   const botToken = env?.TELEGRAM_BOT_TOKEN?.trim();
@@ -546,6 +592,51 @@ async function notifyTaskNotStarted({ fetchImpl, env, task, reason }) {
         reply_to_message_id: notification.replyToMessageId,
         allow_sending_without_reply: true,
         disable_web_page_preview: true,
+      }),
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function notifyFeishuTaskNotStarted({ fetchImpl, env, notification, reason }) {
+  const appId = env?.FEISHU_APP_ID?.trim();
+  const appSecret = env?.FEISHU_APP_SECRET?.trim();
+  if (!appId || !appSecret) {
+    return null;
+  }
+
+  const apiBaseUrl = env?.FEISHU_API_BASE_URL?.trim() || FEISHU_API_BASE_URL;
+  try {
+    const tokenResponse = await fetchImpl(`${apiBaseUrl}/open-apis/auth/v3/tenant_access_token/internal`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        app_id: appId,
+        app_secret: appSecret,
+      }),
+    });
+    if (!tokenResponse.ok) {
+      return null;
+    }
+    const tokenPayload = await tokenResponse.json();
+    const token = tokenPayload.tenant_access_token;
+    if (tokenPayload.code !== 0 || !token) {
+      return null;
+    }
+
+    return await fetchImpl(`${apiBaseUrl}/open-apis/im/v1/messages?receive_id_type=chat_id`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        receive_id: notification.chatId,
+        msg_type: 'text',
+        content: JSON.stringify({
+          text: `GitHub Action 未能启动：${reason || '未知原因'}`,
+        }),
       }),
     });
   } catch {
@@ -571,6 +662,19 @@ async function setStateAlarm(state, value) {
 function calculateRetryDelayMs(attempts) {
   const exponent = Math.max(0, Math.min(Number(attempts) - 1, 6));
   return Math.min(RETRY_BASE_DELAY_MS * (2 ** exponent), RETRY_MAX_DELAY_MS);
+}
+
+function hasWorkflowRunLookupTimedOut({ env, processing }) {
+  const startedAt = Date.parse(processing?.dispatchStartedAt ?? '');
+  if (!Number.isFinite(startedAt)) {
+    return false;
+  }
+  return getNow(env) - startedAt > resolveRunLookupTimeoutMs(env);
+}
+
+function resolveRunLookupTimeoutMs(env) {
+  const configured = Number(env?.GITHUB_RUN_LOOKUP_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_RUN_LOOKUP_TIMEOUT_MS;
 }
 
 function summarizeError(error) {

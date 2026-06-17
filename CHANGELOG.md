@@ -33,8 +33,9 @@
 
 ### Fixed
 
+- 修复飞书单条文本随想也不触发 GitHub Actions 的问题：飞书 `text` 消息现在绕过 `FEISHU_IMAGE_BUFFER`，直接进入全局同步队列；图片消息仍保留 3 秒 burst 缓冲。同步队列在 `workflow_dispatch` 后长期找不到对应 run 时会 dead-letter 当前任务并继续处理后续消息，且在配置 Worker 级 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 时会向飞书回发“GitHub Action 未能启动”。
 - 修复飞书连续随想队列在 GitHub Actions run title 被截断后卡死的问题：`SyncDispatchQueue` 现在使用短稳定 `queue_task_id`（`channel:sortKey:eventType:hash`），避免把完整飞书 payload 写入 run 标题；同时兼容旧的超长队列 ID 前缀匹配，让已卡在 `wait_for_run` 的任务可以继续 drain 后续消息。
-- 修复飞书连续发送多条文本随想/随想编时只处理第一条的问题：飞书 text/post/image 消息现在统一按 chat 进入 3 秒消息 burst buffer，聚合为单个 `feishu_updates` 后再进入全局同步队列；同时补齐 buffer 重试保护、结构化日志和 Cloudflare Workers observability，便于后续排查历史回调链路。
+- 修复飞书连续发送多条文本随想/随想编时只处理第一条的问题：飞书文本消息进入全局同步队列按 `create_time` 顺序处理，图片消息继续按 chat 进入 3 秒 burst buffer 并聚合为 `feishu_updates`；同时补齐 buffer 重试保护、结构化日志和 Cloudflare Workers observability，便于后续排查历史回调链路。
 - 补充 dev 环境连续发送多条随想的实测验证记录：当前已确认连续多条随想可以按队列顺序完成同步，不再复现中间消息丢失或被取消的问题。
 - 修复 `repository_dispatch` 总是读取默认分支 workflow、导致 dev 上的连续消息队列修复未生效的问题；Cloudflare `SyncDispatchQueue` 现在改用 `workflow_dispatch` 并按环境传入 `GITHUB_SYNC_REF`（dev/main 分别触发各自分支），workflow 通过 `queue_task_id` 精确匹配 run，避免连续随想消息中间 run 被旧默认分支并发组取消或误关联。
 - 修复 `SyncDispatchQueue` 使用异步 KV 数组读改写导致连续 Telegram/飞书 webhook 并发入队时可能覆盖中间任务的问题；生产 Durable Object 改用 SQLite 表保存 FIFO 队列和 processing 状态，测试环境也串行化 KV fallback，确保三连发不会丢第二条。

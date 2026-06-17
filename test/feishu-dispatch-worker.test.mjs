@@ -128,7 +128,7 @@ test('handleFeishuWebhook enqueues single Feishu text events when the sync dispa
   });
 });
 
-test('handleFeishuWebhook buffers consecutive Feishu text messages per chat before queueing one task', async () => {
+test('handleFeishuWebhook bypasses the image buffer for single Feishu text events', async () => {
   const enqueued = [];
   let env;
   const bufferNamespace = createFeishuBufferNamespace(() => env);
@@ -138,15 +138,52 @@ test('handleFeishuWebhook buffers consecutive Feishu text messages per chat befo
     SYNC_DISPATCH_QUEUE: createSyncDispatchQueueNamespace(enqueued),
   });
   const firstEvent = createFeishuTextEvent({
-    eventId: 'evt-text-buffer-1',
-    messageId: 'om_feishu_text_buffer_1',
+    eventId: 'evt-text-bypass-1',
+    messageId: 'om_feishu_text_bypass_1',
+    chatId: 'oc_chat_1',
+    text: '/随想 第一条飞书随想',
+    createTime: '1781398801000',
+  });
+
+  const response = await handleFeishuWebhook(createFeishuRequest(firstEvent), env, {
+    skipSignatureVerification: true,
+    fetchImpl: async () => {
+      throw new Error('GitHub dispatch should be handled by the queue');
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    queued: true,
+    eventId: 'evt-text-bypass-1',
+  });
+  assert.equal(enqueued.length, 1);
+  assert.equal(enqueued[0].event_type, 'feishu_update_dev');
+  assert.deepEqual(enqueued[0].client_payload, {
+    feishu_update: firstEvent,
+  });
+});
+
+test('handleFeishuWebhook enqueues consecutive Feishu text messages as ordered queue tasks', async () => {
+  const enqueued = [];
+  let env;
+  const bufferNamespace = createFeishuBufferNamespace(() => env);
+  env = createEnv({
+    GITHUB_DISPATCH_EVENT_TYPE_FEISHU: 'feishu_update_dev',
+    FEISHU_IMAGE_BUFFER: bufferNamespace,
+    SYNC_DISPATCH_QUEUE: createSyncDispatchQueueNamespace(enqueued),
+  });
+  const firstEvent = createFeishuTextEvent({
+    eventId: 'evt-text-immediate-1',
+    messageId: 'om_feishu_text_immediate_1',
     chatId: 'oc_chat_1',
     text: '/随想编 600 身体反馈 第一条',
     createTime: '1781398801000',
   });
   const secondEvent = createFeishuTextEvent({
-    eventId: 'evt-text-buffer-2',
-    messageId: 'om_feishu_text_buffer_2',
+    eventId: 'evt-text-immediate-2',
+    messageId: 'om_feishu_text_immediate_2',
     chatId: 'oc_chat_1',
     text: '/随想编 601 杂七杂八 第二条',
     createTime: '1781398802000',
@@ -168,20 +205,21 @@ test('handleFeishuWebhook buffers consecutive Feishu text messages per chat befo
   assert.equal(firstResponse.status, 200);
   assert.deepEqual(await firstResponse.json(), {
     ok: true,
-    buffered: true,
-    eventId: 'evt-text-buffer-1',
-    bufferKey: 'oc_chat_1:messages',
+    queued: true,
+    eventId: 'evt-text-immediate-1',
   });
   assert.equal(secondResponse.status, 200);
-  assert.equal(enqueued.length, 0);
-
-  await bufferNamespace.flush('oc_chat_1:messages');
-
-  assert.equal(enqueued.length, 1);
-  assert.equal(enqueued[0].event_type, 'feishu_update_dev');
-  assert.deepEqual(enqueued[0].client_payload, {
-    feishu_updates: [firstEvent, secondEvent],
+  assert.deepEqual(await secondResponse.json(), {
+    ok: true,
+    queued: true,
+    eventId: 'evt-text-immediate-2',
   });
+  assert.equal(enqueued.length, 2);
+  assert.deepEqual(enqueued.map((item) => item.source.sortKey), ['1781398801000', '1781398802000']);
+  assert.deepEqual(enqueued.map((item) => item.client_payload.feishu_update.header.event_id), [
+    'evt-text-immediate-1',
+    'evt-text-immediate-2',
+  ]);
 });
 
 test('handleFeishuWebhook dispatches encrypted Feishu events without Lark signature headers', async () => {
