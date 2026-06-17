@@ -159,6 +159,10 @@ telegram_chat_id: 42
       const homepage = readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
 
       assert.match(thoughtsIndex, /锻炼模块默认随想/);
+      assert.match(
+        thoughtsIndex,
+        /<span class="thought-card__id"[^>]*title="Telegram message id"[^>]*data-thought-id="501"[^>]*>#501<\/span>/,
+      );
       assert.doesNotMatch(thoughtsIndex, /杂七杂八模块随想/);
       assert.doesNotMatch(thoughtsIndex, /身体反馈模块随想/);
       assert.match(miscIndex, /杂七杂八模块随想/);

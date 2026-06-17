@@ -165,8 +165,7 @@ jobs:
           fi
 
           found=false
-          if grep -F "#${TARGET_THOUGHT_ID}" "$page_file" >/dev/null ||
-             grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$page_file" >/dev/null; then
+          if grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$page_file" >/dev/null; then
             found=true
           fi
 
@@ -190,8 +189,7 @@ jobs:
               fi
 
               module_found=false
-              if grep -F "#${TARGET_THOUGHT_ID}" "$module_file" >/dev/null ||
-                 grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$module_file" >/dev/null; then
+              if grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$module_file" >/dev/null; then
                 module_found=true
               fi
 

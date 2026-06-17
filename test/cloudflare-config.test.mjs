@@ -20,8 +20,12 @@ test('wrangler main config reuses the Feishu worker as the unified production en
   assert.match(config, /class_name\s*=\s*"TelegramAlbumBuffer"/);
   assert.match(config, /name\s*=\s*"FEISHU_IMAGE_BUFFER"/);
   assert.match(config, /class_name\s*=\s*"FeishuImageBuffer"/);
+  assert.match(config, /GITHUB_SYNC_WORKFLOW_FILE\s*=\s*"sync\.yml"/);
+  assert.match(config, /name\s*=\s*"SYNC_DISPATCH_QUEUE"/);
+  assert.match(config, /class_name\s*=\s*"SyncDispatchQueue"/);
   assert.match(config, /tag\s*=\s*"v1"\s*\nnew_sqlite_classes\s*=\s*\["FeishuImageBuffer"\]/);
   assert.match(config, /tag\s*=\s*"v2"\s*\nnew_sqlite_classes\s*=\s*\["TelegramAlbumBuffer"\]/);
+  assert.match(config, /tag\s*=\s*"v3"\s*\nnew_sqlite_classes\s*=\s*\["SyncDispatchQueue"\]/);
   assert.doesNotMatch(config, /GITHUB_OWNER/);
   assert.doesNotMatch(config, /GITHUB_REPO/);
   assert.doesNotMatch(config, /GITHUB_TOKEN|TELEGRAM_SECRET_TOKEN|TELEGRAM_BOT_TOKEN|FEISHU_APP_SECRET|FEISHU_ENCRYPT_KEY|FEISHU_VERIFICATION_TOKEN/);
@@ -49,7 +53,10 @@ test('wrangler unified dev config routes Telegram and Feishu to dev workflows wi
   assert.match(config, /class_name\s*=\s*"TelegramAlbumBuffer"/);
   assert.match(config, /name\s*=\s*"FEISHU_IMAGE_BUFFER"/);
   assert.match(config, /class_name\s*=\s*"FeishuImageBuffer"/);
-  assert.match(config, /new_sqlite_classes\s*=\s*\["TelegramAlbumBuffer",\s*"FeishuImageBuffer"\]/);
+  assert.match(config, /GITHUB_SYNC_WORKFLOW_FILE\s*=\s*"sync-dev\.yml"/);
+  assert.match(config, /name\s*=\s*"SYNC_DISPATCH_QUEUE"/);
+  assert.match(config, /class_name\s*=\s*"SyncDispatchQueue"/);
+  assert.match(config, /new_sqlite_classes\s*=\s*\["TelegramAlbumBuffer",\s*"FeishuImageBuffer",\s*"SyncDispatchQueue"\]/);
   assert.doesNotMatch(config, /GITHUB_OWNER/);
   assert.doesNotMatch(config, /GITHUB_REPO/);
   assert.doesNotMatch(config, /GITHUB_TOKEN|TELEGRAM_SECRET_TOKEN|TELEGRAM_BOT_TOKEN|FEISHU_APP_SECRET|FEISHU_ENCRYPT_KEY|FEISHU_VERIFICATION_TOKEN/);

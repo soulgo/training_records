@@ -6,8 +6,11 @@ import {
   FeishuImageBuffer,
   handleFeishuWebhook,
 } from './feishu-sync-dispatch-worker.mjs';
+import {
+  SyncDispatchQueue,
+} from './sync-dispatch-queue.mjs';
 
-export { TelegramAlbumBuffer, FeishuImageBuffer };
+export { TelegramAlbumBuffer, FeishuImageBuffer, SyncDispatchQueue, handleTelegramWebhook, handleFeishuWebhook };
 
 const TELEGRAM_SECRET_HEADER = 'X-Telegram-Bot-Api-Secret-Token';
 const LARK_SIGNATURE_HEADERS = [

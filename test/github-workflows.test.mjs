@@ -125,6 +125,7 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
   assert.match(workflow, /curl -fsSL --retry 6 --retry-delay 10/);
   assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
+  assert.doesNotMatch(workflow, /grep -F "#\$\{TARGET_THOUGHT_ID\}"/);
   assert.match(workflow, /module_paths=\("\/thoughts\/" "\/misc\/" "\/body-feedback\/"\)/);
   assert.match(workflow, /Unexpected thought #\$\{TARGET_THOUGHT_ID\}/);
   assert.match(workflow, /::error title=Thought page verification failed::/);
@@ -229,6 +230,7 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.match(workflow, /TARGET_THOUGHT_EXPECTATION:\s*\$\{\{\s*inputs\.target_thought_expectation\s*\}\}/);
   assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
   assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
+  assert.doesNotMatch(workflow, /grep -F "#\$\{TARGET_THOUGHT_ID\}"/);
   assert.match(workflow, /module_paths=\("\/thoughts\/" "\/misc\/" "\/body-feedback\/"\)/);
   assert.match(workflow, /Unexpected thought #\$\{TARGET_THOUGHT_ID\}/);
   assert.match(workflow, /::error title=Thought page verification failed::/);
@@ -618,7 +620,7 @@ test('main sync workflow sends deleted thought targets as absent deploy checks',
   assert.match(output, /thought_check_expectation=absent/);
 });
 
-test('telegram-sync repository dispatch runs queue sequentially via a shared concurrency group', async () => {
+test('telegram-sync repository dispatch runs use unique concurrency groups while the worker queue controls ordering', async () => {
   const workflows = [
     ['.github/workflows/sync.yml', 'sync'],
     ['.github/workflows/sync-dev.yml', 'sync-dev'],
@@ -627,10 +629,25 @@ test('telegram-sync repository dispatch runs queue sequentially via a shared con
   for (const [workflowPath, groupName] of workflows) {
     const workflow = await readWorkflow(workflowPath);
     const expectedGroup = new RegExp(
-      `concurrency:\\s*\\n\\s*group:\\s*${escapeRegExp(groupName)}\\s*\\n\\s*cancel-in-progress:\\s*false`,
+      `group:\\s*\\$\\{\\{\\s*github\\.event_name == 'repository_dispatch' && format\\('${escapeRegExp(groupName)}-\\{0\\}', github\\.run_id\\) \\|\\| '${escapeRegExp(groupName)}'\\s*\\}\\}`,
     );
 
-    assert.match(workflow, expectedGroup, `${workflowPath} must use shared concurrency group "${groupName}" with cancel-in-progress: false`);
+    assert.match(workflow, expectedGroup);
+    assert.match(workflow, /cancel-in-progress:\s*false/);
+    assert.doesNotMatch(
+      workflow,
+      new RegExp(`concurrency:\\s*\\n\\s*group:\\s*${escapeRegExp(groupName)}\\s*\\n\\s*cancel-in-progress:\\s*false`),
+      `${workflowPath} must not put every repository_dispatch into one fixed pending queue`,
+    );
+  }
+});
+
+test('thought deploy verification uses exact data-thought-id matches instead of id prefixes', async () => {
+  for (const workflowPath of ['.github/workflows/deploy-pages.yml', '.github/workflows/deploy-cloudflare-pages-dev.yml']) {
+    const workflow = await readWorkflow(workflowPath);
+
+    assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
+    assert.doesNotMatch(workflow, /grep -F "#\$\{TARGET_THOUGHT_ID\}"/);
   }
 });
 

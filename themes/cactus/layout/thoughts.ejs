@@ -73,7 +73,7 @@ function getThoughtDisplayMeta(post) {
   return {
     title: 'Telegram message id',
     label: `#${post.telegram_message_id}`,
-    dataThoughtId: null,
+    dataThoughtId: post.telegram_message_id,
   };
 }
 

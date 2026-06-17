@@ -96,6 +96,38 @@ test('handleFeishuWebhook dispatches a single Feishu event with the singular pay
   });
 });
 
+test('handleFeishuWebhook enqueues single Feishu text events when the sync dispatch queue is bound', async () => {
+  const enqueued = [];
+  const event = createFeishuTextEvent({
+    eventId: 'evt-text-queue-1',
+    messageId: 'om_feishu_text_queue_1',
+    chatId: 'oc_chat_1',
+    text: '/随想 第一条飞书随想',
+  });
+
+  const response = await handleFeishuWebhook(createFeishuRequest(event), createEnv({
+    GITHUB_DISPATCH_EVENT_TYPE_FEISHU: 'feishu_update_dev',
+    SYNC_DISPATCH_QUEUE: createSyncDispatchQueueNamespace(enqueued),
+  }), {
+    skipSignatureVerification: true,
+    fetchImpl: async () => {
+      throw new Error('GitHub dispatch should be handled by the queue');
+    },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    queued: true,
+    eventId: 'evt-text-queue-1',
+  });
+  assert.equal(enqueued.length, 1);
+  assert.equal(enqueued[0].event_type, 'feishu_update_dev');
+  assert.deepEqual(enqueued[0].client_payload, {
+    feishu_update: event,
+  });
+});
+
 test('handleFeishuWebhook dispatches encrypted Feishu events without Lark signature headers', async () => {
   const calls = [];
   const event = createFeishuImageEvent({
@@ -218,6 +250,39 @@ test('FeishuImageBuffer dispatches buffered image bursts with the plural payload
   assert.equal(await state.storage.get('events'), undefined);
 });
 
+test('FeishuImageBuffer enqueues buffered image bursts as one sync dispatch queue task', async () => {
+  const enqueued = [];
+  const state = createDurableObjectState();
+  const firstEvent = createFeishuImageEvent({
+    eventId: 'evt-image-queue-1',
+    messageId: 'om_feishu_queue_1',
+    chatId: 'oc_chat_1',
+    imageKey: 'img_v3_queue_1',
+  });
+  const secondEvent = createFeishuImageEvent({
+    eventId: 'evt-image-queue-2',
+    messageId: 'om_feishu_queue_2',
+    chatId: 'oc_chat_1',
+    imageKey: 'img_v3_queue_2',
+    createTime: '1781398802000',
+  });
+  const buffer = new FeishuImageBuffer(state, createEnv({
+    GITHUB_DISPATCH_EVENT_TYPE_FEISHU: 'feishu_update_dev',
+    SYNC_DISPATCH_QUEUE: createSyncDispatchQueueNamespace(enqueued),
+  }));
+
+  assert.equal((await buffer.fetch(createBufferRequest(firstEvent))).status, 202);
+  assert.equal((await buffer.fetch(createBufferRequest(secondEvent))).status, 202);
+
+  await buffer.alarm();
+
+  assert.equal(enqueued.length, 1);
+  assert.deepEqual(enqueued[0].client_payload, {
+    feishu_updates: [firstEvent, secondEvent],
+  });
+  assert.equal(await state.storage.get('events'), undefined);
+});
+
 test('FeishuImageBuffer keeps buffered events and schedules a retry when GitHub dispatch fails', async () => {
   const logs = [];
   const state = createDurableObjectState();
@@ -327,6 +392,22 @@ function createDurableObjectState() {
   };
 }
 
+function createSyncDispatchQueueNamespace(enqueued) {
+  return {
+    idFromName(name) {
+      return { name };
+    },
+    get() {
+      return {
+        async fetch(request) {
+          enqueued.push(await request.json());
+          return Response.json({ ok: true, queued: true }, { status: 202 });
+        },
+      };
+    },
+  };
+}
+
 function createFeishuImageEvent({
   eventId,
   messageId,
@@ -354,6 +435,39 @@ function createFeishuImageEvent({
         chat_type: 'group',
         message_type: 'image',
         content: JSON.stringify({ image_key: imageKey }),
+        create_time: createTime,
+      },
+    },
+  };
+}
+
+function createFeishuTextEvent({
+  eventId,
+  messageId,
+  chatId,
+  text,
+  createTime = '1781398800000',
+}) {
+  return {
+    schema: '2.0',
+    header: {
+      event_id: eventId,
+      event_type: 'im.message.receive_v1',
+      create_time: createTime,
+      token: 'verification-token',
+      app_id: 'cli_a',
+    },
+    event: {
+      sender: {
+        sender_id: { open_id: 'ou_sender_1' },
+        sender_type: 'user',
+      },
+      message: {
+        message_id: messageId,
+        chat_id: chatId,
+        chat_type: 'group',
+        message_type: 'text',
+        content: JSON.stringify({ text }),
         create_time: createTime,
       },
     },
