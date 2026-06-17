@@ -26,4 +26,8 @@ class_name = "SyncDispatchQueue"
 
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["TelegramAlbumBuffer", "FeishuImageBuffer", "SyncDispatchQueue"]
+new_sqlite_classes = ["TelegramAlbumBuffer", "FeishuImageBuffer"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["SyncDispatchQueue"]
