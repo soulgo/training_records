@@ -404,6 +404,45 @@ test('runFeishuSync consumes queued dispatch payloads when event name is unavail
   assert.equal(persisted.length, 1);
 });
 
+test('runFeishuSync consumes inline queued dispatch payloads without event path', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-inline-dispatch-'));
+  const persisted = [];
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: {
+      ...feishuSyncEnv(),
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_EVENT_PATH: '',
+      SYNC_DISPATCH_PAYLOAD: JSON.stringify({
+        action: 'feishu_update_dev',
+        client_payload: {
+          feishu_updates: [
+            createFeishuTextEvent({
+              eventId: 'evt-inline-edit-1',
+              messageId: 'om_inline_edit_1',
+              chatId: 'oc_chat_1',
+              text: '/随想编 274 杂七杂八 inline dispatch fallback',
+              createTime: '1781398820000',
+            }),
+          ],
+        },
+      }),
+    },
+    persistNormalizedBatch: async ({ batch, sourceChannel }) => {
+      persisted.push({ batch, sourceChannel });
+      return { status: 'stored', archivedDate: batch.archivedDate ?? null };
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.updatesFetched, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persisted.length, 1);
+});
+
 test('runFeishuSync persists explicit Feishu thought edit module updates through the shared pipeline', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-runner-edit-'));
   const persisted = [];
@@ -660,6 +699,44 @@ test('feishu action monitor reports queued workflow dispatch failures to the ori
       GITHUB_SERVER_URL: 'https://github.com',
       GITHUB_REPOSITORY: 'soulgo/training_records',
       GITHUB_RUN_ID: '123460',
+      STEP_SYNC_OUTCOME: 'failure',
+    },
+    sendFeishuMessage: async (message) => {
+      sentMessages.push(message);
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(result.failureCategory, 'github_action');
+  assert.deepEqual(sentMessages.map((message) => message.chatId), ['oc_chat_1']);
+  assert.match(sentMessages[0].text, /GitHub Action 执行失败：Sync Feishu updates/);
+});
+
+test('feishu action monitor reports inline queued dispatch failures to the original Feishu chat', async () => {
+  const sentMessages = [];
+
+  const result = await notifyFeishuActionFailure({
+    env: {
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_EVENT_PATH: '',
+      SYNC_DISPATCH_PAYLOAD: JSON.stringify({
+        action: 'feishu_update_dev',
+        client_payload: {
+          feishu_updates: [
+            createFeishuImageEvent({
+              eventId: 'evt-action-inline-fail-1',
+              messageId: 'om_action_inline_fail_1',
+              chatId: 'oc_chat_1',
+              imageKey: 'img_action_inline_fail_1',
+              createTime: '1781398800000',
+            }),
+          ],
+        },
+      }),
+      GITHUB_SERVER_URL: 'https://github.com',
+      GITHUB_REPOSITORY: 'soulgo/training_records',
+      GITHUB_RUN_ID: '123462',
       STEP_SYNC_OUTCOME: 'failure',
     },
     sendFeishuMessage: async (message) => {

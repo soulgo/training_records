@@ -192,6 +192,7 @@ export async function runTelegramSync(options = {}) {
       repositoryDispatchEvent: options.repositoryDispatchEvent,
       githubEventName: env.githubEventName,
       githubEventPath: env.githubEventPath,
+      dispatchPayload: env.dispatchPayload,
     }),
   );
   const previousLastProcessedUpdateId = await measureSyncStage(timings, 'readOffset', () =>
@@ -753,6 +754,7 @@ function loadRequiredEnv(env = process.env) {
         : 'poll',
     githubEventName: env.GITHUB_EVENT_NAME?.trim() || '',
     githubEventPath: env.GITHUB_EVENT_PATH?.trim() || '',
+    dispatchPayload: env.SYNC_DISPATCH_PAYLOAD ?? env.DISPATCH_PAYLOAD ?? '',
     pollLimit: Number.isFinite(pollLimit) && pollLimit > 0 ? pollLimit : 20,
     aiConcurrency: Number.isFinite(aiConcurrency) && aiConcurrency > 0 ? aiConcurrency : 3,
     allowedChatIds: parseAllowedChatIds(allowedChatIdsRaw),

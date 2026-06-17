@@ -1,7 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isDispatchEventName } from '../src/adapters/telegram/polling.transport.mjs';
+import {
+  isDispatchEventName,
+  readInlineDispatchPayload,
+  shouldReadDispatchEventFile,
+} from '../src/adapters/telegram/polling.transport.mjs';
 
 const TELEGRAM_API_BASE_URL = 'https://api.telegram.org';
 
@@ -23,11 +27,15 @@ export async function main() {
 
 export async function notifyTelegramActionFailure(options = {}) {
   const env = options.env ?? process.env;
-  if (!isDispatchEventName(env.GITHUB_EVENT_NAME)) {
+  if (!isDispatchEventName(env.GITHUB_EVENT_NAME) && !env.SYNC_DISPATCH_PAYLOAD) {
     return { notified: false, reason: 'not_dispatch_event' };
   }
 
-  const updates = await readRepositoryDispatchUpdates(env.GITHUB_EVENT_PATH);
+  const updates = await readRepositoryDispatchUpdates({
+    eventPath: env.GITHUB_EVENT_PATH,
+    githubEventName: env.GITHUB_EVENT_NAME,
+    dispatchPayload: env.SYNC_DISPATCH_PAYLOAD ?? env.DISPATCH_PAYLOAD,
+  });
   const targets = collectTelegramTargets(updates);
   if (targets.length === 0) {
     return { notified: false, reason: 'missing_telegram_target' };
@@ -63,13 +71,13 @@ export async function notifyTelegramActionFailure(options = {}) {
   };
 }
 
-async function readRepositoryDispatchUpdates(eventPath) {
-  if (!eventPath) {
-    return [];
-  }
+async function readRepositoryDispatchUpdates({ eventPath, githubEventName, dispatchPayload }) {
   try {
-    const raw = await readFile(eventPath, 'utf8');
-    const event = JSON.parse(raw);
+    const event =
+      readInlineDispatchPayload(dispatchPayload) ??
+      (shouldReadDispatchEventFile({ githubEventName, githubEventPath: eventPath })
+        ? JSON.parse(await readFile(eventPath, 'utf8'))
+        : null);
     const payload = event.client_payload ?? {};
     if (Array.isArray(payload.telegram_updates)) {
       return payload.telegram_updates;

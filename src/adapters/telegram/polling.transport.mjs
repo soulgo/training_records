@@ -23,9 +23,11 @@ export async function resolveDispatchTelegramUpdates({
   repositoryDispatchEvent,
   githubEventName,
   githubEventPath,
+  dispatchPayload,
 }) {
   const eventPayload =
     repositoryDispatchEvent ??
+    readInlineDispatchPayload(dispatchPayload) ??
     (shouldReadDispatchEventFile({ githubEventName, githubEventPath })
       ? await readGithubEventFile(githubEventPath)
       : null);
@@ -54,6 +56,33 @@ export function shouldReadDispatchEventFile({ githubEventName, githubEventPath }
       (isDispatchEventName(githubEventName) ||
         path.basename(githubEventPath) === 'queued-dispatch-event.json'),
   );
+}
+
+export function readInlineDispatchPayload(value) {
+  if (!value) {
+    return null;
+  }
+  if (typeof value === 'object') {
+    return normalizeInlineDispatchPayload(value);
+  }
+  try {
+    return normalizeInlineDispatchPayload(JSON.parse(String(value)));
+  } catch {
+    return null;
+  }
+}
+
+function normalizeInlineDispatchPayload(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+  if ('client_payload' in payload) {
+    return payload;
+  }
+  return {
+    action: payload.action ?? '',
+    client_payload: payload,
+  };
 }
 
 async function readGithubEventFile(eventPath) {

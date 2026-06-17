@@ -660,8 +660,12 @@ test('sync workflows accept queued workflow dispatch payloads and expose a webho
     assert.match(workflow, /IS_WEBHOOK_DISPATCH=true/);
     assert.match(workflow, /echo "is_webhook_dispatch=\$\{IS_WEBHOOK_DISPATCH\}" >> "\$GITHUB_OUTPUT"/);
     assert.match(workflow, /GITHUB_EVENT_PATH="\$RUNNER_TEMP\/queued-dispatch-event\.json"/);
+    assert.match(workflow, /SYNC_DISPATCH_PAYLOAD<<SYNC_DISPATCH_PAYLOAD_EOF/);
+    assert.match(workflow, /echo "\$DISPATCH_PAYLOAD" >> "\$GITHUB_ENV"/);
+    assert.match(workflow, /SYNC_DISPATCH_PAYLOAD_EOF/);
     assert.match(workflow, /client_payload: payload\.client_payload \?\? payload/);
     assert.match(workflow, /steps\.channel\.outputs\.is_webhook_dispatch == 'true'/);
+    assert.doesNotMatch(workflow, /\$\{\{\s*env\.SYNC_DISPATCH_PAYLOAD\s*\}\}/);
     assert.doesNotMatch(workflow, /if:\s*(?:always\(\) && |success\(\) && |failure\(\) && )?github\.event_name == 'repository_dispatch'/);
   }
 });
