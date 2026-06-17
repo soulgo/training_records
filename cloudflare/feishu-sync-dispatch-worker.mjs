@@ -398,6 +398,9 @@ function resolveGithubDispatchEventType(env) {
 
 function getMessageBufferKey(event) {
   const message = event?.event?.message ?? null;
+  if (message?.message_type === 'text') {
+    return null;
+  }
   if (!message?.chat_id) {
     return null;
   }
