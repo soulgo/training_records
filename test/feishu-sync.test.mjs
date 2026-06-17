@@ -360,6 +360,50 @@ test('runFeishuSync consumes queued workflow dispatch payloads in webhook mode',
   assert.equal(persisted[0].sourceChannel, 'feishu');
 });
 
+test('runFeishuSync consumes queued dispatch payloads when event name is unavailable', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-queued-dispatch-path-'));
+  const dispatchPath = path.join(tempRoot, 'queued-dispatch-event.json');
+  const persisted = [];
+  await writeFile(
+    dispatchPath,
+    JSON.stringify({
+      action: 'feishu_update_dev',
+      client_payload: {
+        feishu_updates: [
+          createFeishuTextEvent({
+            eventId: 'evt-queued-edit-1',
+            messageId: 'om_queued_edit_1',
+            chatId: 'oc_chat_1',
+            text: '/随想编 273 身体反馈 event path fallback',
+            createTime: '1781398820000',
+          }),
+        ],
+      },
+    }),
+    'utf8',
+  );
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: {
+      ...feishuSyncEnv(),
+      GITHUB_EVENT_NAME: '',
+      GITHUB_EVENT_PATH: dispatchPath,
+    },
+    persistNormalizedBatch: async ({ batch, sourceChannel }) => {
+      persisted.push({ batch, sourceChannel });
+      return { status: 'stored', archivedDate: batch.archivedDate ?? null };
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.updatesFetched, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persisted.length, 1);
+});
+
 test('runFeishuSync persists explicit Feishu thought edit module updates through the shared pipeline', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-runner-edit-'));
   const persisted = [];

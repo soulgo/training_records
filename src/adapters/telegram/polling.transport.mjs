@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 export async function fetchTelegramUpdates({ botToken, offset, limit, fetch: fetchImpl = globalThis.fetch }) {
@@ -25,7 +26,7 @@ export async function resolveDispatchTelegramUpdates({
 }) {
   const eventPayload =
     repositoryDispatchEvent ??
-    (isDispatchEventName(githubEventName) && githubEventPath
+    (shouldReadDispatchEventFile({ githubEventName, githubEventPath })
       ? await readGithubEventFile(githubEventPath)
       : null);
 
@@ -45,6 +46,14 @@ export async function resolveDispatchTelegramUpdates({
 
 export function isDispatchEventName(value) {
   return value === 'repository_dispatch' || value === 'workflow_dispatch';
+}
+
+export function shouldReadDispatchEventFile({ githubEventName, githubEventPath }) {
+  return Boolean(
+    githubEventPath &&
+      (isDispatchEventName(githubEventName) ||
+        path.basename(githubEventPath) === 'queued-dispatch-event.json'),
+  );
 }
 
 async function readGithubEventFile(eventPath) {

@@ -115,6 +115,52 @@ test('telegram sync entrypoint consumes queued workflow dispatch payloads in web
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
 });
 
+test('telegram sync entrypoint consumes queued dispatch payloads when event name is unavailable', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-queued-dispatch-path-'));
+  const dispatchPath = path.join(tempRoot, 'queued-dispatch-event.json');
+  await writeFile(
+    dispatchPath,
+    JSON.stringify({
+      action: 'telegram_update_dev',
+      client_payload: {
+        telegram_updates: [
+          {
+            update_id: 904,
+            message: {
+              message_id: 128,
+              date: 1781665850,
+              chat: { id: 42 },
+              text: '/随想编 128 身体反馈 event path fallback',
+            },
+          },
+        ],
+      },
+    }),
+    'utf8',
+  );
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv({
+      TELEGRAM_SYNC_TRANSPORT: 'webhook',
+      GITHUB_EVENT_NAME: '',
+      GITHUB_EVENT_PATH: dispatchPath,
+    }),
+    getLastProcessedUpdateId: async () => 900,
+    readPendingRecognitionBatches: async () => [],
+    persistNormalizedBatch: async ({ batch }) => ({
+      status: 'stored',
+      messageId: batch.thoughtEdit.targetMessageId,
+      thoughtModule: batch.thoughtEdit.thoughtModule,
+    }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.updatesFetched, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+});
+
 test('does not persist telegram artifacts when no updates were fetched and nothing changed', () => {
   assert.equal(
     shouldPersistTelegramArtifacts({
