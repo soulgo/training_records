@@ -33,6 +33,7 @@
 
 ### Fixed
 
+- 补充 dev 环境连续发送多条随想的实测验证记录：当前已确认连续多条随想可以按队列顺序完成同步，不再复现中间消息丢失或被取消的问题。
 - 修复 `repository_dispatch` 总是读取默认分支 workflow、导致 dev 上的连续消息队列修复未生效的问题；Cloudflare `SyncDispatchQueue` 现在改用 `workflow_dispatch` 并按环境传入 `GITHUB_SYNC_REF`（dev/main 分别触发各自分支），workflow 通过 `queue_task_id` 精确匹配 run，避免连续随想消息中间 run 被旧默认分支并发组取消或误关联。
 - 修复 `SyncDispatchQueue` 使用异步 KV 数组读改写导致连续 Telegram/飞书 webhook 并发入队时可能覆盖中间任务的问题；生产 Durable Object 改用 SQLite 表保存 FIFO 队列和 processing 状态，测试环境也串行化 KV fallback，确保三连发不会丢第二条。
 - 修复 dev Worker 推送后没有自动部署的问题；`deploy-cloudflare-worker-dev.yml` 现在在 `dev` 分支相关 Worker/workflow 配置变更时自动部署并刷新 dev Telegram webhook，避免测试仍命中旧 Worker 代码。
