@@ -6,6 +6,10 @@ const TELEGRAM_SECRET_HEADER = 'X-Telegram-Bot-Api-Secret-Token';
 const IMAGE_BURST_BUFFER_DELAY_MS = 3_000;
 
 import { TELEGRAM_HELP_TEXT, isTelegramHelpText } from '../src/telegram/help.mjs';
+import {
+  buildTelegramDispatchPayload,
+  enqueueSyncDispatchTask,
+} from './sync-dispatch-queue.mjs';
 
 export default {
   async fetch(request, env) {
@@ -197,7 +201,7 @@ export async function handleTelegramWebhook(request, env, options = {}) {
 
   return jsonResponse(202, {
     ok: true,
-    dispatched: true,
+    [response.queued ? 'queued' : 'dispatched']: true,
     updateId: update?.update_id ?? null,
   });
 }
@@ -319,10 +323,17 @@ async function safeReadText(response) {
 }
 
 async function dispatchTelegramUpdates({ fetchImpl, env, updates }) {
+  const queuePayload = buildTelegramDispatchPayload({ env, updates });
+  const queueResponse = await enqueueSyncDispatchTask({
+    env,
+    payload: queuePayload,
+  });
+  if (queueResponse) {
+    queueResponse.queued = true;
+    return queueResponse;
+  }
+
   const { owner, repo } = resolveGithubRepository(env);
-  const eventType = env?.GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM?.trim() ||
-    env?.GITHUB_DISPATCH_EVENT_TYPE?.trim() ||
-    'telegram_update';
   return fetchImpl(
     `${env.GITHUB_API_BASE_URL?.trim() || GITHUB_API_BASE_URL}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dispatches`,
     {
@@ -334,10 +345,8 @@ async function dispatchTelegramUpdates({ fetchImpl, env, updates }) {
         'user-agent': 'telegram-sync-dispatch-worker',
       },
       body: JSON.stringify({
-        event_type: eventType,
-        client_payload: {
-          telegram_updates: updates,
-        },
+        event_type: queuePayload.event_type,
+        client_payload: queuePayload.client_payload,
       }),
     },
   );

@@ -170,8 +170,7 @@ jobs:
           fi
 
           found=false
-          if grep -F "#${TARGET_THOUGHT_ID}" "$page_file" >/dev/null ||
-             grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$page_file" >/dev/null; then
+          if grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$page_file" >/dev/null; then
             found=true
           fi
 
@@ -181,8 +180,7 @@ jobs:
             rm -f "$page_file"
             page_file="$(mktemp)"
             if curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$target_url" -o "$page_file"; then
-              if grep -F "#${TARGET_THOUGHT_ID}" "$page_file" >/dev/null ||
-                 grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$page_file" >/dev/null; then
+              if grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$page_file" >/dev/null; then
                 found=true
               fi
             fi
@@ -199,8 +197,7 @@ jobs:
               fi
 
               module_found=false
-              if grep -F "#${TARGET_THOUGHT_ID}" "$module_file" >/dev/null ||
-                 grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$module_file" >/dev/null; then
+              if grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$module_file" >/dev/null; then
                 module_found=true
               fi
 
@@ -222,8 +219,7 @@ jobs:
               prod_page_file="$(mktemp)"
               if curl -fsSL --retry 10 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$prod_target_url" -o "$prod_page_file"; then
                 prod_found=false
-                if grep -F "#${TARGET_THOUGHT_ID}" "$prod_page_file" >/dev/null ||
-                   grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$prod_page_file" >/dev/null; then
+                if grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$prod_page_file" >/dev/null; then
                   prod_found=true
                 fi
                 if [ "$prod_found" = "true" ]; then

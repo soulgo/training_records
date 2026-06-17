@@ -1,3 +1,8 @@
+import {
+  buildFeishuDispatchPayload,
+  enqueueSyncDispatchTask,
+} from './sync-dispatch-queue.mjs';
+
 const GITHUB_API_BASE_URL = 'https://api.github.com';
 const DEFAULT_GITHUB_OWNER = 'soulgo';
 const DEFAULT_GITHUB_REPO = 'training_records';
@@ -208,7 +213,7 @@ export async function handleFeishuWebhook(request, env, options = {}) {
 
   return jsonResponse(200, {
     ok: true,
-    dispatched: true,
+    [response.queued ? 'queued' : 'dispatched']: true,
     eventId: event?.header?.event_id ?? null,
   });
 }
@@ -341,11 +346,17 @@ function isFeishuEventLoggingDisabled(env) {
 }
 
 async function dispatchFeishuUpdates({ fetchImpl, env, events }) {
+  const queuePayload = buildFeishuDispatchPayload({ env, events });
+  const queueResponse = await enqueueSyncDispatchTask({
+    env,
+    payload: queuePayload,
+  });
+  if (queueResponse) {
+    queueResponse.queued = true;
+    return queueResponse;
+  }
+
   const { owner, repo } = resolveGithubRepository(env);
-  const eventType = resolveGithubDispatchEventType(env);
-  const clientPayload = events.length === 1
-    ? { feishu_update: events[0] }
-    : { feishu_updates: events };
   return fetchImpl(
     `${env.GITHUB_API_BASE_URL?.trim() || GITHUB_API_BASE_URL}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dispatches`,
     {
@@ -357,8 +368,8 @@ async function dispatchFeishuUpdates({ fetchImpl, env, events }) {
         'user-agent': 'feishu-sync-dispatch-worker',
       },
       body: JSON.stringify({
-        event_type: eventType,
-        client_payload: clientPayload,
+        event_type: queuePayload.event_type,
+        client_payload: queuePayload.client_payload,
       }),
     },
   );

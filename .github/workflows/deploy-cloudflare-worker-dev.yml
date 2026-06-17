@@ -1,6 +1,14 @@
 name: Deploy Cloudflare Worker (Dev)
 
 on:
+  push:
+    branches:
+      - dev
+    paths:
+      - cloudflare/**
+      - wrangler.dev.toml
+      - .github/workflows/deploy-cloudflare-worker-dev.yml
+      - .github/workflows/sync-dev.yml
   workflow_dispatch:
 
 permissions:

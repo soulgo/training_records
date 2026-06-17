@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  SyncDispatchQueue,
   TelegramAlbumBuffer,
   handleTelegramWebhook,
-} from '../cloudflare/telegram-sync-dispatch-worker.mjs';
+} from '../cloudflare/sync-dispatch-worker.mjs';
 import { TELEGRAM_HELP_TEXT } from '../src/telegram/help.mjs';
 
 function createEnv() {
@@ -119,6 +120,49 @@ test('handleTelegramWebhook dispatches with a configured GitHub event type', asy
   assert.equal(response.status, 202);
   assert.equal(calls.length, 1);
   assert.equal(JSON.parse(calls[0].init.body).event_type, 'telegram_update_dev');
+});
+
+test('handleTelegramWebhook enqueues non-album telegram updates when the sync dispatch queue is bound', async () => {
+  const enqueued = [];
+  const request = createTelegramRequest({
+    update_id: 123,
+    message: {
+      message_id: 1,
+      chat: { id: 42 },
+      text: '/随想 第一条',
+    },
+  });
+
+  const response = await handleTelegramWebhook(request, {
+    ...createEnv(),
+    GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM: 'telegram_update_dev',
+    SYNC_DISPATCH_QUEUE: createSyncDispatchQueueNamespace(enqueued),
+  }, {
+    fetchImpl: async () => {
+      throw new Error('GitHub dispatch should be handled by the queue');
+    },
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(await response.json(), {
+    ok: true,
+    queued: true,
+    updateId: 123,
+  });
+  assert.equal(enqueued.length, 1);
+  assert.equal(enqueued[0].event_type, 'telegram_update_dev');
+  assert.deepEqual(enqueued[0].client_payload, {
+    telegram_updates: [
+      {
+        update_id: 123,
+        message: {
+          message_id: 1,
+          chat: { id: 42 },
+          text: '/随想 第一条',
+        },
+      },
+    ],
+  });
 });
 
 test('handleTelegramWebhook prefers the Telegram-specific dispatch event type', async () => {
@@ -405,6 +449,305 @@ test('handleTelegramWebhook buffers album updates and dispatches them together a
   });
 });
 
+test('TelegramAlbumBuffer enqueues a buffered image burst as one sync dispatch queue task', async () => {
+  const enqueued = [];
+  const env = {
+    ...createEnv(),
+    GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM: 'telegram_update_dev',
+    SYNC_DISPATCH_QUEUE: createSyncDispatchQueueNamespace(enqueued),
+  };
+  const namespace = createAlbumBufferNamespace(env);
+  const workerEnv = {
+    ...env,
+    TELEGRAM_ALBUM_BUFFER: namespace,
+  };
+
+  for (const update of [
+    {
+      update_id: 202,
+      message: {
+        message_id: 22,
+        media_group_id: 'album-1',
+        chat: { id: 42 },
+        photo: [{ file_id: 'photo-22' }],
+      },
+    },
+    {
+      update_id: 201,
+      message: {
+        message_id: 21,
+        media_group_id: 'album-1',
+        chat: { id: 42 },
+        photo: [{ file_id: 'photo-21' }],
+      },
+    },
+  ]) {
+    const response = await handleTelegramWebhook(createTelegramRequest(update), workerEnv);
+    assert.equal(response.status, 202);
+  }
+
+  await namespace.flush('42:images');
+
+  assert.equal(enqueued.length, 1);
+  assert.deepEqual(enqueued[0].client_payload.telegram_updates.map((update) => update.update_id), [201, 202]);
+});
+
+test('SyncDispatchQueue processes queued tasks FIFO and continues after a failed workflow run', async () => {
+  const state = createDurableObjectState();
+  const dispatched = [];
+  const runs = [
+    { id: 101, status: 'completed', conclusion: 'failure' },
+    { id: 102, status: 'completed', conclusion: 'success' },
+    { id: 103, status: 'completed', conclusion: 'success' },
+  ];
+  const queue = new SyncDispatchQueue(state, {
+    ...createEnv(),
+    GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+    GITHUB_SYNC_REF: 'dev',
+    __now: () => 1_000,
+    __dispatchFetchImpl: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
+        dispatched.push(JSON.parse(init.body));
+        return new Response(null, { status: 204 });
+      }
+      if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
+        const taskId = JSON.parse(dispatched.at(-1).inputs.dispatch_payload).client_payload.queue_task_id;
+        return Response.json({
+          workflow_runs: [
+            {
+              id: runs[dispatched.length - 1].id,
+              name: `Sync queue task ${taskId}`,
+              created_at: '2026-06-17T00:00:01Z',
+              event: 'workflow_dispatch',
+            },
+          ],
+        });
+      }
+      const runId = Number(urlText.match(/\/actions\/runs\/(\d+)/)?.[1]);
+      const run = runs.find((item) => item.id === runId);
+      return Response.json({
+        id: run.id,
+        status: run.status,
+        conclusion: run.conclusion,
+        html_url: `https://github.com/soulgo/training_records/actions/runs/${run.id}`,
+      });
+    },
+  });
+
+  for (const updateId of [1, 2, 3]) {
+    assert.equal((await queue.fetch(createQueueRequest({
+      event_type: 'telegram_update_dev',
+      client_payload: { telegram_updates: [{ update_id: updateId }] },
+      source: { channel: 'telegram', sortKey: updateId },
+    }))).status, 202);
+  }
+
+  for (let i = 0; i < 9; i += 1) {
+    await queue.alarm();
+  }
+
+  assert.deepEqual(
+    dispatched.map((body) => JSON.parse(body.inputs.dispatch_payload).client_payload.telegram_updates[0].update_id),
+    [1, 2, 3],
+  );
+  assert.deepEqual(dispatched.map((body) => body.ref), ['dev', 'dev', 'dev']);
+  assert.deepEqual(await state.storage.get('queue'), []);
+  assert.equal(await state.storage.get('processing'), undefined);
+});
+
+test('SyncDispatchQueue dispatches workflow_dispatch payloads to the configured branch ref', async () => {
+  const state = createDurableObjectState();
+  const dispatched = [];
+  const queue = new SyncDispatchQueue(state, {
+    ...createEnv(),
+    GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+    GITHUB_SYNC_REF: 'dev',
+    __now: () => 1_000,
+    __dispatchFetchImpl: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
+        dispatched.push(JSON.parse(init.body));
+        return new Response(null, { status: 204 });
+      }
+      if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
+        const dispatchPayload = JSON.parse(dispatched[0].inputs.dispatch_payload);
+        return Response.json({
+          workflow_runs: [
+            {
+              id: 201,
+              name: `Sync queue task ${dispatchPayload.client_payload.queue_task_id}`,
+              created_at: '2026-06-17T00:00:01Z',
+              event: 'workflow_dispatch',
+            },
+          ],
+        });
+      }
+      return Response.json({
+        id: 201,
+        status: 'completed',
+        conclusion: 'success',
+      });
+    },
+  });
+
+  assert.equal((await queue.fetch(createQueueRequest({
+    event_type: 'telegram_update_dev',
+    client_payload: { telegram_updates: [{ update_id: 1 }] },
+    source: { channel: 'telegram', sortKey: 1 },
+  }))).status, 202);
+
+  await queue.alarm();
+
+  const taskId = dispatched[0].inputs.queue_task_id;
+  assert.equal(dispatched.length, 1);
+  assert.deepEqual(dispatched[0], {
+    ref: 'dev',
+    inputs: {
+      channel: 'telegram',
+      queue_task_id: taskId,
+      dispatch_payload: JSON.stringify({
+        action: 'telegram_update_dev',
+        client_payload: {
+          telegram_updates: [{ update_id: 1 }],
+          queue_task_id: taskId,
+        },
+      }),
+    },
+  });
+});
+
+test('SyncDispatchQueue matches workflow runs by queue task id instead of first recent run', async () => {
+  const state = createDurableObjectState();
+  const dispatched = [];
+  let lookupCount = 0;
+  const queue = new SyncDispatchQueue(state, {
+    ...createEnv(),
+    GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+    GITHUB_SYNC_REF: 'dev',
+    __now: () => 1_000,
+    __dispatchFetchImpl: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
+        dispatched.push(JSON.parse(init.body));
+        return new Response(null, { status: 204 });
+      }
+      if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
+        lookupCount += 1;
+        const taskId = JSON.parse(dispatched[0].inputs.dispatch_payload).client_payload.queue_task_id;
+        return Response.json({
+          workflow_runs: lookupCount === 1 ? [] : [
+            {
+              id: 999,
+              name: 'Sync queue task unrelated',
+              created_at: '2026-06-17T00:00:01Z',
+              event: 'workflow_dispatch',
+            },
+            {
+              id: 201,
+              name: `Sync queue task ${taskId}`,
+              created_at: '2026-06-17T00:00:01Z',
+              event: 'workflow_dispatch',
+            },
+          ],
+        });
+      }
+      return Response.json({
+        id: 201,
+        status: 'completed',
+        conclusion: 'success',
+      });
+    },
+  });
+
+  assert.equal((await queue.fetch(createQueueRequest({
+    event_type: 'telegram_update_dev',
+    client_payload: { telegram_updates: [{ update_id: 1 }] },
+    source: { channel: 'telegram', sortKey: 1 },
+  }))).status, 202);
+
+  await queue.alarm();
+  await queue.alarm();
+  await queue.alarm();
+
+  assert.equal(dispatched.length, 1);
+  assert.deepEqual(await state.storage.get('queue'), []);
+  assert.equal(await state.storage.get('processing'), undefined);
+});
+
+test('SyncDispatchQueue keeps concurrent enqueues instead of overwriting the middle task', async () => {
+  const state = createDurableObjectState();
+  const queue = new SyncDispatchQueue(state, {
+    ...createEnv(),
+    __now: () => 1_000,
+  });
+
+  await Promise.all([1, 2, 3].map((updateId) => queue.fetch(createQueueRequest({
+    event_type: 'telegram_update_dev',
+    client_payload: { telegram_updates: [{ update_id: updateId }] },
+    source: { channel: 'telegram', sortKey: updateId },
+  }))));
+
+  const storedQueue = await state.storage.get('queue');
+  assert.deepEqual(
+    storedQueue.map((task) => task.clientPayload.telegram_updates[0].update_id),
+    [1, 2, 3],
+  );
+});
+
+test('SyncDispatchQueue uses Durable Object SQL storage for FIFO queue state when available', async () => {
+  const state = createDurableObjectSqlState();
+  const dispatched = [];
+  const queue = new SyncDispatchQueue(state, {
+    ...createEnv(),
+    GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+    GITHUB_SYNC_REF: 'dev',
+    __now: () => 1_000,
+    __dispatchFetchImpl: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
+        dispatched.push(JSON.parse(init.body));
+        return new Response(null, { status: 204 });
+      }
+      if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
+        const taskId = JSON.parse(dispatched.at(-1).inputs.dispatch_payload).client_payload.queue_task_id;
+        return Response.json({
+          workflow_runs: [
+            {
+              id: 301,
+              name: `Sync queue task ${taskId}`,
+              created_at: '2026-06-17T00:00:01Z',
+              event: 'workflow_dispatch',
+            },
+          ],
+        });
+      }
+      return Response.json({
+        id: 301,
+        status: 'completed',
+        conclusion: 'success',
+      });
+    },
+  });
+
+  for (const updateId of [3, 1, 2]) {
+    assert.equal((await queue.fetch(createQueueRequest({
+      event_type: 'telegram_update_dev',
+      client_payload: { telegram_updates: [{ update_id: updateId }] },
+      source: { channel: 'telegram', sortKey: updateId },
+    }))).status, 202);
+  }
+
+  for (let i = 0; i < 3; i += 1) {
+    await queue.alarm();
+  }
+
+  assert.deepEqual(
+    dispatched.map((body) => JSON.parse(body.inputs.dispatch_payload).client_payload.telegram_updates[0].update_id),
+    [1, 2, 3],
+  );
+});
+
 test('handleTelegramWebhook buffers consecutive image batches from the same chat in update order', async () => {
   const calls = [];
   const env = createEnv();
@@ -665,6 +1008,30 @@ function createTelegramRequest(update) {
   });
 }
 
+function createQueueRequest(payload) {
+  return new Request('https://sync-dispatch-queue.internal/enqueue', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+function createSyncDispatchQueueNamespace(enqueued) {
+  return {
+    idFromName(name) {
+      return { name };
+    },
+    get() {
+      return {
+        async fetch(request) {
+          enqueued.push(await request.json());
+          return Response.json({ ok: true, queued: true }, { status: 202 });
+        },
+      };
+    },
+  };
+}
+
 function createAlbumBufferNamespace(baseEnv, options = {}) {
   const instances = new Map();
 
@@ -718,6 +1085,70 @@ function createDurableObjectState() {
     },
     async setAlarm(value) {
       alarmAt = value;
+    },
+  };
+}
+
+function createDurableObjectSqlState() {
+  const storage = createDurableObjectState().storage;
+  const queueRows = new Map();
+  const processingRows = new Map();
+  storage.sql = {
+    exec(sql, ...params) {
+      const normalized = sql.replace(/\s+/g, ' ').trim();
+      if (normalized.startsWith('CREATE TABLE')) {
+        return createSqlResult([]);
+      }
+      if (normalized.startsWith('INSERT OR IGNORE INTO sync_dispatch_queue')) {
+        const [id, sortKey, enqueuedAt, taskJson] = params;
+        if (!queueRows.has(id)) {
+          queueRows.set(id, { id, sort_key: sortKey, enqueued_at: enqueuedAt, task_json: taskJson });
+        }
+        return createSqlResult([]);
+      }
+      if (normalized.startsWith('SELECT id, task_json FROM sync_dispatch_queue')) {
+        return createSqlResult([...queueRows.values()].sort((left, right) =>
+          String(left.sort_key).localeCompare(String(right.sort_key), undefined, { numeric: true }) ||
+          Number(left.enqueued_at) - Number(right.enqueued_at) ||
+          String(left.id).localeCompare(String(right.id))
+        ));
+      }
+      if (normalized.startsWith('DELETE FROM sync_dispatch_queue')) {
+        queueRows.delete(params[0]);
+        return createSqlResult([]);
+      }
+      if (normalized.startsWith('SELECT processing_json FROM sync_dispatch_processing')) {
+        return createSqlResult(processingRows.has('current') ? [processingRows.get('current')] : []);
+      }
+      if (normalized.startsWith('INSERT OR REPLACE INTO sync_dispatch_processing')) {
+        processingRows.set('current', { processing_json: params[0] });
+        return createSqlResult([]);
+      }
+      if (normalized.startsWith('DELETE FROM sync_dispatch_processing')) {
+        processingRows.delete('current');
+        return createSqlResult([]);
+      }
+      throw new Error(`unexpected sql: ${normalized}`);
+    },
+  };
+  return {
+    storage,
+    blockConcurrencyWhile(callback) {
+      return callback();
+    },
+    async getAlarm() {
+      return null;
+    },
+    async setAlarm() {
+      return null;
+    },
+  };
+}
+
+function createSqlResult(rows) {
+  return {
+    toArray() {
+      return rows;
     },
   };
 }

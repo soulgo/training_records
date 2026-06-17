@@ -9,6 +9,8 @@ routes = [
 [vars]
 GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM = "telegram_update_dev"
 GITHUB_DISPATCH_EVENT_TYPE_FEISHU = "feishu_update_dev"
+GITHUB_SYNC_WORKFLOW_FILE = "sync-dev.yml"
+GITHUB_SYNC_REF = "dev"
 
 [[durable_objects.bindings]]
 name = "TELEGRAM_ALBUM_BUFFER"
@@ -18,6 +20,10 @@ class_name = "TelegramAlbumBuffer"
 name = "FEISHU_IMAGE_BUFFER"
 class_name = "FeishuImageBuffer"
 
+[[durable_objects.bindings]]
+name = "SYNC_DISPATCH_QUEUE"
+class_name = "SyncDispatchQueue"
+
 [[migrations]]
 tag = "v1"
-new_sqlite_classes = ["TelegramAlbumBuffer", "FeishuImageBuffer"]
+new_sqlite_classes = ["TelegramAlbumBuffer", "FeishuImageBuffer", "SyncDispatchQueue"]
