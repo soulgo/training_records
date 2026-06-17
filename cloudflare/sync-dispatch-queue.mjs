@@ -9,6 +9,9 @@ const POLL_DELAY_MS = 10_000;
 const RETRY_BASE_DELAY_MS = 10_000;
 const RETRY_MAX_DELAY_MS = 60_000;
 const MAX_ATTEMPTS = 5;
+const PAYLOAD_HASH_LENGTH = 16;
+const LEGACY_LONG_TASK_ID_LENGTH = 240;
+const LEGACY_TRUNCATED_TITLE_MIN_LENGTH = 120;
 const TELEGRAM_API_BASE_URL = 'https://api.telegram.org';
 const QUEUE_TABLE = 'sync_dispatch_queue';
 const PROCESSING_TABLE = 'sync_dispatch_processing';
@@ -45,7 +48,7 @@ export class SyncDispatchQueue {
     }
 
     const task = {
-      id: buildTaskId(payload),
+      id: await buildTaskId(payload),
       eventType: payload.event_type,
       clientPayload: payload.client_payload,
       source: payload.source ?? null,
@@ -412,14 +415,23 @@ function resolveGithubRepository(env) {
   };
 }
 
-function buildTaskId(payload) {
+async function buildTaskId(payload) {
   const source = payload?.source ?? {};
+  const payloadHash = await sha256Hex(JSON.stringify(payload?.client_payload ?? null));
   return [
     source.channel ?? 'sync',
     source.sortKey ?? '',
     payload.event_type,
-    JSON.stringify(payload.client_payload),
+    payloadHash.slice(0, PAYLOAD_HASH_LENGTH),
   ].join(':');
+}
+
+async function sha256Hex(value) {
+  const encoded = new TextEncoder().encode(String(value ?? ''));
+  const digest = await crypto.subtle.digest('SHA-256', encoded);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function buildWorkflowDispatchPayload({ task, ref }) {
@@ -444,12 +456,33 @@ function workflowRunMatchesTask(candidate, task) {
   if (!task?.id) {
     return true;
   }
+  const taskId = String(task.id);
   const text = [
     candidate.name,
     candidate.display_title,
     candidate.run_name,
   ].filter(Boolean).join('\n');
-  return text.includes(task.id);
+  if (text.includes(taskId)) {
+    return true;
+  }
+  return isLegacyLongTaskId(taskId) && workflowRunMatchesTruncatedLegacyTaskId(text, taskId);
+}
+
+function isLegacyLongTaskId(taskId) {
+  return taskId.length > LEGACY_LONG_TASK_ID_LENGTH;
+}
+
+function workflowRunMatchesTruncatedLegacyTaskId(text, taskId) {
+  const expectedTitle = `Sync queue task ${taskId}`;
+  for (const field of String(text ?? '').split('\n').filter(Boolean)) {
+    if (field.length < LEGACY_TRUNCATED_TITLE_MIN_LENGTH) {
+      continue;
+    }
+    if (expectedTitle.startsWith(field)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function initializeSqlStorage(state) {
