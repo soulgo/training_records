@@ -128,6 +128,62 @@ test('handleFeishuWebhook enqueues single Feishu text events when the sync dispa
   });
 });
 
+test('handleFeishuWebhook buffers consecutive Feishu text messages per chat before queueing one task', async () => {
+  const enqueued = [];
+  let env;
+  const bufferNamespace = createFeishuBufferNamespace(() => env);
+  env = createEnv({
+    GITHUB_DISPATCH_EVENT_TYPE_FEISHU: 'feishu_update_dev',
+    FEISHU_IMAGE_BUFFER: bufferNamespace,
+    SYNC_DISPATCH_QUEUE: createSyncDispatchQueueNamespace(enqueued),
+  });
+  const firstEvent = createFeishuTextEvent({
+    eventId: 'evt-text-buffer-1',
+    messageId: 'om_feishu_text_buffer_1',
+    chatId: 'oc_chat_1',
+    text: '/随想编 600 身体反馈 第一条',
+    createTime: '1781398801000',
+  });
+  const secondEvent = createFeishuTextEvent({
+    eventId: 'evt-text-buffer-2',
+    messageId: 'om_feishu_text_buffer_2',
+    chatId: 'oc_chat_1',
+    text: '/随想编 601 杂七杂八 第二条',
+    createTime: '1781398802000',
+  });
+
+  const firstResponse = await handleFeishuWebhook(createFeishuRequest(firstEvent), env, {
+    skipSignatureVerification: true,
+    fetchImpl: async () => {
+      throw new Error('GitHub dispatch should be handled by the queue');
+    },
+  });
+  const secondResponse = await handleFeishuWebhook(createFeishuRequest(secondEvent), env, {
+    skipSignatureVerification: true,
+    fetchImpl: async () => {
+      throw new Error('GitHub dispatch should be handled by the queue');
+    },
+  });
+
+  assert.equal(firstResponse.status, 200);
+  assert.deepEqual(await firstResponse.json(), {
+    ok: true,
+    buffered: true,
+    eventId: 'evt-text-buffer-1',
+    bufferKey: 'oc_chat_1:messages',
+  });
+  assert.equal(secondResponse.status, 200);
+  assert.equal(enqueued.length, 0);
+
+  await bufferNamespace.flush('oc_chat_1:messages');
+
+  assert.equal(enqueued.length, 1);
+  assert.equal(enqueued[0].event_type, 'feishu_update_dev');
+  assert.deepEqual(enqueued[0].client_payload, {
+    feishu_updates: [firstEvent, secondEvent],
+  });
+});
+
 test('handleFeishuWebhook dispatches encrypted Feishu events without Lark signature headers', async () => {
   const calls = [];
   const event = createFeishuImageEvent({
@@ -208,7 +264,7 @@ test('handleFeishuWebhook logs Feishu event metadata with chat id for discovery'
   const metadataLog = logs.find((line) => line.includes('[feishu-webhook]'));
   assert.ok(metadataLog);
   assert.match(metadataLog, /"chat_id":"oc_chat_for_logs"/);
-  assert.match(metadataLog, /"event_type":"im\.message\.receive_v1"/);
+  assert.match(metadataLog, /"message_type":"image"/);
   assert.doesNotMatch(metadataLog, /img_v3_should_not_be_logged/);
 });
 
@@ -283,6 +339,63 @@ test('FeishuImageBuffer enqueues buffered image bursts as one sync dispatch queu
   assert.equal(await state.storage.get('events'), undefined);
 });
 
+test('FeishuImageBuffer sorts buffered text messages with identical create_time by event id', async () => {
+  const enqueued = [];
+  const state = createDurableObjectState();
+  const firstEvent = createFeishuTextEvent({
+    eventId: 'evt-text-same-time-a',
+    messageId: 'om_feishu_same_time_a',
+    chatId: 'oc_chat_1',
+    text: '/随想编 600 身体反馈 第一条',
+    createTime: '1781398800000',
+  });
+  const secondEvent = createFeishuTextEvent({
+    eventId: 'evt-text-same-time-b',
+    messageId: 'om_feishu_same_time_b',
+    chatId: 'oc_chat_1',
+    text: '/随想编 601 杂七杂八 第二条',
+    createTime: '1781398800000',
+  });
+  const buffer = new FeishuImageBuffer(state, createEnv({
+    GITHUB_DISPATCH_EVENT_TYPE_FEISHU: 'feishu_update_dev',
+    SYNC_DISPATCH_QUEUE: createSyncDispatchQueueNamespace(enqueued),
+  }));
+
+  assert.equal((await buffer.fetch(createBufferRequest(secondEvent))).status, 202);
+  assert.equal((await buffer.fetch(createBufferRequest(firstEvent))).status, 202);
+
+  await buffer.alarm();
+
+  assert.equal(enqueued.length, 1);
+  assert.deepEqual(enqueued[0].client_payload, {
+    feishu_updates: [firstEvent, secondEvent],
+  });
+});
+
+test('FeishuImageBuffer enqueues a single buffered text message with the singular payload field', async () => {
+  const enqueued = [];
+  const state = createDurableObjectState();
+  const event = createFeishuTextEvent({
+    eventId: 'evt-text-single-buffer-1',
+    messageId: 'om_feishu_text_single_buffer_1',
+    chatId: 'oc_chat_1',
+    text: '/随想编 600 身体反馈 单条',
+  });
+  const buffer = new FeishuImageBuffer(state, createEnv({
+    GITHUB_DISPATCH_EVENT_TYPE_FEISHU: 'feishu_update_dev',
+    SYNC_DISPATCH_QUEUE: createSyncDispatchQueueNamespace(enqueued),
+  }));
+
+  assert.equal((await buffer.fetch(createBufferRequest(event))).status, 202);
+
+  await buffer.alarm();
+
+  assert.equal(enqueued.length, 1);
+  assert.deepEqual(enqueued[0].client_payload, {
+    feishu_update: event,
+  });
+});
+
 test('FeishuImageBuffer keeps buffered events and schedules a retry when GitHub dispatch fails', async () => {
   const logs = [];
   const state = createDurableObjectState();
@@ -293,6 +406,7 @@ test('FeishuImageBuffer keeps buffered events and schedules a retry when GitHub 
     imageKey: 'img_v3_retry_1',
   });
   const buffer = new FeishuImageBuffer(state, createEnv({
+    FEISHU_EVENT_LOGGING: 'true',
     GITHUB_DISPATCH_EVENT_TYPE: 'feishu_update_dev',
     __logger: {
       log(message) {
@@ -311,13 +425,36 @@ test('FeishuImageBuffer keeps buffered events and schedules a retry when GitHub 
   assert.equal(await state.storage.get('dispatchRetryCount'), 1);
   assert.ok(await state.storage.get('alarm') > firstAlarm);
 
-  const dispatchLog = logs.find((line) => line.includes('[feishu-image-buffer]'));
+  const dispatchLog = logs.find((line) => line.includes('[feishu-message-buffer]') && line.includes('"outcome":"queue_failed"'));
   assert.ok(dispatchLog);
   assert.match(dispatchLog, /"eventType":"feishu_update_dev"/);
   assert.match(dispatchLog, /"eventCount":1/);
   assert.match(dispatchLog, /"status":401/);
   assert.match(dispatchLog, /"retryCount":1/);
   assert.doesNotMatch(dispatchLog, /github-token|bad credentials/);
+});
+
+test('FeishuImageBuffer keeps buffered text events and retries when sync queue enqueue fails', async () => {
+  const state = createDurableObjectState();
+  const event = createFeishuTextEvent({
+    eventId: 'evt-text-retry-1',
+    messageId: 'om_feishu_text_retry_1',
+    chatId: 'oc_chat_1',
+    text: '/随想编 600 身体反馈 重试',
+  });
+  const buffer = new FeishuImageBuffer(state, createEnv({
+    GITHUB_DISPATCH_EVENT_TYPE_FEISHU: 'feishu_update_dev',
+    SYNC_DISPATCH_QUEUE: createFailingSyncDispatchQueueNamespace(),
+  }));
+
+  assert.equal((await buffer.fetch(createBufferRequest(event))).status, 202);
+  const firstAlarm = await state.storage.get('alarm');
+
+  await buffer.alarm();
+
+  assert.deepEqual(await state.storage.get('events'), [event]);
+  assert.equal(await state.storage.get('dispatchRetryCount'), 1);
+  assert.ok(await state.storage.get('alarm') > firstAlarm);
 });
 
 function createFeishuRequest(event) {
@@ -392,6 +529,33 @@ function createDurableObjectState() {
   };
 }
 
+function createFeishuBufferNamespace(resolveEnv) {
+  const instances = new Map();
+  return {
+    idFromName(name) {
+      return { name };
+    },
+    get(id) {
+      const name = id.name;
+      if (!instances.has(name)) {
+        const state = createDurableObjectState();
+        instances.set(name, {
+          object: new FeishuImageBuffer(state, resolveEnv()),
+          state,
+        });
+      }
+      return {
+        fetch(request) {
+          return instances.get(name).object.fetch(request);
+        },
+      };
+    },
+    async flush(name) {
+      await instances.get(name).object.alarm();
+    },
+  };
+}
+
 function createSyncDispatchQueueNamespace(enqueued) {
   return {
     idFromName(name) {
@@ -402,6 +566,21 @@ function createSyncDispatchQueueNamespace(enqueued) {
         async fetch(request) {
           enqueued.push(await request.json());
           return Response.json({ ok: true, queued: true }, { status: 202 });
+        },
+      };
+    },
+  };
+}
+
+function createFailingSyncDispatchQueueNamespace() {
+  return {
+    idFromName(name) {
+      return { name };
+    },
+    get() {
+      return {
+        async fetch() {
+          return Response.json({ ok: false, error: 'queue_failed' }, { status: 503 });
         },
       };
     },

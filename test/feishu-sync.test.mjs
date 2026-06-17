@@ -487,6 +487,76 @@ test('runFeishuSync persists explicit Feishu thought edit module updates through
   assert.deepEqual(persisted[0].batch.thoughtEdit.tags, ['杂七杂八', '随想', '飞书']);
 });
 
+test('runFeishuSync processes two Feishu thought edit messages from one buffered payload', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-runner-edit-burst-'));
+  const persisted = [];
+  const sent = [];
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: {
+      ...feishuSyncEnv(),
+      FEISHU_SYNC_NOTIFY: 'true',
+      FEISHU_SYNC_NOTIFY_STAGE: 'inline',
+    },
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuTextEvent({
+            eventId: 'evt-edit-burst-1',
+            messageId: 'om_edit_burst_1',
+            chatId: 'oc_chat_1',
+            text: '/随想编 600 身体反馈 第一条连续编辑',
+            createTime: '1781398820000',
+          }),
+          createFeishuTextEvent({
+            eventId: 'evt-edit-burst-2',
+            messageId: 'om_edit_burst_2',
+            chatId: 'oc_chat_1',
+            text: '/随想编 601 杂七杂八 第二条连续编辑',
+            createTime: '1781398821000',
+          }),
+        ],
+      },
+    },
+    persistNormalizedBatch: async ({ batch, sourceChannel }) => {
+      persisted.push({ batch, sourceChannel });
+      return {
+        status: 'stored',
+        thoughtModule: batch.thoughtEdit.thoughtModule,
+        messageId: batch.thoughtEdit.targetMessageId,
+      };
+    },
+    sendFeishuMessage: async (input) => {
+      sent.push(input);
+      return { ok: true };
+    },
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.updatesFetched, 2);
+  assert.equal(result.batchResults.length, 2);
+  assert.deepEqual(result.batchResults.map((batch) => batch.kind), ['thought_edit', 'thought_edit']);
+  assert.deepEqual(
+    result.batchResults.map((batch) => batch.thoughtEdit.targetMessageId),
+    [600, 601],
+  );
+  assert.deepEqual(
+    result.batchResults.map((batch) => batch.thoughtEdit.thoughtModule),
+    ['body_feedback', 'misc'],
+  );
+  assert.deepEqual(
+    result.batchResults.map((batch) => batch.persistenceStatus),
+    ['stored', 'stored'],
+  );
+  assert.equal(persisted.length, 2);
+  assert.deepEqual(persisted.map((entry) => entry.sourceChannel), ['feishu', 'feishu']);
+  assert.equal(sent.length, 2);
+  assert.deepEqual(sent.map((message) => message.chatId), ['oc_chat_1', 'oc_chat_1']);
+  assert.ok(sent.every((message) => /随想更新成功/.test(message.text)));
+  assert.ok(sent.every((message) => /已入库/.test(message.text)));
+});
+
 test('runFeishuSync skips ambiguous /随想 id module body messages without persistence', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-runner-ambiguous-'));
   const persisted = [];

@@ -6,9 +6,9 @@ import {
 const GITHUB_API_BASE_URL = 'https://api.github.com';
 const DEFAULT_GITHUB_OWNER = 'soulgo';
 const DEFAULT_GITHUB_REPO = 'training_records';
-const IMAGE_BURST_BUFFER_DELAY_MS = 3_000;
-const IMAGE_BUFFER_RETRY_BASE_DELAY_MS = 10_000;
-const IMAGE_BUFFER_RETRY_MAX_DELAY_MS = 60_000;
+const MESSAGE_BURST_BUFFER_DELAY_MS = 3_000;
+const MESSAGE_BUFFER_RETRY_BASE_DELAY_MS = 10_000;
+const MESSAGE_BUFFER_RETRY_MAX_DELAY_MS = 60_000;
 
 export default {
   async fetch(request, env) {
@@ -47,7 +47,12 @@ export class FeishuImageBuffer {
       await this.state.storage.put('events', events);
     }
 
-    await setStateAlarm(this.state, Date.now() + IMAGE_BURST_BUFFER_DELAY_MS);
+    await setStateAlarm(this.state, Date.now() + MESSAGE_BURST_BUFFER_DELAY_MS);
+    logFeishuMessageBuffer(this.env, this.env.__logger ?? console, {
+      outcome: 'buffered',
+      ...getFeishuEventMetadata(event),
+      eventCount: events.length,
+    });
 
     return jsonResponse(202, {
       ok: true,
@@ -71,7 +76,7 @@ export class FeishuImageBuffer {
         events,
       });
       if (!response.ok) {
-        await scheduleImageBufferRetry({
+        await scheduleMessageBufferRetry({
           state: this.state,
           env: this.env,
           logger,
@@ -84,15 +89,15 @@ export class FeishuImageBuffer {
 
       await this.state.storage.delete('events');
       await this.state.storage.delete('dispatchRetryCount');
-      logImageBufferDispatch(logger, {
-        ok: true,
+      logFeishuMessageBuffer(this.env, logger, {
+        outcome: 'flushed',
         eventType,
         eventCount: events.length,
         status: response.status,
         retryCount: 0,
       });
     } catch (error) {
-      await scheduleImageBufferRetry({
+      await scheduleMessageBufferRetry({
         state: this.state,
         env: this.env,
         logger,
@@ -165,12 +170,12 @@ export async function handleFeishuWebhook(request, env, options = {}) {
     return jsonResponse(500, { ok: false, error: dispatchConfigError });
   }
 
-  const imageBufferKey = getImageBufferKey(event);
-  if (imageBufferKey && env?.FEISHU_IMAGE_BUFFER) {
-    const stubId = env.FEISHU_IMAGE_BUFFER.idFromName(imageBufferKey);
+  const messageBufferKey = getMessageBufferKey(event);
+  if (messageBufferKey && env?.FEISHU_IMAGE_BUFFER) {
+    const stubId = env.FEISHU_IMAGE_BUFFER.idFromName(messageBufferKey);
     const stub = env.FEISHU_IMAGE_BUFFER.get(stubId);
     const response = await stub.fetch(
-      new Request('https://feishu-image-buffer.internal/enqueue', {
+      new Request('https://feishu-message-buffer.internal/enqueue', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -182,17 +187,23 @@ export async function handleFeishuWebhook(request, env, options = {}) {
     if (!response.ok) {
       return jsonResponse(502, {
         ok: false,
-        error: 'image_buffer_failed',
+        error: 'message_buffer_failed',
         status: response.status,
         body: await safeReadText(response),
       });
     }
 
+    logFeishuMessageBuffer(env, options.logger ?? console, {
+      outcome: 'accepted',
+      bufferKey: messageBufferKey,
+      ...getFeishuEventMetadata(event),
+    });
+
     return jsonResponse(200, {
       ok: true,
       buffered: true,
       eventId: event?.header?.event_id ?? null,
-      bufferKey: imageBufferKey,
+      bufferKey: messageBufferKey,
     });
   }
 
@@ -323,11 +334,8 @@ function logFeishuEventMetadata(event, env, logger) {
   }
 
   const message = event?.event?.message ?? {};
-  const header = event?.header ?? {};
   const metadata = {
-    event_id: header.event_id ?? null,
-    event_type: header.event_type ?? null,
-    app_id: header.app_id ?? null,
+    event_id: event?.header?.event_id ?? null,
     chat_id: message.chat_id ?? null,
     message_id: message.message_id ?? null,
     message_type: message.message_type ?? null,
@@ -388,19 +396,19 @@ function resolveGithubDispatchEventType(env) {
     'feishu_update';
 }
 
-function getImageBufferKey(event) {
+function getMessageBufferKey(event) {
   const message = event?.event?.message ?? null;
-  if (!message || message.message_type !== 'image' || !message.chat_id) {
+  if (!message?.chat_id) {
     return null;
   }
-  return `${message.chat_id}:images`;
+  return `${message.chat_id}:messages`;
 }
 
 async function readBufferedEvents(state) {
   return (await state.storage.get('events')) ?? [];
 }
 
-async function scheduleImageBufferRetry({
+async function scheduleMessageBufferRetry({
   state,
   env,
   logger,
@@ -411,11 +419,11 @@ async function scheduleImageBufferRetry({
 }) {
   const retryCount = Number(await state.storage.get('dispatchRetryCount') ?? 0) + 1;
   await state.storage.put('dispatchRetryCount', retryCount);
-  const retryDelayMs = calculateImageBufferRetryDelayMs(retryCount);
+  const retryDelayMs = calculateMessageBufferRetryDelayMs(retryCount);
   const nextAlarmAt = getNow(env) + retryDelayMs;
   await setStateAlarm(state, nextAlarmAt);
-  logImageBufferDispatch(logger, {
-    ok: false,
+  logFeishuMessageBuffer(env, logger, {
+    outcome: 'queue_failed',
     eventType,
     eventCount,
     status,
@@ -426,11 +434,11 @@ async function scheduleImageBufferRetry({
   });
 }
 
-function calculateImageBufferRetryDelayMs(retryCount) {
+function calculateMessageBufferRetryDelayMs(retryCount) {
   const exponent = Math.max(0, Math.min(Number(retryCount) - 1, 6));
   return Math.min(
-    IMAGE_BUFFER_RETRY_BASE_DELAY_MS * (2 ** exponent),
-    IMAGE_BUFFER_RETRY_MAX_DELAY_MS,
+    MESSAGE_BUFFER_RETRY_BASE_DELAY_MS * (2 ** exponent),
+    MESSAGE_BUFFER_RETRY_MAX_DELAY_MS,
   );
 }
 
@@ -438,12 +446,25 @@ function getNow(env) {
   return typeof env?.__now === 'function' ? env.__now() : Date.now();
 }
 
-function logImageBufferDispatch(logger, metadata) {
+function logFeishuMessageBuffer(env, logger, metadata) {
+  if (isFeishuEventLoggingDisabled(env)) {
+    return;
+  }
   try {
-    logger?.log?.(`[feishu-image-buffer] ${JSON.stringify(metadata)}`);
+    logger?.log?.(`[feishu-message-buffer] ${JSON.stringify(metadata)}`);
   } catch {
     // Diagnostic logging must never affect buffered message delivery.
   }
+}
+
+function getFeishuEventMetadata(event) {
+  const message = event?.event?.message ?? {};
+  return {
+    event_id: event?.header?.event_id ?? null,
+    message_id: message.message_id ?? null,
+    chat_id: message.chat_id ?? null,
+    message_type: message.message_type ?? null,
+  };
 }
 
 function compareFeishuEvents(left, right) {
