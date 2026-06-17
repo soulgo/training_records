@@ -33,7 +33,7 @@
 
 这些文件会由数据库快照或构建脚本生成。`npm test`、`npm run build` 等命令可能只改动其中的 `generatedAt` 或派生内容。合并后如果这些文件变脏，一般应恢复，不应提交到 `main`。
 
-当前 `npm run merge:dev-to-main` 会保护部分派生数据路径，但截至本文记录，它不会自动保护 `source/_data/**`。因此合并后必须额外执行本文的严格数据保护校验。
+当前 `npm run merge:dev-to-main` 会自动保护上述派生数据路径。合并后仍必须执行本文的数据保护验收，确认 merge commit 相对合并前 `main` 没有带入 dev 数据。
 
 ## 3. 合并前检查
 
@@ -95,12 +95,12 @@ const currentFiles = new Set(
   gitLines(['ls-files', '--', '训练记录.md', 'source/_posts', 'source/images/thoughts', 'source/_data']),
 );
 
-const telegramThoughtPostRe = /^source\/_posts\/[^/]*-telegram-thought-\d+\.md$/u;
+const thoughtPostRe = /^source\/_posts\/[^/]*-(telegram|feishu)-thought-\d+\.md$/u;
 const isProtectedDataPath = (filePath) =>
   filePath === '训练记录.md' ||
   filePath.startsWith('source/_data/') ||
   filePath.startsWith('source/images/thoughts/') ||
-  telegramThoughtPostRe.test(filePath);
+  thoughtPostRe.test(filePath);
 
 const restore = [...mainFiles].filter(isProtectedDataPath).sort();
 const remove = [...currentFiles].filter((filePath) => isProtectedDataPath(filePath) && !mainFiles.has(filePath)).sort();
@@ -125,7 +125,7 @@ fi
 
 ```bash
 git diff --name-only HEAD^1 HEAD -- '训练记录.md' source/_data source/images/thoughts
-git diff --name-only HEAD^1 HEAD -- source/_posts | rg 'source/_posts/[^/]*-telegram-thought-[0-9]+\.md'
+git diff --name-only HEAD^1 HEAD -- source/_posts | rg 'source/_posts/[^/]*-(telegram|feishu)-thought-[0-9]+\.md'
 ```
 
 以上两条命令都不应输出任何文件。第二条命令没有匹配时 `rg` 会返回退出码 1，这是正常的；重点是没有文件名输出。
@@ -136,7 +136,7 @@ git diff --name-only HEAD^1 HEAD -- source/_posts | rg 'source/_posts/[^/]*-tele
 git diff --name-only HEAD^1 HEAD
 ```
 
-如果看到 `训练记录.md`、`source/_data/**`、Telegram thought 备份文章或 `source/images/thoughts/**`，不要推送，先回到第 5 步修正。
+如果看到 `训练记录.md`、`source/_data/**`、Telegram/飞书 thought 备份文章或 `source/images/thoughts/**`，不要推送，先回到第 5 步修正。
 
 ## 7. 测试与清理
 
@@ -233,7 +233,7 @@ gh run watch <run_id> --repo soulgo/training_records --exit-status
 合并来源：origin/dev@<sha>
 合并目标：main@<sha-before>
 合并提交：<merge-sha>
-数据保护：训练记录.md/source/_data/source/_posts telegram thought/source/images/thoughts 均 0 diff
+数据保护：训练记录.md/source/_data/source/_posts telegram+feishu thought/source/images/thoughts 均 0 diff
 验证：
 - node --test test/derived-data-merge.test.mjs test/github-workflows.test.mjs test/telegram-sync-notify.test.mjs
 - npm test

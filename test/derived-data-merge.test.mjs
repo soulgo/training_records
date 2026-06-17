@@ -14,7 +14,9 @@ const execFileAsync = promisify(execFile);
 
 test('derived data path helper protects generated training and Telegram backup paths', () => {
   assert.equal(isDerivedDataPath('训练记录.md'), true);
+  assert.equal(isDerivedDataPath('source/_data/training.json'), true);
   assert.equal(isDerivedDataPath('source/_posts/2026-05-14-telegram-thought-501.md'), true);
+  assert.equal(isDerivedDataPath('source/_posts/2026-06-16-feishu-thought-338182848231024.md'), true);
   assert.equal(isDerivedDataPath('source/images/thoughts/2026/05/image.jpg'), true);
   assert.equal(isDerivedDataPath('source/_posts/2026-05-09-post-workout-glute-pain.md'), false);
   assert.equal(isDerivedDataPath('docs/训练系统/Telegram使用说明.md'), false);
@@ -23,7 +25,9 @@ test('derived data path helper protects generated training and Telegram backup p
 test('mergeDevToMain keeps main derived data while merging code, docs, and regular posts', async () => {
   const repo = await createRepo('derived-merge-');
   await writeText(repo, '训练记录.md', 'main training\n');
+  await writeText(repo, 'source/_data/training.json', '{"source":"main"}\n');
   await writeText(repo, 'source/_posts/2026-05-10-telegram-thought-100.md', 'main thought\n');
+  await writeText(repo, 'source/_posts/2026-06-16-feishu-thought-200.md', 'main feishu thought\n');
   await writeText(repo, 'source/images/thoughts/2026/05/main.jpg', 'main image\n');
   await writeText(repo, 'source/_posts/2026-05-09-post-workout-glute-pain.md', 'main regular post\n');
   await writeText(repo, 'src/app.mjs', 'export const value = "main";\n');
@@ -34,8 +38,12 @@ test('mergeDevToMain keeps main derived data while merging code, docs, and regul
 
   await git(repo, ['checkout', '-b', 'dev']);
   await writeText(repo, '训练记录.md', 'dev training should not merge\n');
+  await writeText(repo, 'source/_data/training.json', '{"source":"dev"}\n');
+  await writeText(repo, 'source/_data/dashboardView.json', '{"source":"dev-new"}\n');
   await writeText(repo, 'source/_posts/2026-05-10-telegram-thought-100.md', 'dev thought should not merge\n');
   await writeText(repo, 'source/_posts/2026-05-11-telegram-thought-101.md', 'dev new thought should not merge\n');
+  await writeText(repo, 'source/_posts/2026-06-16-feishu-thought-200.md', 'dev feishu thought should not merge\n');
+  await writeText(repo, 'source/_posts/2026-06-17-feishu-thought-201.md', 'dev new feishu thought should not merge\n');
   await writeText(repo, 'source/images/thoughts/2026/05/main.jpg', 'dev image should not merge\n');
   await writeText(repo, 'source/images/thoughts/2026/05/dev.jpg', 'dev new image should not merge\n');
   await writeText(repo, 'source/_posts/2026-05-09-post-workout-glute-pain.md', 'dev regular post\n');
@@ -54,15 +62,23 @@ test('mergeDevToMain keeps main derived data while merging code, docs, and regul
   assert.equal(result.committed, true);
   assert.equal(result.mainCommit, mainBeforeMerge);
   assert.deepEqual(result.protectedPaths, [
+    'source/_data/dashboardView.json',
+    'source/_data/training.json',
     'source/_posts/2026-05-10-telegram-thought-100.md',
     'source/_posts/2026-05-11-telegram-thought-101.md',
+    'source/_posts/2026-06-16-feishu-thought-200.md',
+    'source/_posts/2026-06-17-feishu-thought-201.md',
     'source/images/thoughts/2026/05/dev.jpg',
     'source/images/thoughts/2026/05/main.jpg',
     '训练记录.md',
   ]);
   assert.equal(await readText(repo, '训练记录.md'), 'main training\n');
+  assert.equal(await readText(repo, 'source/_data/training.json'), '{"source":"main"}\n');
+  await assert.rejects(readFile(path.join(repo, 'source/_data/dashboardView.json'), 'utf8'), /ENOENT/u);
   assert.equal(await readText(repo, 'source/_posts/2026-05-10-telegram-thought-100.md'), 'main thought\n');
   await assert.rejects(readFile(path.join(repo, 'source/_posts/2026-05-11-telegram-thought-101.md'), 'utf8'), /ENOENT/u);
+  assert.equal(await readText(repo, 'source/_posts/2026-06-16-feishu-thought-200.md'), 'main feishu thought\n');
+  await assert.rejects(readFile(path.join(repo, 'source/_posts/2026-06-17-feishu-thought-201.md'), 'utf8'), /ENOENT/u);
   assert.equal(await readText(repo, 'source/images/thoughts/2026/05/main.jpg'), 'main image\n');
   await assert.rejects(readFile(path.join(repo, 'source/images/thoughts/2026/05/dev.jpg'), 'utf8'), /ENOENT/u);
   assert.equal(await readText(repo, 'source/_posts/2026-05-09-post-workout-glute-pain.md'), 'dev regular post\n');
@@ -172,7 +188,9 @@ test('checkDerivedDataMerge fails on protected data changes and allows code docs
   await git(repo, ['checkout', 'main']);
   await git(repo, ['checkout', '-b', 'feature-data']);
   await writeText(repo, '训练记录.md', 'feature training\n');
+  await writeText(repo, 'source/_data/training.json', '{"source":"feature"}\n');
   await writeText(repo, 'source/_posts/2026-05-12-telegram-thought-102.md', 'feature thought\n');
+  await writeText(repo, 'source/_posts/2026-06-16-feishu-thought-202.md', 'feature feishu thought\n');
   await git(repo, ['add', '.']);
   await git(repo, ['commit', '-m', 'data changes']);
   const blocked = await checkDerivedDataMerge({
@@ -184,7 +202,9 @@ test('checkDerivedDataMerge fails on protected data changes and allows code docs
 
   assert.equal(blocked.ok, false);
   assert.deepEqual(blocked.derivedPaths, [
+    'source/_data/training.json',
     'source/_posts/2026-05-12-telegram-thought-102.md',
+    'source/_posts/2026-06-16-feishu-thought-202.md',
     '训练记录.md',
   ]);
 });
