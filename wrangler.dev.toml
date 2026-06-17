@@ -10,6 +10,7 @@ routes = [
 GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM = "telegram_update_dev"
 GITHUB_DISPATCH_EVENT_TYPE_FEISHU = "feishu_update_dev"
 GITHUB_SYNC_WORKFLOW_FILE = "sync-dev.yml"
+GITHUB_SYNC_REF = "dev"
 
 [[durable_objects.bindings]]
 name = "TELEGRAM_ALBUM_BUFFER"

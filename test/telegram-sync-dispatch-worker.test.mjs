@@ -503,20 +503,23 @@ test('SyncDispatchQueue processes queued tasks FIFO and continues after a failed
   const queue = new SyncDispatchQueue(state, {
     ...createEnv(),
     GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+    GITHUB_SYNC_REF: 'dev',
     __now: () => 1_000,
     __dispatchFetchImpl: async (url, init) => {
       const urlText = String(url);
-      if (urlText.endsWith('/dispatches')) {
+      if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
         dispatched.push(JSON.parse(init.body));
         return new Response(null, { status: 204 });
       }
       if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
+        const taskId = JSON.parse(dispatched.at(-1).inputs.dispatch_payload).client_payload.queue_task_id;
         return Response.json({
           workflow_runs: [
             {
               id: runs[dispatched.length - 1].id,
+              name: `Sync queue task ${taskId}`,
               created_at: '2026-06-17T00:00:01Z',
-              event: 'repository_dispatch',
+              event: 'workflow_dispatch',
             },
           ],
         });
@@ -545,35 +548,106 @@ test('SyncDispatchQueue processes queued tasks FIFO and continues after a failed
   }
 
   assert.deepEqual(
-    dispatched.map((body) => body.client_payload.telegram_updates[0].update_id),
+    dispatched.map((body) => JSON.parse(body.inputs.dispatch_payload).client_payload.telegram_updates[0].update_id),
     [1, 2, 3],
   );
+  assert.deepEqual(dispatched.map((body) => body.ref), ['dev', 'dev', 'dev']);
   assert.deepEqual(await state.storage.get('queue'), []);
   assert.equal(await state.storage.get('processing'), undefined);
 });
 
-test('SyncDispatchQueue does not dispatch a task twice while waiting for the workflow run to appear', async () => {
+test('SyncDispatchQueue dispatches workflow_dispatch payloads to the configured branch ref', async () => {
+  const state = createDurableObjectState();
+  const dispatched = [];
+  const queue = new SyncDispatchQueue(state, {
+    ...createEnv(),
+    GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+    GITHUB_SYNC_REF: 'dev',
+    __now: () => 1_000,
+    __dispatchFetchImpl: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
+        dispatched.push(JSON.parse(init.body));
+        return new Response(null, { status: 204 });
+      }
+      if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
+        const dispatchPayload = JSON.parse(dispatched[0].inputs.dispatch_payload);
+        return Response.json({
+          workflow_runs: [
+            {
+              id: 201,
+              name: `Sync queue task ${dispatchPayload.client_payload.queue_task_id}`,
+              created_at: '2026-06-17T00:00:01Z',
+              event: 'workflow_dispatch',
+            },
+          ],
+        });
+      }
+      return Response.json({
+        id: 201,
+        status: 'completed',
+        conclusion: 'success',
+      });
+    },
+  });
+
+  assert.equal((await queue.fetch(createQueueRequest({
+    event_type: 'telegram_update_dev',
+    client_payload: { telegram_updates: [{ update_id: 1 }] },
+    source: { channel: 'telegram', sortKey: 1 },
+  }))).status, 202);
+
+  await queue.alarm();
+
+  const taskId = dispatched[0].inputs.queue_task_id;
+  assert.equal(dispatched.length, 1);
+  assert.deepEqual(dispatched[0], {
+    ref: 'dev',
+    inputs: {
+      channel: 'telegram',
+      queue_task_id: taskId,
+      dispatch_payload: JSON.stringify({
+        action: 'telegram_update_dev',
+        client_payload: {
+          telegram_updates: [{ update_id: 1 }],
+          queue_task_id: taskId,
+        },
+      }),
+    },
+  });
+});
+
+test('SyncDispatchQueue matches workflow runs by queue task id instead of first recent run', async () => {
   const state = createDurableObjectState();
   const dispatched = [];
   let lookupCount = 0;
   const queue = new SyncDispatchQueue(state, {
     ...createEnv(),
     GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+    GITHUB_SYNC_REF: 'dev',
     __now: () => 1_000,
     __dispatchFetchImpl: async (url, init) => {
       const urlText = String(url);
-      if (urlText.endsWith('/dispatches')) {
+      if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
         dispatched.push(JSON.parse(init.body));
         return new Response(null, { status: 204 });
       }
       if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
         lookupCount += 1;
+        const taskId = JSON.parse(dispatched[0].inputs.dispatch_payload).client_payload.queue_task_id;
         return Response.json({
           workflow_runs: lookupCount === 1 ? [] : [
             {
-              id: 201,
+              id: 999,
+              name: 'Sync queue task unrelated',
               created_at: '2026-06-17T00:00:01Z',
-              event: 'repository_dispatch',
+              event: 'workflow_dispatch',
+            },
+            {
+              id: 201,
+              name: `Sync queue task ${taskId}`,
+              created_at: '2026-06-17T00:00:01Z',
+              event: 'workflow_dispatch',
             },
           ],
         });
@@ -599,6 +673,79 @@ test('SyncDispatchQueue does not dispatch a task twice while waiting for the wor
   assert.equal(dispatched.length, 1);
   assert.deepEqual(await state.storage.get('queue'), []);
   assert.equal(await state.storage.get('processing'), undefined);
+});
+
+test('SyncDispatchQueue keeps concurrent enqueues instead of overwriting the middle task', async () => {
+  const state = createDurableObjectState();
+  const queue = new SyncDispatchQueue(state, {
+    ...createEnv(),
+    __now: () => 1_000,
+  });
+
+  await Promise.all([1, 2, 3].map((updateId) => queue.fetch(createQueueRequest({
+    event_type: 'telegram_update_dev',
+    client_payload: { telegram_updates: [{ update_id: updateId }] },
+    source: { channel: 'telegram', sortKey: updateId },
+  }))));
+
+  const storedQueue = await state.storage.get('queue');
+  assert.deepEqual(
+    storedQueue.map((task) => task.clientPayload.telegram_updates[0].update_id),
+    [1, 2, 3],
+  );
+});
+
+test('SyncDispatchQueue uses Durable Object SQL storage for FIFO queue state when available', async () => {
+  const state = createDurableObjectSqlState();
+  const dispatched = [];
+  const queue = new SyncDispatchQueue(state, {
+    ...createEnv(),
+    GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+    GITHUB_SYNC_REF: 'dev',
+    __now: () => 1_000,
+    __dispatchFetchImpl: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
+        dispatched.push(JSON.parse(init.body));
+        return new Response(null, { status: 204 });
+      }
+      if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
+        const taskId = JSON.parse(dispatched.at(-1).inputs.dispatch_payload).client_payload.queue_task_id;
+        return Response.json({
+          workflow_runs: [
+            {
+              id: 301,
+              name: `Sync queue task ${taskId}`,
+              created_at: '2026-06-17T00:00:01Z',
+              event: 'workflow_dispatch',
+            },
+          ],
+        });
+      }
+      return Response.json({
+        id: 301,
+        status: 'completed',
+        conclusion: 'success',
+      });
+    },
+  });
+
+  for (const updateId of [3, 1, 2]) {
+    assert.equal((await queue.fetch(createQueueRequest({
+      event_type: 'telegram_update_dev',
+      client_payload: { telegram_updates: [{ update_id: updateId }] },
+      source: { channel: 'telegram', sortKey: updateId },
+    }))).status, 202);
+  }
+
+  for (let i = 0; i < 3; i += 1) {
+    await queue.alarm();
+  }
+
+  assert.deepEqual(
+    dispatched.map((body) => JSON.parse(body.inputs.dispatch_payload).client_payload.telegram_updates[0].update_id),
+    [1, 2, 3],
+  );
 });
 
 test('handleTelegramWebhook buffers consecutive image batches from the same chat in update order', async () => {
@@ -938,6 +1085,70 @@ function createDurableObjectState() {
     },
     async setAlarm(value) {
       alarmAt = value;
+    },
+  };
+}
+
+function createDurableObjectSqlState() {
+  const storage = createDurableObjectState().storage;
+  const queueRows = new Map();
+  const processingRows = new Map();
+  storage.sql = {
+    exec(sql, ...params) {
+      const normalized = sql.replace(/\s+/g, ' ').trim();
+      if (normalized.startsWith('CREATE TABLE')) {
+        return createSqlResult([]);
+      }
+      if (normalized.startsWith('INSERT OR IGNORE INTO sync_dispatch_queue')) {
+        const [id, sortKey, enqueuedAt, taskJson] = params;
+        if (!queueRows.has(id)) {
+          queueRows.set(id, { id, sort_key: sortKey, enqueued_at: enqueuedAt, task_json: taskJson });
+        }
+        return createSqlResult([]);
+      }
+      if (normalized.startsWith('SELECT id, task_json FROM sync_dispatch_queue')) {
+        return createSqlResult([...queueRows.values()].sort((left, right) =>
+          String(left.sort_key).localeCompare(String(right.sort_key), undefined, { numeric: true }) ||
+          Number(left.enqueued_at) - Number(right.enqueued_at) ||
+          String(left.id).localeCompare(String(right.id))
+        ));
+      }
+      if (normalized.startsWith('DELETE FROM sync_dispatch_queue')) {
+        queueRows.delete(params[0]);
+        return createSqlResult([]);
+      }
+      if (normalized.startsWith('SELECT processing_json FROM sync_dispatch_processing')) {
+        return createSqlResult(processingRows.has('current') ? [processingRows.get('current')] : []);
+      }
+      if (normalized.startsWith('INSERT OR REPLACE INTO sync_dispatch_processing')) {
+        processingRows.set('current', { processing_json: params[0] });
+        return createSqlResult([]);
+      }
+      if (normalized.startsWith('DELETE FROM sync_dispatch_processing')) {
+        processingRows.delete('current');
+        return createSqlResult([]);
+      }
+      throw new Error(`unexpected sql: ${normalized}`);
+    },
+  };
+  return {
+    storage,
+    blockConcurrencyWhile(callback) {
+      return callback();
+    },
+    async getAlarm() {
+      return null;
+    },
+    async setAlarm() {
+      return null;
+    },
+  };
+}
+
+function createSqlResult(rows) {
+  return {
+    toArray() {
+      return rows;
     },
   };
 }

@@ -16,6 +16,7 @@ test('wrangler main config reuses the Feishu worker as the unified production en
   assert.doesNotMatch(config, /^pages_build_output_dir\s*=/m);
   assert.match(config, /GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM\s*=\s*"telegram_update"/);
   assert.match(config, /GITHUB_DISPATCH_EVENT_TYPE_FEISHU\s*=\s*"feishu_update"/);
+  assert.match(config, /GITHUB_SYNC_REF\s*=\s*"main"/);
   assert.match(config, /name\s*=\s*"TELEGRAM_ALBUM_BUFFER"/);
   assert.match(config, /class_name\s*=\s*"TelegramAlbumBuffer"/);
   assert.match(config, /name\s*=\s*"FEISHU_IMAGE_BUFFER"/);
@@ -49,6 +50,7 @@ test('wrangler unified dev config routes Telegram and Feishu to dev workflows wi
   assert.match(config, /custom_domain\s*=\s*true/);
   assert.match(config, /GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM\s*=\s*"telegram_update_dev"/);
   assert.match(config, /GITHUB_DISPATCH_EVENT_TYPE_FEISHU\s*=\s*"feishu_update_dev"/);
+  assert.match(config, /GITHUB_SYNC_REF\s*=\s*"dev"/);
   assert.match(config, /name\s*=\s*"TELEGRAM_ALBUM_BUFFER"/);
   assert.match(config, /class_name\s*=\s*"TelegramAlbumBuffer"/);
   assert.match(config, /name\s*=\s*"FEISHU_IMAGE_BUFFER"/);

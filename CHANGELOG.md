@@ -33,6 +33,9 @@
 
 ### Fixed
 
+- 修复 `repository_dispatch` 总是读取默认分支 workflow、导致 dev 上的连续消息队列修复未生效的问题；Cloudflare `SyncDispatchQueue` 现在改用 `workflow_dispatch` 并按环境传入 `GITHUB_SYNC_REF`（dev/main 分别触发各自分支），workflow 通过 `queue_task_id` 精确匹配 run，避免连续随想消息中间 run 被旧默认分支并发组取消或误关联。
+- 修复 `SyncDispatchQueue` 使用异步 KV 数组读改写导致连续 Telegram/飞书 webhook 并发入队时可能覆盖中间任务的问题；生产 Durable Object 改用 SQLite 表保存 FIFO 队列和 processing 状态，测试环境也串行化 KV fallback，确保三连发不会丢第二条。
+- 修复 dev Worker 推送后没有自动部署的问题；`deploy-cloudflare-worker-dev.yml` 现在在 `dev` 分支相关 Worker/workflow 配置变更时自动部署并刷新 dev Telegram webhook，避免测试仍命中旧 Worker 代码。
 - 修复 Telegram/飞书连续发送多条随想或图片时 GitHub Actions 固定 `concurrency.group` 只能保留一个 pending run、导致中间消息被取消的问题；新增 `SyncDispatchQueue` Durable Object 作为真正的 FIFO 队列，统一承接 Telegram/飞书文本和图片 burst，按顺序触发并轮询同步 workflow，前一个 run 失败或取消后仍继续处理后续任务。
 - 修复随想页面部署校验用 `grep -F "#ID"` 前缀匹配导致短 ID 误命中长 ID（如 `#3` 命中 `#300`）的问题；部署 workflow 现在只检查精确 `data-thought-id="ID"`，随想列表页也为 Telegram 和飞书随想统一输出 `data-thought-id`。
 - 修复 `/随想编 id 模块`（仅修改模块、不带正文）被误拒为"empty thought body"的问题：`analyzeThoughtEditBatch` 现在在指定了有效模块时允许空正文；`persistMirror` 的 `thought_edit` 分支改为传递 `null`（而非空字符串）作为 body，使 SQL `coalesce` 保留原有正文，与 `thought_move` 行为一致。

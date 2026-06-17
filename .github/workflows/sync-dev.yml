@@ -1,8 +1,17 @@
 name: Sync (Dev)
+run-name: ${{ github.event.inputs.queue_task_id && format('Sync queue task {0}', github.event.inputs.queue_task_id) || github.event.action || github.workflow }}
 
 on:
   workflow_dispatch:
     inputs:
+      dispatch_payload:
+        description: Serialized webhook payload from the Cloudflare sync queue
+        required: false
+        default: ''
+      queue_task_id:
+        description: Sync queue task id used to correlate workflow runs
+        required: false
+        default: ''
       channel:
         description: Dev sync channel to run
         required: true
@@ -21,7 +30,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: ${{ github.event_name == 'repository_dispatch' && format('sync-dev-{0}', github.run_id) || 'sync-dev' }}
+  group: ${{ (github.event.inputs.queue_task_id || github.event_name == 'repository_dispatch') && format('sync-dev-{0}', github.run_id) || 'sync-dev' }}
   cancel-in-progress: false
 
 jobs:
@@ -52,9 +61,30 @@ jobs:
 
       - name: Determine sync channel
         id: channel
+        env:
+          DISPATCH_PAYLOAD: ${{ github.event.inputs.dispatch_payload }}
         run: |
           EVENT_TYPE="${{ github.event.action }}"
           INPUT_CHANNEL="${{ github.event.inputs.channel || 'telegram' }}"
+          IS_WEBHOOK_DISPATCH=false
+          if [ -n "${DISPATCH_PAYLOAD:-}" ]; then
+            IS_WEBHOOK_DISPATCH=true
+            GITHUB_EVENT_PATH="$RUNNER_TEMP/queued-dispatch-event.json"
+            export GITHUB_EVENT_PATH
+            node <<'NODE'
+          const fs = require('fs');
+          const payload = JSON.parse(process.env.DISPATCH_PAYLOAD || '{}');
+          fs.writeFileSync(process.env.GITHUB_EVENT_PATH, JSON.stringify({
+            action: payload.action || '',
+            client_payload: payload.client_payload ?? payload,
+          }));
+          NODE
+            echo "GITHUB_EVENT_PATH=$GITHUB_EVENT_PATH" >> "$GITHUB_ENV"
+            EVENT_TYPE="$(node -e "const data=JSON.parse(process.env.DISPATCH_PAYLOAD || '{}'); process.stdout.write(data.action || '')")"
+          elif [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            IS_WEBHOOK_DISPATCH=true
+          fi
+          echo "is_webhook_dispatch=${IS_WEBHOOK_DISPATCH}" >> "$GITHUB_OUTPUT"
           if [ "$EVENT_TYPE" = "feishu_update_dev" ] || [ "$INPUT_CHANNEL" = "feishu" ]; then
             echo "channel=feishu" >> "$GITHUB_OUTPUT"
             echo "sync_command=sync:feishu" >> "$GITHUB_OUTPUT"
@@ -192,7 +222,7 @@ jobs:
         run: git push origin HEAD:dev
 
       - name: Write Telegram sync summary
-        if: always() && github.event_name == 'repository_dispatch' && steps.channel.outputs.channel == 'telegram'
+        if: always() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'telegram'
         env:
           TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
         run: |
@@ -245,7 +275,7 @@ jobs:
           NODE
 
       - name: Write Feishu sync summary
-        if: always() && github.event_name == 'repository_dispatch' && steps.channel.outputs.channel == 'feishu'
+        if: always() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'feishu'
         env:
           FEISHU_SYNC_RESULT_PATH: ${{ runner.temp }}/feishu-sync-result.json
         run: |
@@ -292,7 +322,7 @@ jobs:
           NODE
 
       - name: Notify Telegram sync result
-        if: success() && github.event_name == 'repository_dispatch' && steps.channel.outputs.channel == 'telegram'
+        if: success() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'telegram'
         continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}
@@ -302,7 +332,7 @@ jobs:
         run: node tools/telegram-sync-notify.mjs
 
       - name: Notify Feishu sync result
-        if: success() && github.event_name == 'repository_dispatch' && steps.channel.outputs.channel == 'feishu'
+        if: success() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'feishu'
         continue-on-error: true
         env:
           FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID || secrets.FEISHU_APP_ID }}
@@ -314,7 +344,7 @@ jobs:
 
       - name: Trigger and wait for async dev site deploy
         id: deploy
-        if: success() && github.event_name == 'repository_dispatch' && (steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true')
+        if: success() && steps.channel.outputs.is_webhook_dispatch == 'true' && (steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true')
         env:
           GITHUB_TOKEN: ${{ github.token }}
           THOUGHT_CHECK_ID: ${{ steps.detect.outputs.thought_check_id }}
@@ -407,7 +437,7 @@ jobs:
           exit 1
 
       - name: Notify Telegram sync failure
-        if: failure() && github.event_name == 'repository_dispatch' && steps.channel.outputs.channel == 'telegram'
+        if: failure() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'telegram'
         continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}
@@ -420,7 +450,7 @@ jobs:
         run: node tools/telegram-action-monitor.mjs
 
       - name: Notify Feishu sync failure
-        if: failure() && github.event_name == 'repository_dispatch' && steps.channel.outputs.channel == 'feishu'
+        if: failure() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'feishu'
         continue-on-error: true
         env:
           FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID || secrets.FEISHU_APP_ID }}

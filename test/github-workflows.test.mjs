@@ -277,7 +277,15 @@ test('deploy-cloudflare-worker-dev workflow deploys the unified dev worker and r
 
   assert.match(workflow, /name:\s*Deploy Cloudflare Worker \(Dev\)/);
   assert.match(workflow, /workflow_dispatch:/);
-  assert.doesNotMatch(workflow, /push:/);
+  assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
+  for (const expectedPath of [
+    'cloudflare/**',
+    'wrangler.dev.toml',
+    '.github/workflows/deploy-cloudflare-worker-dev.yml',
+    '.github/workflows/sync-dev.yml',
+  ]) {
+    assert.match(workflow, new RegExp(`-\\s*${escapeRegExp(expectedPath)}`));
+  }
   assert.match(workflow, /cloudflare\/wrangler-action@v3/);
   assert.match(workflow, /command:\s*deploy --config wrangler\.dev\.toml/);
   assert.match(workflow, /- name: Refresh Dev Telegram webhook/);
@@ -298,7 +306,7 @@ test('feishu-sync workflows expose source ids and chat ids in dispatch summaries
   }
 });
 
-test('feishu-sync workflows report repository dispatch failures back to Feishu', async () => {
+test('feishu-sync workflows report queued webhook dispatch failures back to Feishu', async () => {
   for (const workflowPath of ['.github/workflows/sync.yml', '.github/workflows/sync-dev.yml']) {
     const workflow = await readWorkflow(workflowPath);
 
@@ -317,7 +325,7 @@ test('feishu-sync workflows report repository dispatch failures back to Feishu',
     }
 
     assert.match(workflow, /- name: Notify Feishu sync failure/);
-    assert.match(workflow, /if: failure\(\) && github\.event_name == 'repository_dispatch'/);
+    assert.match(workflow, /if: failure\(\) && steps\.channel\.outputs\.is_webhook_dispatch == 'true'/);
     assert.match(workflow, /continue-on-error: true/);
     assert.match(workflow, /node tools\/feishu-action-monitor\.mjs/);
     assert.match(workflow, /STEP_INSTALL_OUTCOME: \$\{\{ steps\.install\.outcome \}\}/);
@@ -377,7 +385,7 @@ test('main sync workflow notifies after sync and waits for site deploy completio
   assert.match(workflow, /echo "commit_message=chore: sync Telegram updates"/);
   assert.match(workflow, /echo "commit_message=chore: sync Feishu updates"/);
   assert.match(workflow, /git commit -m "\$\{\{ steps\.channel\.outputs\.commit_message \}\}"/);
-  assert.match(workflow, /- name: Run tests\s*\n\s*id: test\s*\n\s*if: github\.event_name != 'repository_dispatch' && steps\.channel\.outputs\.channel == 'telegram' && steps\.detect\.outputs\.content_changed == 'true'/);
+  assert.match(workflow, /- name: Run tests\s*\n\s*id: test\s*\n\s*if: steps\.channel\.outputs\.is_webhook_dispatch != 'true' && steps\.channel\.outputs\.channel == 'telegram' && steps\.detect\.outputs\.content_changed == 'true'/);
   assert.match(workflow, /run:\s*npm run test:fast/);
   assert.doesNotMatch(workflow, /- name: Build and deploy site snapshot/);
   assert.doesNotMatch(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
@@ -432,7 +440,7 @@ test('main sync workflow keeps change detection and maintenance gating intact', 
   assert.match(workflow, /content_changed=false/);
   assert.match(
     workflow,
-    /- name: Sync safe database repairs\n\s+if: github\.event_name != 'repository_dispatch' && steps\.channel\.outputs\.channel == 'telegram'\n\s+run:\s*npm run sync:db/,
+    /- name: Sync safe database repairs\n\s+if: steps\.channel\.outputs\.is_webhook_dispatch != 'true' && steps\.channel\.outputs\.channel == 'telegram'\n\s+run:\s*npm run sync:db/,
   );
   assert.doesNotMatch(workflow, /- name: Export markdown from database snapshot/);
   assert.doesNotMatch(workflow, /run:\s*npm run backfill:core/);
@@ -460,7 +468,7 @@ test('telegram-sync workflows keep database-only detection without blocking on p
     assert.match(workflow, /readyStoredContentBatches/);
     assert.match(workflow, /- name: Write Telegram sync summary/);
     assert.match(workflow, /- name: Notify Telegram sync result/);
-    assert.match(workflow, /if: success\(\) && github\.event_name == 'repository_dispatch' && \(steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'\)/);
+    assert.match(workflow, /if: success\(\) && steps\.channel\.outputs\.is_webhook_dispatch == 'true' && \(steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'\)/);
     assert.match(workflow, /strict_database_snapshot/);
     assert.doesNotMatch(workflow, /steps\.detect\.outputs\.db_content_changed == 'true'[\s\S]*uses:\s*\.\/\.github\/actions\/site-build/);
   }
@@ -620,7 +628,7 @@ test('main sync workflow sends deleted thought targets as absent deploy checks',
   assert.match(output, /thought_check_expectation=absent/);
 });
 
-test('telegram-sync repository dispatch runs use unique concurrency groups while the worker queue controls ordering', async () => {
+test('telegram-sync workflow dispatch runs use unique concurrency groups while the worker queue controls ordering', async () => {
   const workflows = [
     ['.github/workflows/sync.yml', 'sync'],
     ['.github/workflows/sync-dev.yml', 'sync-dev'],
@@ -629,7 +637,7 @@ test('telegram-sync repository dispatch runs use unique concurrency groups while
   for (const [workflowPath, groupName] of workflows) {
     const workflow = await readWorkflow(workflowPath);
     const expectedGroup = new RegExp(
-      `group:\\s*\\$\\{\\{\\s*github\\.event_name == 'repository_dispatch' && format\\('${escapeRegExp(groupName)}-\\{0\\}', github\\.run_id\\) \\|\\| '${escapeRegExp(groupName)}'\\s*\\}\\}`,
+      `group:\\s*\\$\\{\\{\\s*\\(github\\.event\\.inputs\\.queue_task_id \\|\\| github\\.event_name == 'repository_dispatch'\\) && format\\('${escapeRegExp(groupName)}-\\{0\\}', github\\.run_id\\) \\|\\| '${escapeRegExp(groupName)}'\\s*\\}\\}`,
     );
 
     assert.match(workflow, expectedGroup);
@@ -639,6 +647,22 @@ test('telegram-sync repository dispatch runs use unique concurrency groups while
       new RegExp(`concurrency:\\s*\\n\\s*group:\\s*${escapeRegExp(groupName)}\\s*\\n\\s*cancel-in-progress:\\s*false`),
       `${workflowPath} must not put every repository_dispatch into one fixed pending queue`,
     );
+  }
+});
+
+test('sync workflows accept queued workflow dispatch payloads and expose a webhook dispatch flag', async () => {
+  for (const workflowPath of ['.github/workflows/sync.yml', '.github/workflows/sync-dev.yml']) {
+    const workflow = await readWorkflow(workflowPath);
+
+    assert.match(workflow, /dispatch_payload:\s*\n\s+description: Serialized webhook payload from the Cloudflare sync queue/);
+    assert.match(workflow, /queue_task_id:\s*\n\s+description: Sync queue task id used to correlate workflow runs/);
+    assert.match(workflow, /run-name:\s*\$\{\{ github\.event\.inputs\.queue_task_id && format\('Sync queue task \{0\}', github\.event\.inputs\.queue_task_id\) \|\| github\.event\.action \|\| github\.workflow \}\}/);
+    assert.match(workflow, /IS_WEBHOOK_DISPATCH=true/);
+    assert.match(workflow, /echo "is_webhook_dispatch=\$\{IS_WEBHOOK_DISPATCH\}" >> "\$GITHUB_OUTPUT"/);
+    assert.match(workflow, /GITHUB_EVENT_PATH="\$RUNNER_TEMP\/queued-dispatch-event\.json"/);
+    assert.match(workflow, /client_payload: payload\.client_payload \?\? payload/);
+    assert.match(workflow, /steps\.channel\.outputs\.is_webhook_dispatch == 'true'/);
+    assert.doesNotMatch(workflow, /if:\s*(?:always\(\) && |success\(\) && |failure\(\) && )?github\.event_name == 'repository_dispatch'/);
   }
 });
 
@@ -734,7 +758,10 @@ test('main sync workflow handles production dispatches and writes main branch', 
   const workflow = await readWorkflow('.github/workflows/sync.yml');
 
   assert.match(workflow, /name:\s*Sync \(Main\)/);
-  assert.match(workflow, /workflow_dispatch:\s*\n\s+inputs:\s*\n\s+channel:/);
+  assert.match(workflow, /workflow_dispatch:\s*\n\s+inputs:/);
+  assert.match(workflow, /dispatch_payload:/);
+  assert.match(workflow, /queue_task_id:/);
+  assert.match(workflow, /channel:/);
   assert.match(workflow, /type:\s*choice/);
   assert.match(workflow, /default:\s*telegram/);
   assert.match(workflow, /-\s*telegram/);
@@ -762,7 +789,10 @@ test('telegram-sync dev workflow only handles dev dispatches and writes dev bran
   const workflow = await readWorkflow('.github/workflows/sync-dev.yml');
 
   assert.match(workflow, /name:\s*Sync \(Dev\)/);
-  assert.match(workflow, /workflow_dispatch:\s*\n\s+inputs:\s*\n\s+channel:/);
+  assert.match(workflow, /workflow_dispatch:\s*\n\s+inputs:/);
+  assert.match(workflow, /dispatch_payload:/);
+  assert.match(workflow, /queue_task_id:/);
+  assert.match(workflow, /channel:/);
   assert.match(workflow, /type:\s*choice/);
   assert.match(workflow, /default:\s*telegram/);
   assert.match(workflow, /-\s*telegram/);
@@ -847,7 +877,7 @@ test('package fast tests skip the slow thought module page render and exposes sy
   assert.equal(packageJson.scripts['sync:db'], 'node tools/training-maintenance.mjs sync');
 });
 
-test('main sync workflow reports repository dispatch failures back to Telegram', async () => {
+test('main sync workflow reports queued webhook dispatch failures back to Telegram', async () => {
   const workflow = await readWorkflow('.github/workflows/sync.yml');
 
   for (const [stepName, stepId] of [
@@ -868,10 +898,10 @@ test('main sync workflow reports repository dispatch failures back to Telegram',
   }
 
   assert.match(workflow, /- name: Notify Telegram sync failure/);
-  assert.match(workflow, /if: failure\(\) && github\.event_name == 'repository_dispatch'/);
+  assert.match(workflow, /if: failure\(\) && steps\.channel\.outputs\.is_webhook_dispatch == 'true'/);
   assert.match(workflow, /continue-on-error: true/);
   assert.match(workflow, /- name: Notify Telegram sync result/);
-  assert.match(workflow, /if: success\(\) && github\.event_name == 'repository_dispatch'/);
+  assert.match(workflow, /if: success\(\) && steps\.channel\.outputs\.is_webhook_dispatch == 'true'/);
   assert.match(workflow, /node tools\/telegram-sync-notify\.mjs/);
   assert.match(workflow, /node tools\/telegram-action-monitor\.mjs/);
   assert.match(workflow, /STEP_INSTALL_OUTCOME: \$\{\{ steps\.install\.outcome \}\}/);
