@@ -618,7 +618,7 @@ test('main sync workflow sends deleted thought targets as absent deploy checks',
   assert.match(output, /thought_check_expectation=absent/);
 });
 
-test('telegram-sync repository dispatch runs use unique concurrency groups for consecutive image batches', async () => {
+test('telegram-sync repository dispatch runs queue sequentially via a shared concurrency group', async () => {
   const workflows = [
     ['.github/workflows/sync.yml', 'sync'],
     ['.github/workflows/sync-dev.yml', 'sync-dev'],
@@ -627,16 +627,10 @@ test('telegram-sync repository dispatch runs use unique concurrency groups for c
   for (const [workflowPath, groupName] of workflows) {
     const workflow = await readWorkflow(workflowPath);
     const expectedGroup = new RegExp(
-      `group:\\s*\\$\\{\\{\\s*github\\.event_name == 'repository_dispatch' && format\\('${escapeRegExp(groupName)}-\\{0\\}', github\\.run_id\\) \\|\\| '${escapeRegExp(groupName)}'\\s*\\}\\}`,
+      `concurrency:\\s*\\n\\s*group:\\s*${escapeRegExp(groupName)}\\s*\\n\\s*cancel-in-progress:\\s*false`,
     );
 
-    assert.match(workflow, expectedGroup);
-    assert.match(workflow, /cancel-in-progress:\s*false/);
-    assert.doesNotMatch(
-      workflow,
-      new RegExp(`concurrency:\\s*\\n\\s*group:\\s*${escapeRegExp(groupName)}\\s*\\n\\s*cancel-in-progress:\\s*false`),
-      `${workflowPath} must not put every Telegram dispatch into one fixed pending queue`,
-    );
+    assert.match(workflow, expectedGroup, `${workflowPath} must use shared concurrency group "${groupName}" with cancel-in-progress: false`);
   }
 });
 
