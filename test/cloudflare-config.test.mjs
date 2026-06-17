@@ -13,6 +13,8 @@ test('wrangler main config reuses the Feishu worker as the unified production en
   assert.match(config, /^workers_dev\s*=\s*true/m);
   assert.match(config, /pattern\s*=\s*"feishu\.soulgo\.chat"/);
   assert.match(config, /custom_domain\s*=\s*true/);
+  assert.match(config, /\[observability\]\s*\nenabled\s*=\s*true/);
+  assert.match(config, /\[observability\.logs\]\s*\ninvocation_logs\s*=\s*true\s*\nhead_sampling_rate\s*=\s*1/);
   assert.doesNotMatch(config, /^pages_build_output_dir\s*=/m);
   assert.match(config, /GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM\s*=\s*"telegram_update"/);
   assert.match(config, /GITHUB_DISPATCH_EVENT_TYPE_FEISHU\s*=\s*"feishu_update"/);
@@ -48,6 +50,8 @@ test('wrangler unified dev config routes Telegram and Feishu to dev workflows wi
   assert.match(config, /^workers_dev\s*=\s*true/m);
   assert.match(config, /pattern\s*=\s*"feishu-dev\.soulgo\.chat"/);
   assert.match(config, /custom_domain\s*=\s*true/);
+  assert.match(config, /\[observability\]\s*\nenabled\s*=\s*true/);
+  assert.match(config, /\[observability\.logs\]\s*\ninvocation_logs\s*=\s*true\s*\nhead_sampling_rate\s*=\s*1/);
   assert.match(config, /GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM\s*=\s*"telegram_update_dev"/);
   assert.match(config, /GITHUB_DISPATCH_EVENT_TYPE_FEISHU\s*=\s*"feishu_update_dev"/);
   assert.match(config, /GITHUB_SYNC_REF\s*=\s*"dev"/);

@@ -6,6 +6,13 @@ routes = [
   { pattern = "feishu-dev.soulgo.chat", custom_domain = true }
 ]
 
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = true
+head_sampling_rate = 1
+
 [vars]
 GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM = "telegram_update_dev"
 GITHUB_DISPATCH_EVENT_TYPE_FEISHU = "feishu_update_dev"
