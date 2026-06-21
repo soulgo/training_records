@@ -33,6 +33,7 @@
 
 ### Fixed
 
+- 修复 Telegram 饮食图片识别偶发 schema 校验失败的问题：AI 返回 `"510 kcal"`、`"约360"` 等带单位热量时会在校验前归一化为数字，无法确认热量的餐次会跳过；同时允许建议热量范围为 `null` 并收紧 prompt，避免 `records.meals[].calories` 因非数字触发重试。
 - 修复飞书单条文本随想也不触发 GitHub Actions 的问题：飞书 `text` 消息现在绕过 `FEISHU_IMAGE_BUFFER`，直接进入全局同步队列；图片消息仍保留 3 秒 burst 缓冲。同步队列在 `workflow_dispatch` 后长期找不到对应 run 时会 dead-letter 当前任务并继续处理后续消息，且在配置 Worker 级 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 时会向飞书回发“GitHub Action 未能启动”。
 - 修复飞书连续随想队列在 GitHub Actions run title 被截断后卡死的问题：`SyncDispatchQueue` 现在使用短稳定 `queue_task_id`（`channel:sortKey:eventType:hash`），避免把完整飞书 payload 写入 run 标题；同时兼容旧的超长队列 ID 前缀匹配，让已卡在 `wait_for_run` 的任务可以继续 drain 后续消息。
 - 修复飞书连续发送多条文本随想/随想编时只处理第一条的问题：飞书文本消息进入全局同步队列按 `create_time` 顺序处理，图片消息继续按 chat 进入 3 秒 burst buffer 并聚合为 `feishu_updates`；同时补齐 buffer 重试保护、结构化日志和 Cloudflare Workers observability，便于后续排查历史回调链路。

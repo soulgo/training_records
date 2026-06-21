@@ -91,8 +91,8 @@ export function buildRecognitionSchema() {
               properties: {
                 name: { type: 'string' },
                 calories: { type: 'number' },
-                recommendedMin: { type: 'number' },
-                recommendedMax: { type: 'number' },
+                recommendedMin: { type: ['number', 'null'] },
+                recommendedMax: { type: ['number', 'null'] },
               },
             },
           },
