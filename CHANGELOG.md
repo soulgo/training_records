@@ -33,6 +33,7 @@
 
 ### Fixed
 
+- 修复 Telegram/飞书跨通道 `/随想编`、`/随想删`、`/移动` 已存在随想时错误使用命令消息来源覆盖目标随想来源的问题：DB-only 写回现在优先沿用目标行原有 `source_channel`、`source_chat_id` 和 `source_message_id`，避免飞书显式 ID 编辑进入 `source_message_id` 为空的 `pending_replay`，以及 Telegram 删除飞书随想时触发 `thought_pkey` 主键冲突。
 - 修复 Telegram/飞书纯文本随想已入库但不触发页面刷新的问题：新建随想即使没有图片附件也会标记为 `thought_database_only` 数据库内容变更，并在结果中保留持久化后的随想 ID，确保同步 workflow 能触发后续部署校验。
 - 修复生产/开发站点部署在严格数据库导出已成功后仍二次读取数据库、偶发 `database snapshot unavailable: timeout expired` 导致页面刷新失败的问题：site-build action 在 `export:markdown` 成功后切换为已导出的 Markdown 快照供后续测试和构建复用。
 - 修复 Telegram 饮食图片识别偶发 schema 校验失败的问题：AI 返回 `"510 kcal"`、`"约360"` 等带单位热量时会在校验前归一化为数字，无法确认热量的餐次会跳过；同时允许建议热量范围为 `null` 并收紧 prompt，避免 `records.meals[].calories` 因非数字触发重试。

@@ -97,9 +97,15 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
       const thoughtModule =
         normalizeThoughtModuleOrNull(batch.thoughtEdit?.thoughtModule) ??
         normalizeThoughtModule(existing.thought_module);
-      const sourceChannel = batch.sourceChannel ?? existing.source_channel ?? 'telegram';
-      const sourceChatId = batch.thoughtEdit?.sourceChatId ?? existing.source_chat_id ?? sourceMessage?.sourceChatId ?? sourceMessage?.chatId ?? batch.thoughtEdit?.telegramChatId;
-      const sourceMessageId = batch.thoughtEdit?.targetSourceMessageId ?? existing.source_message_id ?? targetMessageId;
+      const { sourceChannel, sourceChatId, sourceMessageId } = resolveExistingThoughtWriteIdentity({
+        batch,
+        existing,
+        sourceMessage,
+        targetMessageId,
+        targetSourceMessageId: batch.thoughtEdit?.targetSourceMessageId,
+        commandSourceChatId: batch.thoughtEdit?.sourceChatId,
+        telegramChatId: batch.thoughtEdit?.telegramChatId,
+      });
 
       await this.save({
         messageId: targetMessageId,
@@ -137,9 +143,15 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
       const thoughtModule =
         normalizeThoughtModuleOrNull(batch.thoughtDelete?.thoughtModule) ??
         normalizeThoughtModule(existing.thought_module);
-      const sourceChannel = batch.sourceChannel ?? existing.source_channel ?? 'telegram';
-      const sourceChatId = batch.thoughtDelete?.sourceChatId ?? existing.source_chat_id ?? sourceMessage?.sourceChatId ?? sourceMessage?.chatId ?? batch.thoughtDelete?.telegramChatId;
-      const sourceMessageId = batch.thoughtDelete?.targetSourceMessageId ?? existing.source_message_id ?? targetMessageId;
+      const { sourceChannel, sourceChatId, sourceMessageId } = resolveExistingThoughtWriteIdentity({
+        batch,
+        existing,
+        sourceMessage,
+        targetMessageId,
+        targetSourceMessageId: batch.thoughtDelete?.targetSourceMessageId,
+        commandSourceChatId: batch.thoughtDelete?.sourceChatId,
+        telegramChatId: batch.thoughtDelete?.telegramChatId,
+      });
       await this.markDeleted({
         messageId: targetMessageId,
         chatId: batch.thoughtDelete?.telegramChatId,
@@ -174,9 +186,15 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
       const thoughtModule =
         normalizeThoughtModuleOrNull(batch.thoughtMove?.thoughtModule) ??
         normalizeThoughtModule(existing.thought_module);
-      const sourceChannel = batch.sourceChannel ?? existing.source_channel ?? 'telegram';
-      const sourceChatId = batch.thoughtMove?.sourceChatId ?? existing.source_chat_id ?? sourceMessage?.sourceChatId ?? sourceMessage?.chatId ?? batch.thoughtMove?.telegramChatId;
-      const sourceMessageId = batch.thoughtMove?.targetSourceMessageId ?? existing.source_message_id ?? targetMessageId;
+      const { sourceChannel, sourceChatId, sourceMessageId } = resolveExistingThoughtWriteIdentity({
+        batch,
+        existing,
+        sourceMessage,
+        targetMessageId,
+        targetSourceMessageId: batch.thoughtMove?.targetSourceMessageId,
+        commandSourceChatId: batch.thoughtMove?.sourceChatId,
+        telegramChatId: batch.thoughtMove?.telegramChatId,
+      });
 
       await this.save({
         messageId: targetMessageId,
@@ -431,5 +449,26 @@ function buildTargetSourceIdentity({
     sourceChannel: batch.sourceChannel ?? 'telegram',
     sourceChatId,
     sourceMessageId: targetSourceMessageId ?? targetMessageId,
+  };
+}
+
+function resolveExistingThoughtWriteIdentity({
+  batch,
+  existing,
+  sourceMessage,
+  targetMessageId,
+  targetSourceMessageId = null,
+  commandSourceChatId = null,
+  telegramChatId = null,
+}) {
+  return {
+    sourceChannel: existing.source_channel ?? batch.sourceChannel ?? 'telegram',
+    sourceChatId:
+      existing.source_chat_id ??
+      commandSourceChatId ??
+      sourceMessage?.sourceChatId ??
+      sourceMessage?.chatId ??
+      telegramChatId,
+    sourceMessageId: existing.source_message_id ?? targetSourceMessageId ?? targetMessageId,
   };
 }
