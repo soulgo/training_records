@@ -8,6 +8,7 @@ export {
   main,
   notifyTelegramSyncResultFromFile,
   notifyTelegramSyncResultFromReport,
+  runMessageSync,
   runTelegramSync,
   shouldPersistTelegramArtifacts,
 } from '../src/app/use-cases/telegram-sync.use-case.mjs';

@@ -105,6 +105,34 @@ test('syncTrainingCore can run a single requested phase', async () => {
   });
 });
 
+test('syncTrainingCore dry-runs markdown phase without requiring database config', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'sync-training-core-markdown-dry-run-'));
+  await writeFile(
+    path.join(tempRoot, '训练记录.md'),
+    '# 训练记录\n\n### 2026-04-06\n\n#### 当日运动截图记录\n',
+    'utf8',
+  );
+
+  const result = await syncTrainingCore({
+    phase: 'markdown',
+    dryRun: true,
+    rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'false',
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(result.status, 'planned');
+  assert.deepEqual(result.markdown, {
+    status: 'planned',
+    dryRun: true,
+    readonly: true,
+    affectedDays: ['2026-04-06'],
+    days: 1,
+  });
+});
+
 test('syncTrainingCore default shared client does not run markdown phase', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'sync-training-core-shared-client-'));
   await mkdir(path.join(tempRoot, 'source', '_posts'), { recursive: true });

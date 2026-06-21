@@ -20,3 +20,8 @@ export function createAiProvider(env = process.env) {
 
   throw new AiProviderError(`Unsupported AI provider: ${providerName}`);
 }
+
+export function isAiSchedulerEnabled(env = process.env) {
+  const normalized = String(env?.AI_SCHEDULER_ENABLED ?? 'true').trim().toLowerCase();
+  return !['0', 'false', 'no', 'off'].includes(normalized);
+}

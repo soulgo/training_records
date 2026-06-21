@@ -179,7 +179,7 @@ psql "$TRAINING_DB_URL" -f sql/training_records/sleep_health_metrics.sql
 6. 查 `core.sleep` 是否有对应 `archived_date`。
 7. 查 `core.training_day` 的睡眠汇总字段是否更新。
 8. 看 GitHub Actions summary 的 `taskStatus`、`persistenceStatus`、`failureDisposition` 和 failed message ids，确认是已入库、自动重试还是需要重新发送。
-9. 如果数据库写入失败，看 `runtime/telegram-sync-pending.ndjson` 是否等待重放。
+9. 如果数据库写入失败，看 `ingest.telegram_pending_batch` 是否等待重放；旧 `runtime/telegram-sync-pending.ndjson` 仅作为 legacy 队列显式重放。
 10. 如果数据库有数据但页面不显示，运行 `npm run build:data`，检查 `训练数据解析.md` 和 `source/_data/dashboardView.json`。
 
 如果页面睡眠卡片显示“待比较”，但 Telegram Sync action 已显示 `persistenceStatus=stored`，优先确认 `source/_data/dashboardView.json` 或构建产物中的睡眠分钟数是否来自 `core.sleep`。如果看到总睡眠等于“总睡眠 + 夜间睡眠”的异常值，说明读模型或 prompt 口径发生回退，需要检查 `readTrainingSnapshotFromDatabaseClient` 的睡眠来源选择和 `prompts/_source/recognition-rules.json` 的 sleep 规则。

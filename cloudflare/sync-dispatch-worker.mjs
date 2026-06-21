@@ -27,17 +27,28 @@ export default {
 
 export async function handleSyncDispatchWebhook(request, env, options = {}) {
   if (request.method !== 'POST') {
-    return jsonResponse(405, { ok: false, error: 'method_not_allowed' });
+    return await logResponseIfNeeded(jsonResponse(405, { ok: false, error: 'method_not_allowed' }), {
+      env,
+      options,
+      channel: null,
+    });
   }
 
   const channel = await detectSyncDispatchChannel(request);
+  let response;
   if (channel === 'telegram') {
-    return handleTelegramWebhook(request, env, options);
+    response = await handleTelegramWebhook(request, env, options);
+    return await logResponseIfNeeded(response, { env, options, channel });
   }
   if (channel === 'feishu') {
-    return handleFeishuWebhook(request, env, options);
+    response = await handleFeishuWebhook(request, env, options);
+    return await logResponseIfNeeded(response, { env, options, channel });
   }
-  return jsonResponse(400, { ok: false, error: 'unknown_channel' });
+  return await logResponseIfNeeded(jsonResponse(400, { ok: false, error: 'unknown_channel' }), {
+    env,
+    options,
+    channel: null,
+  });
 }
 
 export async function detectSyncDispatchChannel(request) {
@@ -95,4 +106,41 @@ function jsonResponse(status, payload) {
       'content-type': 'application/json; charset=utf-8',
     },
   });
+}
+
+async function logResponseIfNeeded(response, { env, options, channel }) {
+  if (response.status < 500) {
+    return response;
+  }
+  const logger = options?.logger ?? env?.__logger ?? console;
+  const metadata = {
+    outcome: 'worker_5xx',
+    channel,
+    status: response.status,
+    error: await resolveWorkerError(response),
+  };
+  try {
+    const line = `[sync-dispatch-worker] ${JSON.stringify(metadata)}`;
+    if (typeof logger?.error === 'function') {
+      logger.error(line);
+    } else {
+      logger?.log?.(line);
+    }
+  } catch {
+    // Diagnostic logging must not affect webhook responses.
+  }
+  return response;
+}
+
+async function resolveWorkerError(response) {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    return null;
+  }
+  try {
+    const payload = await response.clone().json();
+    return payload?.error ?? null;
+  } catch {
+    return null;
+  }
 }

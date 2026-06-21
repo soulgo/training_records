@@ -14,6 +14,9 @@ import {
   createRecognitionAiProvider,
   runTelegramSync,
 } from './telegram-sync.use-case.mjs';
+import {
+  writeStartedRecognitionAiCallLog as writeStartedRecognitionAiCallLogToDatabase,
+} from '../../../tools/training-db-core.mjs';
 import { recognizeBatch } from './telegram-sync/image-processing.mjs';
 import {
   notifyTelegramSyncResultFromFile,
@@ -56,6 +59,7 @@ export async function runFeishuSync(options = {}) {
       imageKey,
       fetch: fetchImpl,
       apiBaseUrl: feishuConfig.apiBaseUrl,
+      maxDownloadBytes: rawEnv.MAX_IMAGE_DOWNLOAD_BYTES,
     }));
   const sendMessage =
     options.sendFeishuMessage ??
@@ -72,9 +76,24 @@ export async function runFeishuSync(options = {}) {
     options.persistNormalizedBatch
       ? (input) => options.persistNormalizedBatch({ ...input, sourceChannel: 'feishu' })
       : undefined;
+  const writeStartedRecognitionAiCallLog =
+    options.writeStartedRecognitionAiCallLog ??
+    (!options.persistNormalizedBatch && !options.recognizeBatch
+      ? (event) =>
+          writeStartedRecognitionAiCallLogToDatabase({
+            ...event,
+            env: sharedEnv,
+            occurredAt: options.now ?? new Date(),
+          })
+      : undefined);
 
   return runTelegramSync({
     ...options,
+    adapter: {
+      channel: 'feishu',
+      allowedChatIdsEnvName: 'FEISHU_ALLOWED_CHAT_IDS',
+      transportEnvName: 'FEISHU_SYNC_TRANSPORT',
+    },
     rootDir: options.rootDir ?? rootDir,
     env: sharedEnv,
     sourceChannel: 'feishu',
@@ -96,8 +115,10 @@ export async function runFeishuSync(options = {}) {
         rawEnv: sharedEnv,
         sourceChannel: 'feishu',
         fetchImageFileById,
+        writeStartedRecognitionAiCallLog,
       })),
     persistNormalizedBatch,
+    writeStartedRecognitionAiCallLog,
     sendTelegramMessage: sendMessage,
     fetchMessageFile: fetchImageFileById,
     aiProvider,
@@ -107,14 +128,53 @@ export async function runFeishuSync(options = {}) {
 
 export function buildFeishuSyncReport(result) {
   const report = buildTelegramSyncReport(result);
+  const batches = (report.batches ?? []).map(normalizeFeishuReportBatch);
   return {
     ...report,
-    batches: (report.batches ?? []).map((batch) => ({
-      ...batch,
-      taskId: String(batch.taskId ?? '').replace(/^telegram:/, 'feishu:'),
-      sourceId: String(batch.sourceId ?? '').replace(/^telegram:/, 'feishu:'),
-      sourceType: batch.sourceType === 'telegram_update' ? 'feishu_update' : batch.sourceType,
-    })),
+    batchResults: (report.batchResults ?? []).map(normalizeFeishuReportBatch),
+    batches,
+    tasks: (report.tasks ?? []).map(normalizeFeishuReportTask),
+  };
+}
+
+function normalizeFeishuReportBatch(batch) {
+  return {
+    ...batch,
+    taskId: String(batch.taskId ?? '').replace(/^telegram:/, 'feishu:'),
+    sourceId: String(batch.sourceId ?? '').replace(/^telegram:/, 'feishu:'),
+    sourceType: batch.sourceType === 'telegram_update' ? 'feishu_update' : batch.sourceType,
+    recognitionErrors: normalizeFeishuRecognitionErrors(batch.recognitionErrors),
+  };
+}
+
+function normalizeFeishuReportTask(task) {
+  return {
+    ...task,
+    taskId: String(task.taskId ?? '').replace(/^telegram:/, 'feishu:'),
+    channel: 'feishu',
+  };
+}
+
+function normalizeFeishuRecognitionErrors(errors) {
+  if (!Array.isArray(errors)) {
+    return errors;
+  }
+  return errors.map((error) => {
+    const summary = normalizeFeishuRecognitionErrorSummary(error?.summary);
+    return summary === error?.summary ? error : { ...error, summary };
+  });
+}
+
+function normalizeFeishuRecognitionErrorSummary(summary) {
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary)) {
+    return summary;
+  }
+  if (summary.sourceChannel !== 'feishu' || summary.reason !== 'image_download') {
+    return summary;
+  }
+  return {
+    ...summary,
+    reason: 'feishu_api',
   };
 }
 
@@ -197,10 +257,6 @@ function loadFeishuEnv(env = process.env, options = {}) {
 function buildSharedSyncEnv(env) {
   return {
     ...env,
-    // Placeholder only satisfies the shared Telegram env check; Feishu I/O is injected below.
-    TELEGRAM_BOT_TOKEN: env.TELEGRAM_BOT_TOKEN || 'feishu',
-    TELEGRAM_ALLOWED_CHAT_IDS: env.FEISHU_ALLOWED_CHAT_IDS ?? env.TELEGRAM_ALLOWED_CHAT_IDS,
-    TELEGRAM_SYNC_TRANSPORT: env.FEISHU_SYNC_TRANSPORT ?? 'webhook',
     TELEGRAM_SYNC_NOTIFY: env.FEISHU_SYNC_NOTIFY ?? env.TELEGRAM_SYNC_NOTIFY,
     TELEGRAM_SYNC_NOTIFY_STAGE: env.FEISHU_SYNC_NOTIFY_STAGE ?? env.TELEGRAM_SYNC_NOTIFY_STAGE,
     TELEGRAM_SYNC_RESULT_PATH: env.FEISHU_SYNC_RESULT_PATH ?? env.TELEGRAM_SYNC_RESULT_PATH,

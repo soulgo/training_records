@@ -9,6 +9,10 @@ const DEFAULT_GITHUB_REPO = 'training_records';
 const MESSAGE_BURST_BUFFER_DELAY_MS = 3_000;
 const MESSAGE_BUFFER_RETRY_BASE_DELAY_MS = 10_000;
 const MESSAGE_BUFFER_RETRY_MAX_DELAY_MS = 60_000;
+const MESSAGE_BUFFER_MAX_DISPATCH_RETRIES = 5;
+const DEAD_LETTER_KEY = 'deadLetters';
+const DEFAULT_FEISHU_SIGNATURE_MAX_SKEW_SECONDS = 300;
+const feishuSignatureReplayCache = new Map();
 
 export default {
   async fetch(request, env) {
@@ -82,7 +86,9 @@ export class FeishuImageBuffer {
           logger,
           eventType,
           eventCount: events.length,
+          events,
           status: response.status,
+          reason: 'dispatch_failed',
         });
         return;
       }
@@ -103,8 +109,10 @@ export class FeishuImageBuffer {
         logger,
         eventType,
         eventCount: events.length,
+        events,
         status: null,
         error,
+        reason: 'dispatch_exception',
       });
     }
   }
@@ -153,10 +161,19 @@ export async function handleFeishuWebhook(request, env, options = {}) {
   }
 
   if (!encrypted && !options.skipSignatureVerification) {
-    const signatureOk = await verifyFeishuSignature(request, body, env.FEISHU_ENCRYPT_KEY.trim());
+    const maxSkewSeconds = parseFeishuSignatureMaxSkewSeconds(env.FEISHU_SIGNATURE_MAX_SKEW_SECONDS);
+    const signatureOk = await verifyFeishuSignature(request, body, env.FEISHU_ENCRYPT_KEY.trim(), {
+      maxSkewSeconds,
+      nowSeconds: options.nowSeconds,
+    });
     if (!signatureOk) {
       return jsonResponse(401, { ok: false, error: 'unauthorized' });
     }
+    logFeishuSignatureReplayWarning(request, {
+      logger: options.logger ?? console,
+      maxSkewSeconds,
+      nowSeconds: options.nowSeconds,
+    });
   }
 
   if (event?.header?.event_type !== 'im.message.receive_v1') {
@@ -229,11 +246,14 @@ export async function handleFeishuWebhook(request, env, options = {}) {
   });
 }
 
-export async function verifyFeishuSignature(request, body, encryptKey) {
+export async function verifyFeishuSignature(request, body, encryptKey, options = {}) {
   const timestamp = request.headers.get('X-Lark-Request-Timestamp');
   const nonce = request.headers.get('X-Lark-Request-Nonce');
   const signature = request.headers.get('X-Lark-Signature');
   if (!timestamp || !nonce || !signature || !encryptKey) {
+    return false;
+  }
+  if (!isFeishuSignatureTimestampFresh(timestamp, options)) {
     return false;
   }
 
@@ -254,6 +274,60 @@ export async function verifyFeishuSignature(request, body, encryptKey) {
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
   return expected === signature;
+}
+
+function isFeishuSignatureTimestampFresh(timestamp, options = {}) {
+  if (!/^\d+$/.test(timestamp)) {
+    return false;
+  }
+  const timestampSeconds = Number(timestamp);
+  if (!Number.isSafeInteger(timestampSeconds)) {
+    return false;
+  }
+  const nowSeconds = options.nowSeconds ?? Math.floor(Date.now() / 1000);
+  const maxSkewSeconds = options.maxSkewSeconds ?? DEFAULT_FEISHU_SIGNATURE_MAX_SKEW_SECONDS;
+  return Math.abs(nowSeconds - timestampSeconds) <= maxSkewSeconds;
+}
+
+function parseFeishuSignatureMaxSkewSeconds(value) {
+  if (value === undefined || value === null || value === '') {
+    return DEFAULT_FEISHU_SIGNATURE_MAX_SKEW_SECONDS;
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    return DEFAULT_FEISHU_SIGNATURE_MAX_SKEW_SECONDS;
+  }
+  return parsed;
+}
+
+function logFeishuSignatureReplayWarning(request, options = {}) {
+  const timestamp = request.headers.get('X-Lark-Request-Timestamp');
+  const nonce = request.headers.get('X-Lark-Request-Nonce');
+  const signature = request.headers.get('X-Lark-Signature');
+  const cacheKey = `feishu-signature:${timestamp}:${nonce}:${signature}`;
+  const maxSkewSeconds = options.maxSkewSeconds ?? DEFAULT_FEISHU_SIGNATURE_MAX_SKEW_SECONDS;
+  const nowSeconds = options.nowSeconds ?? Math.floor(Date.now() / 1000);
+  pruneFeishuSignatureReplayCache(nowSeconds);
+
+  const expiresAt = feishuSignatureReplayCache.get(cacheKey);
+  if (expiresAt && expiresAt >= nowSeconds) {
+    options.logger?.warn?.(JSON.stringify({
+      tag: '[feishu-signature]',
+      outcome: 'replay_warning',
+      timestamp,
+      nonce,
+    }));
+    return;
+  }
+  feishuSignatureReplayCache.set(cacheKey, nowSeconds + maxSkewSeconds);
+}
+
+function pruneFeishuSignatureReplayCache(nowSeconds) {
+  for (const [cacheKey, expiresAt] of feishuSignatureReplayCache.entries()) {
+    if (expiresAt < nowSeconds) {
+      feishuSignatureReplayCache.delete(cacheKey);
+    }
+  }
 }
 
 async function decryptFeishuEncryptedEvent(encryptedPayload, encryptKey) {
@@ -417,10 +491,33 @@ async function scheduleMessageBufferRetry({
   logger,
   eventType,
   eventCount,
+  events,
   status,
   error,
+  reason,
 }) {
   const retryCount = Number(await state.storage.get('dispatchRetryCount') ?? 0) + 1;
+  if (retryCount >= MESSAGE_BUFFER_MAX_DISPATCH_RETRIES) {
+    await deadLetterFeishuMessageBuffer({
+      state,
+      events,
+      reason,
+      status,
+      retryCount,
+      eventType,
+    });
+    logFeishuMessageBuffer(env, logger, {
+      outcome: 'dead_letter',
+      eventType,
+      eventCount,
+      status,
+      retryCount,
+      reason,
+      errorName: error instanceof Error ? error.name : null,
+    });
+    return;
+  }
+
   await state.storage.put('dispatchRetryCount', retryCount);
   const retryDelayMs = calculateMessageBufferRetryDelayMs(retryCount);
   const nextAlarmAt = getNow(env) + retryDelayMs;
@@ -435,6 +532,39 @@ async function scheduleMessageBufferRetry({
     nextAlarmAt,
     errorName: error instanceof Error ? error.name : null,
   });
+}
+
+async function deadLetterFeishuMessageBuffer({
+  state,
+  events,
+  reason,
+  status,
+  retryCount,
+  eventType,
+}) {
+  const deadLetters = (await state.storage.get(DEAD_LETTER_KEY)) ?? [];
+  deadLetters.push({
+    reason,
+    status,
+    retryCount,
+    eventType,
+    failedAt: new Date(Date.now()).toISOString(),
+    events: events.map(summarizeFeishuEvent),
+  });
+  await state.storage.put(DEAD_LETTER_KEY, deadLetters.slice(-100));
+  await state.storage.delete('events');
+  await state.storage.delete('dispatchRetryCount');
+}
+
+function summarizeFeishuEvent(event) {
+  const message = event?.event?.message ?? {};
+  return {
+    event_id: event?.header?.event_id ?? null,
+    message_id: message.message_id ?? null,
+    chat_id: message.chat_id ?? null,
+    message_type: message.message_type ?? null,
+    create_time: message.create_time ?? event?.header?.create_time ?? null,
+  };
 }
 
 function calculateMessageBufferRetryDelayMs(retryCount) {

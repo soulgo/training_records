@@ -62,6 +62,9 @@ CREATE TABLE "ingest"."telegram_message" (
   "date_unix" int8,
   "photo_file_ids_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
   "photo_file_unique_ids_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'telegram'::text,
+  "source_chat_id" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'legacy-chat'::text,
+  "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL,
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
@@ -109,7 +112,35 @@ CREATE TABLE "ingest"."telegram_recognition" (
   "message_id" int8 NOT NULL,
   "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
   "recognition_json" jsonb NOT NULL,
+  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'telegram'::text,
+  "source_chat_id" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'legacy-chat'::text,
+  "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL,
   "updated_at" timestamptz(6) NOT NULL
+)
+;
+
+-- ----------------------------
+-- Table structure for ai_call_log
+-- ----------------------------
+DROP TABLE IF EXISTS "ingest"."ai_call_log";
+CREATE TABLE "ingest"."ai_call_log" (
+  "ai_call_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "task_id" text COLLATE "pg_catalog"."default",
+  "scene" text COLLATE "pg_catalog"."default" NOT NULL,
+  "provider" text COLLATE "pg_catalog"."default" NOT NULL,
+  "model" text COLLATE "pg_catalog"."default" NOT NULL,
+  "prompt_version" text COLLATE "pg_catalog"."default",
+  "idempotency_key" text COLLATE "pg_catalog"."default",
+  "status" text COLLATE "pg_catalog"."default" NOT NULL,
+  "latency_ms" int4,
+  "failure_category" text COLLATE "pg_catalog"."default",
+  "failure_reason" text COLLATE "pg_catalog"."default",
+  "prompt_tokens" int4,
+  "completion_tokens" int4,
+  "total_tokens" int4,
+  "cost_usd" numeric(12,6),
+  "created_at" timestamptz(6) NOT NULL DEFAULT now(),
+  "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
 
@@ -129,11 +160,19 @@ ALTER TABLE "ingest"."telegram_batch" ADD CONSTRAINT "telegram_batch_pkey" PRIMA
 CREATE INDEX "idx_ingest_telegram_message_update_id" ON "ingest"."telegram_message" USING btree (
   "update_id" "pg_catalog"."int8_ops" DESC NULLS FIRST
 );
+CREATE INDEX "idx_ingest_telegram_message_legacy_message_id" ON "ingest"."telegram_message" USING btree (
+  "message_id" "pg_catalog"."int8_ops" ASC NULLS LAST
+);
+CREATE UNIQUE INDEX "ux_ingest_telegram_message_source_identity" ON "ingest"."telegram_message" USING btree (
+  "source_channel" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "source_chat_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "source_message_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
+);
 
 -- ----------------------------
 -- Primary Key structure for table telegram_message
 -- ----------------------------
-ALTER TABLE "ingest"."telegram_message" ADD CONSTRAINT "telegram_message_pkey" PRIMARY KEY ("message_id");
+ALTER TABLE "ingest"."telegram_message" ADD CONSTRAINT "telegram_message_pkey" PRIMARY KEY ("source_channel", "source_chat_id", "source_message_id");
 
 -- ----------------------------
 -- Indexes structure for table telegram_pending_batch
@@ -159,7 +198,20 @@ ALTER TABLE "ingest"."telegram_pending_batch" ADD CONSTRAINT "telegram_pending_b
 -- ----------------------------
 -- Primary Key structure for table telegram_recognition
 -- ----------------------------
-ALTER TABLE "ingest"."telegram_recognition" ADD CONSTRAINT "telegram_recognition_pkey" PRIMARY KEY ("message_id");
+CREATE INDEX "idx_ingest_telegram_recognition_legacy_message_id" ON "ingest"."telegram_recognition" USING btree (
+  "message_id" "pg_catalog"."int8_ops" ASC NULLS LAST
+);
+CREATE UNIQUE INDEX "ux_ingest_telegram_recognition_source_identity" ON "ingest"."telegram_recognition" USING btree (
+  "source_channel" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "source_chat_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "source_message_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
+);
+ALTER TABLE "ingest"."telegram_recognition" ADD CONSTRAINT "telegram_recognition_pkey" PRIMARY KEY ("source_channel", "source_chat_id", "source_message_id");
+
+-- ----------------------------
+-- Primary Key structure for table ai_call_log
+-- ----------------------------
+ALTER TABLE "ingest"."ai_call_log" ADD CONSTRAINT "ai_call_log_pkey" PRIMARY KEY ("ai_call_id");
 
 -- ----------------------------
 -- Foreign Keys structure for table telegram_message
@@ -170,4 +222,3 @@ ALTER TABLE "ingest"."telegram_message" ADD CONSTRAINT "telegram_message_batch_i
 -- Foreign Keys structure for table telegram_recognition
 -- ----------------------------
 ALTER TABLE "ingest"."telegram_recognition" ADD CONSTRAINT "telegram_recognition_batch_id_fkey" FOREIGN KEY ("batch_id") REFERENCES "ingest"."telegram_batch" ("batch_id") ON DELETE CASCADE ON UPDATE NO ACTION;
-ALTER TABLE "ingest"."telegram_recognition" ADD CONSTRAINT "telegram_recognition_message_id_fkey" FOREIGN KEY ("message_id") REFERENCES "ingest"."telegram_message" ("message_id") ON DELETE CASCADE ON UPDATE NO ACTION;

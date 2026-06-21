@@ -184,17 +184,19 @@ export class SyncDispatchQueue {
     }
 
     const deadLetters = await readArray(this.state, DEAD_LETTER_KEY);
+    const reason = summarizeError(error);
     deadLetters.push({
       task: processing.task,
       failedAt: new Date(getNow(this.env)).toISOString(),
-      error: summarizeError(error),
+      error: reason,
     });
     await this.state.storage.put(DEAD_LETTER_KEY, deadLetters.slice(-100));
+    logQueueDeadLetter({ env: this.env, task: processing.task, reason });
     await notifyTaskNotStarted({
       fetchImpl: this.env.__dispatchFetchImpl ?? fetch,
       env: this.env,
       task: processing.task,
-      reason: summarizeError(error),
+      reason,
     });
     await this.deleteProcessing();
     await setStateAlarm(this.state, getNow(this.env));
@@ -208,6 +210,7 @@ export class SyncDispatchQueue {
       error: reason,
     });
     await this.state.storage.put(DEAD_LETTER_KEY, deadLetters.slice(-100));
+    logQueueDeadLetter({ env: this.env, task: processing.task, reason });
     await notifyTaskNotStarted({
       fetchImpl: this.env.__dispatchFetchImpl ?? fetch,
       env: this.env,
@@ -572,18 +575,21 @@ async function notifyTaskNotStarted({ fetchImpl, env, task, reason }) {
     return null;
   }
   if (notification.channel === 'feishu') {
-    return notifyFeishuTaskNotStarted({ fetchImpl, env, notification, reason });
+    const response = await notifyFeishuTaskNotStarted({ fetchImpl, env, notification, reason });
+    logTaskStartNotificationFailureIfNeeded({ env, task, channel: 'feishu', reason, response });
+    return response;
   }
   if (notification.channel !== 'telegram') {
     return null;
   }
   const botToken = env?.TELEGRAM_BOT_TOKEN?.trim();
   if (!botToken) {
+    logTaskStartNotificationFailure({ env, task, channel: 'telegram', reason, error: 'missing_telegram_bot_token' });
     return null;
   }
   const apiBaseUrl = env?.TELEGRAM_API_BASE_URL?.trim() || TELEGRAM_API_BASE_URL;
   try {
-    return await fetchImpl(`${apiBaseUrl}/bot${botToken}/sendMessage`, {
+    const response = await fetchImpl(`${apiBaseUrl}/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -594,7 +600,10 @@ async function notifyTaskNotStarted({ fetchImpl, env, task, reason }) {
         disable_web_page_preview: true,
       }),
     });
-  } catch {
+    logTaskStartNotificationFailureIfNeeded({ env, task, channel: 'telegram', reason, response });
+    return response;
+  } catch (error) {
+    logTaskStartNotificationFailure({ env, task, channel: 'telegram', reason, error: summarizeError(error) });
     return null;
   }
 }
@@ -641,6 +650,62 @@ async function notifyFeishuTaskNotStarted({ fetchImpl, env, notification, reason
     });
   } catch {
     return null;
+  }
+}
+
+function logTaskStartNotificationFailureIfNeeded({ env, task, channel, reason, response }) {
+  if (response?.ok) {
+    return;
+  }
+  logTaskStartNotificationFailure({
+    env,
+    task,
+    channel,
+    reason,
+    status: response?.status ?? null,
+  });
+}
+
+function logTaskStartNotificationFailure({ env, task, channel, reason, status = null, error = null }) {
+  const logger = env?.__logger ?? console;
+  const metadata = {
+    outcome: 'notification_failed',
+    channel,
+    taskId: task?.id ?? null,
+    reason: reason ?? null,
+    status,
+    error,
+  };
+  try {
+    const line = `[sync-dispatch-queue] ${JSON.stringify(metadata)}`;
+    if (typeof logger?.error === 'function') {
+      logger.error(line);
+      return;
+    }
+    logger?.log?.(line);
+  } catch {
+    // Diagnostic logging must never affect queue recovery.
+  }
+}
+
+function logQueueDeadLetter({ env, task, reason }) {
+  const logger = env?.__logger ?? console;
+  const metadata = {
+    outcome: 'dead_letter',
+    channel: task?.source?.channel ?? task?.notification?.channel ?? null,
+    taskId: task?.id ?? null,
+    eventType: task?.eventType ?? null,
+    reason: reason ?? null,
+  };
+  try {
+    const line = `[sync-dispatch-queue] ${JSON.stringify(metadata)}`;
+    if (typeof logger?.error === 'function') {
+      logger.error(line);
+      return;
+    }
+    logger?.log?.(line);
+  } catch {
+    // Diagnostic logging must never affect queue recovery.
   }
 }
 

@@ -1,24 +1,62 @@
-import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const lockDir = path.join(rootDir, '.tmp', 'site-fixture.lock');
-const staleLockMs = 120_000;
+const lockWaitTimeoutMs = 300_000;
+const staleLockMs = 600_000;
+const lockRetryMs = 100;
+const generatedSourceDataPaths = [
+  path.join(rootDir, 'source', '_data', 'training.json'),
+  path.join(rootDir, 'source', '_data', 'dashboardView.json'),
+  path.join(rootDir, 'source', '_data', 'body-metrics.json'),
+];
 
 export function withSharedSiteFixture(run) {
   acquireLock();
+  const sourceDataSnapshot = snapshotFiles(generatedSourceDataPaths);
   try {
-    return run();
-  } finally {
-    rmSync(lockDir, { recursive: true, force: true });
+    const result = run();
+    if (result && typeof result.then === 'function') {
+      return Promise.resolve(result).finally(() => releaseFixture(sourceDataSnapshot));
+    }
+    releaseFixture(sourceDataSnapshot);
+    return result;
+  } catch (error) {
+    releaseFixture(sourceDataSnapshot);
+    throw error;
   }
+}
+
+function snapshotFiles(filePaths) {
+  return filePaths.map((filePath) => ({
+    filePath,
+    content: existsSync(filePath) ? readFileSync(filePath, 'utf8') : null,
+  }));
+}
+
+function restoreFiles(snapshot) {
+  for (const { filePath, content } of snapshot) {
+    if (content === null) {
+      rmSync(filePath, { force: true });
+      continue;
+    }
+
+    mkdirSync(path.dirname(filePath), { recursive: true });
+    writeFileSync(filePath, content, 'utf8');
+  }
+}
+
+function releaseFixture(sourceDataSnapshot) {
+  restoreFiles(sourceDataSnapshot);
+  rmSync(lockDir, { recursive: true, force: true });
 }
 
 function acquireLock() {
   mkdirSync(path.dirname(lockDir), { recursive: true });
-  const deadline = Date.now() + 60_000;
+  const deadline = Date.now() + lockWaitTimeoutMs;
 
   while (Date.now() < deadline) {
     try {
@@ -30,7 +68,7 @@ function acquireLock() {
       }
 
       removeStaleLock();
-      sleep(100);
+      sleep(lockRetryMs);
     }
   }
 

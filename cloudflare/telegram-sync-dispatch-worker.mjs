@@ -4,6 +4,10 @@ const DEFAULT_GITHUB_REPO = 'training_records';
 const TELEGRAM_API_BASE_URL = 'https://api.telegram.org';
 const TELEGRAM_SECRET_HEADER = 'X-Telegram-Bot-Api-Secret-Token';
 const IMAGE_BURST_BUFFER_DELAY_MS = 3_000;
+const IMAGE_BUFFER_RETRY_BASE_DELAY_MS = 10_000;
+const IMAGE_BUFFER_RETRY_MAX_DELAY_MS = 60_000;
+const IMAGE_BUFFER_MAX_DISPATCH_ATTEMPTS = 5;
+const DEAD_LETTER_KEY = 'deadLetters';
 
 import { TELEGRAM_HELP_TEXT, isTelegramHelpText } from '../src/telegram/help.mjs';
 import {
@@ -70,7 +74,7 @@ export class TelegramAlbumBuffer {
     if (!response.ok) {
       const body = await safeReadText(response);
       for (const update of updates) {
-        await notifyTelegramActionNotStarted({
+        const notificationResponse = await notifyTelegramActionNotStarted({
           fetchImpl: this.env.__dispatchFetchImpl ?? fetch,
           env: this.env,
           update,
@@ -78,10 +82,32 @@ export class TelegramAlbumBuffer {
           status: response.status,
           body,
         });
+        if (!notificationResponse?.ok) {
+          logTelegramAlbumBuffer(this.env, this.env.__logger ?? console, {
+            outcome: 'notification_failed',
+            ...summarizeTelegramUpdate(update),
+            status: notificationResponse?.status ?? null,
+          });
+        }
       }
+      const retryCount = Number(await this.state.storage.get('dispatchRetryCount') ?? 0) + 1;
+      if (retryCount >= IMAGE_BUFFER_MAX_DISPATCH_ATTEMPTS) {
+        await deadLetterTelegramAlbumBuffer({
+          state: this.state,
+          updates,
+          reason: 'github_dispatch_failed',
+          status: response.status,
+          body,
+          retryCount,
+        });
+        return;
+      }
+      await scheduleTelegramAlbumBufferRetry(this.state, retryCount);
+      return;
     }
 
     await this.state.storage.delete('updates');
+    await this.state.storage.delete('dispatchRetryCount');
   }
 }
 
@@ -389,6 +415,60 @@ function isImageDocument(document) {
 
 async function readBufferedUpdates(state) {
   return (await state.storage.get('updates')) ?? [];
+}
+
+async function scheduleTelegramAlbumBufferRetry(state, retryCount) {
+  await state.storage.put('dispatchRetryCount', retryCount);
+  await setStateAlarm(state, Date.now() + calculateTelegramAlbumBufferRetryDelayMs(retryCount));
+}
+
+async function deadLetterTelegramAlbumBuffer({ state, updates, reason, status, body, retryCount }) {
+  const deadLetters = (await state.storage.get(DEAD_LETTER_KEY)) ?? [];
+  deadLetters.push({
+    reason,
+    status,
+    body: summarizeText(body),
+    retryCount,
+    failedAt: new Date(Date.now()).toISOString(),
+    updates: updates.map(summarizeTelegramUpdate),
+  });
+  await state.storage.put(DEAD_LETTER_KEY, deadLetters.slice(-100));
+  await state.storage.delete('updates');
+  await state.storage.delete('dispatchRetryCount');
+}
+
+function summarizeTelegramUpdate(update) {
+  const message = update?.message ?? update?.edited_message ?? {};
+  return {
+    update_id: update?.update_id ?? null,
+    chat_id: message?.chat?.id ?? null,
+    message_id: message?.message_id ?? null,
+    media_group_id: message?.media_group_id ?? null,
+  };
+}
+
+function logTelegramAlbumBuffer(env, logger, metadata) {
+  if (isTelegramAlbumBufferLoggingDisabled(env)) {
+    return;
+  }
+  try {
+    logger?.log?.(`[telegram-album-buffer] ${JSON.stringify(metadata)}`);
+  } catch {
+    // Diagnostic logging must never affect buffered message delivery.
+  }
+}
+
+function isTelegramAlbumBufferLoggingDisabled(env) {
+  const value = String(env?.TELEGRAM_ALBUM_BUFFER_LOGGING ?? 'true').trim().toLowerCase();
+  return ['0', 'false', 'no', 'off'].includes(value);
+}
+
+function calculateTelegramAlbumBufferRetryDelayMs(retryCount) {
+  const exponent = Math.max(0, Math.min(Number(retryCount) - 1, 6));
+  return Math.min(
+    IMAGE_BUFFER_RETRY_BASE_DELAY_MS * (2 ** exponent),
+    IMAGE_BUFFER_RETRY_MAX_DELAY_MS,
+  );
 }
 
 async function setStateAlarm(state, value) {

@@ -13,6 +13,7 @@ import {
   PostgresThoughtRepository,
   PostgresTrainingRepository,
 } from '../src/adapters/postgres/index.mjs';
+import { ensureCoreSchema } from '../src/adapters/postgres/schema-preflight.pg.mjs';
 
 test('repository ports fail explicitly until implemented by adapters', async () => {
   await assert.rejects(new TrainingRepositoryPort().findByDate('2026-05-09'), /findByDate/);
@@ -138,6 +139,29 @@ test('PostgresTrainingRepository.findByDates reads requested dates in one batche
   }));
 });
 
+test('ensureCoreSchema adds source identity columns and indexes for thought and ingest tables', async () => {
+  const calls = [];
+  await ensureCoreSchema({
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [] };
+    },
+  });
+
+  const preflightSql = calls.map(([sql]) => sql).join('\n');
+  assert.match(preflightSql, /alter table core\.thought add column if not exists source_chat_id/i);
+  assert.match(preflightSql, /create unique index if not exists ux_core_thought_identity/i);
+  assert.match(preflightSql, /alter table ingest\.telegram_message add column if not exists source_message_id/i);
+  assert.match(preflightSql, /create unique index if not exists ux_ingest_telegram_message_source_identity/i);
+  assert.match(preflightSql, /create table if not exists ingest\.ai_call_log/i);
+  assert.match(preflightSql, /ai_call_id text primary key/i);
+  assert.match(preflightSql, /idempotency_key text/i);
+  assert.match(preflightSql, /prompt_tokens integer/i);
+  assert.match(preflightSql, /completion_tokens integer/i);
+  assert.match(preflightSql, /total_tokens integer/i);
+  assert.match(preflightSql, /cost_usd numeric/i);
+});
+
 test('PostgresTelegramBatchRepository persists batch envelope, messages, and recognitions', async () => {
   const calls = [];
   const client = {
@@ -199,6 +223,54 @@ test('PostgresTelegramBatchRepository stores null chat_id for Feishu string chat
   assert.equal(calls[0][1][4], null);
 });
 
+test('PostgresTelegramBatchRepository keys messages by source channel, chat, and message id', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [] };
+    },
+  };
+  const repository = new PostgresTelegramBatchRepository(client);
+  const processedAt = new Date('2026-06-10T00:00:00.000Z');
+
+  await repository.upsertMessages({
+    batchId: 'cross-chat-batch',
+    sourceChannel: 'feishu',
+    messages: [
+      {
+        messageId: 10,
+        updateId: 1,
+        chatId: 'oc_chat_1',
+        sourceChannel: 'feishu',
+        sourceChatId: 'oc_chat_1',
+        sourceMessageId: 'om_message_1',
+        photos: [{ fileId: 'img_v3_1', fileUniqueId: 'img_v3_1' }],
+      },
+      {
+        messageId: 10,
+        updateId: 2,
+        chatId: 'oc_chat_2',
+        sourceChannel: 'feishu',
+        sourceChatId: 'oc_chat_2',
+        sourceMessageId: 'om_message_1',
+        photos: [{ fileId: 'img_v3_2', fileUniqueId: 'img_v3_2' }],
+      },
+    ],
+  }, processedAt);
+
+  const messageInsert = calls.find(([sql]) => /insert into ingest\.telegram_message/i.test(sql));
+  assert.ok(messageInsert, 'expected message upsert');
+  assert.match(messageInsert[0], /source_channel/i);
+  assert.match(messageInsert[0], /source_chat_id/i);
+  assert.match(messageInsert[0], /source_message_id/i);
+  assert.match(messageInsert[0], /on conflict\s*\(\s*source_channel\s*,\s*source_chat_id\s*,\s*source_message_id\s*\)/i);
+  assert.equal(calls[0][1][10], 'feishu');
+  assert.equal(calls[0][1][11], 'oc_chat_1');
+  assert.equal(calls[0][1][12], 'om_message_1');
+  assert.equal(calls[1][1][11], 'oc_chat_2');
+});
+
 test('PostgresThoughtRepository persists thought mirror batches through core.thought SQL', async () => {
   const calls = [];
   const repository = new PostgresThoughtRepository({
@@ -233,6 +305,269 @@ test('PostgresThoughtRepository persists thought mirror batches through core.tho
   assert.equal(calls[0][1][5], '今天骑行 40 公里');
   assert.equal(calls[0][1][6], 'misc');
   assert.deepEqual(JSON.parse(calls[0][1][10]), ['/images/1.jpg']);
+});
+
+test('PostgresThoughtRepository keys thought mirrors by source identity and falls back to legacy message id lookup', async () => {
+  const calls = [];
+  const repository = new PostgresThoughtRepository({
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from core\.thought/i.test(sql) && /source_channel = \$1/i.test(sql)) {
+        return {
+          rows: [{
+            telegram_message_id: 10,
+            source_channel: params[0],
+            source_chat_id: params[1],
+            source_message_id: params[2],
+            thought_module: 'misc',
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+  });
+
+  await repository.persistMirror(
+    {
+      kind: 'thought',
+      batchId: 'feishu-thought-1',
+      sourceChannel: 'feishu',
+      messages: [{
+        messageId: 10,
+        chatId: 'oc_chat_1',
+        sourceChannel: 'feishu',
+        sourceChatId: 'oc_chat_1',
+        sourceMessageId: 'om_message_1',
+      }],
+      thought: {
+        telegramMessageId: 10,
+        telegramChatId: 'oc_chat_1',
+        sourceMessageId: 'om_message_1',
+        sourceChatId: 'oc_chat_1',
+        command: '/随想',
+        body: '飞书随想正文',
+        thoughtModule: 'misc',
+        storage: {
+          markdownPath: null,
+          photoPaths: [],
+        },
+      },
+    },
+    new Date('2026-06-10T00:00:00.000Z'),
+  );
+
+  const upsertCall = calls.find(([sql]) => /insert into core\.thought/i.test(sql));
+  assert.ok(upsertCall, 'expected thought upsert');
+  assert.match(upsertCall[0], /source_chat_id/i);
+  assert.match(upsertCall[0], /source_message_id/i);
+  assert.match(upsertCall[0], /on conflict\s*\(\s*source_channel\s*,\s*source_chat_id\s*,\s*source_message_id\s*\)/i);
+  assert.equal(upsertCall[1][13], 'oc_chat_1');
+  assert.equal(upsertCall[1][14], 'om_message_1');
+
+  await repository.persistMirror(
+    {
+      kind: 'thought_edit',
+      batchId: 'feishu-thought-edit-1',
+      sourceChannel: 'feishu',
+      messages: [{
+        messageId: 11,
+        chatId: 'oc_chat_1',
+        sourceChannel: 'feishu',
+        sourceChatId: 'oc_chat_1',
+        sourceMessageId: 'om_edit_1',
+      }],
+      thoughtEdit: {
+        command: '/随想编',
+        targetMessageId: 10,
+        targetSourceMessageId: 'om_message_1',
+        sourceChatId: 'oc_chat_1',
+        body: '更新后的飞书随想正文',
+        thoughtModule: null,
+        telegramChatId: 'oc_chat_1',
+        storage: {
+          markdownPath: null,
+          photoPaths: [],
+        },
+      },
+    },
+    new Date('2026-06-10T00:01:00.000Z'),
+  );
+
+  const sourceLookup = calls.find(([sql]) => /from core\.thought/i.test(sql) && /source_channel = \$1/i.test(sql));
+  assert.ok(sourceLookup, 'expected source identity lookup before legacy fallback');
+  assert.equal(sourceLookup[1][0], 'feishu');
+  assert.equal(sourceLookup[1][1], 'oc_chat_1');
+  assert.equal(sourceLookup[1][2], 'om_message_1');
+});
+
+test('PostgresThoughtRepository locates migrated thought targets for edit delete and move ids', async () => {
+  const calls = [];
+  const repository = new PostgresThoughtRepository({
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from core\.thought/i.test(sql) && /source_channel = \$1/i.test(sql)) {
+        const [, sourceChatId, sourceMessageId] = params;
+        if (sourceChatId === 'oc_chat_new' && sourceMessageId === 'om_source_thought') {
+          return {
+            rows: [{
+              telegram_message_id: 338182848231025,
+              source_channel: 'feishu',
+              source_chat_id: 'oc_chat_new',
+              source_message_id: 'om_source_thought',
+              thought_module: 'misc',
+            }],
+          };
+        }
+        return { rows: [] };
+      }
+      if (/from core\.thought/i.test(sql) && /where telegram_message_id = \$1/i.test(sql)) {
+        if (params[0] === 501) {
+          return {
+            rows: [{
+              telegram_message_id: 501,
+              thought_module: 'workout',
+            }],
+          };
+        }
+        if (params[0] === 338182848231024) {
+          return {
+            rows: [{
+              telegram_message_id: 338182848231024,
+              source_channel: 'feishu',
+              source_chat_id: 'oc_chat_legacy',
+              source_message_id: 'om_legacy_proxy',
+              thought_module: 'body_feedback',
+            }],
+          };
+        }
+      }
+      return { rows: [] };
+    },
+  });
+
+  const editResult = await repository.persistMirror(
+    {
+      kind: 'thought_edit',
+      batchId: 'telegram-legacy-edit',
+      messages: [{
+        messageId: 901,
+        chatId: 42,
+        sourceChatId: '42',
+        sourceMessageId: '901',
+      }],
+      thoughtEdit: {
+        command: '/随想编',
+        targetMessageId: 501,
+        body: '旧 Telegram 整数 ID 编辑后的正文',
+        thoughtModule: null,
+        telegramChatId: 42,
+        storage: {
+          writeStatus: 'thought_edit_database_only',
+          markdownPath: null,
+          photoPaths: null,
+        },
+      },
+    },
+    new Date('2026-06-16T02:19:00.000Z'),
+  );
+
+  const deleteResult = await repository.persistMirror(
+    {
+      kind: 'thought_delete',
+      batchId: 'feishu-safe-integer-delete',
+      sourceChannel: 'feishu',
+      messages: [{
+        messageId: 902,
+        chatId: 'oc_chat_legacy',
+        sourceChannel: 'feishu',
+        sourceChatId: 'oc_chat_legacy',
+        sourceMessageId: 'om_delete_command',
+      }],
+      thoughtDelete: {
+        command: '/随想删',
+        targetMessageId: 338182848231024,
+        telegramChatId: null,
+        sourceChatId: 'oc_chat_legacy',
+        storage: {
+          writeStatus: 'thought_delete_database_only',
+          markdownPath: null,
+          deletedPhotoPaths: [],
+        },
+      },
+    },
+    new Date('2026-06-16T02:20:00.000Z'),
+  );
+
+  const moveResult = await repository.persistMirror(
+    {
+      kind: 'thought_move',
+      batchId: 'feishu-source-identity-move',
+      sourceChannel: 'feishu',
+      messages: [{
+        messageId: 903,
+        chatId: 'oc_chat_new',
+        sourceChannel: 'feishu',
+        sourceChatId: 'oc_chat_new',
+        sourceMessageId: 'om_move_command',
+      }],
+      thoughtMove: {
+        command: '/移动',
+        targetMessageId: 338182848231025,
+        targetSourceMessageId: 'om_source_thought',
+        sourceChatId: 'oc_chat_new',
+        thoughtModule: 'workout',
+        telegramChatId: null,
+        storage: {
+          writeStatus: 'thought_move_database_only',
+          markdownPath: null,
+          photoPaths: null,
+        },
+      },
+    },
+    new Date('2026-06-16T02:21:00.000Z'),
+  );
+
+  assert.deepEqual(editResult, { status: 'stored', messageId: 501, thoughtModule: 'workout' });
+  assert.deepEqual(deleteResult, {
+    status: 'stored',
+    messageId: 338182848231024,
+    thoughtModule: 'body_feedback',
+  });
+  assert.deepEqual(moveResult, {
+    status: 'stored',
+    messageId: 338182848231025,
+    thoughtModule: 'workout',
+  });
+
+  const legacyLookups = calls.filter(
+    ([sql]) => /from core\.thought/i.test(sql) && /where telegram_message_id = \$1/i.test(sql),
+  );
+  assert.deepEqual(legacyLookups.map(([, params]) => params[0]), [501, 338182848231024]);
+
+  const sourceLookups = calls.filter(
+    ([sql]) => /from core\.thought/i.test(sql) && /source_channel = \$1/i.test(sql),
+  );
+  assert.ok(
+    sourceLookups.some(([, params]) =>
+      params[0] === 'feishu' &&
+      params[1] === 'oc_chat_new' &&
+      params[2] === 'om_source_thought'
+    ),
+    'expected source identity lookup for new Feishu thought id path',
+  );
+
+  const writes = calls.filter(([sql]) => /insert into core\.thought/i.test(sql));
+  assert.equal(writes.length, 3);
+  assert.equal(writes[0][1][0], 501);
+  assert.equal(writes[0][1][13], '42');
+  assert.equal(writes[0][1][14], '501');
+  assert.match(writes[1][0], /'deleted'/);
+  assert.equal(writes[1][1][0], 338182848231024);
+  assert.equal(writes[1][1][12], 'oc_chat_legacy');
+  assert.equal(writes[1][1][13], 'om_legacy_proxy');
+  assert.equal(writes[2][1][0], 338182848231025);
+  assert.equal(writes[2][1][13], 'oc_chat_new');
+  assert.equal(writes[2][1][14], 'om_source_thought');
 });
 
 test('PostgresThoughtRepository reports the effective module when editing without a module token', async () => {
@@ -321,6 +656,59 @@ test('PostgresThoughtRepository passes null body for module-only thought edits t
   assert.equal(bodyParam, null, 'body parameter should be null so coalesce preserves existing body');
   const moduleParam = upsertCall[1][6];
   assert.equal(moduleParam, 'body_feedback', 'thought_module parameter should be body_feedback');
+});
+
+test('PostgresThoughtRepository preserves bigint thought ids as SQL strings without precision loss', async () => {
+  const calls = [];
+  const largeMessageId = '9007199254740993';
+  const largeChatId = '9007199254740995';
+  const repository = new PostgresThoughtRepository({
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from core\.thought/i.test(sql) && /where telegram_message_id = \$1/i.test(sql)) {
+        return {
+          rows: [{
+            telegram_message_id: params[0],
+            thought_module: 'misc',
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+  });
+
+  const result = await repository.persistMirror(
+    {
+      kind: 'thought_edit',
+      batchId: 'thought-edit-bigint',
+      thoughtEdit: {
+        command: '/随想编',
+        targetMessageId: largeMessageId,
+        body: '保留大整数目标 ID 的正文',
+        thoughtModule: null,
+        telegramChatId: largeChatId,
+        messageDateUnix: 9007199254740997n,
+        storage: {
+          writeStatus: 'thought_edit_database_only',
+          markdownPath: null,
+          photoPaths: null,
+        },
+      },
+    },
+    new Date('2026-06-16T02:19:00.000Z'),
+  );
+
+  assert.deepEqual(result, { status: 'stored', messageId: largeMessageId, thoughtModule: 'misc' });
+
+  const findCall = calls.find(([sql]) => /from core\.thought/i.test(sql) && /where telegram_message_id = \$1/i.test(sql));
+  assert.ok(findCall, 'expected target lookup');
+  assert.equal(findCall[1][0], largeMessageId);
+
+  const upsertCall = calls.find(([sql]) => /insert into core\.thought/i.test(sql));
+  assert.ok(upsertCall, 'expected thought upsert');
+  assert.equal(upsertCall[1][0], largeMessageId);
+  assert.equal(upsertCall[1][1], largeChatId);
+  assert.equal(upsertCall[1][8], '9007199254740997');
 });
 
 test('PostgresThoughtRepository does not create a thought when an edit target is missing', async () => {

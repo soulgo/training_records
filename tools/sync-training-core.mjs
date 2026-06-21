@@ -68,6 +68,7 @@ async function syncTrainingCoreWithInjectedPhases(options, stderr, phase) {
         env: options.env ?? process.env,
         createClient: options.createClient,
         processedAt: options.processedAt,
+        dryRun: options.dryRun && name === 'markdown',
         stderr,
       },
       stderr,
@@ -87,6 +88,23 @@ async function defaultInjectedIngestPhase() {
 async function syncTrainingCoreDefault(options, stderr, phase) {
   const env = options.env ?? process.env;
   const config = resolveTrainingCoreConfig(env);
+  if (options.dryRun && phase === 'markdown') {
+    return {
+      markdown: await runPhase(
+        'markdown',
+        () =>
+          reconcileTrainingMarkdownToCore({
+            rootDir: options.rootDir,
+            env,
+            processedAt: options.processedAt,
+            stderr,
+            dryRun: true,
+          }),
+        {},
+        stderr,
+      ),
+    };
+  }
   if (!config.enabled || !config.url) {
     const skipped = {
       status: 'skipped',
@@ -147,6 +165,7 @@ async function syncTrainingCoreDefault(options, stderr, phase) {
             env,
             processedAt,
             stderr,
+            dryRun: options.dryRun,
             importTrainingMarkdownToDatabase: ({ markdown }) =>
               importTrainingMarkdownToDatabase({
                 markdown,
@@ -243,6 +262,9 @@ function summarizeStatus(result) {
   }
   if (statuses.some((status) => status === 'unchanged')) {
     return 'unchanged';
+  }
+  if (statuses.some((status) => status === 'planned')) {
+    return 'planned';
   }
   return 'skipped';
 }

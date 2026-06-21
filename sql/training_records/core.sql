@@ -163,6 +163,8 @@ CREATE TABLE "core"."thought" (
   "telegram_chat_id" int8,
   "source_batch_id" text COLLATE "pg_catalog"."default",
   "source_channel" text COLLATE "pg_catalog"."default",
+  "source_chat_id" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'legacy-chat'::text,
+  "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL,
   "command" text COLLATE "pg_catalog"."default" NOT NULL,
   "body" text COLLATE "pg_catalog"."default" NOT NULL,
   "thought_module" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'workout'::text,
@@ -177,6 +179,8 @@ CREATE TABLE "core"."thought" (
 ;
 COMMENT ON COLUMN "core"."thought"."telegram_message_id" IS '原 Telegram message_id，也是随想的稳定定位 ID';
 COMMENT ON COLUMN "core"."thought"."source_channel" IS '来源通道，例如 telegram、feishu、markdown_import';
+COMMENT ON COLUMN "core"."thought"."source_chat_id" IS '来源 chat/conversation ID，Telegram 为 chat_id，飞书为 chat_id 原始字符串';
+COMMENT ON COLUMN "core"."thought"."source_message_id" IS '来源消息 ID，Telegram 为 message_id，飞书为 message_id 原始字符串';
 COMMENT ON COLUMN "core"."thought"."body" IS '随想正文文本，不包含图片二进制';
 COMMENT ON COLUMN "core"."thought"."thought_module" IS '随想模块：workout 为锻炼随想，misc 为杂七杂八，body_feedback 为身体反馈；历史缺省按 workout 兼容';
 COMMENT ON COLUMN "core"."thought"."markdown_path" IS '当前 Markdown 兼容层路径，例如 source/_posts/YYYY-MM-DD-telegram-thought-501.md';
@@ -280,11 +284,19 @@ CREATE INDEX "idx_core_thought_module_updated_at" ON "core"."thought" USING btre
 CREATE INDEX "idx_core_thought_updated_at" ON "core"."thought" USING btree (
   "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
 );
+CREATE INDEX "idx_core_thought_legacy_message_id" ON "core"."thought" USING btree (
+  "telegram_message_id" "pg_catalog"."int8_ops" ASC NULLS LAST
+);
+CREATE UNIQUE INDEX "ux_core_thought_identity" ON "core"."thought" USING btree (
+  "source_channel" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "source_chat_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "source_message_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
+);
 
 -- ----------------------------
 -- Primary Key structure for table thought
 -- ----------------------------
-ALTER TABLE "core"."thought" ADD CONSTRAINT "thought_pkey" PRIMARY KEY ("telegram_message_id");
+ALTER TABLE "core"."thought" ADD CONSTRAINT "thought_pkey" PRIMARY KEY ("source_channel", "source_chat_id", "source_message_id");
 
 -- ----------------------------
 -- Primary Key structure for table training_day

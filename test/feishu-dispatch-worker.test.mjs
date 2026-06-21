@@ -5,6 +5,7 @@ import { webcrypto } from 'node:crypto';
 import {
   FeishuImageBuffer,
   handleFeishuWebhook,
+  verifyFeishuSignature,
 } from '../cloudflare/feishu-sync-dispatch-worker.mjs';
 
 const subtleCrypto = globalThis.crypto?.subtle ?? webcrypto.subtle;
@@ -252,6 +253,97 @@ test('handleFeishuWebhook dispatches encrypted Feishu events without Lark signat
   });
 });
 
+test('verifyFeishuSignature rejects signed requests outside the timestamp freshness window', async () => {
+  const nowSeconds = 1_781_398_800;
+  const event = createFeishuTextEvent({
+    eventId: 'evt-signature-timestamp-window',
+    messageId: 'om_feishu_signature_timestamp_window',
+    chatId: 'oc_chat_1',
+    text: '/随想 timestamp freshness',
+  });
+
+  const current = await createSignedFeishuRequest(event, {
+    timestamp: String(nowSeconds),
+    nonce: 'nonce-current',
+  });
+  const currentBody = await current.clone().text();
+  assert.equal(
+    await verifyFeishuSignature(current, currentBody, 'encrypt-key', { nowSeconds }),
+    true,
+  );
+
+  const stale = await createSignedFeishuRequest(event, {
+    timestamp: String(nowSeconds - 601),
+    nonce: 'nonce-stale',
+  });
+  const staleBody = await stale.clone().text();
+  assert.equal(
+    await verifyFeishuSignature(stale, staleBody, 'encrypt-key', { nowSeconds }),
+    false,
+  );
+
+  const future = await createSignedFeishuRequest(event, {
+    timestamp: String(nowSeconds + 601),
+    nonce: 'nonce-future',
+  });
+  const futureBody = await future.clone().text();
+  assert.equal(
+    await verifyFeishuSignature(future, futureBody, 'encrypt-key', { nowSeconds }),
+    false,
+  );
+});
+
+test('handleFeishuWebhook logs a replay warning for duplicate Feishu nonce signatures in the freshness window', async () => {
+  const logs = [];
+  const enqueued = [];
+  const event = createFeishuTextEvent({
+    eventId: 'evt-signature-replay-warning',
+    messageId: 'om_feishu_signature_replay_warning',
+    chatId: 'oc_chat_1',
+    text: '/随想 replay warning',
+  });
+  const env = createEnv({
+    SYNC_DISPATCH_QUEUE: createSyncDispatchQueueNamespace(enqueued),
+  });
+  const logger = {
+    warn(message) {
+      logs.push(String(message));
+    },
+  };
+  const requestOptions = {
+    timestamp: String(Math.floor(Date.now() / 1000)),
+    nonce: 'nonce-replay-warning',
+  };
+
+  const firstResponse = await handleFeishuWebhook(
+    await createSignedFeishuRequest(event, requestOptions),
+    env,
+    {
+      logger,
+      fetchImpl: async () => {
+        throw new Error('GitHub dispatch should be handled by the queue');
+      },
+    },
+  );
+  const secondResponse = await handleFeishuWebhook(
+    await createSignedFeishuRequest(event, requestOptions),
+    env,
+    {
+      logger,
+      fetchImpl: async () => {
+        throw new Error('GitHub dispatch should be handled by the queue');
+      },
+    },
+  );
+
+  assert.equal(firstResponse.status, 200);
+  assert.equal(secondResponse.status, 200);
+  assert.equal(enqueued.length, 2);
+  const replayLog = logs.find((line) => line.includes('[feishu-signature]') && line.includes('"outcome":"replay_warning"'));
+  assert.ok(replayLog);
+  assert.match(replayLog, /"nonce":"nonce-replay-warning"/);
+});
+
 test('handleFeishuWebhook prefers the Feishu-specific dispatch event type', async () => {
   const calls = [];
   const event = createFeishuImageEvent({
@@ -495,6 +587,55 @@ test('FeishuImageBuffer keeps buffered text events and retries when sync queue e
   assert.ok(await state.storage.get('alarm') > firstAlarm);
 });
 
+test('FeishuImageBuffer dead-letters buffered events after max dispatch retries', async () => {
+  const logs = [];
+  const state = createDurableObjectState();
+  const event = createFeishuImageEvent({
+    eventId: 'evt-image-dead-letter-1',
+    messageId: 'om_feishu_dead_letter_1',
+    chatId: 'oc_chat_dead_letter',
+    imageKey: 'img_v3_dead_letter_1',
+  });
+  const buffer = new FeishuImageBuffer(state, createEnv({
+    FEISHU_EVENT_LOGGING: 'true',
+    GITHUB_DISPATCH_EVENT_TYPE_FEISHU: 'feishu_update_dev',
+    SYNC_DISPATCH_QUEUE: createFailingSyncDispatchQueueNamespace(),
+    __logger: {
+      log(message) {
+        logs.push(String(message));
+      },
+    },
+  }));
+
+  assert.equal((await buffer.fetch(createBufferRequest(event))).status, 202);
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await buffer.alarm();
+  }
+
+  assert.equal(await state.storage.get('events'), undefined);
+  assert.equal(await state.storage.get('dispatchRetryCount'), undefined);
+  const deadLetters = await state.storage.get('deadLetters');
+  assert.equal(deadLetters.length, 1);
+  assert.equal(deadLetters[0].reason, 'dispatch_failed');
+  assert.equal(deadLetters[0].retryCount, 5);
+  assert.equal(deadLetters[0].eventType, 'feishu_update_dev');
+  assert.deepEqual(deadLetters[0].events, [
+    {
+      event_id: 'evt-image-dead-letter-1',
+      message_id: 'om_feishu_dead_letter_1',
+      chat_id: 'oc_chat_dead_letter',
+      message_type: 'image',
+      create_time: '1781398800000',
+    },
+  ]);
+
+  const deadLetterLog = logs.find((line) => line.includes('[feishu-message-buffer]') && line.includes('"outcome":"dead_letter"'));
+  assert.ok(deadLetterLog);
+  assert.match(deadLetterLog, /"retryCount":5/);
+  assert.doesNotMatch(deadLetterLog, /img_v3_dead_letter_1/);
+});
+
 function createFeishuRequest(event) {
   return new Request('https://worker.example.com', {
     method: 'POST',
@@ -503,6 +644,54 @@ function createFeishuRequest(event) {
     },
     body: JSON.stringify(event),
   });
+}
+
+async function createSignedFeishuRequest(event, {
+  timestamp = String(Math.floor(Date.now() / 1000)),
+  nonce = 'nonce-1',
+  encryptKey = 'encrypt-key',
+} = {}) {
+  const body = JSON.stringify(event);
+  const signature = await signFeishuRequestBody({
+    timestamp,
+    nonce,
+    encryptKey,
+    body,
+  });
+  return new Request('https://worker.example.com', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'X-Lark-Request-Timestamp': timestamp,
+      'X-Lark-Request-Nonce': nonce,
+      'X-Lark-Signature': signature,
+    },
+    body,
+  });
+}
+
+async function signFeishuRequestBody({
+  timestamp,
+  nonce,
+  encryptKey,
+  body,
+}) {
+  const encoder = new TextEncoder();
+  const key = await subtleCrypto.importKey(
+    'raw',
+    encoder.encode(encryptKey),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signed = await subtleCrypto.sign(
+    'HMAC',
+    key,
+    encoder.encode(`${timestamp}${nonce}${encryptKey}${body}`),
+  );
+  return [...new Uint8Array(signed)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 async function createEncryptedFeishuRequest(event, encryptKey = 'encrypt-key') {

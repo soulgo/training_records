@@ -104,6 +104,27 @@ jobs:
           git commit -m "chore: backup markdown from database"
           git push origin HEAD:"$MARKDOWN_BACKUP_BRANCH"
 
+      - name: Evaluate backup alert
+        if: always()
+        id: alert
+        shell: bash
+        run: |
+          if [ "${{ steps.gate.outputs.run_backup || 'false' }}" != "true" ]; then
+            echo "backup_alert=none" >> "$GITHUB_OUTPUT"
+            echo "backup_conclusion=skipped" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ steps.detect.outputs.changed || 'false' }}" = "true" ] && [ "$MARKDOWN_BACKUP_COMMIT" != "true" ]; then
+            echo "backup_alert=changed_without_commit" >> "$GITHUB_OUTPUT"
+            echo "backup_conclusion=warning" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Markdown backup changed without commit::Database export changed Markdown artifacts, but MARKDOWN_BACKUP_COMMIT is not true."
+            exit 0
+          fi
+
+          echo "backup_alert=none" >> "$GITHUB_OUTPUT"
+          echo "backup_conclusion=ok" >> "$GITHUB_OUTPUT"
+
       - name: Write backup summary
         if: always()
         shell: bash
@@ -117,4 +138,6 @@ jobs:
             echo "- Branch: ${MARKDOWN_BACKUP_BRANCH}"
             echo "- Commit enabled: ${MARKDOWN_BACKUP_COMMIT}"
             echo "- Changed: ${{ steps.detect.outputs.changed || 'not_run' }}"
+            echo "- Conclusion: ${{ steps.alert.outputs.backup_conclusion || 'failed_before_alert_evaluation' }}"
+            echo "- Alert: ${{ steps.alert.outputs.backup_alert || 'workflow_failed_before_alert_evaluation' }}"
           } >> "$GITHUB_STEP_SUMMARY"

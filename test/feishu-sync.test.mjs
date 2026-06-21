@@ -233,6 +233,377 @@ test('recognizeBatch can send Feishu image bytes as inline AI input', async () =
   assert.equal(result.recognitions.length, 1);
   assert.equal(result.recognitions[0].sourceMessageId, 'om_feishu_1');
   assert.equal(result.recognitionErrors.length, 0);
+  assert.equal(result.syncStages.image_download.status, 'succeeded');
+  assert.equal(result.syncStages.cache_read.status, 'skipped');
+  assert.equal(result.syncStages.ai_schema.status, 'succeeded');
+  assert.equal(Number.isFinite(result.syncStages.image_download.durationMs), true);
+  assert.equal(Number.isFinite(result.syncStages.ai_schema.durationMs), true);
+});
+
+test('recognizeBatch writes started AI call log before Feishu provider call', async () => {
+  const events = [];
+
+  await recognizeBatch(
+    {
+      batchId: 'feishu-started-ai-call-log',
+      sourceChannel: 'feishu',
+      messages: [
+        {
+          messageId: 104,
+          sourceMessageId: 'om_feishu_started_ai_log',
+          updateId: 204,
+          mediaGroupId: 'feishu-started-ai-call-log',
+          caption: '',
+          text: '',
+          chatId: 'oc_chat_1',
+          dateUnix: 1781398800,
+          sourceChannel: 'feishu',
+          sourceChatId: 'oc_chat_1',
+          photos: [{ fileId: 'img_started_ai_log', fileUniqueId: 'img_started_ai_log', source: 'feishu_image' }],
+        },
+      ],
+    },
+    {
+      botToken: 'unused',
+      aiConcurrency: 1,
+    },
+    {
+      sourceChannel: 'feishu',
+      rawEnv: {
+        FEISHU_RECOGNITION_IMAGE_INPUT_MODE: 'inline',
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      fetchImageFileById: async () => ({
+        filePath: 'feishu/img_started_ai_log.jpg',
+        contentType: 'image/jpeg',
+        data: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+      }),
+      writeStartedRecognitionAiCallLog: async (event) => {
+        events.push({ type: 'audit', event });
+        return { status: 'written' };
+      },
+      aiProvider: {
+        name: 'openai-compatible',
+        env: { model: 'gpt-vision-fast' },
+        async requestChatCompletion() {
+          events.push({ type: 'provider_call' });
+          return {
+            ok: true,
+            async json() {
+              return {
+                choices: [
+                  {
+                    message: {
+                      content: JSON.stringify({
+                        imageType: 'nutrition',
+                        detectedDate: '2026-05-31',
+                        dateEvidence: 'image header',
+                        confidence: 0.98,
+                        warnings: [],
+                        records: {
+                          measurement: null,
+                          activities: [],
+                          meals: [{ name: '晚餐', calories: 868, recommendedMin: 310, recommendedMax: 723 }],
+                          totalCalories: 868,
+                          details: ['晚餐 868 千卡'],
+                          dailyWorkoutSummary: null,
+                        },
+                      }),
+                    },
+                  },
+                ],
+              };
+            },
+          };
+        },
+      },
+    },
+  );
+
+  assert.equal(events[0].type, 'audit');
+  assert.equal(events[0].event.taskId, 'feishu-started-ai-call-log');
+  assert.equal(events[0].event.sourceChannel, 'feishu');
+  assert.equal(events[0].event.sourceChatId, 'oc_chat_1');
+  assert.equal(events[0].event.sourceMessageId, 'om_feishu_started_ai_log');
+  assert.equal(events[0].event.status, 'started');
+  assert.equal(events[1].type, 'provider_call');
+});
+
+test('recognizeBatch records cache read failures separately from Feishu AI schema success', async () => {
+  const requestedImageUrls = [];
+  const result = await recognizeBatch(
+    {
+      batchId: 'feishu-oc_chat_1-cache-read-failed',
+      sourceChannel: 'feishu',
+      messages: [
+        {
+          messageId: 103,
+          sourceMessageId: 'om_feishu_cache_read_failed',
+          updateId: 203,
+          mediaGroupId: 'feishu-oc_chat_1-cache-read-failed',
+          caption: '',
+          text: '',
+          chatId: 'oc_chat_1',
+          dateUnix: 1781398800,
+          sourceChannel: 'feishu',
+          photos: [{ fileId: 'img_cache_read_failed', fileUniqueId: 'img_cache_read_failed', source: 'feishu_image' }],
+        },
+      ],
+    },
+    {
+      botToken: 'unused',
+      aiConcurrency: 1,
+    },
+    {
+      sourceChannel: 'feishu',
+      rawEnv: {
+        FEISHU_RECOGNITION_IMAGE_INPUT_MODE: 'inline',
+        TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true',
+      },
+      fetchImageFileById: async () => ({
+        filePath: 'feishu/img_cache_read_failed.jpg',
+        contentType: 'image/jpeg',
+        data: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+      }),
+      aiProvider: createRecognitionProvider(requestedImageUrls),
+      readRecognitionCache: async () => {
+        throw new Error('cache database timeout');
+      },
+    },
+  );
+
+  assert.equal(result.recognitions.length, 1);
+  assert.equal(requestedImageUrls.length, 1);
+  assert.equal(result.syncStages.cache_read.status, 'failed');
+  assert.equal(result.syncStages.cache_read.failureCategory, 'database');
+  assert.match(result.syncStages.cache_read.failureReason, /cache database timeout/);
+  assert.equal(result.syncStages.ai_schema.status, 'succeeded');
+});
+
+test('recognizeBatch keeps empty inline image data distinct from unsupported content type', async () => {
+  const baseBatch = {
+    batchId: 'feishu-oc_chat_1-1781398800000',
+    sourceChannel: 'feishu',
+    messages: [
+      {
+        messageId: 101,
+        sourceMessageId: 'om_feishu_empty',
+        updateId: 201,
+        mediaGroupId: 'feishu-oc_chat_1-1781398800000',
+        caption: '',
+        text: '',
+        chatId: 'oc_chat_1',
+        dateUnix: 1781398800,
+        sourceChannel: 'feishu',
+        photos: [{ fileId: 'img_empty', fileUniqueId: 'img_empty', source: 'feishu_image' }],
+      },
+      {
+        messageId: 102,
+        sourceMessageId: 'om_feishu_text',
+        updateId: 202,
+        mediaGroupId: 'feishu-oc_chat_1-1781398800000',
+        caption: '',
+        text: '',
+        chatId: 'oc_chat_1',
+        dateUnix: 1781398801,
+        sourceChannel: 'feishu',
+        photos: [{ fileId: 'img_text', fileUniqueId: 'img_text', source: 'feishu_image' }],
+      },
+    ],
+  };
+
+  const result = await recognizeBatch(
+    baseBatch,
+    {
+      botToken: 'unused',
+      aiConcurrency: 1,
+    },
+    {
+      sourceChannel: 'feishu',
+      rawEnv: {
+        FEISHU_RECOGNITION_IMAGE_INPUT_MODE: 'inline',
+      },
+      fetchImageFileById: async (imageKey) => {
+        if (imageKey === 'img_empty') {
+          return {
+            filePath: 'feishu/empty.jpg',
+            contentType: 'image/jpeg',
+            data: new Uint8Array(),
+          };
+        }
+        return {
+          filePath: 'feishu/not-image.txt',
+          contentType: 'text/plain',
+          data: new Uint8Array([1, 2, 3]),
+        };
+      },
+      aiProvider: {
+        env: { model: 'gpt-vision-fast' },
+        async requestChatCompletion() {
+          throw new Error('AI should not be called when inline image input is invalid');
+        },
+      },
+    },
+  );
+
+  assert.equal(result.recognitions.length, 0);
+  assert.equal(result.recognitionErrors.length, 2);
+  assert.deepEqual(
+    result.recognitionErrors.map((error) => error.summary.reason),
+    ['empty_data', 'unsupported_type'],
+  );
+  assert.deepEqual(
+    result.recognitionErrors.map((error) => error.failureCategory),
+    ['user_input', 'user_input'],
+  );
+  assert.match(result.recognitionErrors[0].error, /empty/i);
+  assert.match(result.recognitionErrors[1].error, /unsupported content-type/i);
+});
+
+test('buildFeishuSyncReport keeps Feishu image download failure reasons distinct', () => {
+  const report = buildFeishuSyncReport({
+    batchResults: [
+      {
+        kind: 'image',
+        sourceChannel: 'feishu',
+        batchId: 'feishu-image-failures',
+        status: 'skipped',
+        messages: [
+          { messageId: 101, sourceMessageId: 'om_forbidden', chatId: 'oc_chat_1' },
+          { messageId: 102, sourceMessageId: 'om_missing', chatId: 'oc_chat_1' },
+          { messageId: 103, sourceMessageId: 'om_empty', chatId: 'oc_chat_1' },
+          { messageId: 104, sourceMessageId: 'om_text', chatId: 'oc_chat_1' },
+        ],
+        failureCategory: 'image_download',
+        failureReason:
+          'Feishu image download failed with HTTP 403; Feishu image download failed with HTTP 404; inline image input is empty; inline image input has unsupported content-type: text/plain',
+        recognitionErrors: [
+          {
+            messageId: 101,
+            failureCategory: 'image_download',
+            error: 'Feishu image download failed with HTTP 403 (feishu message=om_forbidden image=img_forbidden)',
+            summary: {
+              phase: 'inline_image_input',
+              reason: 'image_download',
+              fileId: 'img_forbidden',
+              sourceChannel: 'feishu',
+              sourceMessageId: 'om_forbidden',
+            },
+          },
+          {
+            messageId: 102,
+            failureCategory: 'image_download',
+            error: 'Feishu image download failed with HTTP 404 (feishu message=om_missing image=img_missing)',
+            summary: {
+              phase: 'inline_image_input',
+              reason: 'image_download',
+              fileId: 'img_missing',
+              sourceChannel: 'feishu',
+              sourceMessageId: 'om_missing',
+            },
+          },
+          {
+            messageId: 103,
+            failureCategory: 'user_input',
+            error: 'inline image input is empty (feishu message=om_empty image=img_empty)',
+            summary: {
+              phase: 'inline_image_input',
+              reason: 'empty_data',
+              fileId: 'img_empty',
+              sourceChannel: 'feishu',
+              sourceMessageId: 'om_empty',
+            },
+          },
+          {
+            messageId: 104,
+            failureCategory: 'user_input',
+            error: 'inline image input has unsupported content-type: text/plain (feishu message=om_text image=img_text)',
+            summary: {
+              phase: 'inline_image_input',
+              reason: 'unsupported_type',
+              fileId: 'img_text',
+              sourceChannel: 'feishu',
+              sourceMessageId: 'om_text',
+            },
+          },
+        ],
+        syncStages: {
+          image_download: {
+            status: 'failed',
+            failureCategory: 'image_download',
+            failureReason: 'Feishu image download failed with HTTP 403',
+          },
+        },
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    report.batches[0].recognitionErrors.map((error) => error.summary.reason),
+    ['feishu_api', 'feishu_api', 'empty_data', 'unsupported_type'],
+  );
+  assert.deepEqual(
+    report.batches[0].recognitionErrors.map((error) => error.failureCategory),
+    ['image_download', 'image_download', 'user_input', 'user_input'],
+  );
+});
+
+test('runFeishuSync keeps inline image download failures visible in the summary', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-inline-download-failure-'));
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: feishuSyncEnv(),
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuImageEvent({
+            eventId: 'evt-image-download-fail-1',
+            messageId: 'om_image_download_fail_1',
+            chatId: 'oc_chat_1',
+            imageKey: 'img_download_fail_1',
+            createTime: '1781398800000',
+          }),
+        ],
+      },
+    },
+    fetch: async (url) => {
+      const requestUrl = String(url);
+      if (requestUrl.includes('/tenant_access_token/internal')) {
+        return Response.json({
+          code: 0,
+          tenant_access_token: 'tenant-token',
+          expire: 7200,
+        });
+      }
+      if (requestUrl.includes('/resources/img_download_fail_1')) {
+        return new Response('forbidden', { status: 403 });
+      }
+      throw new Error(`Unexpected fetch call: ${requestUrl}`);
+    },
+    persistNormalizedBatch: async () => {
+      throw new Error('should not persist when inline image download fails');
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  const report = buildFeishuSyncReport(result);
+  const [batch] = report.batches;
+  assert.equal(batch.failureCategory, 'image_download');
+  assert.equal(batch.failureDisposition, 'auto_retry');
+  assert.equal(batch.recognitionErrors[0].failureCategory, 'image_download');
+  assert.deepEqual(batch.syncStages.image_download.status, 'failed');
+  assert.equal(batch.syncStages.image_download.failureCategory, 'image_download');
+  assert.match(batch.syncStages.image_download.failureReason, /Feishu image download failed with HTTP 403/);
+  assert.equal(Number.isFinite(batch.syncStages.image_download.durationMs), true);
+  assert.equal(batch.syncStages.cache_read.status, 'skipped');
+  assert.equal(batch.syncStages.ai_schema.status, 'skipped');
+  assert.equal(batch.syncStages.db_persist.status, 'skipped');
+  assert.match(batch.recognitionErrors[0].error, /Feishu image download failed with HTTP 403/);
+  assert.match(batch.recognitionErrors[0].error, /img_download_fail_1/);
+  assert.doesNotMatch(batch.recognitionErrors[0].error, /tenant-token|secret|open-apis\/im\/v1/);
 });
 
 test('runFeishuSync handles image and thought batches through the shared sync pipeline', async () => {
@@ -300,6 +671,10 @@ test('runFeishuSync handles image and thought batches through the shared sync pi
   assert.deepEqual(persisted.map((entry) => entry.batch.kind), ['image', 'thought']);
   assert.equal(result.batchResults[0].sourceChannel, 'feishu');
   assert.equal(result.batchResults[1].sourceChannel, 'feishu');
+  assert.equal(result.batchResults[0].syncStages.ai_schema.status, 'succeeded');
+  assert.equal(result.batchResults[0].syncStages.db_persist.status, 'succeeded');
+  assert.equal(Number.isFinite(result.batchResults[0].syncStages.ai_schema.durationMs), true);
+  assert.equal(Number.isFinite(result.batchResults[0].syncStages.db_persist.durationMs), true);
 
   const thoughtBatch = result.batchResults.find((batch) => batch.kind === 'thought');
   assert.equal(thoughtBatch.thought.sourceChannel, 'feishu');
@@ -312,6 +687,341 @@ test('runFeishuSync handles image and thought batches through the shared sync pi
   const report = buildFeishuSyncReport(result);
   assert.deepEqual(report.batches.map((batch) => batch.chatIds), [['oc_chat_1'], ['oc_chat_1']]);
   assert.match(report.batches[0].sourceId, /^feishu:chat:oc_chat_1:/);
+  assert.match(report.batchResults[0].sourceId, /^feishu:chat:oc_chat_1:/);
+  assert.deepEqual(Object.keys(result.tasks[0]).sort(), [
+    'archivedDate',
+    'batchId',
+    'channel',
+    'chatIds',
+    'failureCategory',
+    'failureReason',
+    'kind',
+    'persistenceStatus',
+    'sourceMessageIds',
+    'taskId',
+    'taskStatus',
+  ].sort());
+  assert.equal(result.tasks[0].channel, 'feishu');
+  assert.equal(result.tasks[0].kind, 'image');
+  assert.deepEqual(result.tasks[0].chatIds, ['oc_chat_1']);
+  assert.deepEqual(result.tasks[0].sourceMessageIds, ['om_feishu_1']);
+  assert.match(result.tasks[0].taskId, /^feishu:image:/);
+  assert.equal(result.tasks[1].channel, 'feishu');
+  assert.equal(result.tasks[1].kind, 'thought');
+  assert.deepEqual(result.tasks[1].chatIds, ['oc_chat_1']);
+  assert.deepEqual(result.tasks[1].sourceMessageIds, ['om_thought_1']);
+  assert.equal(report.tasks[0].channel, 'feishu');
+  assert.match(report.tasks[0].taskId, /^feishu:image:/);
+  assert.deepEqual(report.tasks[0].chatIds, ['oc_chat_1']);
+  assert.deepEqual(report.tasks[0].sourceMessageIds, ['om_feishu_1']);
+});
+
+test('buildFeishuSyncReport preserves image archive date confidence for summary gates', () => {
+  const report = buildFeishuSyncReport({
+    changed: true,
+    fallbackUsed: false,
+    updatesFetched: 1,
+    lastProcessedUpdateId: null,
+    readyBatches: 1,
+    batchResults: [
+      {
+        kind: 'image',
+        sourceChannel: 'feishu',
+        batchId: 'feishu-date-confidence',
+        status: 'ready',
+        archivedDate: '2026-06-17',
+        dateConfidence: 'uncertain',
+        dateSources: [
+          { messageId: 'om_1', detectedDate: '2026-06-17', source: 'image' },
+          { messageId: 'om_2', detectedDate: '2026-06-17', source: 'sleep_bedtime' },
+          { messageId: 'om_3', detectedDate: null, source: 'no_date' },
+        ],
+        warnings: ['detectedDate补全年份不确定，需程序确认'],
+        messages: [
+          { messageId: 101, sourceMessageId: 'om_1', chatId: 'oc_chat_1' },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(report.batches[0].dateConfidence, 'uncertain');
+  assert.deepEqual(report.batches[0].dateSources.map((item) => item.source), ['image', 'sleep_bedtime', 'no_date']);
+  assert.match(report.batches[0].taskId, /^feishu:image:/);
+});
+
+test('runFeishuSync preserves the recommended Feishu AI_CONCURRENCY limit', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-ai-concurrency-'));
+  const observedConcurrency = [];
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: {
+      ...feishuSyncEnv(),
+      AI_CONCURRENCY: '2',
+    },
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuImageEvent({
+            eventId: 'evt-concurrency-1',
+            messageId: 'om_concurrency_1',
+            chatId: 'oc_chat_1',
+            imageKey: 'img_concurrency_1',
+            createTime: '1781398800000',
+          }),
+        ],
+      },
+    },
+    recognizeBatch: async (batch, env) => {
+      observedConcurrency.push(env.aiConcurrency);
+      return {
+        recognitions: batch.messages.map((message) => ({
+          messageId: message.messageId,
+          sourceMessageId: message.sourceMessageId,
+          imageType: 'workout',
+          detectedDate: '2026-05-31',
+          dateEvidence: 'image header: 2026-05-31',
+          confidence: 0.98,
+          warnings: [],
+          records: {
+            measurement: null,
+            activities: [{ time: '19:13', type: '力量训练', detail: '总消耗 241 千卡' }],
+            meals: [],
+            totalCalories: null,
+            details: [],
+            dailyWorkoutSummary: null,
+          },
+        })),
+        recognitionErrors: [],
+      };
+    },
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.deepEqual(observedConcurrency, [2]);
+});
+
+test('runFeishuSync queues Feishu thought database failures for pending replay', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-thought-pending-'));
+  const queued = [];
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: feishuSyncEnv(),
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuTextEvent({
+            eventId: 'evt-thought-pending-1',
+            messageId: 'om_thought_pending_1',
+            chatId: 'oc_chat_1',
+            text: '/随想 今天练腿后髋部有点紧',
+            createTime: '1781398800000',
+          }),
+        ],
+      },
+    },
+    persistNormalizedBatch: async () => {
+      throw new Error('database unavailable');
+    },
+    appendPendingRecognitionBatch: async (entry) => {
+      queued.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought');
+  assert.equal(result.batchResults[0].persistenceStatus, 'pending_replay');
+  assert.equal(result.batchResults[0].failureCategory, 'database');
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].batch.kind, 'thought');
+  assert.equal(queued[0].batch.sourceChannel, 'feishu');
+  assert.equal(queued[0].batch.messages[0].sourceMessageId, 'om_thought_pending_1');
+  assert.equal(queued[0].failureCategory, 'database');
+  assert.match(queued[0].error, /database unavailable/);
+});
+
+test('runFeishuSync records Feishu image DB persist failures as a separate stage', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-image-persist-stage-'));
+  const queued = [];
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: feishuSyncEnv(),
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuImageEvent({
+            eventId: 'evt-image-db-pending-1',
+            messageId: 'om_image_db_pending_1',
+            chatId: 'oc_chat_1',
+            imageKey: 'img_db_pending_1',
+            createTime: '1781398800000',
+          }),
+        ],
+      },
+    },
+    recognizeBatch: async (batch) => ({
+      recognitions: batch.messages.map((message) => ({
+        messageId: message.messageId,
+        sourceMessageId: message.sourceMessageId,
+        imageType: 'nutrition',
+        detectedDate: '2026-05-31',
+        dateEvidence: 'image header',
+        confidence: 0.98,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [{ name: '晚餐', calories: 868, recommendedMin: 310, recommendedMax: 723 }],
+          totalCalories: 868,
+          details: ['晚餐 868 千卡'],
+          dailyWorkoutSummary: null,
+        },
+      })),
+      recognitionErrors: [],
+    }),
+    persistNormalizedBatch: async () => {
+      throw new Error('database unavailable');
+    },
+    appendPendingRecognitionBatch: async (entry) => {
+      queued.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  const report = buildFeishuSyncReport(result);
+  const [batch] = report.batches;
+  assert.equal(batch.kind, 'image');
+  assert.equal(batch.persistenceStatus, 'pending_replay');
+  assert.equal(batch.syncStages.ai_schema.status, 'succeeded');
+  assert.equal(batch.syncStages.db_persist.status, 'failed');
+  assert.equal(batch.syncStages.db_persist.failureCategory, 'database');
+  assert.match(batch.syncStages.db_persist.failureReason, /database unavailable/);
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].failureCategory, 'database');
+});
+
+test('runFeishuSync treats DB-rejected invalid image archive dates as manual intervention without pending replay', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-invalid-archive-date-'));
+  const queued = [];
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: feishuSyncEnv(),
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuImageEvent({
+            eventId: 'evt-image-invalid-date-1',
+            messageId: 'om_image_invalid_date_1',
+            chatId: 'oc_chat_1',
+            imageKey: 'img_invalid_date_1',
+            createTime: '1781398800000',
+          }),
+        ],
+      },
+    },
+    recognizeBatch: async (batch) => ({
+      recognitions: batch.messages.map((message) => ({
+        messageId: message.messageId,
+        sourceMessageId: message.sourceMessageId,
+        imageType: 'nutrition',
+        detectedDate: '2026-05-31',
+        dateEvidence: 'image header',
+        confidence: 0.98,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [{ name: '晚餐', calories: 868, recommendedMin: 310, recommendedMax: 723 }],
+          totalCalories: 868,
+          details: ['晚餐 868 千卡'],
+          dailyWorkoutSummary: null,
+        },
+      })),
+      recognitionErrors: [],
+    }),
+    persistNormalizedBatch: async () => {
+      throw new Error('invalid archivedDate: 2023-02-30');
+    },
+    appendPendingRecognitionBatch: async (entry) => {
+      queued.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  const report = buildFeishuSyncReport(result);
+  const [batch] = report.batches;
+  assert.equal(batch.persistenceStatus, 'manual_intervention');
+  assert.equal(batch.failureCategory, 'user_input');
+  assert.equal(batch.failureDisposition, 'manual_intervention');
+  assert.equal(batch.syncStages.db_persist.failureCategory, 'user_input');
+  assert.equal(queued.length, 0);
+});
+
+test('runFeishuSync exposes failed recognition AI call log status for Feishu images', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-image-ai-log-failure-'));
+  const queued = [];
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: feishuSyncEnv(),
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuImageEvent({
+            eventId: 'evt-image-ai-failed-log-1',
+            messageId: 'om_image_ai_failed_log_1',
+            chatId: 'oc_chat_1',
+            imageKey: 'img_ai_failed_log_1',
+            createTime: '1781398800000',
+          }),
+        ],
+      },
+    },
+    recognizeBatch: async () => ({
+      recognitions: [],
+      recognitionErrors: [
+        {
+          messageId: '2811537526481927',
+          sourceMessageId: 'om_image_ai_failed_log_1',
+          error: 'AI recognition failed with HTTP 502',
+          failureCategory: 'ai_service',
+          provider: 'openai-compatible',
+          model: 'gpt-primary',
+        },
+      ],
+    }),
+    appendPendingRecognitionBatch: async (entry) => {
+      queued.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId, aiCallLogStatus: 'written' };
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  const report = buildFeishuSyncReport(result);
+  const [batch] = report.batches;
+
+  assert.equal(batch.kind, 'image');
+  assert.equal(batch.taskStatus, 'deferred');
+  assert.equal(batch.failureCategory, 'ai_service');
+  assert.equal(batch.recognitionPendingStatus, 'queued');
+  assert.equal(batch.aiCallLogStatus, 'written');
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].batch.sourceChannel, 'feishu');
+  assert.equal(queued[0].batch.recognitionErrors[0].model, 'gpt-primary');
 });
 
 test('runFeishuSync consumes queued workflow dispatch payloads in webhook mode', async () => {
@@ -441,6 +1151,128 @@ test('runFeishuSync consumes inline queued dispatch payloads without event path'
   assert.equal(result.batchResults[0].kind, 'thought_edit');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persisted.length, 1);
+});
+
+test('runFeishuSync does not require Telegram placeholder env for Feishu payloads', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-no-telegram-env-'));
+  const env = feishuSyncEnv();
+  delete env.TELEGRAM_BOT_TOKEN;
+  delete env.TELEGRAM_ALLOWED_CHAT_IDS;
+  delete env.TELEGRAM_SYNC_TRANSPORT;
+  const persisted = [];
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env,
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuTextEvent({
+            eventId: 'evt-no-telegram-env-1',
+            messageId: 'om_no_telegram_env_1',
+            chatId: 'oc_chat_1',
+            text: '/随想 今天飞书同步不需要 Telegram 占位配置',
+            createTime: '1781398820000',
+          }),
+        ],
+      },
+    },
+    persistNormalizedBatch: async ({ batch, sourceChannel }) => {
+      persisted.push({ batch, sourceChannel });
+      return { status: 'stored', messageId: batch.thought.telegramMessageId };
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought');
+  assert.equal(result.batchResults[0].sourceChannel, 'feishu');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.tasks.length, 1);
+  assert.equal(result.tasks[0].channel, 'feishu');
+  assert.equal(persisted.length, 1);
+  assert.deepEqual(persisted.map((entry) => entry.sourceChannel), ['feishu']);
+});
+
+test('runFeishuSync handles /analysis reply and AI call log through the shared pipeline', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-analysis-'));
+  const sentMessages = [];
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: {
+      ...feishuSyncEnv(),
+      AI_MODEL: 'gpt-analysis-primary',
+    },
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuTextEvent({
+            eventId: 'evt-analysis-1',
+            messageId: 'om_analysis_1',
+            chatId: 'oc_chat_1',
+            text: '/analysis 今天怎么练',
+            createTime: '1781398820000',
+          }),
+        ],
+      },
+    },
+    aiProvider: {
+      env: { model: 'gpt-analysis-primary' },
+      async requestChatCompletion() {
+        return {
+          ok: true,
+          async json() {
+            return {
+              choices: [
+                {
+                  message: {
+                    content: '数据结论：飞书分析路径完成。',
+                  },
+                },
+              ],
+            };
+          },
+        };
+      },
+    },
+    snapshot: buildSyntheticAnalysisSnapshot(),
+    createClient() {
+      return fakeClient;
+    },
+    sendFeishuMessage: async (message) => {
+      sentMessages.push(message);
+      return { ok: true };
+    },
+  });
+
+  const aiLogCall = calls.find(([sql]) => /insert into ingest\.ai_call_log/i.test(sql));
+
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].text, '数据结论：飞书分析路径完成。');
+  assert.equal(result.batchResults[0].kind, 'analysis');
+  assert.equal(result.batchResults[0].analysisReplyStatus, 'sent');
+  assert.equal(result.batchResults[0].analysisAttemptKind, 'primary');
+  assert.equal(result.batchResults[0].analysisModel, 'gpt-analysis-primary');
+  assert.equal(result.batchResults[0].analysisSnapshotSource, 'database');
+  assert.ok(aiLogCall);
+  assert.equal(aiLogCall[1][1], result.batchResults[0].batchId);
+  assert.equal(aiLogCall[1][2], 'analysis');
+  assert.equal(aiLogCall[1][4], 'gpt-analysis-primary');
 });
 
 test('runFeishuSync persists explicit Feishu thought edit module updates through the shared pipeline', async () => {
@@ -641,6 +1473,65 @@ test('Feishu sync notifier reports skipped ambiguous thoughts as failures', asyn
   assert.match(sent[0].text, /\/随想编 id 模块 内容/);
   assert.doesNotMatch(sent[0].text, /成功/);
   assert.doesNotMatch(sent[0].text, /已入库/);
+});
+
+test('buildFeishuSyncReport gates pending replay and manual intervention as business-incomplete states', () => {
+  const report = buildFeishuSyncReport({
+    changed: false,
+    fallbackUsed: false,
+    updatesFetched: 2,
+    lastProcessedUpdateId: null,
+    readyBatches: 0,
+    batchResults: [
+      {
+        kind: 'thought',
+        sourceChannel: 'feishu',
+        batchId: 'feishu-db-pending',
+        status: 'ready',
+        persistenceStatus: 'pending_replay',
+        failureCategory: 'database',
+        failureReason: 'database unavailable',
+        messages: [{ messageId: 201, sourceMessageId: 'om_pending', chatId: 'oc_chat_1' }],
+      },
+      {
+        kind: 'thought',
+        sourceChannel: 'feishu',
+        batchId: 'feishu-manual',
+        status: 'skipped',
+        failureCategory: 'user_input',
+        failureReason: '疑似编辑命令，请使用 /随想编 id 模块 内容',
+        reason: '疑似编辑命令，请使用 /随想编 id 模块 内容',
+        messages: [{ messageId: 202, sourceMessageId: 'om_manual', chatId: 'oc_chat_1' }],
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    report.batches.map((batch) => ({
+      batchId: batch.batchId,
+      taskStatus: batch.taskStatus,
+      retryState: batch.retryState,
+      failureDisposition: batch.failureDisposition,
+      businessComplete: batch.failureDisposition === 'none' && batch.persistenceStatus !== 'pending_replay',
+    })),
+    [
+      {
+        batchId: 'feishu-db-pending',
+        taskStatus: 'deferred',
+        retryState: 'pending_replay',
+        failureDisposition: 'auto_retry',
+        businessComplete: false,
+      },
+      {
+        batchId: 'feishu-manual',
+        taskStatus: 'skipped',
+        retryState: 'none',
+        failureDisposition: 'manual_intervention',
+        businessComplete: false,
+      },
+    ],
+  );
+  assert.ok(report.batches.every((batch) => batch.taskId.startsWith('feishu:')));
 });
 
 test('runFeishuSync handles reply-based Feishu thought delete batches through the shared pipeline', async () => {
@@ -897,6 +1788,40 @@ function createRecognitionProvider(requestedImageUrls) {
           };
         },
       };
+    },
+  };
+}
+
+function buildSyntheticAnalysisSnapshot() {
+  const daily = [
+    {
+      date: '2026-05-14',
+      measurement: {
+        archivedDate: '2026-05-14',
+        weightKg: 73.5,
+        bodyFatPct: 22.1,
+        skeletalMuscleKg: 30.8,
+      },
+      workoutSummary: {
+        trainingCalories: 420,
+        workoutDurationMinutes: 55,
+        cyclingDistanceKm: 0,
+        countsByType: {
+          力量训练: 1,
+        },
+      },
+      nutrition: {
+        totalCalories: 1580,
+      },
+    },
+  ];
+
+  return {
+    source: 'database',
+    daily,
+    latest: {
+      daily: daily[0],
+      measurement: daily[0].measurement,
     },
   };
 }

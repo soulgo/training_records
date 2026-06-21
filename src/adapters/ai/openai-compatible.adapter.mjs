@@ -41,10 +41,7 @@ async function requestOpenAICompatibleChatCompletion(env, input = {}) {
     `${env.baseUrl}/chat/completions`,
     {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${env.apiKey}`,
-      },
+      headers: buildChatCompletionRequestHeaders(env, input),
       body: JSON.stringify(buildChatCompletionRequestBody(env, input)),
     },
     {
@@ -58,6 +55,18 @@ async function requestOpenAICompatibleChatCompletion(env, input = {}) {
   );
 
   return response;
+}
+
+function buildChatCompletionRequestHeaders(env, input) {
+  const headers = {
+    'content-type': 'application/json',
+    authorization: `Bearer ${env.apiKey}`,
+  };
+  const idempotencyKey = String(input.idempotencyKey ?? '').trim();
+  if (idempotencyKey) {
+    headers['Idempotency-Key'] = idempotencyKey;
+  }
+  return headers;
 }
 
 function buildChatCompletionRequestBody(env, input) {
@@ -98,7 +107,7 @@ function createTimeoutFetch(fetchImpl, timeoutMs) {
 function normalizeTimeoutMs(value) {
   const normalized = Number(value);
   if (!Number.isFinite(normalized) || normalized <= 0) {
-    return null;
+    return 45000;
   }
   return Math.floor(normalized);
 }

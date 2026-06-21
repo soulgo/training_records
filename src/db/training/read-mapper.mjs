@@ -359,6 +359,8 @@ function normalizeThoughtRow(row) {
     telegramMessageId: toNullableNumber(row.telegram_message_id),
     telegramChatId: toNullableNumber(row.telegram_chat_id),
     sourceChannel: normalizeSourceChannel(row.source_channel),
+    sourceMessageId: row.source_message_id ?? null,
+    sourceChatId: row.source_chat_id ?? null,
     markdownPath: row.markdown_path ?? null,
     imageRefs: Array.isArray(row.image_refs_json) ? row.image_refs_json : [],
     source: 'database',

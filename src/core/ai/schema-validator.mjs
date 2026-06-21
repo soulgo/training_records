@@ -16,6 +16,24 @@ export function extractAiResponseContent(payload, options = {}) {
   return content;
 }
 
+export function normalizeAiUsage(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {
+      promptTokens: null,
+      completionTokens: null,
+      totalTokens: null,
+      costUsd: null,
+    };
+  }
+
+  return {
+    promptTokens: normalizeNonNegativeInteger(value.promptTokens ?? value.prompt_tokens),
+    completionTokens: normalizeNonNegativeInteger(value.completionTokens ?? value.completion_tokens),
+    totalTokens: normalizeNonNegativeInteger(value.totalTokens ?? value.total_tokens),
+    costUsd: normalizeNonNegativeNumber(value.costUsd ?? value.cost_usd),
+  };
+}
+
 export function parseAiJsonContent(content, schema, options = {}) {
   const schemaName = options.schemaName ?? 'ai_schema';
   const schemaVersion = options.schemaVersion ?? 'v1';
@@ -62,6 +80,28 @@ function parseJsonLikeContent(content, { schemaName, schemaVersion, rootPath }) 
     schemaVersion,
     path: rootPath,
   });
+}
+
+function normalizeNonNegativeInteger(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) {
+    return null;
+  }
+  return Math.round(number);
+}
+
+function normalizeNonNegativeNumber(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) {
+    return null;
+  }
+  return number;
 }
 
 function collectJsonCandidates(content) {

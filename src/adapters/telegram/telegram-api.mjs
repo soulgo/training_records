@@ -1,3 +1,5 @@
+import { downloadBinaryWithLimit } from '../http/download-binary.mjs';
+
 export async function sendTelegramMessage({
   botToken,
   chatId,
@@ -54,15 +56,24 @@ export async function resolveTelegramFileInfo(botToken, fileId, fetchImpl = glob
   };
 }
 
-export async function fetchTelegramFile({ botToken, fileId, fetch: fetchImpl = globalThis.fetch }) {
+export async function fetchTelegramFile({
+  botToken,
+  fileId,
+  fetch: fetchImpl = globalThis.fetch,
+  maxDownloadBytes,
+}) {
   const file = await resolveTelegramFileInfo(botToken, fileId, fetchImpl);
   const response = await fetchImpl(file.url);
   if (!response.ok) {
     throw new Error(`Telegram file download failed with HTTP ${response.status}`);
   }
+  const data = await downloadBinaryWithLimit(response, {
+    maxBytes: maxDownloadBytes,
+    label: 'Telegram file download',
+  });
   return {
     ...file,
     contentType: response.headers.get('content-type') ?? '',
-    data: new Uint8Array(await response.arrayBuffer()),
+    data,
   };
 }

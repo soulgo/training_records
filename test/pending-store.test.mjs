@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -8,6 +8,10 @@ import {
   createFilePendingStore,
   createPendingStore,
 } from '../src/jobs/index.mjs';
+import {
+  formatPendingFallbackInspection,
+  inspectPendingFallbackQueue,
+} from '../tools/telegram-sync-fallback.mjs';
 
 test('file pending store preserves ndjson format and deduplicates by batch id', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'pending-store-'));
@@ -70,4 +74,72 @@ test('pending store factory can switch to an injected database store', async () 
   assert.equal(dbStore.appendCalls, 1);
   assert.deepEqual(dbStore.lastWrite, [{ batch: { batchId: 'db-batch-2' } }]);
   assert.deepEqual(dbStore.lastAppend, { batch: { batchId: 'db-batch-3' } });
+});
+
+test('NDJSON fallback inspection is read-only and summarizes replay candidates', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'pending-store-inspect-'));
+  const queuePath = path.join(dir, 'runtime', 'telegram-sync-pending.ndjson');
+  await mkdir(path.dirname(queuePath), { recursive: true });
+  const originalContent = [
+    JSON.stringify({
+      batch: {
+        batchId: 'legacy-image',
+        kind: 'image',
+        archivedDate: '2026-05-09',
+        status: 'ready',
+      },
+      failedAt: '2026-05-09T10:00:00.000Z',
+      error: 'database timeout',
+    }),
+    JSON.stringify({
+      batch: {
+        batchId: 'legacy-thought',
+        kind: 'thought',
+        archivedDate: null,
+        status: 'ready',
+      },
+      failedAt: '2026-05-09T10:01:00.000Z',
+      error: 'connection reset',
+    }),
+    '',
+  ].join('\n');
+  await writeFile(queuePath, originalContent, 'utf8');
+
+  const inspection = await inspectPendingFallbackQueue({ queuePath });
+  const formatted = formatPendingFallbackInspection(inspection);
+
+  assert.equal(await readFile(queuePath, 'utf8'), originalContent);
+  assert.equal(inspection.status, 'ok');
+  assert.equal(inspection.totalEntries, 2);
+  assert.deepEqual(
+    inspection.entries.map((entry) => ({
+      batchId: entry.batchId,
+      kind: entry.kind,
+      archivedDate: entry.archivedDate,
+      status: entry.status,
+      failedAt: entry.failedAt,
+      error: entry.error,
+    })),
+    [
+      {
+        batchId: 'legacy-image',
+        kind: 'image',
+        archivedDate: '2026-05-09',
+        status: 'ready',
+        failedAt: '2026-05-09T10:00:00.000Z',
+        error: 'database timeout',
+      },
+      {
+        batchId: 'legacy-thought',
+        kind: 'thought',
+        archivedDate: null,
+        status: 'ready',
+        failedAt: '2026-05-09T10:01:00.000Z',
+        error: 'connection reset',
+      },
+    ],
+  );
+  assert.match(formatted, /legacy-image/);
+  assert.match(formatted, /legacy-thought/);
+  assert.match(formatted, /read-only/i);
 });

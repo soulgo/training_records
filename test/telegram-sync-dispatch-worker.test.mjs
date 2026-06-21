@@ -6,6 +6,7 @@ import {
   TelegramAlbumBuffer,
   handleTelegramWebhook,
 } from '../cloudflare/sync-dispatch-worker.mjs';
+import { buildTelegramDispatchPayload } from '../cloudflare/sync-dispatch-queue.mjs';
 import { TELEGRAM_HELP_TEXT } from '../src/telegram/help.mjs';
 
 function createEnv() {
@@ -190,6 +191,34 @@ test('handleTelegramWebhook prefers the Telegram-specific dispatch event type', 
   assert.equal(response.status, 202);
   assert.equal(calls.length, 1);
   assert.equal(JSON.parse(calls[0].init.body).event_type, 'telegram_update_dev');
+});
+
+test('buildTelegramDispatchPayload uses the original message for Telegram task-start notifications', () => {
+  const payload = buildTelegramDispatchPayload({
+    env: { GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM: 'telegram_update_dev' },
+    updates: [
+      {
+        update_id: 130,
+        message: {
+          message_id: 10,
+          chat: { id: 42 },
+          text: '/随想 原始消息',
+        },
+        edited_message: {
+          message_id: 11,
+          chat: { id: 42 },
+          text: '/随想 编辑后的消息',
+        },
+      },
+    ],
+  });
+
+  assert.equal(payload.event_type, 'telegram_update_dev');
+  assert.deepEqual(payload.notification, {
+    channel: 'telegram',
+    chatId: 42,
+    replyToMessageId: 10,
+  });
 });
 
 test('handleTelegramWebhook notifies Telegram when the GitHub token is missing', async () => {
@@ -679,6 +708,7 @@ test('SyncDispatchQueue dead-letters Feishu tasks when workflow runs never appea
   const state = createDurableObjectState();
   const dispatched = [];
   const feishuMessages = [];
+  const logs = [];
   let now = 1_000;
   const queue = new SyncDispatchQueue(state, {
     ...createEnv(),
@@ -687,6 +717,9 @@ test('SyncDispatchQueue dead-letters Feishu tasks when workflow runs never appea
     GITHUB_RUN_LOOKUP_TIMEOUT_MS: '30000',
     FEISHU_APP_ID: 'feishu-app-id',
     FEISHU_APP_SECRET: 'feishu-app-secret',
+    __logger: {
+      error: (line) => logs.push(line),
+    },
     __now: () => now,
     __dispatchFetchImpl: async (url, init) => {
       const urlText = String(url);
@@ -763,6 +796,12 @@ test('SyncDispatchQueue dead-letters Feishu tasks when workflow runs never appea
   assert.equal(feishuMessages.length, 1);
   assert.equal(feishuMessages[0].receive_id, 'oc_queue_chat');
   assert.match(JSON.parse(feishuMessages[0].content).text, /GitHub Action 未能启动/);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /\[sync-dispatch-queue\]/);
+  assert.match(logs[0], /"outcome":"dead_letter"/);
+  assert.match(logs[0], /"channel":"feishu"/);
+  assert.match(logs[0], /github_workflow_run_not_found_after_dispatch/);
+  assert.doesNotMatch(logs[0], /om_timeout_1|超时恢复/);
 
   await queue.alarm();
   assert.equal(dispatched.length, 2);
@@ -770,6 +809,96 @@ test('SyncDispatchQueue dead-letters Feishu tasks when workflow runs never appea
 
   await queue.alarm();
   assert.equal(await state.storage.get('processing'), undefined);
+});
+
+test('SyncDispatchQueue logs failed task-start notifications for Telegram and Feishu dead letters', async () => {
+  for (const channel of ['telegram', 'feishu']) {
+    const state = createDurableObjectState();
+    const logs = [];
+    const dispatched = [];
+    let now = 1_000;
+    const queue = new SyncDispatchQueue(state, {
+      ...createEnv(),
+      GITHUB_SYNC_WORKFLOW_FILE: 'sync-dev.yml',
+      GITHUB_SYNC_REF: 'dev',
+      GITHUB_RUN_LOOKUP_TIMEOUT_MS: '30000',
+      TELEGRAM_API_BASE_URL: 'https://telegram.example.com',
+      FEISHU_API_BASE_URL: 'https://feishu.example.com',
+      FEISHU_APP_ID: 'feishu-app-id',
+      FEISHU_APP_SECRET: 'feishu-app-secret',
+      __logger: {
+        error: (line) => logs.push(line),
+      },
+      __now: () => now,
+      __dispatchFetchImpl: async (url) => {
+        const urlText = String(url);
+        if (urlText.endsWith('/actions/workflows/sync-dev.yml/dispatches')) {
+          dispatched.push(urlText);
+          return new Response(null, { status: 204 });
+        }
+        if (urlText.includes('/actions/workflows/sync-dev.yml/runs')) {
+          return Response.json({ workflow_runs: [] });
+        }
+        if (urlText.includes('/bottelegram-token/sendMessage')) {
+          return new Response('telegram send failed', { status: 429 });
+        }
+        if (urlText.endsWith('/open-apis/auth/v3/tenant_access_token/internal')) {
+          return new Response('tenant token failed', { status: 500 });
+        }
+        throw new Error(`unexpected fetch: ${urlText}`);
+      },
+    });
+    const sourceSortKey = channel === 'telegram' ? 42 : '1781680601000';
+    const payload = channel === 'telegram'
+      ? {
+          event_type: 'telegram_update_dev',
+          client_payload: { telegram_updates: [{ update_id: 42 }] },
+          source: { channel: 'telegram', sortKey: sourceSortKey },
+          notification: {
+            channel: 'telegram',
+            chatId: 42,
+            replyToMessageId: 7,
+          },
+        }
+      : {
+          event_type: 'feishu_update_dev',
+          client_payload: {
+            feishu_update: createFeishuQueueEvent({
+              eventId: 'evt-notify-failed',
+              messageId: 'om_notify_failed',
+              text: '/随想编 3 身体反馈 通知失败',
+            }),
+          },
+          source: { channel: 'feishu', sortKey: sourceSortKey },
+          notification: {
+            channel: 'feishu',
+            chatId: 'oc_queue_chat',
+            sourceMessageId: 'om_notify_failed',
+          },
+        };
+
+    assert.equal((await queue.fetch(createQueueRequest(payload))).status, 202);
+
+    await queue.alarm();
+    now += 40_000;
+    await queue.alarm();
+
+    const deadLetters = await state.storage.get('deadLetters');
+    assert.equal(deadLetters.length, 1);
+    assert.equal(dispatched.length, 1);
+    const deadLetterLog = logs.find((line) => line.includes('"outcome":"dead_letter"'));
+    const notificationFailedLog = logs.find((line) => line.includes('"outcome":"notification_failed"'));
+    assert.ok(deadLetterLog);
+    assert.ok(notificationFailedLog);
+    assert.match(deadLetterLog, /\[sync-dispatch-queue\]/);
+    assert.match(notificationFailedLog, /\[sync-dispatch-queue\]/);
+    assert.match(deadLetterLog, new RegExp(`"channel":"${channel}"`));
+    assert.match(notificationFailedLog, new RegExp(`"channel":"${channel}"`));
+    assert.match(deadLetterLog, /"taskId":/);
+    assert.match(notificationFailedLog, /"taskId":/);
+    assert.match(deadLetterLog, /github_workflow_run_not_found_after_dispatch/);
+    assert.match(notificationFailedLog, /github_workflow_run_not_found_after_dispatch/);
+  }
 });
 
 test('SyncDispatchQueue uses short task ids that do not expose Feishu payload content', async () => {
@@ -1270,6 +1399,119 @@ test('TelegramAlbumBuffer dispatches with a configured GitHub event type after t
 
   assert.equal(calls.length, 1);
   assert.equal(JSON.parse(calls[0].init.body).event_type, 'telegram_update_dev');
+});
+
+test('TelegramAlbumBuffer keeps buffered updates and schedules retry when dispatch and notification fail', async () => {
+  const originalNow = Date.now;
+  const calls = [];
+  const logs = [];
+  const state = createDurableObjectState();
+  const buffer = new TelegramAlbumBuffer(state, {
+    ...createEnv(),
+    TELEGRAM_BOT_TOKEN: 'bot-token',
+    TELEGRAM_API_BASE_URL: 'https://telegram.example.com',
+    __logger: {
+      log: (line) => logs.push(line),
+    },
+    __dispatchFetchImpl: async (url) => {
+      calls.push(String(url));
+      if (String(url).includes('/dispatches')) {
+        return new Response('dispatch unavailable', { status: 503 });
+      }
+      throw new Error('telegram notification unavailable');
+    },
+  });
+
+  try {
+    Date.now = () => 10_000;
+    await buffer.fetch(
+      new Request('https://worker.example.com/buffer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          update: {
+            update_id: 303,
+            message: {
+              message_id: 33,
+              chat: { id: 7 },
+              photo: [{ file_id: 'photo-retry' }],
+            },
+          },
+        }),
+      }),
+    );
+
+    await buffer.alarm();
+
+    const storedUpdates = await state.storage.get('updates');
+    assert.deepEqual(storedUpdates.map((update) => update.update_id), [303]);
+    assert.equal(await state.storage.get('dispatchRetryCount'), 1);
+    assert.equal(await state.getAlarm(), 20_000);
+    assert.equal(calls.some((url) => url.includes('/dispatches')), true);
+    assert.equal(calls.some((url) => url.includes('/botbot-token/sendMessage')), true);
+    assert.equal(logs.some((line) => line.includes('"outcome":"notification_failed"')), true);
+    assert.equal(logs.some((line) => line.includes('"update_id":303')), true);
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
+test('TelegramAlbumBuffer dead-letters buffered updates after max dispatch retries', async () => {
+  const originalNow = Date.now;
+  const state = createDurableObjectState();
+  const buffer = new TelegramAlbumBuffer(state, {
+    ...createEnv(),
+    TELEGRAM_BOT_TOKEN: 'bot-token',
+    TELEGRAM_API_BASE_URL: 'https://telegram.example.com',
+    __dispatchFetchImpl: async (url) => {
+      if (String(url).includes('/dispatches')) {
+        return new Response('dispatch still unavailable', { status: 500 });
+      }
+      return new Response(null, { status: 200 });
+    },
+  });
+
+  try {
+    Date.now = () => Date.parse('2026-06-20T08:00:00.000Z');
+    await buffer.fetch(
+      new Request('https://worker.example.com/buffer', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          update: {
+            update_id: 304,
+            message: {
+              message_id: 34,
+              media_group_id: 'album-dead-letter',
+              chat: { id: 7 },
+              photo: [{ file_id: 'photo-dead-letter' }],
+            },
+          },
+        }),
+      }),
+    );
+    await state.storage.put('dispatchRetryCount', 4);
+
+    await buffer.alarm();
+
+    const deadLetters = await state.storage.get('deadLetters');
+    assert.equal(deadLetters.length, 1);
+    assert.equal(deadLetters[0].reason, 'github_dispatch_failed');
+    assert.equal(deadLetters[0].status, 500);
+    assert.equal(deadLetters[0].retryCount, 5);
+    assert.deepEqual(deadLetters[0].updates, [
+      {
+        update_id: 304,
+        chat_id: 7,
+        message_id: 34,
+        media_group_id: 'album-dead-letter',
+      },
+    ]);
+    assert.equal(await state.storage.get('updates'), undefined);
+    assert.equal(await state.storage.get('dispatchRetryCount'), undefined);
+  } finally {
+    Date.now = originalNow;
+  }
 });
 
 test('handleTelegramWebhook rejects requests with the wrong Telegram secret', async () => {

@@ -321,11 +321,17 @@ function dateFromUnix(unixSeconds) {
     };
   }
 
-  const date = new Date(unixSeconds * 1000);
+  const dateParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(unixSeconds * 1000));
+  const partMap = Object.fromEntries(dateParts.map((part) => [part.type, part.value]));
   return {
-    year: date.getUTCFullYear(),
-    month: date.getUTCMonth() + 1,
-    day: date.getUTCDate(),
+    year: Number(partMap.year),
+    month: Number(partMap.month),
+    day: Number(partMap.day),
   };
 }
 

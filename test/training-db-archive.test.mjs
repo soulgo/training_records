@@ -856,3 +856,72 @@ test('sleep health metric columns are present in canonical SQL schema files', as
     assert.match(sql, /suggestion_text/i, `${relativePath} should define suggestion_text`);
   }
 });
+
+test('canonical SQL schemas use source identity for cross-channel message and thought keys', async () => {
+  const pgsql = await readFile(path.resolve(process.cwd(), 'sql/pgsql17.sql'), 'utf8');
+  const ingest = await readFile(path.resolve(process.cwd(), 'sql/training_records/ingest.sql'), 'utf8');
+  const core = await readFile(path.resolve(process.cwd(), 'sql/training_records/core.sql'), 'utf8');
+
+  for (const [relativePath, sql] of [
+    ['sql/pgsql17.sql', pgsql],
+    ['sql/training_records/ingest.sql', ingest],
+  ]) {
+    assert.match(sql, /source_channel/i, `${relativePath} should store source_channel`);
+    assert.match(sql, /source_chat_id/i, `${relativePath} should store source_chat_id`);
+    assert.match(sql, /source_message_id/i, `${relativePath} should store source_message_id`);
+    assert.match(
+      sql,
+      /ux_ingest_telegram_message_source_identity[\s\S]*source_channel[\s\S]*source_chat_id[\s\S]*source_message_id/i,
+      `${relativePath} should uniquely key ingest messages by source identity`,
+    );
+    assert.doesNotMatch(
+      sql,
+      /telegram_message[\s\S]{0,120}message_id\s+bigint\s+primary\s+key/i,
+      `${relativePath} should not use global message_id as the only ingest message key`,
+    );
+  }
+
+  for (const [relativePath, sql] of [
+    ['sql/pgsql17.sql', pgsql],
+    ['sql/training_records/core.sql', core],
+  ]) {
+    assert.match(
+      sql,
+      /ux_core_thought_identity[\s\S]*source_channel[\s\S]*source_chat_id[\s\S]*source_message_id/i,
+      `${relativePath} should uniquely key thoughts by source identity`,
+    );
+    assert.match(
+      sql,
+      /idx_core_thought_legacy_message_id/i,
+      `${relativePath} should keep legacy telegram_message_id lookup indexed`,
+    );
+  }
+});
+
+test('canonical SQL schemas define ingest ai call log for AI audit', async () => {
+  for (const relativePath of [
+    'sql/pgsql17.sql',
+    'sql/training_records/ingest.sql',
+  ]) {
+    const sql = await readFile(path.resolve(process.cwd(), relativePath), 'utf8');
+    assert.match(sql, /ai_call_log/i, `${relativePath} should define ingest.ai_call_log`);
+    assert.match(sql, /ai_call_id/i, `${relativePath} should store ai_call_id`);
+    assert.match(sql, /idempotency_key/i, `${relativePath} should store idempotency_key`);
+    assert.match(sql, /prompt_tokens/i, `${relativePath} should store prompt token usage`);
+    assert.match(sql, /completion_tokens/i, `${relativePath} should store completion token usage`);
+    assert.match(sql, /total_tokens/i, `${relativePath} should store total token usage`);
+    assert.match(sql, /cost_usd/i, `${relativePath} should store nullable AI cost`);
+    assert.match(sql, /failure_category/i, `${relativePath} should store failure_category`);
+  }
+});
+
+test('database rollback SQL preserves legacy ingest and core data tables', async () => {
+  const relativePath = 'sql/training_records/rollback_core_code_optimization_01.sql';
+  const sql = await readFile(path.resolve(process.cwd(), relativePath), 'utf8');
+
+  assert.match(sql, /drop table if exists ingest\.ai_call_log/i);
+  assert.match(sql, /drop index (?:if exists )?ux_ingest_telegram_message_source_identity/i);
+  assert.match(sql, /drop index (?:if exists )?ux_core_thought_identity/i);
+  assert.doesNotMatch(sql, /drop table\s+(?:if exists\s+)?ingest\.telegram_/i);
+  assert.doesNotMatch(sql, /drop table\s+(?:if exists\s+)?core\.(?:measurement|activity|meal|sleep|thought|training_day)/i);
+});

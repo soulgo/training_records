@@ -5,6 +5,7 @@ import { constants } from 'node:fs';
 import { access, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { load as parseYaml } from 'js-yaml';
 
 const rootDir = new URL('../', import.meta.url);
 
@@ -125,6 +126,8 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
   assert.match(workflow, /curl -fsSL --retry 6 --retry-delay 10/);
   assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
+  assert.match(workflow, /Thought #\$\{TARGET_THOUGHT_ID\} not found on target URL; waiting 20s for Pages propagation and retrying/);
+  assert.match(workflow, /sleep 20/);
   assert.doesNotMatch(workflow, /grep -F "#\$\{TARGET_THOUGHT_ID\}"/);
   assert.match(workflow, /module_paths=\("\/thoughts\/" "\/misc\/" "\/body-feedback\/"\)/);
   assert.match(workflow, /Unexpected thought #\$\{TARGET_THOUGHT_ID\}/);
@@ -301,6 +304,7 @@ test('feishu-sync workflows expose source ids and chat ids in dispatch summaries
     assert.match(workflow, /- name: Write Feishu sync summary/);
     assert.match(workflow, /GITHUB_STEP_SUMMARY/);
     assert.match(workflow, /batchId \| sourceId \| chatIds \| taskStatus/);
+    assert.match(workflow, /aiCallLogStatus/);
     assert.match(workflow, /batch\.sourceId/);
     assert.match(workflow, /batch\.chatIds/);
   }
@@ -393,7 +397,7 @@ test('main sync workflow notifies after sync and waits for site deploy completio
   assert.match(workflow, /- name: Write Telegram sync summary/);
   assert.match(workflow, /GITHUB_STEP_SUMMARY/);
   assert.match(workflow, /stage \| ms/);
-  assert.match(workflow, /batchId \| taskStatus \| persistenceStatus \| archivedDate \| images \| pending \| failureDisposition \| failed messageIds/);
+  assert.match(workflow, /batchId \| taskStatus \| persistenceStatus \| archivedDate \| dateSources \| warnings \| dateConfidence \| images \| aiAttemptKinds \| aiCallLogStatus \| pending \| failureDisposition \| failed messageIds/);
   assert.match(workflow, /TELEGRAM_SYNC_NOTIFY_STAGE: after_action/);
   assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH: \$\{\{ runner\.temp \}\}\/telegram-sync-result\.json/);
   assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
@@ -422,6 +426,11 @@ test('main sync workflow notifies after sync and waits for site deploy completio
   assert.match(deployStep, /dispatch_started_at=/);
   assert.match(deployStep, /actions\/workflows\/deploy-pages\.yml\/runs/);
   assert.match(deployStep, /Deploy workflow failed/);
+  assert.match(deployStep, /GITHUB_STEP_SUMMARY/);
+  assert.match(deployStep, /## Site deploy result/);
+  assert.match(deployStep, /\| workflow \| runId \| status \| conclusion \| url \|/);
+  assert.match(deployStep, /appendDeploySummary/);
+  assert.match(deployStep, /Deploy workflow succeeded/);
   assert.ok(
     workflow.indexOf('- name: Notify Telegram sync result') > workflow.indexOf('- name: Push changes'),
     'Telegram notification should run after push and before any asynchronous site deployment workflow',
@@ -471,6 +480,51 @@ test('telegram-sync workflows keep database-only detection without blocking on p
     assert.match(workflow, /if: success\(\) && steps\.channel\.outputs\.is_webhook_dispatch == 'true' && \(steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'\)/);
     assert.match(workflow, /strict_database_snapshot/);
     assert.doesNotMatch(workflow, /steps\.detect\.outputs\.db_content_changed == 'true'[\s\S]*uses:\s*\.\/\.github\/actions\/site-build/);
+  }
+});
+
+test('telegram-sync workflows keep dev and main environment sources isolated', async () => {
+  const main = await readWorkflowConfig('.github/workflows/sync.yml');
+  const dev = await readWorkflowConfig('.github/workflows/sync-dev.yml');
+  const mainSyncEnv = getWorkflowStep(main, 'sync', 'Sync updates').env;
+  const devSyncEnv = getWorkflowStep(dev, 'sync', 'Sync updates').env;
+
+  assert.equal(main.jobs.sync.env.TRAINING_DB_ENABLED, '${{ vars.TRAINING_DB_ENABLED }}');
+  assert.equal(main.jobs.sync.env.TRAINING_DB_URL, '${{ secrets.TRAINING_DB_URL }}');
+  assert.equal(main.jobs.sync.env.TRAINING_DB_APP_NAME, '${{ vars.TRAINING_DB_APP_NAME }}');
+  assert.notEqual(main.jobs.sync.env.TRAINING_DB_URL, '${{ secrets.DEV_TRAINING_DB_URL }}');
+
+  assert.equal(dev.jobs.sync.env.TRAINING_DB_ENABLED, 'true');
+  assert.equal(dev.jobs.sync.env.TRAINING_DB_URL, '${{ secrets.DEV_TRAINING_DB_URL }}');
+  assert.equal(dev.jobs.sync.env.TRAINING_DB_APP_NAME, '${{ vars.DEV_TRAINING_DB_APP_NAME }}');
+  assert.notEqual(dev.jobs.sync.env.TRAINING_DB_URL, '${{ secrets.TRAINING_DB_URL }}');
+
+  assert.equal(mainSyncEnv.TELEGRAM_BOT_TOKEN, '${{ secrets.TELEGRAM_BOT_TOKEN }}');
+  assert.equal(devSyncEnv.TELEGRAM_BOT_TOKEN, '${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}');
+  assert.notEqual(devSyncEnv.TELEGRAM_BOT_TOKEN, mainSyncEnv.TELEGRAM_BOT_TOKEN);
+
+  assert.equal(mainSyncEnv.FEISHU_APP_ID, '${{ secrets.FEISHU_APP_ID }}');
+  assert.equal(mainSyncEnv.FEISHU_APP_SECRET, '${{ secrets.FEISHU_APP_SECRET }}');
+  assert.equal(mainSyncEnv.FEISHU_ALLOWED_CHAT_IDS, '${{ vars.FEISHU_ALLOWED_CHAT_IDS }}');
+  assert.equal(devSyncEnv.FEISHU_APP_ID, '${{ secrets.DEV_FEISHU_APP_ID || secrets.FEISHU_APP_ID }}');
+  assert.equal(devSyncEnv.FEISHU_APP_SECRET, '${{ secrets.DEV_FEISHU_APP_SECRET || secrets.FEISHU_APP_SECRET }}');
+  assert.equal(devSyncEnv.FEISHU_ALLOWED_CHAT_IDS, '${{ vars.DEV_FEISHU_ALLOWED_CHAT_IDS || vars.FEISHU_ALLOWED_CHAT_IDS }}');
+
+  for (const envName of [
+    'AI_API_KEY',
+    'AI_PROVIDER',
+    'AI_BASE_URL',
+    'AI_MODEL',
+    'AI_TIMEOUT_MS',
+    'AI_CONCURRENCY',
+    'TELEGRAM_RECOGNITION_MODEL',
+    'TELEGRAM_RECOGNITION_FALLBACK_API_KEY',
+    'TELEGRAM_RECOGNITION_FALLBACK_BASE_URL',
+    'TELEGRAM_RECOGNITION_FALLBACK_MODEL',
+    'TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS',
+    'TELEGRAM_RECOGNITION_CACHE_ENABLED',
+  ]) {
+    assert.equal(devSyncEnv[envName], mainSyncEnv[envName], `${envName} should use the same repository-level source`);
   }
 });
 
@@ -670,6 +724,25 @@ test('sync workflows accept queued workflow dispatch payloads and expose a webho
   }
 });
 
+test('sync workflow run scripts are valid bash after YAML parsing', async () => {
+  for (const workflowPath of ['.github/workflows/sync.yml', '.github/workflows/sync-dev.yml']) {
+    const scripts = await readWorkflowRunScripts(workflowPath);
+    assert.ok(scripts.length >= 1, `${workflowPath} should contain run scripts`);
+
+    for (const { jobName, stepName, script } of scripts) {
+      assert.doesNotThrow(
+        () => execFileSync('bash', ['-n'], {
+          input: script,
+          encoding: 'utf8',
+          cwd: new URL('..', import.meta.url),
+          stdio: ['pipe', 'pipe', 'pipe'],
+        }),
+        `${workflowPath} ${jobName}/${stepName} should be valid bash`,
+      );
+    }
+  }
+});
+
 test('thought deploy verification uses exact data-thought-id matches instead of id prefixes', async () => {
   for (const workflowPath of ['.github/workflows/deploy-pages.yml', '.github/workflows/deploy-cloudflare-pages-dev.yml']) {
     const workflow = await readWorkflow(workflowPath);
@@ -677,6 +750,17 @@ test('thought deploy verification uses exact data-thought-id matches instead of 
     assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
     assert.doesNotMatch(workflow, /grep -F "#\$\{TARGET_THOUGHT_ID\}"/);
   }
+});
+
+test('Pages deployment uploads and deploys a single github-pages artifact path', async () => {
+  const action = await readWorkflow('.github/actions/site-build/action.yml');
+  const deployPages = await readWorkflow('.github/workflows/deploy-pages.yml');
+
+  assert.equal(matchCount(action, /actions\/upload-pages-artifact@v3/g), 1);
+  assert.equal(matchCount(action, /actions\/deploy-pages@v4/g), 1);
+  assert.equal(matchCount(deployPages, /actions\/upload-pages-artifact@v3/g), 0);
+  assert.equal(matchCount(deployPages, /actions\/deploy-pages@v4/g), 0);
+  assert.match(deployPages, /uses:\s*\.\/\.github\/actions\/site-build/);
 });
 
 test('telegram-sync workflow summary normalizes partial failure task status from raw result files', async () => {
@@ -696,6 +780,12 @@ test('telegram-sync workflow summary normalizes partial failure task status from
           status: 'ready',
           batchId: 'album-partial-summary',
           archivedDate: '2026-06-13',
+          dateConfidence: 'uncertain',
+          dateSources: [
+            { messageId: 6101, detectedDate: '2026-06-13', source: 'image' },
+            { messageId: 6102, detectedDate: null, source: 'no_date' },
+          ],
+          warnings: ['detectedDate missing year | needs review'],
           persistenceStatus: 'stored',
           partialFailure: true,
           failureCategory: 'ai_service',
@@ -703,6 +793,7 @@ test('telegram-sync workflow summary normalizes partial failure task status from
           sourceImageCount: 2,
           recognizedImageCount: 1,
           failedImageCount: 1,
+          aiCallLogStatus: 'written',
           messages: [
             { chatId: 42, messageId: 6101, updateId: 9101, mediaGroupId: 'album-partial-summary' },
             { chatId: 42, messageId: 6102, updateId: 9102, mediaGroupId: 'album-partial-summary' },
@@ -731,9 +822,120 @@ test('telegram-sync workflow summary normalizes partial failure task status from
       },
     });
 
-    assert.match(output, /\| album-partial-summary \| partialFailure \| stored \| 2026-06-13 \| 2\/1\/1 \|/);
+    assert.match(output, /archivedDate \| dateSources \| warnings \| dateConfidence \| images \| aiAttemptKinds \| aiCallLogStatus/);
+    assert.match(output, /image:2026-06-13/);
+    assert.match(output, /no_date:null/);
+    assert.match(output, /detectedDate missing year \/ needs review/);
+    assert.match(output, /\| album-partial-summary \| partialFailure \| stored \| 2026-06-13 \| image:2026-06-13; no_date:null \| detectedDate missing year \/ needs review \| uncertain \| 2\/1\/1 \|  \| written \|/);
     assert.match(output, /\| auto_retry \| 6102 \|/);
     assert.doesNotMatch(output, /\| album-partial-summary \| ready \| stored/);
+  }
+});
+
+test('sync workflow summaries emit warnings for business-incomplete batches', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'sync-workflow-business-warning-'));
+  const telegramResultPath = path.join(tempRoot, 'telegram-sync-result.json');
+  const feishuResultPath = path.join(tempRoot, 'feishu-sync-result.json');
+
+  await writeFile(
+    telegramResultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'image',
+          status: 'ready',
+          batchId: 'tg-pending-db',
+          archivedDate: '2026-06-13',
+          persistenceStatus: 'pending_replay',
+          persistenceError: 'database unavailable',
+          sourceImageCount: 1,
+          recognizedImageCount: 1,
+          failedImageCount: 0,
+          messages: [{ chatId: 42, messageId: 6101 }],
+        },
+        {
+          kind: 'image',
+          status: 'ready',
+          batchId: 'tg-partial-ai',
+          archivedDate: '2026-06-13',
+          persistenceStatus: 'stored',
+          partialFailure: true,
+          sourceImageCount: 2,
+          recognizedImageCount: 1,
+          failedImageCount: 1,
+          recognitionErrors: [{ messageId: 6103, error: 'invalid JSON' }],
+          messages: [{ chatId: 42, messageId: 6102 }, { chatId: 42, messageId: 6103 }],
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  await writeFile(
+    feishuResultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'image',
+          status: 'skipped',
+          batchId: 'fs-manual-date',
+          sourceId: 'evt-1',
+          chatIds: ['oc_1'],
+          archivedDate: '2026-06-17',
+          dateConfidence: 'missing',
+          dateSources: [{ source: 'no_date', detectedDate: null }],
+          warnings: ['no reliable image or filename date'],
+          failureDisposition: 'manual_intervention',
+          failureReason: 'no reliable image or filename date',
+          sourceImageCount: 1,
+          recognizedImageCount: 0,
+          failedImageCount: 1,
+          messages: [{ sourceMessageId: 'om_1' }],
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  for (const workflowPath of ['.github/workflows/sync.yml', '.github/workflows/sync-dev.yml']) {
+    const telegramSummary = getWorkflowStep(
+      await readWorkflowConfig(workflowPath),
+      'sync',
+      'Write Telegram sync summary',
+    ).run;
+    const telegramOutput = execFileSync(process.execPath, ['-e', extractNodeHereDocScript(telegramSummary)], {
+      encoding: 'utf8',
+      cwd: rootDir,
+      env: {
+        ...process.env,
+        TELEGRAM_SYNC_RESULT_PATH: telegramResultPath,
+      },
+    });
+
+    assert.match(telegramOutput, /::warning title=Telegram sync business incomplete::/);
+    assert.match(telegramOutput, /tg-pending-db.*pending_replay/);
+    assert.match(telegramOutput, /tg-partial-ai.*partialFailure/);
+
+    const feishuSummary = getWorkflowStep(
+      await readWorkflowConfig(workflowPath),
+      'sync',
+      'Write Feishu sync summary',
+    ).run;
+    const feishuOutput = execFileSync(process.execPath, ['-e', extractNodeHereDocScript(feishuSummary)], {
+      encoding: 'utf8',
+      cwd: rootDir,
+      env: {
+        ...process.env,
+        FEISHU_SYNC_RESULT_PATH: feishuResultPath,
+      },
+    });
+
+    assert.match(feishuOutput, /::warning title=Feishu sync business incomplete::/);
+    assert.match(feishuOutput, /fs-manual-date.*manual_intervention/);
+    assert.match(feishuOutput, /archivedDate \| dateSources \| warnings \| dateConfidence \| images/);
+    assert.match(feishuOutput, /no_date:null/);
+    assert.match(feishuOutput, /no reliable image or filename date/);
+    assert.match(feishuOutput, /\| fs-manual-date \| [^|]+ \| [^|]* \| skipped \|  \| 2026-06-17 \| no_date:null \| no reliable image or filename date \| missing \| 1\/0\/1 \|/);
   }
 });
 
@@ -754,6 +956,15 @@ test('markdown backup workflow exports database snapshots behind GitHub variable
   assert.match(workflow, /if \[ "\$frequency" = "weekly" \] && \[ "\$\(date -u \+%u\)" = "1" \]/);
   assert.match(workflow, /run:\s*npm run export:markdown/);
   assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
+  assert.match(workflow, /backup_alert=changed_without_commit/);
+  assert.match(workflow, /::warning title=Markdown backup changed without commit::/);
+  assert.match(workflow, /Conclusion:/);
+  const maintenanceGuide = await readFile(
+    new URL('../docs/部署维护/日常维护手册.md', import.meta.url),
+    'utf8',
+  );
+  assert.match(maintenanceGuide, /changed_without_commit/);
+  assert.match(maintenanceGuide, /workflow_failed_before_alert_evaluation/);
   assert.match(workflow, /git commit -m "chore: backup markdown from database"/);
   assert.match(workflow, /git push origin HEAD:"\$MARKDOWN_BACKUP_BRANCH"/);
 });
@@ -850,6 +1061,11 @@ test('telegram-sync dev workflow waits for the dev deploy workflow', async () =>
   assert.match(deployStep, /dispatch_started_at=/);
   assert.match(deployStep, /actions\/workflows\/deploy-cloudflare-pages-dev\.yml\/runs/);
   assert.match(deployStep, /Deploy workflow failed/);
+  assert.match(deployStep, /GITHUB_STEP_SUMMARY/);
+  assert.match(deployStep, /## Site deploy result/);
+  assert.match(deployStep, /\| workflow \| runId \| status \| conclusion \| url \|/);
+  assert.match(deployStep, /appendDeploySummary/);
+  assert.match(deployStep, /Deploy workflow succeeded/);
   assert.match(workflow, /STEP_DEPLOY_OUTCOME: \$\{\{ steps\.deploy\.outcome \}\}/);
   assert.match(deployWorkflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
   assert.match(deployWorkflow, /workflow_dispatch:/);
@@ -937,8 +1153,40 @@ async function readWorkflow(relativePath) {
   return workflow.replace(/\r\n?/g, '\n');
 }
 
+async function readWorkflowConfig(relativePath) {
+  return parseYaml(await readWorkflow(relativePath));
+}
+
+function getWorkflowStep(workflow, jobName, stepName) {
+  const step = workflow?.jobs?.[jobName]?.steps?.find((candidate) => candidate?.name === stepName);
+  assert.ok(step, `missing ${jobName} step: ${stepName}`);
+  return step;
+}
+
+async function readWorkflowRunScripts(relativePath) {
+  const parsed = await readWorkflowConfig(relativePath);
+  const scripts = [];
+  for (const [jobName, job] of Object.entries(parsed?.jobs ?? {})) {
+    for (const step of job?.steps ?? []) {
+      if (typeof step?.run !== 'string') {
+        continue;
+      }
+      scripts.push({
+        jobName,
+        stepName: step.name ?? '(unnamed step)',
+        script: step.run,
+      });
+    }
+  }
+  return scripts;
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function matchCount(value, pattern) {
+  return Array.from(value.matchAll(pattern)).length;
 }
 
 function extractDatabaseContentDetectionScript(workflow) {
@@ -950,5 +1198,11 @@ function extractDatabaseContentDetectionScript(workflow) {
 function extractTelegramSyncSummaryScript(workflow) {
   const match = workflow.match(/node <<'NODE' >> "\$GITHUB_STEP_SUMMARY"\n([\s\S]*?)\n\s*NODE/);
   assert.ok(match, 'missing Telegram sync summary script');
+  return match[1];
+}
+
+function extractNodeHereDocScript(runScript) {
+  const match = runScript.match(/node <<'NODE' >> "\$GITHUB_STEP_SUMMARY"\n([\s\S]*?)\n\s*NODE/);
+  assert.ok(match, 'missing Node summary here-doc');
   return match[1];
 }
