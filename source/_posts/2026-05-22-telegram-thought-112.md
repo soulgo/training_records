@@ -1,12 +1,12 @@
 ---
-date: 2026-05-31 17:54:00
+date: 2026-05-22 11:33:00
 tags:
   - 身体反馈
   - 随想
   - Telegram
 thought_module: body_feedback
-telegram_message_id: 273
+telegram_message_id: 112
 telegram_chat_id: 6314355239
 ---
 
-左膝盖有点疼，只是有点疼的感觉
+今天早上Hiit练完以后背稍微有点酸
