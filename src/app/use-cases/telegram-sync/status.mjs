@@ -18,6 +18,20 @@ export function shouldPersistTelegramArtifacts({
 }
 
 export function buildTelegramSyncReport(result) {
+  const batches = (result.batchResults ?? []).map((batch) => normalizeSyncReportBatch(batch));
+  const tasks = result.tasks ?? batches.map((batch) => ({
+    taskId: batch.taskId,
+    channel: inferSyncTaskChannel(batch.taskId),
+    kind: batch.kind,
+    batchId: batch.batchId,
+    taskStatus: batch.taskStatus,
+    persistenceStatus: batch.persistenceStatus,
+    failureCategory: batch.failureCategory,
+    failureReason: batch.failureReason,
+    archivedDate: batch.archivedDate,
+    chatIds: batch.chatIds,
+    sourceMessageIds: batch.messageIds,
+  }));
   const normalized = {
     changed: result.changed,
     fallbackUsed: result.fallbackUsed,
@@ -25,43 +39,9 @@ export function buildTelegramSyncReport(result) {
     lastProcessedUpdateId: result.lastProcessedUpdateId,
     readyBatches: result.readyBatches,
     ...(isPlainTimingMap(result.timingsMs) ? { timingsMs: normalizeTimings(result.timingsMs) } : {}),
-    batches: (result.batchResults ?? []).map((batch) => {
-      const taskAudit = buildSyncTaskAuditFields(batch);
-      return {
-        kind: batch.kind ?? 'image',
-        batchId: batch.batchId,
-        taskId: taskAudit.taskId,
-        sourceType: taskAudit.sourceType,
-        sourceId: taskAudit.sourceId,
-        taskStatus: taskAudit.taskStatus,
-        retryState: taskAudit.retryState,
-        retryCount: taskAudit.retryCount,
-        chatIds: taskAudit.chatIds,
-        messageIds: taskAudit.messageIds,
-        updateIds: taskAudit.updateIds,
-        status: batch.status,
-        partialFailure: batch.partialFailure ?? false,
-        archivedDate: batch.archivedDate ?? null,
-        postPath: batch.postPath ?? null,
-        thoughtWriteStatus: batch.thoughtWriteStatus ?? null,
-        persistenceStatus: batch.persistenceStatus ?? null,
-        persistenceError: batch.persistenceError ?? null,
-        failureCategory: batch.failureCategory ?? null,
-        failureReason: batch.failureReason ?? null,
-        failureDisposition: normalizeFailureDisposition(batch),
-        recognitionPendingStatus: batch.recognitionPendingStatus ?? null,
-        recognitionPendingError: batch.recognitionPendingError ?? null,
-        pendingReplay: batch.pendingReplay ?? false,
-        sourceImageCount: batch.sourceImageCount ?? 0,
-        recognizedImageCount: batch.recognizedImageCount ?? 0,
-        failedImageCount: batch.failedImageCount ?? 0,
-        recognitionErrors: batch.recognitionErrors ?? [],
-        warnings: batch.warnings ?? [],
-        issues: batch.issues ?? [],
-        reason: batch.reason ?? null,
-        dateSources: batch.dateSources ?? [],
-      };
-    }),
+    batchResults: batches,
+    batches,
+    tasks,
   };
 
   for (const [index, batch] of (result.batchResults ?? []).entries()) {
@@ -69,6 +49,9 @@ export function buildTelegramSyncReport(result) {
       normalized.batches[index].analysisReplyStatus = batch.analysisReplyStatus ?? null;
       normalized.batches[index].analysisReplyError = batch.analysisReplyError ?? null;
       normalized.batches[index].analysisReplyParts = batch.analysisReplyParts ?? null;
+      normalized.batches[index].analysisAttemptKind = batch.analysisAttemptKind ?? null;
+      normalized.batches[index].analysisModel = batch.analysisModel ?? null;
+      normalized.batches[index].analysisSnapshotSource = batch.analysisSnapshotSource ?? null;
     }
     if ((batch.kind ?? 'image') === 'help') {
       normalized.batches[index].helpReplyStatus = batch.helpReplyStatus ?? null;
@@ -77,6 +60,117 @@ export function buildTelegramSyncReport(result) {
   }
 
   return normalized;
+}
+
+function normalizeSyncReportBatch(batch) {
+  const taskAudit = buildSyncTaskAuditFields(batch);
+  const failureCategory = normalizeBatchFailureCategory(batch);
+  return {
+    kind: batch.kind ?? 'image',
+    batchId: batch.batchId,
+    taskId: taskAudit.taskId,
+    sourceType: taskAudit.sourceType,
+    sourceId: taskAudit.sourceId,
+    taskStatus: taskAudit.taskStatus,
+    retryState: taskAudit.retryState,
+    retryCount: taskAudit.retryCount,
+    chatIds: taskAudit.chatIds,
+    messageIds: taskAudit.messageIds,
+    updateIds: taskAudit.updateIds,
+    status: batch.status,
+    partialFailure: batch.partialFailure ?? false,
+    archivedDate: batch.archivedDate ?? null,
+    postPath: batch.postPath ?? null,
+    thoughtWriteStatus: batch.thoughtWriteStatus ?? null,
+    persistenceStatus: batch.persistenceStatus ?? null,
+    persistenceError: batch.persistenceError ?? null,
+    failureCategory,
+    failureReason: batch.failureReason ?? null,
+    failureDisposition: normalizeFailureDisposition({ ...batch, failureCategory }),
+    recognitionPendingStatus: batch.recognitionPendingStatus ?? null,
+    recognitionPendingError: batch.recognitionPendingError ?? null,
+    aiCallLogStatus: batch.aiCallLogStatus ?? null,
+    pendingReplay: batch.pendingReplay ?? false,
+    sourceImageCount: batch.sourceImageCount ?? 0,
+    recognizedImageCount: batch.recognizedImageCount ?? 0,
+    failedImageCount: batch.failedImageCount ?? 0,
+    recognitionAttemptKinds: normalizeRecognitionAttemptKinds(batch.recognitions),
+    recognitionErrors: batch.recognitionErrors ?? [],
+    syncStages: normalizeSyncStages(batch.syncStages),
+    warnings: batch.warnings ?? [],
+    issues: batch.issues ?? [],
+    reason: batch.reason ?? null,
+    dateSources: batch.dateSources ?? [],
+    dateConfidence: batch.dateConfidence ?? null,
+    dateStages: normalizeDateStages(batch.dateStages),
+  };
+}
+
+function normalizeBatchFailureCategory(batch) {
+  if (batch.failureCategory) {
+    return batch.failureCategory;
+  }
+  const failureText = batch.failureReason ?? batch.recognitionPendingError;
+  return failureText ? classifyFailureCategory(failureText) : null;
+}
+
+function normalizeRecognitionAttemptKinds(recognitions) {
+  if (!Array.isArray(recognitions)) {
+    return [];
+  }
+  return [
+    ...new Set(
+      recognitions
+        .map((recognition) => String(recognition?.aiAttemptKind ?? '').trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function normalizeSyncStages(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, stage]) => stage && typeof stage === 'object' && !Array.isArray(stage))
+      .map(([name, stage]) => [
+        name,
+        {
+          status: String(stage.status ?? 'skipped'),
+          durationMs: Number.isFinite(stage.durationMs) && stage.durationMs >= 0
+            ? Math.round(stage.durationMs)
+            : 0,
+          failureCategory: stage.failureCategory ?? null,
+          failureReason: stage.failureReason ?? null,
+        },
+      ]),
+  );
+}
+
+function normalizeDateStages(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, stage]) => stage && typeof stage === 'object' && !Array.isArray(stage))
+      .map(([name, stage]) => [
+        name,
+        {
+          status: String(stage.status ?? 'skipped'),
+          resultDate: stage.resultDate ?? null,
+          result: stage.result ?? null,
+          failureCategory: stage.failureCategory ?? null,
+          failureReason: stage.failureReason ?? null,
+        },
+      ]),
+  );
+}
+
+function inferSyncTaskChannel(taskId) {
+  const channel = String(taskId ?? '').split(':', 1)[0];
+  return channel || 'telegram';
 }
 
 function isPlainTimingMap(value) {
@@ -172,6 +266,9 @@ function normalizeSyncTaskStatus(batch) {
 }
 
 function normalizeSyncRetryState(batch) {
+  if (batch.persistenceStatus === 'abandoned') {
+    return 'abandoned';
+  }
   if (batch.recognitionPendingStatus === 'queued') {
     return 'queued';
   }
@@ -195,13 +292,20 @@ function normalizeSyncRetryCount(batch) {
 }
 
 function normalizeFailureDisposition(batch) {
+  if (batch.persistenceStatus === 'abandoned') {
+    return 'manual_intervention';
+  }
   if (batch.recognitionPendingStatus === 'queued') {
     return 'auto_retry';
   }
   if (batch.persistenceStatus === 'fallback_markdown' || batch.persistenceStatus === 'pending_replay') {
     return 'auto_retry';
   }
-  if (batch.failureCategory === 'ai_service' || batch.failureCategory === 'telegram_api') {
+  if (
+    batch.failureCategory === 'ai_service' ||
+    batch.failureCategory === 'telegram_api' ||
+    batch.failureCategory === 'image_download'
+  ) {
     return 'auto_retry';
   }
   if (batch.failureCategory === 'database' || batch.failureCategory === 'github_action') {
@@ -508,8 +612,14 @@ export function classifyFailureCategory(message, options = {}) {
   if (/github|action|dispatch|rebase|push|checkout|npm ci|workflow/i.test(`${phase} ${text}`)) {
     return 'github_action';
   }
+  if (/image download/i.test(`${phase} ${text}`)) {
+    return 'image_download';
+  }
   if (/getFile|sendMessage|file download|download failed/i.test(text)) {
     return 'telegram_api';
+  }
+  if (/invalid\s+archivedDate|invalid\s+archive\s+date/i.test(text)) {
+    return 'user_input';
   }
   if (/database|postgres|TRAINING_DB|ECONN|connection|pending_replay|fallback_markdown/i.test(`${phase} ${text}`)) {
     return 'database';
@@ -517,7 +627,7 @@ export function classifyFailureCategory(message, options = {}) {
   if (/missing recognition/i.test(text)) {
     return 'user_input';
   }
-  if (/\bAI\b|recognition|analysis|agent|schema|JSON|HTTP\s*(?:4\d\d|5\d\d)|rate|timeout|timed out|empty content|provider/i.test(`${phase} ${text}`)) {
+  if (/\bAI\b|recognition|analysis|agent|schema|JSON|HTTP\s*(?:4\d\d|5\d\d)|rate|timeout|timed out|AbortError|aborted|empty content|provider/i.test(`${phase} ${text}`)) {
     return 'ai_service';
   }
   if (/unauthorized|no reliable|low confidence|conflicting|missing target|not_found|ignored|skipped|filename date/i.test(text)) {

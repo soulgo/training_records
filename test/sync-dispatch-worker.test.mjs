@@ -154,6 +154,37 @@ test('unified dev worker rejects non-POST requests before channel detection', as
   });
 });
 
+test('unified dev worker logs structured alert metadata for 5xx responses', async () => {
+  const logs = [];
+  const response = await handleSyncDispatchWebhook(
+    createTelegramRequest({
+      update_id: 902,
+      message: {
+        message_id: 2,
+        chat: { id: 42 },
+        text: 'hello',
+      },
+    }),
+    createEnv({ GITHUB_TOKEN: '' }),
+    {
+      logger: {
+        error(message) {
+          logs.push(String(message));
+        },
+      },
+    },
+  );
+
+  assert.equal(response.status, 500);
+  assert.equal(logs.length, 1);
+  assert.match(logs[0], /\[sync-dispatch-worker\]/);
+  assert.match(logs[0], /"outcome":"worker_5xx"/);
+  assert.match(logs[0], /"channel":"telegram"/);
+  assert.match(logs[0], /"status":500/);
+  assert.match(logs[0], /"error":"missing_github_token"/);
+  assert.doesNotMatch(logs[0], /github-token|telegram-token|secret-token|hello/);
+});
+
 test('unified dev worker exports both Durable Object classes', () => {
   assert.equal(typeof TelegramAlbumBuffer, 'function');
   assert.equal(typeof FeishuImageBuffer, 'function');

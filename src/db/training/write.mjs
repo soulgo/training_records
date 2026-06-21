@@ -74,16 +74,9 @@ export async function persistNormalizedBatch(options) {
     await client.query('BEGIN');
     transactionStarted = true;
 
-    const existingBatchResult = await client.query(
-      `
-        select payload_hash
-        from ingest.telegram_batch
-        where batch_id = $1
-      `,
-      [batch.batchId],
-    );
-    const existingPayloadHash = existingBatchResult.rows[0]?.payload_hash ?? null;
-    if (existingPayloadHash === payloadHash) {
+    const telegramBatchRepository = new PostgresTelegramBatchRepository(client);
+    const batchUpsertResult = await telegramBatchRepository.upsertBatch(batch, payloadHash, processedAt);
+    if (batchUpsertResult?.rowCount === 0) {
       await client.query('ROLLBACK');
       transactionStarted = false;
       return {
@@ -92,8 +85,6 @@ export async function persistNormalizedBatch(options) {
       };
     }
 
-    const telegramBatchRepository = new PostgresTelegramBatchRepository(client);
-    await telegramBatchRepository.upsertBatch(batch, payloadHash, processedAt);
     await telegramBatchRepository.upsertMessages(batch, processedAt);
     await telegramBatchRepository.upsertRecognitions(batch, processedAt);
 
@@ -102,7 +93,7 @@ export async function persistNormalizedBatch(options) {
       thoughtMirrorResult = await new PostgresThoughtRepository(client).persistMirror(batch, processedAt);
     } else if (isTelegramImageBatch(batch) && batch.status === 'ready' && batch.archivedDate) {
       await persistTelegramImageBatchIncremental(client, batch, processedAt, { sourceChannel });
-    } else if (batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
+    } else if (batch.kind !== 'image' && batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
       const existingDay = await readCoreDay(client, batch.archivedDate);
       const mergedDay = mergeBatchIntoDay(existingDay, batch);
       await replaceCoreDay(client, mergedDay, batch.batchId, processedAt, {
@@ -113,6 +104,15 @@ export async function persistNormalizedBatch(options) {
 
     await client.query('COMMIT');
     transactionStarted = false;
+
+    try {
+      await telegramBatchRepository.upsertRecognitionAiCallLogs(batch, processedAt);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(
+        `[training-db] failed to write recognition AI call log for ${batch.batchId}: ${message}\n`,
+      );
+    }
 
     if (thoughtMirrorResult?.status === 'not_found') {
       return {
@@ -136,7 +136,14 @@ export async function persistNormalizedBatch(options) {
     };
   } catch (error) {
     if (transactionStarted) {
-      await client.query('ROLLBACK');
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        const message = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        process.stderr.write(
+          `[training-db] rollback failed after persistNormalizedBatch error for ${batch.batchId}: ${message}\n`,
+        );
+      }
     }
     throw error;
   } finally {
@@ -150,6 +157,14 @@ export async function persistTrainingSnapshotToCore(options) {
     return {
       status: 'skipped',
       reason: !config.enabled ? 'disabled' : 'missing_url',
+    };
+  }
+
+  if (!hasValidSnapshotDays(options.snapshot)) {
+    return {
+      status: 'skipped',
+      reason: 'missing_snapshot_days',
+      days: 0,
     };
   }
 
@@ -485,7 +500,9 @@ export async function backfillCoreFromLatestArchiveSnapshotClient(client, option
 
 export async function persistTrainingSnapshotToCoreClient(client, options) {
   const snapshot = options.snapshot ?? { daily: [] };
-  const days = (snapshot.daily ?? []).map((day) => ({ ...day, date: day.date })).filter((day) => day.date);
+  const days = (snapshot.daily ?? [])
+    .map((day) => ({ ...day, date: normalizeDateKey(day.date) }))
+    .filter((day) => isValidDateKey(day.date));
   if (days.length === 0) {
     return {
       status: 'skipped',
@@ -553,6 +570,9 @@ function normalizeDayForComparison(day) {
       totalCalories: normalizeNumber(day.nutrition?.totalCalories, null),
       details: day.nutrition?.details ?? [],
     },
+    sleep: (day.sleep ?? [])
+      .map(normalizeSleepForComparison)
+      .sort(compareSleepForComparison),
   };
 }
 
@@ -600,6 +620,60 @@ function normalizeMealForComparison(meal) {
   };
 }
 
+function normalizeSleepForComparison(sleep) {
+  return {
+    sleepType: sleep.sleepType ?? '夜间睡眠',
+    bedtime: sleep.bedtime ?? sleep.sleepStartTime ?? null,
+    wakeTime: sleep.wakeTime ?? sleep.sleepEndTime ?? null,
+    nightSleepMinutes: normalizeNumber(sleep.nightSleepMinutes, null),
+    totalSleepMinutes: normalizeNumber(sleep.totalSleepMinutes, null),
+    napMinutes: normalizeNumber(sleep.napMinutes, null),
+    deepSleepMinutes: normalizeNumber(sleep.deepSleepMinutes, null),
+    lightSleepMinutes: normalizeNumber(sleep.lightSleepMinutes, null),
+    remSleepMinutes: normalizeNumber(sleep.remSleepMinutes, null),
+    awakeMinutes: normalizeNumber(sleep.awakeMinutes, null),
+    sleepStageText: sleep.sleepStageText ?? null,
+    sleepStageDetail: normalizeSleepStageDetailForComparison(sleep.sleepStageDetail),
+    ...Object.fromEntries(
+      SLEEP_HEALTH_FIELDS.map((field) => [
+        field,
+        typeof sleep[field] === 'number' || sleep[field] === null || sleep[field] === undefined || sleep[field] === ''
+          ? normalizeNumber(sleep[field], null)
+          : sleep[field],
+      ]),
+    ),
+  };
+}
+
+function compareSleepForComparison(left, right) {
+  return [
+    left.bedtime ?? '',
+    left.wakeTime ?? '',
+    left.sleepType ?? '',
+    String(left.totalSleepMinutes ?? ''),
+  ].join('|').localeCompare([
+    right.bedtime ?? '',
+    right.wakeTime ?? '',
+    right.sleepType ?? '',
+    String(right.totalSleepMinutes ?? ''),
+  ].join('|'));
+}
+
+function normalizeSleepStageDetailForComparison(value) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed : value;
+  } catch {
+    return value;
+  }
+}
+
 function compareDaysByDate(left, right) {
   return left.date.localeCompare(right.date);
 }
@@ -629,6 +703,24 @@ function normalizeDateKey(value) {
   return match ? `${match[1]}-${match[2]}-${match[3]}` : String(value ?? '');
 }
 
+function isValidDateKey(value) {
+  const match = String(value ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return false;
+  }
+  const date = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z`);
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.getUTCFullYear() === Number(match[1]) &&
+    date.getUTCMonth() + 1 === Number(match[2]) &&
+    date.getUTCDate() === Number(match[3])
+  );
+}
+
+function hasValidSnapshotDays(snapshot) {
+  return (snapshot?.daily ?? []).some((day) => isValidDateKey(normalizeDateKey(day?.date)));
+}
+
 function hasSleepPayload(sleep) {
   return Boolean(sleep && [
     sleep.records?.length,
@@ -650,6 +742,12 @@ function hasSleepPayload(sleep) {
 }
 
 function isTelegramImageBatch(batch) {
-  return (batch?.kind ?? 'image') === 'image';
+  if ((batch?.kind ?? 'image') !== 'image') {
+    return false;
+  }
+  if (batch?.kind !== 'image') {
+    return true;
+  }
+  return (batch?.messages ?? []).some((message) => (message?.photos ?? []).length > 0);
 }
 

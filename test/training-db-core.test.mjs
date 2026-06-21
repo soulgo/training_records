@@ -13,11 +13,18 @@ import {
   persistNormalizedBatch,
   persistTrainingSnapshotToCore,
   readPendingRecognitionBatches,
+  readPendingRecognitionSummary,
   readArchiveTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabase,
 } from '../tools/training-db-core.mjs';
 import { parseTrainingRecord } from '../src/domain/training/training-parser.mjs';
+import {
+  shouldQueueRecognitionFailure,
+} from '../src/db/training/pending-recognition.mjs';
+import {
+  persistTelegramImageBatchIncremental,
+} from '../src/adapters/postgres/incremental-write.pg.mjs';
 import {
   assertSequentialUnnestParameters,
   buildCoreTestDay,
@@ -595,13 +602,457 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_message/i.test(sql)));
   const recognitionCall = calls.find(([sql]) => /insert into ingest\.telegram_recognition/i.test(sql));
-  assert.equal(JSON.parse(recognitionCall[1][2]).detectedApp, '华为健康');
+  const recognitionJson = JSON.parse(recognitionCall[1][2]);
+  assert.equal(recognitionJson.detectedApp, '华为健康');
+  assert.equal(recognitionJson.aiAttemptKind, 'normal');
   assert.ok(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into core\.measurement/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into core\.activity/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into core\.meal/i.test(sql)));
   assert.equal(calls.at(-2)[0], 'COMMIT');
   assert.equal(calls.at(-1)[0], 'end');
+});
+
+test('persistNormalizedBatch preserves fallback AI audit fields in recognition json', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'album-fallback-ai-audit',
+      recognitions: [
+        {
+          ...normalizedBatch.recognitions[0],
+          aiAttemptKind: 'fallback',
+          model: 'gpt-fallback',
+          cacheKey: 'telegram:file_unique_id:u-abc:prompt:2026-05-24:schema:v2:model:gpt-fallback',
+          aiIdempotencyKey: 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:u-abc:abc123',
+        },
+      ],
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  const recognitionCall = calls.find(([sql]) => /insert into ingest\.telegram_recognition/i.test(sql));
+  const recognitionJson = JSON.parse(recognitionCall[1][2]);
+
+  assert.equal(result.status, 'stored');
+  assert.equal(recognitionJson.aiAttemptKind, 'fallback');
+  assert.equal(recognitionJson.model, 'gpt-fallback');
+  assert.equal(recognitionJson.aiIdempotencyKey, 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:u-abc:abc123');
+  assert.match(recognitionJson.cacheKey, /model:gpt-fallback$/);
+});
+
+test('persistNormalizedBatch preserves strict JSON retry AI audit fields in recognition json', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'album-strict-json-retry-ai-audit',
+      recognitions: [
+        {
+          ...normalizedBatch.recognitions[0],
+          aiAttemptKind: 'strict_json_retry',
+          model: 'gpt-primary',
+          promptVersion: '2026-05-24',
+          schemaName: 'telegram_training_image',
+          schemaVersion: 'v2',
+          cacheKey: 'telegram:file_unique_id:u-abc:prompt:2026-05-24:schema:v2:model:gpt-primary',
+          aiIdempotencyKey: 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:u-abc:abc123',
+        },
+      ],
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  const recognitionCall = calls.find(([sql]) => /insert into ingest\.telegram_recognition/i.test(sql));
+  const recognitionJson = JSON.parse(recognitionCall[1][2]);
+
+  assert.equal(result.status, 'stored');
+  assert.equal(recognitionJson.aiAttemptKind, 'strict_json_retry');
+  assert.equal(recognitionJson.model, 'gpt-primary');
+  assert.equal(recognitionJson.promptVersion, '2026-05-24');
+  assert.equal(recognitionJson.schemaVersion, 'v2');
+  assert.equal(recognitionJson.aiIdempotencyKey, 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:u-abc:abc123');
+  assert.match(recognitionJson.cacheKey, /model:gpt-primary$/);
+});
+
+test('persistNormalizedBatch writes recognition AI call log after business commit', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const processedAt = new Date('2026-06-15T00:00:00.000Z');
+  const result = await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'album-ai-call-log',
+      recognitions: [
+        {
+          ...normalizedBatch.recognitions[0],
+          provider: 'openai-compatible',
+          model: 'gpt-primary',
+          promptVersion: '2026-05-24',
+          aiIdempotencyKey: 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:u-abc:abc123',
+          aiLatencyMs: 1234,
+          aiUsage: {
+            promptTokens: 1200,
+            completionTokens: 300,
+            totalTokens: 1500,
+          },
+        },
+      ],
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt,
+  });
+
+  const commitIndex = calls.findIndex(([sql]) => sql === 'COMMIT');
+  const aiLogIndex = calls.findIndex(([sql]) => /insert into ingest\.ai_call_log/i.test(sql));
+  const aiLogCall = calls[aiLogIndex];
+
+  assert.equal(result.status, 'stored');
+  assert.ok(aiLogIndex > commitIndex, 'AI call log should be best-effort after business commit');
+  assert.equal(aiLogCall[1][1], 'album-ai-call-log');
+  assert.equal(aiLogCall[1][2], 'recognition');
+  assert.equal(aiLogCall[1][3], 'openai-compatible');
+  assert.equal(aiLogCall[1][4], 'gpt-primary');
+  assert.equal(aiLogCall[1][5], '2026-05-24');
+  assert.equal(aiLogCall[1][6], 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:u-abc:abc123');
+  assert.equal(aiLogCall[1][7], 'succeeded');
+  assert.equal(aiLogCall[1][8], 1234);
+  assert.equal(aiLogCall[1][9], null);
+  assert.equal(aiLogCall[1][10], null);
+  assert.equal(aiLogCall[1][11], processedAt.toISOString());
+  assert.equal(aiLogCall[1][12], processedAt.toISOString());
+  assert.equal(aiLogCall[1][13], 1200);
+  assert.equal(aiLogCall[1][14], 300);
+  assert.equal(aiLogCall[1][15], 1500);
+  assert.equal(aiLogCall[1][16], null);
+});
+
+test('writeStartedRecognitionAiCallLog writes started AI call log best-effort', async () => {
+  const dbCore = await import('../tools/training-db-core.mjs');
+  assert.equal(typeof dbCore.writeStartedRecognitionAiCallLog, 'function');
+
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+  const occurredAt = new Date('2026-06-15T00:00:01.000Z');
+
+  const result = await dbCore.writeStartedRecognitionAiCallLog({
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient: () => fakeClient,
+    occurredAt,
+    taskId: 'album-started-ai-call-log',
+    scene: 'recognition',
+    provider: 'openai-compatible',
+    model: 'gpt-primary',
+    promptVersion: '2026-05-24',
+    idempotencyKey: 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:u-started:abc123',
+    sourceChannel: 'telegram',
+    sourceChatId: '42',
+    sourceMessageId: '1773',
+    messageId: 1773,
+    status: 'started',
+  });
+
+  const aiLogCall = calls.find(([sql]) => /insert into ingest\.ai_call_log/i.test(sql));
+
+  assert.equal(result.status, 'written');
+  assert.match(result.aiCallId, /^ai-call:recognition:/);
+  assert.ok(aiLogCall);
+  assert.equal(aiLogCall[1][0], result.aiCallId);
+  assert.equal(aiLogCall[1][1], 'album-started-ai-call-log');
+  assert.equal(aiLogCall[1][2], 'recognition');
+  assert.equal(aiLogCall[1][3], 'openai-compatible');
+  assert.equal(aiLogCall[1][4], 'gpt-primary');
+  assert.equal(aiLogCall[1][5], '2026-05-24');
+  assert.equal(aiLogCall[1][6], 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:u-started:abc123');
+  assert.equal(aiLogCall[1][7], 'started');
+  assert.equal(aiLogCall[1][8], null);
+  assert.equal(aiLogCall[1][9], null);
+  assert.equal(aiLogCall[1][10], null);
+  assert.equal(aiLogCall[1][11], occurredAt.toISOString());
+  assert.equal(aiLogCall[1][12], occurredAt.toISOString());
+});
+
+test('started and succeeded recognition AI call logs use the same call id', async () => {
+  const dbCore = await import('../tools/training-db-core.mjs');
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+  const idempotencyKey = 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:u-abc:abc123';
+
+  const started = await dbCore.writeStartedRecognitionAiCallLog({
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient: () => fakeClient,
+    occurredAt: new Date('2026-06-15T00:00:01.000Z'),
+    taskId: 'album-ai-call-log',
+    scene: 'recognition',
+    provider: 'openai-compatible',
+    model: 'gpt-primary',
+    promptVersion: '2026-05-24',
+    idempotencyKey,
+    sourceChannel: 'telegram',
+    sourceChatId: '42',
+    sourceMessageId: '71',
+    messageId: 71,
+    status: 'started',
+  });
+
+  await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'album-ai-call-log',
+      recognitions: [
+        {
+          ...normalizedBatch.recognitions[0],
+          provider: 'openai-compatible',
+          model: 'gpt-primary',
+          promptVersion: '2026-05-24',
+          aiIdempotencyKey: idempotencyKey,
+          aiLatencyMs: 1234,
+        },
+      ],
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-06-15T00:00:02.000Z'),
+  });
+
+  const aiLogCalls = calls.filter(([sql]) => /insert into ingest\.ai_call_log/i.test(sql));
+  const succeededCall = aiLogCalls.find(([, params]) => params?.[7] === 'succeeded');
+
+  assert.ok(succeededCall);
+  assert.equal(started.aiCallId, succeededCall[1][0]);
+});
+
+test('persistNormalizedBatch keeps stored result when recognition AI call log write fails', async () => {
+  const calls = [];
+  const stderrWrite = process.stderr.write;
+  const stderrMessages = [];
+  process.stderr.write = function write(chunk, ...args) {
+    stderrMessages.push(String(chunk));
+    if (typeof args.at(-1) === 'function') {
+      args.at(-1)();
+    }
+    return true;
+  };
+
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/insert into ingest\.ai_call_log/i.test(sql)) {
+        throw new Error('audit table unavailable');
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  try {
+    const result = await persistNormalizedBatch({
+      batch: {
+        ...normalizedBatch,
+        batchId: 'album-ai-call-log-best-effort',
+        recognitions: [
+          {
+            ...normalizedBatch.recognitions[0],
+            model: 'gpt-primary',
+            promptVersion: '2026-05-24',
+            aiIdempotencyKey: 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:u-abc:abc123',
+          },
+        ],
+      },
+      env: {
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      createClient() {
+        return fakeClient;
+      },
+      processedAt: new Date('2026-06-15T00:00:00.000Z'),
+    });
+
+    assert.equal(result.status, 'stored');
+    assert.ok(calls.some(([sql]) => sql === 'COMMIT'));
+    assert.ok(calls.some(([sql]) => /insert into ingest\.ai_call_log/i.test(sql)));
+    assert.ok(stderrMessages.some((message) => /failed to write recognition AI call log/.test(message)));
+  } finally {
+    process.stderr.write = stderrWrite;
+  }
+});
+
+test('persistNormalizedBatch writes Feishu recognition AI call log through shared image path', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'feishu-ai-call-log',
+      sourceChannel: 'feishu',
+      messages: normalizedBatch.messages.map((message) => ({
+        ...message,
+        chatId: 'oc_chat_1',
+        sourceChannel: 'feishu',
+        sourceChatId: 'oc_chat_1',
+        sourceMessageId: 'om_feishu_ai_log_1',
+      })),
+      recognitions: [
+        {
+          ...normalizedBatch.recognitions[0],
+          sourceChannel: 'feishu',
+          sourceChatId: 'oc_chat_1',
+          sourceMessageId: 'om_feishu_ai_log_1',
+          provider: 'openai-compatible',
+          model: 'gpt-primary',
+          promptVersion: '2026-05-24',
+          aiIdempotencyKey: 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:img_v3:abc123',
+        },
+      ],
+    },
+    sourceChannel: 'feishu',
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-06-15T00:00:00.000Z'),
+  });
+
+  const aiLogCall = calls.find(([sql]) => /insert into ingest\.ai_call_log/i.test(sql));
+
+  assert.equal(result.status, 'stored');
+  assert.equal(aiLogCall[1][1], 'feishu-ai-call-log');
+  assert.equal(aiLogCall[1][2], 'recognition');
+  assert.equal(aiLogCall[1][3], 'openai-compatible');
+  assert.equal(aiLogCall[1][4], 'gpt-primary');
+  assert.equal(aiLogCall[1][6], 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:img_v3:abc123');
+  assert.equal(aiLogCall[1][7], 'succeeded');
 });
 
 test('persistNormalizedBatch stores Feishu image batches with nullable legacy chat id and Feishu source channel', async () => {
@@ -656,6 +1107,104 @@ test('persistNormalizedBatch stores Feishu image batches with nullable legacy ch
   assert.equal(result.status, 'stored');
   assert.equal(messageInsert[1][4], null);
   assert.equal(summaryInsert[1][2], 'feishu');
+});
+
+test('persistTelegramImageBatchIncremental requires explicit sourceChannel', async () => {
+  const { calls, client } = createIncrementalPersistClient();
+
+  await assert.rejects(
+    persistTelegramImageBatchIncremental(client, normalizedBatch, new Date('2026-06-14T00:00:00.000Z')),
+    /sourceChannel is required/i,
+  );
+  assert.equal(calls.length, 0);
+});
+
+test('core detail keys keep Telegram and Feishu sources from overwriting each other', async () => {
+  const { calls, client } = createIncrementalPersistClient();
+  const processedAt = new Date('2026-06-14T00:00:00.000Z');
+  const batch = {
+    ...normalizedBatch,
+    batchId: 'same-business-fact',
+    sleep: {
+      sleepType: '夜间睡眠',
+      bedtime: '23:10',
+      wakeTime: '06:40',
+      totalSleepMinutes: 450,
+      nightSleepMinutes: 450,
+      sleepScore: 88,
+    },
+  };
+
+  await persistTelegramImageBatchIncremental(client, batch, processedAt, { sourceChannel: 'telegram' });
+  await persistTelegramImageBatchIncremental(client, batch, processedAt, { sourceChannel: 'feishu' });
+
+  const keyPairs = [
+    /insert into core\.measurement/i,
+    /insert into core\.activity/i,
+    /insert into core\.meal/i,
+    /insert into core\.sleep/i,
+  ].map((pattern) =>
+    calls
+      .filter(([sql]) => pattern.test(sql))
+      .map(([, params]) => params[0][0])
+  );
+
+  for (const keys of keyPairs) {
+    assert.equal(keys.length, 2);
+    assert.notEqual(keys[0], keys[1]);
+  }
+});
+
+test('persistNormalizedBatch does not treat image batches without photos as Telegram image batches', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select payload_hash from ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      batchId: 'image-empty-photos',
+      kind: 'image',
+      measurement: null,
+      activities: [],
+      workoutDailySummary: null,
+      nutrition: null,
+      messages: [
+        {
+          ...normalizedBatch.messages[0],
+          messageId: 72,
+          photos: [],
+        },
+      ],
+      recognitions: [],
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_message/i.test(sql)));
+  assert.equal(calls.some(([sql]) => /insert into core\.(measurement|activity|meal|sleep|training_day)/i.test(sql)), false);
 });
 
 test('persistNormalizedBatch upserts measurement without deleting other core modules', async () => {
@@ -727,6 +1276,32 @@ test('persistNormalizedBatch upserts measurement without deleting other core mod
   assert.match(trainingDayInsert[0], /existing_day/i);
   assert.equal(trainingDayInsert[1][9], false);
   assert.equal(trainingDayInsert[1][10], false);
+});
+
+test('persistTelegramImageBatchIncremental rejects impossible archive dates before core writes', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [] };
+    },
+  };
+
+  await assert.rejects(
+    persistTelegramImageBatchIncremental(
+      client,
+      {
+        ...normalizedBatch,
+        batchId: 'image-invalid-archive-date',
+        archivedDate: '2023-02-30',
+      },
+      new Date('2026-05-13T00:00:00.000Z'),
+      { sourceChannel: 'telegram' },
+    ),
+    /invalid archivedDate: 2023-02-30/,
+  );
+
+  assert.equal(calls.some(([sql]) => /core\./i.test(sql)), false);
 });
 
 test('persistNormalizedBatch upserts activity without deleting same-day nutrition or sleep', async () => {
@@ -1061,7 +1636,7 @@ test('persistNormalizedBatch stores sleep payload in core without writing archiv
   assert.ok(ingestBatchInsert);
   assert.match(sleepInsert[0], /\$16::text\[\]/i);
   assert.doesNotMatch(sleepInsert[0], /sleep_stage_detail[\s\S]*jsonb\[\]/i);
-  assert.equal(sleepInsert[1][0][0], createHash('md5').update('2026-06-03|夜间睡眠|23:26|06:19|411').digest('hex'));
+  assert.equal(sleepInsert[1][0][0], createHash('md5').update('telegram|2026-06-03|夜间睡眠|23:26|06:19|411').digest('hex'));
   assert.deepEqual(sleepInsert[1][1], ['2026-06-03']);
   assert.deepEqual(sleepInsert[1][7], [411]);
   assert.deepEqual(sleepInsert[1][8], [411]);
@@ -1471,7 +2046,431 @@ test('pending recognition store reads, queues, and resolves database rows', asyn
   assert.equal(queued.status, 'queued');
   assert.equal(resolved.status, 'resolved');
   assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_pending_batch/i.test(sql)));
-  assert.ok(calls.some(([sql]) => /update ingest\.telegram_pending_batch/i.test(sql)));
+  assert.ok(
+    calls.some(([sql]) =>
+      /update ingest\.telegram_pending_batch/i.test(sql) &&
+      /set\s+status\s*=\s*'resolved'/i.test(sql),
+    ),
+  );
+});
+
+test('appendPendingRecognitionBatch writes failed AI call log best-effort', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/select status\s+from ingest\.telegram_pending_batch/i.test(sql)) {
+        return { rows: [{ status: 'pending' }] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const now = new Date('2026-05-31T03:12:00.000Z');
+  const result = await appendPendingRecognitionBatch({
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient: () => fakeClient,
+    now,
+    nextRetryAt: new Date('2026-05-31T03:22:00.000Z'),
+    batch: {
+      kind: 'image',
+      batchId: 'single-ai-failed-log',
+      sourceChannel: 'telegram',
+      messages: [
+        {
+          messageId: 384,
+          chatId: 42,
+          photos: [{ fileId: 'file-food-384', fileUniqueId: 'uniq-food-384' }],
+        },
+      ],
+      recognitionErrors: [
+        {
+          messageId: 384,
+          error: 'AI recognition failed with HTTP 429: rate limit',
+          failureCategory: 'ai_service',
+          provider: 'openai-compatible',
+          model: 'gpt-primary',
+          promptVersion: '2026-05-24',
+          aiIdempotencyKey: 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:uniq-food-384:abc123',
+          aiLatencyMs: 4567,
+        },
+      ],
+    },
+    failureCategory: 'ai_service',
+    error: 'AI recognition failed with HTTP 429: rate limit',
+  });
+
+  const aiLogCall = calls.find(([sql]) => /insert into ingest\.ai_call_log/i.test(sql));
+
+  assert.equal(result.status, 'queued');
+  assert.ok(aiLogCall);
+  assert.match(aiLogCall[1][0], /^ai-call:recognition:/);
+  assert.equal(aiLogCall[1][1], 'single-ai-failed-log');
+  assert.equal(aiLogCall[1][2], 'recognition');
+  assert.equal(aiLogCall[1][3], 'openai-compatible');
+  assert.equal(aiLogCall[1][4], 'gpt-primary');
+  assert.equal(aiLogCall[1][5], '2026-05-24');
+  assert.equal(aiLogCall[1][6], 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:uniq-food-384:abc123');
+  assert.equal(aiLogCall[1][7], 'failed');
+  assert.equal(aiLogCall[1][8], 4567);
+  assert.equal(aiLogCall[1][9], 'ai_service');
+  assert.match(aiLogCall[1][10], /HTTP 429/);
+  assert.equal(aiLogCall[1][11], now.toISOString());
+  assert.equal(aiLogCall[1][12], now.toISOString());
+});
+
+test('appendPendingRecognitionBatch keeps queued result when failed AI call log write fails', async () => {
+  const stderrWrite = process.stderr.write;
+  const stderrMessages = [];
+  process.stderr.write = function write(chunk, ...args) {
+    stderrMessages.push(String(chunk));
+    if (typeof args.at(-1) === 'function') {
+      args.at(-1)();
+    }
+    return true;
+  };
+
+  const fakeClient = {
+    async connect() {},
+    async query(sql) {
+      if (/select status\s+from ingest\.telegram_pending_batch/i.test(sql)) {
+        return { rows: [{ status: 'pending' }] };
+      }
+      if (/insert into ingest\.ai_call_log/i.test(sql)) {
+        throw new Error('ai audit table unavailable');
+      }
+      return { rows: [] };
+    },
+    async end() {},
+  };
+
+  try {
+    const result = await appendPendingRecognitionBatch({
+      env: {
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      createClient: () => fakeClient,
+      now: new Date('2026-05-31T03:12:00.000Z'),
+      batch: {
+        kind: 'image',
+        batchId: 'single-ai-failed-log-best-effort',
+        messages: [{ messageId: 384, photos: [{ fileId: 'file-food-384' }] }],
+        recognitionErrors: [
+          {
+            messageId: 384,
+            error: 'AI recognition failed with HTTP 502',
+            failureCategory: 'ai_service',
+            model: 'gpt-primary',
+          },
+        ],
+      },
+      failureCategory: 'ai_service',
+      error: 'AI recognition failed with HTTP 502',
+    });
+
+    assert.equal(result.status, 'queued');
+    assert.equal(result.aiCallLogStatus, 'failed');
+    assert.ok(stderrMessages.some((message) => /failed to write failed recognition AI call log/.test(message)));
+  } finally {
+    process.stderr.write = stderrWrite;
+  }
+});
+
+test('shouldQueueRecognitionFailure allows non-image database failures to enter pending replay', () => {
+  for (const kind of ['thought', 'analysis', 'help']) {
+    assert.equal(
+      shouldQueueRecognitionFailure({
+        kind,
+        status: 'ready',
+        failureCategory: 'database',
+        failureReason: 'database unavailable',
+        messages: [{ messageId: 8001, photos: [] }],
+      }),
+      true,
+      `${kind} database failures should be retryable`,
+    );
+  }
+
+  assert.equal(
+    shouldQueueRecognitionFailure({
+      kind: 'thought',
+      status: 'skipped',
+      failureCategory: 'user_input',
+      failureReason: 'empty thought body',
+      messages: [{ messageId: 8002, photos: [] }],
+    }),
+    false,
+  );
+});
+
+test('readPendingRecognitionBatches claims pending rows so concurrent workers do not process the same batch', async () => {
+  const calls = [];
+  const rows = [
+    {
+      pending_id: 1,
+      batch_id: 'single-concurrent',
+      kind: 'image',
+      status: 'pending',
+      batch_payload_json: {
+        kind: 'image',
+        batchId: 'single-concurrent',
+        messages: [{ messageId: 481, photos: [{ fileId: 'file-concurrent' }] }],
+      },
+      failure_category: 'ai_service',
+      failure_reason: 'primary and fallback failed',
+      attempt_count: 2,
+      next_retry_at: '2026-05-31T03:10:00.000Z',
+      last_failed_at: '2026-05-31T03:00:00.000Z',
+    },
+  ];
+  const env = {
+    TRAINING_DB_ENABLED: 'true',
+    TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+  };
+  const now = new Date('2026-05-31T03:11:00.000Z');
+  const claimUntil = new Date('2026-05-31T03:21:00.000Z');
+  const createClient = () => ({
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params = []) {
+      calls.push([sql, params]);
+      if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
+        return { rows: [] };
+      }
+      if (/for update skip locked/i.test(sql)) {
+        const [nowIso, limit, claimUntilIso] = params;
+        const claimed = rows
+          .filter((row) => row.status === 'pending' && row.next_retry_at <= nowIso)
+          .slice(0, limit);
+        for (const row of claimed) {
+          row.next_retry_at = claimUntilIso;
+        }
+        return { rows: claimed };
+      }
+      if (/from ingest\.telegram_pending_batch/i.test(sql)) {
+        const [nowIso, limit] = params;
+        return {
+          rows: rows
+            .filter((row) => row.status === 'pending' && row.next_retry_at <= nowIso)
+            .slice(0, limit),
+        };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  });
+
+  const [firstRead, secondRead] = await Promise.all([
+    readPendingRecognitionBatches({ env, createClient, now, claimUntil }),
+    readPendingRecognitionBatches({ env, createClient, now, claimUntil }),
+  ]);
+  const claimedBatchIds = [...firstRead, ...secondRead].map((entry) => entry.batchId);
+
+  assert.deepEqual(claimedBatchIds, ['single-concurrent']);
+  assert.ok(calls.some(([sql]) => sql === 'BEGIN'));
+  assert.ok(calls.some(([sql]) => sql === 'COMMIT'));
+  assert.ok(calls.some(([sql]) => /for update skip locked/i.test(sql)));
+});
+
+test('readPendingRecognitionSummary reads pending metrics without claiming rows', async () => {
+  const calls = [];
+  const env = {
+    TRAINING_DB_ENABLED: 'true',
+    TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+  };
+  const createClient = () => ({
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params = []) {
+      calls.push([sql, params]);
+      assert.doesNotMatch(sql, /\bupdate\b/i);
+      assert.doesNotMatch(sql, /for update/i);
+      return {
+        rows: [
+          {
+            batch_id: 'pending-old',
+            kind: 'image',
+            failure_category: 'database',
+            failure_reason: 'database unavailable',
+            attempt_count: 25,
+            next_retry_at: '2026-06-20T00:10:00.000Z',
+            last_failed_at: '2026-06-20T00:00:00.000Z',
+            created_at: '2026-06-19T23:00:00.000Z',
+            updated_at: '2026-06-20T00:00:00.000Z',
+          },
+        ],
+      };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  });
+
+  const pending = await readPendingRecognitionSummary({ env, createClient, limit: 1000 });
+
+  assert.deepEqual(pending, [
+    {
+      batchId: 'pending-old',
+      kind: 'image',
+      failureCategory: 'database',
+      failureReason: 'database unavailable',
+      attemptCount: 25,
+      nextRetryAt: '2026-06-20T00:10:00.000Z',
+      lastFailedAt: '2026-06-20T00:00:00.000Z',
+      createdAt: '2026-06-19T23:00:00.000Z',
+      updatedAt: '2026-06-20T00:00:00.000Z',
+    },
+  ]);
+  assert.equal(calls.some(([sql]) => sql === 'BEGIN' || sql === 'COMMIT'), false);
+  assert.ok(calls.some(([sql]) => /from ingest\.telegram_pending_batch/i.test(sql)));
+});
+
+test('readPendingRecognitionBatches abandons retry rows over the attempt limit before claiming work', async () => {
+  const calls = [];
+  const rows = [
+    {
+      pending_id: 1,
+      batch_id: 'single-abandoned',
+      kind: 'image',
+      status: 'pending',
+      batch_payload_json: {
+        kind: 'image',
+        batchId: 'single-abandoned',
+        messages: [{ messageId: 482, photos: [{ fileId: 'file-abandoned' }] }],
+      },
+      failure_category: 'ai_service',
+      failure_reason: 'primary and fallback failed',
+      attempt_count: 26,
+      next_retry_at: '2026-05-31T03:10:00.000Z',
+      last_failed_at: '2026-05-31T03:00:00.000Z',
+    },
+    {
+      pending_id: 2,
+      batch_id: 'single-claimable',
+      kind: 'image',
+      status: 'pending',
+      batch_payload_json: {
+        kind: 'image',
+        batchId: 'single-claimable',
+        messages: [{ messageId: 483, photos: [{ fileId: 'file-claimable' }] }],
+      },
+      failure_category: 'ai_service',
+      failure_reason: 'temporary timeout',
+      attempt_count: 2,
+      next_retry_at: '2026-05-31T03:10:00.000Z',
+      last_failed_at: '2026-05-31T03:00:00.000Z',
+    },
+  ];
+  const env = {
+    TRAINING_DB_ENABLED: 'true',
+    TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+  };
+  const now = new Date('2026-05-31T03:11:00.000Z');
+  const createClient = () => ({
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params = []) {
+      calls.push([sql, params]);
+      if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
+        return { rows: [] };
+      }
+      if (/status = 'abandoned'/i.test(sql)) {
+        const [, , , retryLimit] = params;
+        for (const row of rows) {
+          if (row.status === 'pending' && row.attempt_count > retryLimit) {
+            row.status = 'abandoned';
+          }
+        }
+      }
+      if (/for update skip locked/i.test(sql)) {
+        const [nowIso, limit, claimUntilIso] = params;
+        const claimed = rows
+          .filter((row) => row.status === 'pending' && row.next_retry_at <= nowIso)
+          .slice(0, limit);
+        for (const row of claimed) {
+          row.next_retry_at = claimUntilIso;
+        }
+        return { rows: claimed };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  });
+
+  const pending = await readPendingRecognitionBatches({
+    env,
+    createClient,
+    now,
+    retryLimit: 25,
+  });
+
+  assert.deepEqual(pending.map((entry) => entry.batchId), ['single-claimable']);
+  assert.equal(rows[0].status, 'abandoned');
+  assert.ok(calls.some(([sql]) => /status = 'abandoned'/i.test(sql)));
+});
+
+test('appendPendingRecognitionBatch does not reactivate abandoned pending rows', async () => {
+  const calls = [];
+  const row = { batch_id: 'single-abandoned', status: 'abandoned', attempt_count: 26 };
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params = []) {
+      calls.push([sql, params]);
+      if (/insert into ingest\.telegram_pending_batch/i.test(sql)) {
+        assert.match(sql, /where\s+ingest\.telegram_pending_batch\.status\s+<>\s+'abandoned'/i);
+        return { rows: [] };
+      }
+      if (/select status\s+from ingest\.telegram_pending_batch/i.test(sql)) {
+        return { rows: [{ status: row.status }] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await appendPendingRecognitionBatch({
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    batch: {
+      kind: 'image',
+      batchId: 'single-abandoned',
+      messages: [{ messageId: 484, photos: [{ fileId: 'file-abandoned' }] }],
+    },
+    failureCategory: 'ai_service',
+    error: 'still failing',
+    now: new Date('2026-05-31T03:20:00.000Z'),
+  });
+
+  assert.equal(result.status, 'abandoned');
+  assert.equal(result.batchId, 'single-abandoned');
+  assert.equal(result.aiCallLogStatus, 'skipped');
+  assert.ok(calls.some(([sql]) => /select status\s+from ingest\.telegram_pending_batch/i.test(sql)));
 });
 
 test('persistNormalizedBatch can merge an existing core day without failing on body feedback reads', async () => {
@@ -1580,11 +2579,64 @@ test('persistNormalizedBatch rolls back the transaction when a core write fails'
   assert.ok(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)));
 });
 
-test('persistNormalizedBatch returns unchanged and rolls back when payload hash matches', async () => {
+test('persistNormalizedBatch preserves the original error when rollback fails', async () => {
   const calls = [];
-  const expectedPayloadHash = createHash('sha256')
-    .update(JSON.stringify(normalizedBatch), 'utf8')
-    .digest('hex');
+  const stderrWrite = process.stderr.write;
+  const stderrMessages = [];
+  process.stderr.write = function write(chunk, ...args) {
+    stderrMessages.push(String(chunk));
+    if (typeof args.at(-1) === 'function') {
+      args.at(-1)();
+    }
+    return true;
+  };
+
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/insert into core\.training_day/i.test(sql)) {
+        throw new Error('core write failed');
+      }
+      if (sql === 'ROLLBACK') {
+        throw new Error('rollback failed');
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  try {
+    await assert.rejects(
+      persistNormalizedBatch({
+        batch: normalizedBatch,
+        env: {
+          TRAINING_DB_ENABLED: 'true',
+          TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+        },
+        createClient() {
+          return fakeClient;
+        },
+        processedAt: new Date('2026-05-13T00:00:00.000Z'),
+      }),
+      /core write failed/,
+    );
+  } finally {
+    process.stderr.write = stderrWrite;
+  }
+
+  const statements = calls.map(([sql]) => sql);
+  assert.equal(statements.includes('ROLLBACK'), true);
+  assert.equal(calls.at(-1)[0], 'end');
+  assert.ok(stderrMessages.some((message) => /rollback failed after persistNormalizedBatch error/.test(message)));
+});
+
+test('persistNormalizedBatch returns unchanged from atomic batch upsert when payload hash matches', async () => {
+  const calls = [];
   const fakeClient = {
     async connect() {
       calls.push(['connect']);
@@ -1592,7 +2644,11 @@ test('persistNormalizedBatch returns unchanged and rolls back when payload hash 
     async query(sql, params) {
       calls.push([sql, params]);
       if (/select payload_hash\s+from ingest\.telegram_batch/i.test(sql)) {
-        return { rows: [{ payload_hash: expectedPayloadHash }] };
+        throw new Error('payload hash check must be atomic with batch upsert');
+      }
+      if (/insert into ingest\.telegram_batch/i.test(sql)) {
+        assert.match(sql, /where\s+ingest\.telegram_batch\.payload_hash\s+<>\s+excluded\.payload_hash/i);
+        return { rows: [], rowCount: 0 };
       }
       return { rows: [] };
     },
@@ -1615,12 +2671,15 @@ test('persistNormalizedBatch returns unchanged and rolls back when payload hash 
 
   assert.equal(result.status, 'unchanged');
   assert.equal(result.batchId, normalizedBatch.batchId);
-  assert.equal(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)), false);
+  const statements = calls.map(([sql]) => sql);
+  const beginIndex = statements.indexOf('BEGIN');
+  const batchUpsertIndex = calls.findIndex(([sql]) => /insert into ingest\.telegram_batch/i.test(sql));
+  const rollbackIndex = statements.indexOf('ROLLBACK');
+  assert.notEqual(batchUpsertIndex, -1);
+  assert.ok(beginIndex < batchUpsertIndex);
+  assert.ok(batchUpsertIndex < rollbackIndex);
   assert.equal(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)), false);
-  assert.deepEqual(
-    calls.map(([sql]) => sql),
-    ['connect', 'BEGIN', calls[2][0], 'ROLLBACK', 'end'],
-  );
+  assert.equal(calls.at(-1)[0], 'end');
 });
 
 test('persistNormalizedBatch mirrors thought create, edit, and delete batches into core.thought', async () => {
@@ -2453,6 +3512,343 @@ test('importTrainingMarkdownToDatabase returns unchanged when core already match
     days: 1,
   });
   assert.equal(calls.some(([sql]) => /delete from core\.measurement/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)), false);
+});
+
+test('importTrainingMarkdownToDatabase skips empty or malformed markdown without core writes', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      throw new Error('empty markdown should not query the database');
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  for (const markdown of ['', '# 训练记录\n\n这不是日期段\n', '# 训练记录\n\n### 2026-13-99\n\n#### 当日运动截图记录\n']) {
+    const result = await importTrainingMarkdownToDatabase({
+      markdown,
+      env: {
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      createClient() {
+        return fakeClient;
+      },
+      processedAt: new Date('2026-05-13T00:00:00.000Z'),
+    });
+
+    assert.deepEqual(result, {
+      status: 'skipped',
+      reason: 'missing_snapshot_days',
+      days: 0,
+    });
+  }
+
+  assert.deepEqual(calls, []);
+});
+
+test('importTrainingMarkdownToDatabase writes whole-day replacement with markdown_import source', async () => {
+  const calls = [];
+  const markdown = `# 训练记录
+
+### 2026-04-03
+
+#### 当日运动截图记录
+
+##### 当日活动总览
+
+- 活动热量：459千卡
+- 锻炼时长：32分钟
+
+##### 活动明细
+
+- 20:18 力量训练：总消耗459千卡，时长00:32:00
+`;
+
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await importTrainingMarkdownToDatabase({
+    markdown,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+    skipIfUnchanged: false,
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.equal(result.days, 1);
+  assert.equal(calls.some(([sql]) => /delete from core\.activity/i.test(sql)), true);
+  assert.equal(calls.some(([sql]) => /delete from core\.meal/i.test(sql)), true);
+  assert.equal(calls.some(([sql]) => /delete from core\.sleep/i.test(sql)), true);
+  const trainingDayInsert = calls.find(([sql]) => /insert into core\.training_day/i.test(sql));
+  const activityInsert = calls.find(([sql]) => /insert into core\.activity/i.test(sql));
+  assert.ok(trainingDayInsert);
+  assert.ok(activityInsert);
+  assert.deepEqual(trainingDayInsert[1][2], ['markdown_import']);
+  assert.deepEqual(activityInsert[1][2], ['markdown_import']);
+});
+
+test('importTrainingMarkdownToDatabase stores when only sleep fields changed', async () => {
+  const calls = [];
+  const markdown = `# 训练记录
+
+### 2026-04-03
+
+#### 2026-04-03 睡眠截图记录
+
+##### 睡眠明细
+
+- 睡眠类型：夜间睡眠
+- 入睡/起床：23:26 → 06:19
+- 总睡眠：411分钟
+- 夜间睡眠：411分钟
+- 深睡：145分钟
+- 浅睡：195分钟
+- 快动眼睡眠：71分钟
+- 睡眠评分：81分
+- 睡眠阶段：深睡2小时25分钟；浅睡3小时15分钟；快速眼动1小时11分钟
+`;
+
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from core\.training_day/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-04-03',
+              total_activities: 0,
+              total_duration_seconds: 0,
+              training_calories: 0,
+              workout_duration_minutes: null,
+              active_hours: null,
+              cycling_distance_km: 0,
+              intake_calories: null,
+              nutrition_details_json: [],
+              sleep_total_minutes: 372,
+              night_sleep_minutes: 372,
+              nap_minutes: null,
+              sleep_start_time: '23:26',
+              sleep_end_time: '06:19',
+              deep_sleep_minutes: 120,
+              light_sleep_minutes: 190,
+              rem_sleep_minutes: 62,
+              awake_minutes: null,
+            },
+          ],
+        };
+      }
+      if (/from core\.sleep/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-04-03',
+              sleep_type: '夜间睡眠',
+              bedtime: '23:26',
+              wake_time: '06:19',
+              night_sleep_minutes: 372,
+              total_sleep_minutes: 372,
+              nap_minutes: null,
+              deep_sleep_minutes: 120,
+              light_sleep_minutes: 190,
+              rem_sleep_minutes: 62,
+              awake_minutes: null,
+              sleep_stage_text: '深睡2小时；浅睡3小时10分钟；快速眼动1小时2分钟',
+              sleep_stage_detail: null,
+              sleep_score: 76,
+              sleep_score_percentile: null,
+              deep_sleep_ratio_pct: null,
+              light_sleep_ratio_pct: null,
+              rem_sleep_ratio_pct: null,
+              deep_sleep_continuity_score: null,
+              wake_count: null,
+              breathing_quality_score: null,
+              average_heart_rate_bpm: null,
+              hrv_ms: null,
+              average_spo2_pct: null,
+              average_respiratory_rate: null,
+              analysis_text: null,
+              suggestion_text: null,
+            },
+          ],
+        };
+      }
+      if (/from core\.(measurement|activity|meal|thought)/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await importTrainingMarkdownToDatabase({
+    markdown,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.equal(result.days, 1);
+  assert.equal(calls.some(([sql]) => /delete from core\.sleep/i.test(sql)), true);
+  const sleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
+  assert.ok(sleepInsert);
+  assert.deepEqual(sleepInsert[1][8], [411]);
+  assert.deepEqual(sleepInsert[1][16], [81]);
+});
+
+test('importTrainingMarkdownToDatabase keeps matching sleep stage details unchanged', async () => {
+  const calls = [];
+  const markdown = `# 训练记录
+
+### 2026-04-03
+
+#### 2026-04-03 睡眠截图记录
+
+##### 睡眠明细
+
+- 睡眠类型：夜间睡眠
+- 入睡/起床：23:26 → 06:19
+- 总睡眠：411分钟
+- 夜间睡眠：411分钟
+- 深睡：145分钟
+- 浅睡：195分钟
+- 快动眼睡眠：71分钟
+- 睡眠评分：81分
+- 睡眠阶段：深睡2小时25分钟；浅睡3小时15分钟；快速眼动1小时11分钟
+- 睡眠阶段明细：
+  - 深睡 2小时25分钟
+  - 浅睡 3小时15分钟
+  - 快速眼动 1小时11分钟
+`;
+
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from core\.training_day/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-04-03',
+              total_activities: 0,
+              total_duration_seconds: 0,
+              training_calories: 0,
+              workout_duration_minutes: null,
+              active_hours: null,
+              cycling_distance_km: 0,
+              intake_calories: null,
+              nutrition_details_json: [],
+              sleep_total_minutes: 411,
+              night_sleep_minutes: 411,
+              nap_minutes: null,
+              sleep_start_time: '23:26',
+              sleep_end_time: '06:19',
+              deep_sleep_minutes: 145,
+              light_sleep_minutes: 195,
+              rem_sleep_minutes: 71,
+              awake_minutes: null,
+            },
+          ],
+        };
+      }
+      if (/from core\.sleep/i.test(sql)) {
+        return {
+          rows: [
+            {
+              archived_date: '2026-04-03',
+              sleep_type: '夜间睡眠',
+              bedtime: '23:26',
+              wake_time: '06:19',
+              night_sleep_minutes: 411,
+              total_sleep_minutes: 411,
+              nap_minutes: null,
+              deep_sleep_minutes: 145,
+              light_sleep_minutes: 195,
+              rem_sleep_minutes: 71,
+              awake_minutes: null,
+              sleep_stage_text: '深睡2小时25分钟；浅睡3小时15分钟；快速眼动1小时11分钟',
+              sleep_stage_detail: '["深睡 2小时25分钟","浅睡 3小时15分钟","快速眼动 1小时11分钟"]',
+              sleep_score: 81,
+              sleep_score_percentile: null,
+              deep_sleep_ratio_pct: null,
+              light_sleep_ratio_pct: null,
+              rem_sleep_ratio_pct: null,
+              deep_sleep_continuity_score: null,
+              wake_count: null,
+              breathing_quality_score: null,
+              average_heart_rate_bpm: null,
+              hrv_ms: null,
+              average_spo2_pct: null,
+              average_respiratory_rate: null,
+              analysis_text: null,
+              suggestion_text: null,
+            },
+          ],
+        };
+      }
+      if (/from core\.(measurement|activity|meal|thought)/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await importTrainingMarkdownToDatabase({
+    markdown,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  assert.deepEqual(result, {
+    status: 'unchanged',
+    reason: 'core_matches_markdown',
+    days: 1,
+  });
+  assert.equal(calls.some(([sql]) => /delete from core\.sleep/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)), false);
 });
 

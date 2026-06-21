@@ -19,7 +19,7 @@ export async function persistTelegramImageBatchIncremental(client, batch, proces
   }
 
   const processedAtIso = processedAt.toISOString();
-  const sourceChannel = writeOptions.sourceChannel ?? batch.sourceChannel ?? 'telegram';
+  const sourceChannel = normalizeRequiredSourceChannel(writeOptions.sourceChannel ?? batch.sourceChannel);
   const rowOptions = {
     batchId: batch.batchId,
     processedAt,
@@ -265,13 +265,42 @@ async function refreshCoreTrainingDaySummary(client, batch, processedAtIso, sour
 
 function normalizeDateKey(value) {
   if (value instanceof Date) {
-    return [
+    const dateKey = [
       value.getFullYear(),
       String(value.getMonth() + 1).padStart(2, '0'),
       String(value.getDate()).padStart(2, '0'),
     ].join('-');
+    return assertValidDateKey(dateKey, value);
   }
 
   const match = String(value ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return match ? `${match[1]}-${match[2]}-${match[3]}` : String(value ?? '');
+  if (!match) {
+    return String(value ?? '');
+  }
+  return assertValidDateKey(`${match[1]}-${match[2]}-${match[3]}`, value);
+}
+
+function assertValidDateKey(dateKey, originalValue) {
+  const match = String(dateKey ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    throw new Error(`invalid archivedDate: ${String(originalValue ?? '')}`);
+  }
+  const date = new Date(`${match[1]}-${match[2]}-${match[3]}T00:00:00.000Z`);
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getUTCFullYear() !== Number(match[1]) ||
+    date.getUTCMonth() + 1 !== Number(match[2]) ||
+    date.getUTCDate() !== Number(match[3])
+  ) {
+    throw new Error(`invalid archivedDate: ${String(originalValue ?? '')}`);
+  }
+  return dateKey;
+}
+
+function normalizeRequiredSourceChannel(value) {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    throw new Error('persistTelegramImageBatchIncremental: sourceChannel is required');
+  }
+  return text;
 }

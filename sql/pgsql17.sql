@@ -384,7 +384,7 @@ create table if not exists ingest.telegram_batch (
 );
 
 create table if not exists ingest.telegram_message (
-  message_id bigint primary key,
+  message_id bigint not null,
   batch_id text not null references ingest.telegram_batch(batch_id) on delete cascade,
   update_id bigint not null,
   media_group_id text null,
@@ -394,18 +394,56 @@ create table if not exists ingest.telegram_message (
   date_unix bigint null,
   photo_file_ids_json jsonb not null default '[]'::jsonb,
   photo_file_unique_ids_json jsonb not null default '[]'::jsonb,
+  source_channel text not null default 'telegram',
+  source_chat_id text not null default 'legacy-chat',
+  source_message_id text not null,
   updated_at timestamptz not null
 );
 
 create table if not exists ingest.telegram_recognition (
-  message_id bigint primary key references ingest.telegram_message(message_id) on delete cascade,
+  message_id bigint not null,
   batch_id text not null references ingest.telegram_batch(batch_id) on delete cascade,
   recognition_json jsonb not null,
+  source_channel text not null default 'telegram',
+  source_chat_id text not null default 'legacy-chat',
+  source_message_id text not null,
   updated_at timestamptz not null
 );
 
 create index if not exists idx_ingest_telegram_message_update_id
 on ingest.telegram_message (update_id desc);
+
+create index if not exists idx_ingest_telegram_message_legacy_message_id
+on ingest.telegram_message (message_id);
+
+create unique index if not exists ux_ingest_telegram_message_source_identity
+on ingest.telegram_message(source_channel, source_chat_id, source_message_id);
+
+create index if not exists idx_ingest_telegram_recognition_legacy_message_id
+on ingest.telegram_recognition (message_id);
+
+create unique index if not exists ux_ingest_telegram_recognition_source_identity
+on ingest.telegram_recognition(source_channel, source_chat_id, source_message_id);
+
+create table if not exists ingest.ai_call_log (
+  ai_call_id text primary key,
+  task_id text null,
+  scene text not null,
+  provider text not null,
+  model text not null,
+  prompt_version text null,
+  idempotency_key text null,
+  status text not null,
+  latency_ms integer null,
+  failure_category text null,
+  failure_reason text null,
+  prompt_tokens integer null,
+  completion_tokens integer null,
+  total_tokens integer null,
+  cost_usd numeric(12, 6) null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
 
 -- Telegram 识别失败待重试批次表
@@ -564,10 +602,12 @@ create table if not exists core.meal (
 );
 
 create table if not exists core.thought (
-  telegram_message_id bigint primary key,
+  telegram_message_id bigint not null,
   telegram_chat_id bigint null,
   source_batch_id text null,
   source_channel text null,
+  source_chat_id text not null default 'legacy-chat',
+  source_message_id text not null,
   command text not null,
   body text not null,
   thought_module text not null default 'workout',
@@ -607,6 +647,8 @@ alter table core.training_day add column if not exists awake_minutes integer nul
 comment on table core.thought is '锻炼随想正文镜像表；图片仍保存在本地目录或后续对象存储，表内只保存引用';
 comment on column core.thought.telegram_message_id is '原 Telegram message_id，也是随想的稳定定位 ID';
 comment on column core.thought.source_channel is '来源通道，例如 telegram、feishu、markdown_import';
+comment on column core.thought.source_chat_id is '来源 chat/conversation ID，Telegram 为 chat_id，飞书为 chat_id 原始字符串';
+comment on column core.thought.source_message_id is '来源消息 ID，Telegram 为 message_id，飞书为 message_id 原始字符串';
 comment on column core.thought.body is '随想正文文本，不包含图片二进制';
 comment on column core.thought.thought_module is '随想模块：workout 为锻炼随想，misc 为杂七杂八，body_feedback 为身体反馈；历史缺省按 workout 兼容';
 comment on column core.thought.markdown_path is '当前 Markdown 兼容层路径，例如 source/_posts/YYYY-MM-DD-telegram-thought-501.md';
@@ -630,6 +672,12 @@ on core.thought (updated_at desc);
 
 create index if not exists idx_core_thought_module_updated_at
 on core.thought (thought_module, updated_at desc);
+
+create index if not exists idx_core_thought_legacy_message_id
+on core.thought (telegram_message_id);
+
+create unique index if not exists ux_core_thought_identity
+on core.thought(source_channel, source_chat_id, source_message_id);
 
 grant usage on schema ingest to training_writer;
 grant usage on schema core to training_writer;

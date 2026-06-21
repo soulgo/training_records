@@ -5,12 +5,13 @@ export async function insertCoreMeasurements(client, days, options, processedAtI
     .filter((day) => day.measurement)
     .map((day) => {
       const measurement = day.measurement;
+      const sourceChannel = options.sourceChannel ?? 'telegram';
       return {
         measurementKey: createHash('md5')
-          .update([day.date, measurement.measuredAt ?? '', measurement.weightKg ?? ''].join('|'))
+          .update([sourceChannel, day.date, measurement.measuredAt ?? '', measurement.weightKg ?? ''].join('|'))
           .digest('hex'),
         archivedDate: day.date,
-        sourceChannel: options.sourceChannel ?? 'telegram',
+        sourceChannel,
         sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
         measuredAt: measurement.measuredAt ?? null,
         bodyScore: measurement.bodyScore != null ? Math.round(Number(measurement.bodyScore)) : null,
@@ -123,25 +124,28 @@ export async function insertCoreMeasurements(client, days, options, processedAtI
 
 export async function insertCoreActivities(client, days, options, processedAtIso) {
   const rows = days.flatMap((day) =>
-    (day.activities ?? []).map((activity) => ({
-      activityKey: createHash('md5')
-        .update([day.date, activity.time ?? '', activity.type ?? '', activity.detail ?? ''].join('|'))
-        .digest('hex'),
-      archivedDate: day.date,
-      sourceChannel: options.sourceChannel ?? 'telegram',
-      sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
-      activityTime: activity.time ?? null,
-      activityType: activity.type ?? '未知活动',
-      rawType: activity.rawType ?? activity.type ?? null,
-      detail: activity.detail ?? null,
-      calories: activity.calories != null ? Math.round(Number(activity.calories)) : null,
-      heartRate: activity.heartRate != null ? Math.round(Number(activity.heartRate)) : null,
-      distanceKm: activity.distanceKm ?? null,
-      avgSpeedKmh: activity.avgSpeedKmh ?? null,
-      durationText: activity.durationText ?? null,
-      durationSeconds: activity.durationSeconds != null ? Math.round(Number(activity.durationSeconds)) : null,
-      updatedAt: processedAtIso,
-    })),
+    (day.activities ?? []).map((activity) => {
+      const sourceChannel = options.sourceChannel ?? 'telegram';
+      return {
+        activityKey: createHash('md5')
+          .update([sourceChannel, day.date, activity.time ?? '', activity.type ?? '', activity.detail ?? ''].join('|'))
+          .digest('hex'),
+        archivedDate: day.date,
+        sourceChannel,
+        sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
+        activityTime: activity.time ?? null,
+        activityType: activity.type ?? '未知活动',
+        rawType: activity.rawType ?? activity.type ?? null,
+        detail: activity.detail ?? null,
+        calories: activity.calories != null ? Math.round(Number(activity.calories)) : null,
+        heartRate: activity.heartRate != null ? Math.round(Number(activity.heartRate)) : null,
+        distanceKm: activity.distanceKm ?? null,
+        avgSpeedKmh: activity.avgSpeedKmh ?? null,
+        durationText: activity.durationText ?? null,
+        durationSeconds: activity.durationSeconds != null ? Math.round(Number(activity.durationSeconds)) : null,
+        updatedAt: processedAtIso,
+      };
+    }),
   );
   if (rows.length === 0) {
     return;
@@ -221,19 +225,22 @@ export async function insertCoreActivities(client, days, options, processedAtIso
 
 export async function insertCoreMeals(client, days, options, processedAtIso) {
   const rows = days.flatMap((day) =>
-    (day.nutrition?.meals ?? []).map((meal) => ({
-      mealKey: createHash('md5')
-        .update([day.date, meal.name ?? '', meal.calories ?? ''].join('|'))
-        .digest('hex'),
-      archivedDate: day.date,
-      sourceChannel: options.sourceChannel ?? 'telegram',
-      sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
-      mealName: meal.name ?? '未命名餐次',
-      calories: meal.calories != null ? Math.round(Number(meal.calories)) : null,
-      recommendedMin: meal.recommendedMin != null ? Math.round(Number(meal.recommendedMin)) : null,
-      recommendedMax: meal.recommendedMax != null ? Math.round(Number(meal.recommendedMax)) : null,
-      updatedAt: processedAtIso,
-    })),
+    (day.nutrition?.meals ?? []).map((meal) => {
+      const sourceChannel = options.sourceChannel ?? 'telegram';
+      return {
+        mealKey: createHash('md5')
+          .update([sourceChannel, day.date, meal.name ?? '', meal.calories ?? ''].join('|'))
+          .digest('hex'),
+        archivedDate: day.date,
+        sourceChannel,
+        sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
+        mealName: meal.name ?? '未命名餐次',
+        calories: meal.calories != null ? Math.round(Number(meal.calories)) : null,
+        recommendedMin: meal.recommendedMin != null ? Math.round(Number(meal.recommendedMin)) : null,
+        recommendedMax: meal.recommendedMax != null ? Math.round(Number(meal.recommendedMax)) : null,
+        updatedAt: processedAtIso,
+      };
+    }),
   );
   if (rows.length === 0) {
     return;
@@ -586,12 +593,13 @@ function buildSleepRows(days, options, processedAtIso) {
       const bedtime = sleep.bedtime ?? sleep.sleepStartTime ?? null;
       const wakeTime = sleep.wakeTime ?? sleep.sleepEndTime ?? null;
       const sleepType = sleep.sleepType ?? '夜间睡眠';
+      const sourceChannel = options.sourceChannel ?? 'telegram';
       return {
         sleepKey: createHash('md5')
-          .update([day.date, sleepType, bedtime ?? '', wakeTime ?? '', sleep.totalSleepMinutes ?? ''].join('|'))
+          .update([sourceChannel, day.date, sleepType, bedtime ?? '', wakeTime ?? '', sleep.totalSleepMinutes ?? ''].join('|'))
           .digest('hex'),
         archivedDate: day.date,
-        sourceChannel: options.sourceChannel ?? 'telegram',
+        sourceChannel,
         sourceBatchId: options.batchId ?? `${options.batchIdPrefix ?? 'core-day'}-${day.date}`,
         sleepType,
         bedtime,

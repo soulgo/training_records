@@ -390,6 +390,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   }
 
   let archivedDate = null;
+  let usedFilenameDate = false;
   if (imageDates.size === 1) {
     archivedDate = resolveDetectedDate(imageDates);
     const conflictingFilenameDates = [...filenameDates].filter((date) => date !== archivedDate);
@@ -399,11 +400,25 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       );
     }
   } else if (filenameDates.size > 1) {
+    const dateConfidence = classifyDateConfidence({
+      archivedDate: null,
+      dateSources,
+      warnings,
+      reason: `conflicting filename dates: ${[...filenameDates].sort().join(', ')}`,
+    });
     return buildSkippedBatchResult(batch, {
       reason: `conflicting filename dates: ${[...filenameDates].sort().join(', ')}`,
       warnings,
       issues,
       dateSources,
+      dateStages: buildDateStages({
+        archivedDate: null,
+        imageDates,
+        filenameDates,
+        usedFilenameDate,
+        dateSources,
+        dateConfidence,
+      }),
       detectedApp,
       sourceImageCount,
       recognizedImageCount,
@@ -412,6 +427,7 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   } else {
     archivedDate = resolveDetectedDate(filenameDates);
     if (archivedDate) {
+      usedFilenameDate = true;
       warnings.push(`Using filename date ${archivedDate} for Telegram batch without image dates.`);
     }
   }
@@ -422,13 +438,28 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
         '该 Telegram 图片看起来是以 photo 形式发送，Bot API 通常不会保留原始文件名；若要依赖文件名日期回退，请改为以 document/文件 发送。',
       );
     }
+    const reason = issues.length > 0
+      ? `${issues.join('; ')}; no reliable image or filename date`
+      : 'no reliable image or filename date';
+    const dateConfidence = classifyDateConfidence({
+      archivedDate: null,
+      dateSources,
+      warnings,
+      reason,
+    });
     return buildSkippedBatchResult(batch, {
-      reason: issues.length > 0
-        ? `${issues.join('; ')}; no reliable image or filename date`
-        : 'no reliable image or filename date',
+      reason,
       warnings,
       issues,
       dateSources,
+      dateStages: buildDateStages({
+        archivedDate: null,
+        imageDates,
+        filenameDates,
+        usedFilenameDate,
+        dateSources,
+        dateConfidence,
+      }),
       detectedApp,
       sourceImageCount,
       recognizedImageCount,
@@ -436,10 +467,19 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     });
   }
 
-  const measurement = normalizeMeasurementForArchive(measurementCandidates.at(-1) ?? null, archivedDate);
+  const measurement = normalizeMeasurementForArchive(
+    mergeMeasurementCandidates(measurementCandidates),
+    archivedDate,
+  );
   const normalizedActivities = normalizeActivities(activities);
   const normalizedNutrition = normalizeNutrition(nutritionMeals, nutritionTotalCalories, nutritionDetails);
   const normalizedSleep = normalizeSleepRecords(sleepRecords, archivedDate);
+  const dateConfidence = classifyDateConfidence({
+    archivedDate,
+    dateSources,
+    warnings,
+    usedFilenameDate,
+  });
 
   return {
     status: 'ready',
@@ -454,6 +494,15 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     warnings,
     issues,
     dateSources,
+    dateConfidence,
+    dateStages: buildDateStages({
+      archivedDate,
+      imageDates,
+      filenameDates,
+      usedFilenameDate,
+      dateSources,
+      dateConfidence,
+    }),
     sourceImageCount,
     recognizedImageCount,
     failedImageCount: failedMessageIds.length,
@@ -478,6 +527,7 @@ export async function processTelegramUpdates({
   allowedChatIds,
   recognizeBatch,
   minConfidence,
+  previousLastProcessedUpdateId = 0,
 }) {
   const grouped = groupTelegramUpdates(updates);
   const batchResults = [];
@@ -486,7 +536,7 @@ export async function processTelegramUpdates({
   let changed = false;
   let lastProcessedUpdateId = updates.reduce(
     (max, update) => Math.max(max, update.update_id ?? 0),
-    0,
+    previousLastProcessedUpdateId,
   );
 
   for (const batch of grouped) {
@@ -815,15 +865,23 @@ function buildSkippedBatchResult(batch, {
   warnings = [],
   issues = [],
   dateSources = [],
+  dateStages = null,
   detectedApp = null,
   sourceImageCount = 0,
   recognizedImageCount = 0,
   failedImageCount = 0,
   failureCategory = null,
 }) {
+  const kind = batch.kind ?? 'image';
+  const dateConfidence = classifyDateConfidence({
+    archivedDate: null,
+    dateSources,
+    warnings,
+    reason,
+  });
   return {
     status: 'skipped',
-    kind: batch.kind ?? 'image',
+    kind,
     batchId: batch.batchId,
     sourceChannel: batch.sourceChannel ?? 'telegram',
     reason,
@@ -832,11 +890,102 @@ function buildSkippedBatchResult(batch, {
     warnings,
     issues,
     dateSources,
+    dateConfidence: kind === 'image' ? dateConfidence : null,
+    dateStages: kind === 'image'
+      ? dateStages ?? buildDateStages({
+          archivedDate: null,
+          imageDates: new Set(),
+          filenameDates: new Set(),
+          usedFilenameDate: false,
+          dateSources,
+          dateConfidence,
+        })
+      : null,
     detectedApp,
     sourceImageCount,
     recognizedImageCount,
     failedImageCount,
   };
+}
+
+function buildDateStages({
+  archivedDate,
+  imageDates = new Set(),
+  filenameDates = new Set(),
+  usedFilenameDate = false,
+  dateSources = [],
+  dateConfidence = null,
+}) {
+  const imageDate = resolveDetectedDate(imageDates);
+  const filenameDate = resolveDetectedDate(filenameDates);
+  const sleepBedtimeSource = dateSources.find((source) => source?.source === 'sleep_bedtime');
+  return {
+    date_parse: {
+      status: imageDate ? 'succeeded' : 'failed',
+      resultDate: imageDate ?? null,
+    },
+    filename_fallback: {
+      status: usedFilenameDate ? 'succeeded' : 'skipped',
+      resultDate: usedFilenameDate ? filenameDate : null,
+    },
+    sleep_bedtime_shift: {
+      status: sleepBedtimeSource?.detectedDate ? 'succeeded' : 'skipped',
+      resultDate: sleepBedtimeSource?.detectedDate ?? null,
+    },
+    date_confidence_gate: {
+      status: ['uncertain', 'missing'].includes(dateConfidence) ? 'manual_intervention' : 'succeeded',
+      result: dateConfidence ?? (archivedDate ? 'exact' : 'missing'),
+    },
+  };
+}
+
+function classifyDateConfidence({
+  archivedDate,
+  dateSources = [],
+  warnings = [],
+  reason = '',
+  usedFilenameDate = false,
+}) {
+  const normalizedSources = dateSources
+    .map((item) => String(item?.source ?? '').trim())
+    .filter(Boolean);
+  const uniqueSources = new Set(normalizedSources);
+  const warningText = [...warnings, reason].map((item) => String(item ?? '')).join('\n');
+
+  if (
+    uniqueSources.has('no_date') && !hasReliableDateSource(uniqueSources) && !usedFilenameDate ||
+    /no reliable image or filename date/i.test(warningText)
+  ) {
+    return 'missing';
+  }
+
+  if (!archivedDate) {
+    return 'uncertain';
+  }
+
+  if (
+    (uniqueSources.has('no_date') && !usedFilenameDate) ||
+    uniqueSources.has('none') ||
+    uniqueSources.has('low_confidence') ||
+    uniqueSources.size > 1 ||
+    hasUncertainDateWarning(warningText)
+  ) {
+    return 'uncertain';
+  }
+
+  if (usedFilenameDate || uniqueSources.has('sleep_bedtime')) {
+    return 'derived';
+  }
+
+  return 'exact';
+}
+
+function hasReliableDateSource(sources) {
+  return sources.has('image') || sources.has('sleep_bedtime');
+}
+
+function hasUncertainDateWarning(text) {
+  return /缺少年份|补全年份|不确定|无法可靠|混合|日期冲突|conflict|conflicting|ambiguous|multiple dates/i.test(text);
 }
 
 function analyzeThoughtBatch(batch) {
@@ -876,6 +1025,8 @@ function analyzeThoughtBatch(batch) {
       tags: getThoughtModuleTags(thoughtModule, { sourceChannel }),
       telegramMessageId: message?.messageId ?? null,
       telegramChatId: message?.chatId ?? null,
+      sourceMessageId: message?.sourceMessageId ?? message?.messageId ?? null,
+      sourceChatId: message?.sourceChatId ?? message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,
     },
   };
@@ -922,6 +1073,8 @@ function analyzeThoughtEditBatch(batch) {
       thoughtModule: normalizeThoughtModuleOrNull(batch.thoughtEdit?.thoughtModule),
       replacePhotos: Boolean(batch.thoughtEdit?.replacePhotos),
       telegramChatId: message?.chatId ?? null,
+      targetSourceMessageId: batch.thoughtEdit?.targetSourceMessageId ?? message?.replySourceMessageId ?? targetMessageId,
+      sourceChatId: batch.thoughtEdit?.sourceChatId ?? message?.sourceChatId ?? message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,
     },
   };
@@ -952,6 +1105,8 @@ function analyzeThoughtDeleteBatch(batch) {
       sourceChannel,
       targetMessageId,
       telegramChatId: message?.chatId ?? null,
+      targetSourceMessageId: batch.thoughtDelete?.targetSourceMessageId ?? message?.replySourceMessageId ?? targetMessageId,
+      sourceChatId: batch.thoughtDelete?.sourceChatId ?? message?.sourceChatId ?? message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,
     },
   };
@@ -1172,15 +1327,38 @@ function normalizeMeasurementForArchive(measurement, archivedDate) {
   }
 
   if (/^\d{2}:\d{2}$/.test(measuredAt)) {
-    const { detectedDate, ...rest } = normalized;
     return {
-      ...rest,
+      ...normalized,
       measuredAt: `${normalized.detectedDate ?? archivedDate} ${measuredAt}`,
     };
   }
 
-  const { detectedDate, ...finalNormalized } = normalized;
-  return finalNormalized;
+  return normalized;
+}
+
+function mergeMeasurementCandidates(candidates) {
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return null;
+  }
+
+  return candidates.reduce((merged, candidate) => mergeMeasurementCandidate(merged, candidate), null);
+}
+
+function mergeMeasurementCandidate(current, incoming) {
+  if (!incoming) {
+    return current;
+  }
+  if (!current) {
+    return { ...incoming };
+  }
+
+  const merged = { ...current };
+  for (const [key, value] of Object.entries(incoming)) {
+    if (value !== null && value !== undefined && value !== '') {
+      merged[key] = value;
+    }
+  }
+  return merged;
 }
 
 function normalizeWeightValue(value) {
@@ -1385,6 +1563,7 @@ function analyzeThoughtMoveBatch(batch) {
   const message = batch.messages?.[0] ?? null;
   const targetMessageId = normalizeMessageId(batch.thoughtMove?.targetMessageId);
   const thoughtModule = normalizeThoughtModuleOrNull(batch.thoughtMove?.thoughtModule);
+  const sourceChannel = batch.sourceChannel ?? message?.sourceChannel ?? 'telegram';
 
   if (!targetMessageId) {
     return buildSkippedBatchResult(batch, {
@@ -1402,16 +1581,20 @@ function analyzeThoughtMoveBatch(batch) {
     status: 'ready',
     kind: 'thought_move',
     batchId: batch.batchId,
+    sourceChannel,
     archivedDate: null,
     warnings: [],
     issues: [],
     confidence: 1,
     thoughtMove: {
       command: batch.thoughtMove?.command ?? '/移动',
+      sourceChannel,
       targetMessageId,
       thoughtModule,
-      tags: getThoughtModuleTags(thoughtModule),
+      tags: getThoughtModuleTags(thoughtModule, { sourceChannel }),
       telegramChatId: message?.chatId ?? null,
+      targetSourceMessageId: batch.thoughtMove?.targetSourceMessageId ?? message?.replySourceMessageId ?? targetMessageId,
+      sourceChatId: batch.thoughtMove?.sourceChatId ?? message?.sourceChatId ?? message?.chatId ?? null,
       messageDateUnix: message?.dateUnix ?? null,
     },
   };
@@ -1439,7 +1622,7 @@ function parseThoughtEditCommand(text) {
   const parsedBody = parseThoughtModuleBody(bodyMatch[2] ?? '');
   return {
     command: match[1],
-    targetMessageId: Number(bodyMatch[1]),
+    targetMessageId: normalizeMessageId(bodyMatch[1]),
     body: parsedBody.body,
     moduleKey: parsedBody.moduleKey,
     moduleExplicit: parsedBody.moduleExplicit,
@@ -1477,7 +1660,7 @@ function parseThoughtDeleteCommand(text) {
   return {
     command: match[1],
     requestedTargetText,
-    targetMessageId: idMatch ? Number(idMatch[1]) : null,
+    targetMessageId: idMatch ? normalizeMessageId(idMatch[1]) : null,
   };
 }
 
@@ -1486,8 +1669,21 @@ function buildThoughtMessageKey(chatId, messageId) {
 }
 
 function normalizeMessageId(value) {
-  const number = Number(value);
-  return Number.isInteger(number) && number > 0 ? number : null;
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  }
+  if (typeof value === 'bigint') {
+    return value > 0n ? value.toString() : null;
+  }
+  const text = String(value).trim();
+  if (!/^\d+$/u.test(text) || text === '0') {
+    return null;
+  }
+  const number = Number(text);
+  return Number.isSafeInteger(number) && String(number) === text ? number : text;
 }
 
 function parseThoughtMoveCommand(text) {
@@ -1512,7 +1708,7 @@ function parseThoughtMoveCommand(text) {
       ? {
           command,
           requestedTargetText,
-          targetMessageId: Number(idAndModuleMatch[1]),
+          targetMessageId: normalizeMessageId(idAndModuleMatch[1]),
           thoughtModule,
         }
       : null;

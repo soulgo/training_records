@@ -878,6 +878,49 @@ test('groups supported Telegram command aliases without changing routed batch sh
   }
 });
 
+test('preserves oversized thought target ids from Telegram commands without precision loss', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const oversizedId = '9007199254740993';
+  const batches = lib.groupTelegramUpdates([
+    telegramUpdate(861, {
+      messageId: 861,
+      telegram: {
+        text: `/随想编 ${oversizedId} 新正文`,
+      },
+    }),
+    telegramUpdate(862, {
+      messageId: 862,
+      telegram: {
+        text: `/随想删 ${oversizedId}`,
+      },
+    }),
+    telegramUpdate(863, {
+      messageId: 863,
+      telegram: {
+        text: `/移动 ${oversizedId} 杂七杂八`,
+      },
+    }),
+  ]);
+
+  assert.deepEqual(
+    batches.map((batch) => batch.kind),
+    ['thought_edit', 'thought_delete', 'thought_move'],
+  );
+  assert.equal(batches[0].thoughtEdit.targetMessageId, oversizedId);
+  assert.equal(batches[1].thoughtDelete.targetMessageId, oversizedId);
+  assert.equal(batches[2].thoughtMove.targetMessageId, oversizedId);
+
+  const analyzed = batches.map((batch) => lib.analyzeTelegramBatch(batch, []));
+
+  assert.equal(analyzed[0].thoughtEdit.targetMessageId, oversizedId);
+  assert.equal(analyzed[1].thoughtDelete.targetMessageId, oversizedId);
+  assert.equal(analyzed[2].thoughtMove.targetMessageId, oversizedId);
+});
+
 test('groups edited thought messages into thought_edit batches when the message is already a known thought', async () => {
   const lib = await importTelegramSyncLib();
 
@@ -966,6 +1009,63 @@ test('groups reply-based thought revisions into thought_edit batches when replyi
     '今天骑行 40 公里，温地公园是一个散步的好地方，\n高德地图骑行的公里数和华为手表骑行的公里数差别太大了，差了12公里多。',
   );
   assert.equal(batches[0].thoughtEdit.thoughtModule, null);
+});
+
+test('groups same-batch thought create followed by reply edit, explicit edit, delete, and move targets', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+
+  const batches = lib.groupTelegramUpdates([
+    telegramUpdate(431, {
+      messageId: 220,
+      telegram: {
+        text: '/随想 今天力量训练后状态不错',
+      },
+    }),
+    telegramUpdate(432, {
+      messageId: 221,
+      telegram: {
+        reply_to_message: { message_id: 220 },
+        text: '/随想 补充：右肩没有不适',
+      },
+    }),
+    telegramUpdate(433, {
+      messageId: 222,
+      telegram: {
+        text: '/随想编 220 杂七杂八 改成杂项视角',
+      },
+    }),
+    telegramUpdate(434, {
+      messageId: 223,
+      telegram: {
+        text: '/随想删 220',
+      },
+    }),
+    telegramUpdate(435, {
+      messageId: 224,
+      telegram: {
+        text: '/移动 220 身体反馈',
+      },
+    }),
+  ]);
+
+  assert.deepEqual(
+    batches.map((batch) => batch.kind),
+    ['thought', 'thought_edit', 'thought_edit', 'thought_delete', 'thought_move'],
+  );
+  assert.equal(batches[0].thought.sourceMessageId, 220);
+  assert.equal(batches[0].thought.body, '今天力量训练后状态不错');
+  assert.equal(batches[1].thoughtEdit.command, '/随想');
+  assert.equal(batches[1].thoughtEdit.targetMessageId, 220);
+  assert.equal(batches[1].thoughtEdit.body, '补充：右肩没有不适');
+  assert.equal(batches[2].thoughtEdit.command, '/随想编');
+  assert.equal(batches[2].thoughtEdit.targetMessageId, 220);
+  assert.equal(batches[2].thoughtEdit.thoughtModule, 'misc');
+  assert.equal(batches[2].thoughtEdit.body, '改成杂项视角');
+  assert.equal(batches[3].thoughtDelete.targetMessageId, 220);
+  assert.equal(batches[4].thoughtMove.targetMessageId, 220);
+  assert.equal(batches[4].thoughtMove.thoughtModule, 'body_feedback');
 });
 
 test('groups explicit thought edit commands by target message id', async () => {
@@ -1670,6 +1770,27 @@ test('processes only allowed chats and advances state to the highest processed u
   assert.match(result.markdown, /19:12 力量训练/);
 });
 
+test('processTelegramUpdates preserves the previous offset when updates are empty', async () => {
+  const lib = await importTelegramSyncLib();
+
+  const result = await lib.processTelegramUpdates({
+    markdown: '### 2026-05-08\n',
+    updates: [],
+    allowedChatIds: new Set([42]),
+    recognizeBatch: async () => {
+      throw new Error('empty updates should not trigger recognition');
+    },
+    minConfidence: 0.8,
+    previousLastProcessedUpdateId: 520905341,
+  });
+
+  assert.equal(result.changed, false);
+  assert.equal(result.lastProcessedUpdateId, 520905341);
+  assert.deepEqual(result.batchResults, []);
+  assert.deepEqual(result.inboxEntries, []);
+  assert.equal(result.markdown, '### 2026-05-08\n');
+});
+
 test('normalizes detected month-day using the telegram message year when AI returns an impossible year', async () => {
   const lib = await importTelegramSyncLib();
 
@@ -1713,6 +1834,51 @@ test('normalizes detected month-day using the telegram message year when AI retu
 
   assert.equal(analyzed.status, 'ready');
   assert.equal(analyzed.archivedDate, '2026-05-06');
+});
+
+test('normalizes month-day dates with Asia/Shanghai message year instead of UTC year', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'shanghai-new-year-morning',
+    messages: [
+      {
+        updateId: 520905342,
+        messageId: 130,
+        mediaGroupId: null,
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.parse('2026-12-31T16:30:00.000Z') / 1000,
+        photos: [{ fileId: 'file-workout-new-year', fileUniqueId: 'uniq-workout-new-year' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 130,
+      imageType: 'workout',
+      detectedDate: '5669-01-01',
+      dateEvidence: 'image only shows 1月1日',
+      confidence: 0.95,
+      warnings: ['year is unreliable'],
+      records: {
+        activities: [
+          {
+            time: '07:30',
+            type: '力量训练',
+            detail: '总消耗250千卡，时长00:28:48，平均心率125次/分钟',
+          },
+        ],
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2027-01-01');
 });
 
 test('uses the explicit year from the screenshot when a valid four-digit year is present', async () => {
@@ -2121,6 +2287,139 @@ test('skips a multi-image album when every image lacks a reliable date', async (
   assert.equal(analyzed.status, 'skipped');
   assert.equal(analyzed.batchId, 'album-no-date');
   assert.match(analyzed.reason, /no reliable image or filename date/i);
+});
+
+test('preserves measurement detectedDate when measuredAt contains only time', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'single-measurement-time-only',
+    messages: [
+      {
+        updateId: 520905412,
+        messageId: 94,
+        mediaGroupId: null,
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 0, 23, 0) / 1000,
+        photos: [{ fileId: 'file-measurement-time-only', fileUniqueId: 'uniq-measurement-time-only' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 94,
+      imageType: 'measurement',
+      detectedDate: '2026-05-14',
+      dateEvidence: 'body scale screenshot shows 2026-05-14 and 06:23',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: '06:23',
+          bodyScore: 73,
+          weightKg: 73.65,
+          bmi: 23.7,
+          bodyFatPct: 24.1,
+          skeletalMuscleKg: 30.7,
+          visceralFatLevel: 9,
+          basalMetabolismKcal: 1601,
+          bodyWaterPct: 48.6,
+          proteinPct: 23.3,
+          boneMassKg: 2.965,
+          fatFreeMassKg: 55.9,
+          bodyAge: 32,
+          bodyType: '肥胖型',
+        },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-14');
+  assert.equal(analyzed.measurement?.measuredAt, '2026-05-14 06:23');
+  assert.equal(analyzed.measurement?.detectedDate, '2026-05-14');
+});
+
+test('merges same-day measurement candidates without dropping complementary fields', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const batch = {
+    batchId: 'album-measurement-complementary',
+    messages: [
+      {
+        updateId: 520905413,
+        messageId: 95,
+        mediaGroupId: 'album-measurement-complementary',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 0, 23, 0) / 1000,
+        photos: [{ fileId: 'file-measurement-a', fileUniqueId: 'uniq-measurement-a' }],
+      },
+      {
+        updateId: 520905414,
+        messageId: 96,
+        mediaGroupId: 'album-measurement-complementary',
+        caption: '',
+        text: '',
+        chatId: 42,
+        dateUnix: Date.UTC(2026, 4, 14, 0, 24, 0) / 1000,
+        photos: [{ fileId: 'file-measurement-b', fileUniqueId: 'uniq-measurement-b' }],
+      },
+    ],
+  };
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 95,
+      imageType: 'measurement',
+      detectedDate: '2026-05-14',
+      dateEvidence: 'body scale overview',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: '06:23',
+          weightKg: 73.65,
+          bodyFatPct: 24.1,
+          skeletalMuscleKg: 30.7,
+        },
+      },
+    },
+    {
+      messageId: 96,
+      imageType: 'measurement',
+      detectedDate: '2026-05-14',
+      dateEvidence: 'body composition details',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: '06:23',
+          boneMassKg: 2.965,
+          fatFreeMassKg: 55.9,
+          basalMetabolismKcal: 1601,
+          bodyAge: 32,
+        },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-05-14');
+  assert.equal(analyzed.measurement?.measuredAt, '2026-05-14 06:23');
+  assert.equal(analyzed.measurement?.weightKg, 73.65);
+  assert.equal(analyzed.measurement?.bodyFatPct, 24.1);
+  assert.equal(analyzed.measurement?.boneMassKg, 2.965);
+  assert.equal(analyzed.measurement?.fatFreeMassKg, 55.9);
+  assert.equal(analyzed.measurement?.basalMetabolismKcal, 1601);
 });
 
 test('skips a multi-image album when reliable detected dates conflict', async () => {
@@ -2612,6 +2911,12 @@ test('uses a filename date from any position when screenshots are undated', asyn
   assert.equal(analyzed.status, 'ready');
   assert.equal(analyzed.archivedDate, '2026-05-12');
   assert.match(analyzed.warnings.join('\n'), /filename date 2026-05-12/i);
+  assert.equal(analyzed.dateStages.date_parse.status, 'failed');
+  assert.equal(analyzed.dateStages.filename_fallback.status, 'succeeded');
+  assert.equal(analyzed.dateStages.filename_fallback.resultDate, '2026-05-12');
+  assert.equal(analyzed.dateStages.sleep_bedtime_shift.status, 'skipped');
+  assert.equal(analyzed.dateStages.date_confidence_gate.status, 'succeeded');
+  assert.equal(analyzed.dateStages.date_confidence_gate.result, 'derived');
 });
 
 test('accepts a visible gallery filename date from image evidence when Telegram photo has no filename', async () => {
@@ -3421,6 +3726,176 @@ test('reports dateSources with per-image date evidence', async () => {
   assert.equal(analyzed.dateSources[1].source, 'image');
 });
 
+test('classifies image archive date confidence from exact, derived, uncertain, and missing evidence', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const exact = lib.analyzeTelegramBatch({
+    batchId: 'confidence-exact',
+    messages: [
+      {
+        messageId: 2101,
+        mediaGroupId: null,
+        dateUnix: Date.UTC(2026, 5, 18, 0, 30, 0) / 1000,
+        photos: [{ fileId: 'f1', fileUniqueId: 'u1' }],
+      },
+    ],
+  }, [
+    {
+      messageId: 2101,
+      imageType: 'workout',
+      detectedDate: '2026-06-18',
+      dateEvidence: 'image header: 2026-06-18',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        activities: [{ time: '19:13', type: '力量训练', detail: '总消耗241千卡' }],
+      },
+    },
+  ]);
+
+  assert.equal(exact.status, 'ready');
+  assert.equal(exact.dateConfidence, 'exact');
+  assert.equal(exact.dateStages.date_parse.status, 'succeeded');
+  assert.equal(exact.dateStages.date_parse.resultDate, '2026-06-18');
+  assert.equal(exact.dateStages.date_confidence_gate.result, 'exact');
+
+  const derived = lib.analyzeTelegramBatch({
+    batchId: 'confidence-derived-filename',
+    messages: [
+      {
+        messageId: 2102,
+        mediaGroupId: null,
+        dateUnix: Date.UTC(2026, 5, 19, 0, 30, 0) / 1000,
+        photos: [{ fileId: 'f2', fileUniqueId: 'u2', fileName: '饮食记录 2026-06-18.jpg', source: 'document' }],
+      },
+    ],
+  }, [
+    {
+      messageId: 2102,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no reliable image date',
+      confidence: 0.97,
+      warnings: [],
+      records: {
+        meals: [{ name: '晚餐', calories: 465, recommendedMin: 309, recommendedMax: 721 }],
+        totalCalories: 465,
+      },
+    },
+  ]);
+
+  assert.equal(derived.status, 'ready');
+  assert.equal(derived.archivedDate, '2026-06-18');
+  assert.equal(derived.dateConfidence, 'derived');
+
+  const uncertain = lib.analyzeTelegramBatch({
+    batchId: 'confidence-uncertain-mixed',
+    messages: [
+      {
+        messageId: 2103,
+        mediaGroupId: 'confidence-uncertain-mixed',
+        dateUnix: Date.UTC(2026, 5, 18, 23, 28, 0) / 1000,
+        photos: [{ fileId: 'f3', fileUniqueId: 'u3' }],
+      },
+      {
+        messageId: 2104,
+        mediaGroupId: 'confidence-uncertain-mixed',
+        dateUnix: Date.UTC(2026, 5, 18, 23, 29, 0) / 1000,
+        photos: [{ fileId: 'f4', fileUniqueId: 'u4' }],
+      },
+      {
+        messageId: 2105,
+        mediaGroupId: 'confidence-uncertain-mixed',
+        dateUnix: Date.UTC(2026, 5, 18, 23, 30, 0) / 1000,
+        photos: [{ fileId: 'f5', fileUniqueId: 'u5' }],
+      },
+    ],
+  }, [
+    {
+      messageId: 2103,
+      imageType: 'workout',
+      detectedDate: '2026-06-17',
+      dateEvidence: 'image header: 2026-06-17',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        activities: [{ time: '19:13', type: '力量训练', detail: '总消耗241千卡' }],
+      },
+    },
+    {
+      messageId: 2104,
+      imageType: 'sleep',
+      detectedDate: '2026-06-18',
+      dateEvidence: 'screenshot shows 6月18日, year from message time',
+      confidence: 0.97,
+      warnings: ['detectedDate补全年份不确定，需程序确认'],
+      records: {
+        sleep: [{
+          bedtime: '23:10',
+          wakeTime: '06:45',
+          totalSleepMinutes: 455,
+          sleepScore: 83,
+        }],
+      },
+    },
+    {
+      messageId: 2105,
+      imageType: 'nutrition',
+      detectedDate: null,
+      dateEvidence: 'no reliable image date',
+      confidence: 0.96,
+      warnings: [],
+      records: {
+        meals: [{ name: '早餐', calories: 300, recommendedMin: 300, recommendedMax: 700 }],
+        totalCalories: 300,
+      },
+    },
+  ]);
+
+  assert.equal(uncertain.status, 'ready');
+  assert.equal(uncertain.archivedDate, '2026-06-17');
+  assert.deepEqual(uncertain.dateSources.map((item) => item.source), ['image', 'sleep_bedtime', 'no_date']);
+  assert.equal(uncertain.dateConfidence, 'uncertain');
+  assert.equal(uncertain.dateStages.sleep_bedtime_shift.status, 'succeeded');
+  assert.equal(uncertain.dateStages.sleep_bedtime_shift.resultDate, '2026-06-17');
+  assert.equal(uncertain.dateStages.date_confidence_gate.status, 'manual_intervention');
+  assert.equal(uncertain.dateStages.date_confidence_gate.result, 'uncertain');
+
+  const missing = lib.analyzeTelegramBatch({
+    batchId: 'confidence-missing',
+    messages: [
+      {
+        messageId: 2106,
+        mediaGroupId: null,
+        dateUnix: Date.UTC(2026, 5, 18, 0, 30, 0) / 1000,
+        photos: [{ fileId: 'f6', fileUniqueId: 'u6', source: 'photo' }],
+      },
+    ],
+  }, [
+    {
+      messageId: 2106,
+      imageType: 'measurement',
+      detectedDate: null,
+      dateEvidence: 'no reliable image date',
+      confidence: 0.96,
+      warnings: [],
+      records: {
+        measurement: {
+          measuredAt: null,
+          weightKg: 73.55,
+          bodyFatPct: 22.4,
+        },
+      },
+    },
+  ]);
+
+  assert.equal(missing.status, 'skipped');
+  assert.match(missing.reason, /no reliable image or filename date/);
+  assert.equal(missing.dateConfidence, 'missing');
+});
+
 test('overview screenshot only writes dailyWorkoutSummary and does not produce activities', async () => {
   const lib = await importTelegramSyncLib();
 
@@ -3636,6 +4111,7 @@ test('uses filename date for single nutrition image sent as document without ima
 
   assert.equal(analyzed.status, 'ready');
   assert.equal(analyzed.archivedDate, '2026-05-12');
+  assert.equal(Object.hasOwn(analyzed.measurement ?? {}, 'detectedDate'), false);
   assert.match(analyzed.warnings.join('\n'), /filename date/i);
 });
 

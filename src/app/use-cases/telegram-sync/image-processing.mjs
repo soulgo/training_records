@@ -5,6 +5,7 @@ import { analyzeTelegramBatch, mapWithConcurrency } from '../../../adapters/tele
 import { resolveTelegramFileUrl } from '../../../adapters/telegram/index.mjs';
 import { getRecognitionPromptMetadata, stripPromptMetadataHeader } from '../../../../tools/prompt-generator.mjs';
 import { createAiProvider } from '../../../ai/provider.mjs';
+import { shouldQueueRecognitionFailure } from '../../../db/training/pending-recognition.mjs';
 import {
   classifyFailureCategory,
   hasPartialRecognitionFailure,
@@ -36,7 +37,9 @@ export async function recognizeBatch(batch, env, options = {}) {
   const fetchImageFileById = options.fetchImageFileById ?? fetchTelegramFileById;
   const sourceChannel = options.sourceChannel ?? batch.sourceChannel ?? 'telegram';
   const imageInputMode = resolveRecognitionImageInputMode(options.rawEnv ?? process.env, sourceChannel);
+  const writeStartedRecognitionAiCallLog = options.writeStartedRecognitionAiCallLog ?? null;
   const recognitionErrors = [];
+  const syncStages = createImageSyncStages();
   const recognitions = await mapWithConcurrency(batch.messages, env.aiConcurrency, async (message) => {
     const photo = message.photos.at(-1);
     const fileId = photo?.fileId;
@@ -45,60 +48,103 @@ export async function recognizeBatch(batch, env, options = {}) {
     }
 
     try {
-      const imageUrl = await resolveRecognitionImageUrl({
+      const imageUrl = await measureBatchStage(syncStages, 'image_download', () => resolveRecognitionImageUrl({
         mode: imageInputMode,
         botToken: env.botToken,
         fileId,
         fetchImageFileById,
         message,
         photo,
-      });
-      const recognition = await recognizeTelegramImageMessage({
+      }));
+      const recognition = await measureBatchStage(syncStages, 'ai_schema', () => recognizeTelegramImageMessage({
         aiProvider,
         message,
         imageUrl,
         systemPrompt,
         promptMetadata,
         env: options.rawEnv ?? process.env,
-      });
+        readRecognitionCache: options.readRecognitionCache,
+        onCacheReadStage: (stage) => markImageStage(syncStages, 'cache_read', stage),
+        onAiCallLog: buildStartedRecognitionAiCallLogWriter({
+          batch,
+          message,
+          sourceChannel,
+          writeStartedRecognitionAiCallLog,
+        }),
+      }));
+      markCacheReadStage(syncStages, recognition);
       return attachSourceMessageId(recognition, message);
     } catch (error) {
       if (imageInputMode === 'auto' && shouldRetryRecognitionInline(error) && fetchImageFileById) {
-        const inlineImageUrl = await buildInlineImageUrl(fetchImageFileById, fileId, { message, photo });
-        if (inlineImageUrl) {
+        const inlineImage = await measureBatchStage(syncStages, 'image_download', () =>
+          buildInlineImageUrl(fetchImageFileById, fileId, { message, photo })
+        );
+        if (inlineImage.ok) {
           try {
-            const recognition = await recognizeTelegramImageMessage({
+            const recognition = await measureBatchStage(syncStages, 'ai_schema', () => recognizeTelegramImageMessage({
               aiProvider,
               message,
-              imageUrl: inlineImageUrl,
+              imageUrl: inlineImage.imageUrl,
               systemPrompt,
               promptMetadata,
               env: options.rawEnv ?? process.env,
-            });
+              readRecognitionCache: options.readRecognitionCache,
+              onCacheReadStage: (stage) => markImageStage(syncStages, 'cache_read', stage),
+              onAiCallLog: buildStartedRecognitionAiCallLogWriter({
+                batch,
+                message,
+                sourceChannel,
+                writeStartedRecognitionAiCallLog,
+              }),
+            }));
+            markCacheReadStage(syncStages, recognition);
             return attachSourceMessageId(recognition, message);
           } catch (inlineError) {
             const originalMessage = error instanceof Error ? error.message : String(error);
             const inlineMessage = inlineError instanceof Error ? inlineError.message : String(inlineError);
+            markImageStageFailure(syncStages, 'ai_schema', inlineMessage, {
+              failureCategory: classifyFailureCategory(inlineMessage, { phase: 'ai_recognition' }),
+            });
             recognitionErrors.push({
               messageId: message.messageId,
               error: inlineMessage,
               originalError: originalMessage,
               failureCategory: classifyFailureCategory(inlineMessage, { phase: 'ai_recognition' }),
               summary: inlineError?.summary ?? null,
+              ...buildRecognitionErrorAiAudit(inlineError),
             });
             process.stderr.write(
               `[telegram-sync] inline image retry failed for ${message.messageId}: ${inlineMessage} (original: ${originalMessage})\n`,
             );
             return null;
           }
+        } else {
+          markImageStageFailure(syncStages, 'image_download', inlineImage.error, {
+            failureCategory: inlineImage.failureCategory,
+          });
+          recognitionErrors.push({
+            messageId: message.messageId,
+            error: inlineImage.error,
+            originalError: error instanceof Error ? error.message : String(error),
+            failureCategory: inlineImage.failureCategory,
+            summary: inlineImage.summary ?? null,
+          });
+          process.stderr.write(
+            `[telegram-sync] inline image input failed for ${message.messageId}: ${inlineImage.error}\n`,
+          );
+          return null;
         }
       }
       const errorMessage = error instanceof Error ? error.message : String(error);
+      markImageStageFailure(syncStages, classifyFailureStage(error, imageInputMode), errorMessage, {
+        failureCategory: error?.failureCategory ?? classifyFailureCategory(errorMessage, { phase: 'ai_recognition' }),
+      });
       recognitionErrors.push({
         messageId: message.messageId,
         error: errorMessage,
-        failureCategory: classifyFailureCategory(errorMessage, { phase: 'ai_recognition' }),
+        failureCategory: error?.failureCategory ?? classifyFailureCategory(errorMessage, { phase: 'ai_recognition' }),
         summary: error?.summary ?? null,
+        ...buildRecognitionErrorAiAudit(error),
       });
       process.stderr.write(
         `[telegram-sync] image recognition failed for ${message.messageId}: ${errorMessage}\n`,
@@ -110,7 +156,29 @@ export async function recognizeBatch(batch, env, options = {}) {
   return {
     recognitions: recognitions.filter(Boolean),
     recognitionErrors,
+    syncStages: finalizeImageSyncStages(syncStages),
   };
+}
+
+function buildStartedRecognitionAiCallLogWriter({
+  batch,
+  message,
+  sourceChannel,
+  writeStartedRecognitionAiCallLog,
+}) {
+  if (typeof writeStartedRecognitionAiCallLog !== 'function') {
+    return undefined;
+  }
+
+  return (event) =>
+    writeStartedRecognitionAiCallLog({
+      ...event,
+      taskId: batch.batchId,
+      sourceChannel,
+      sourceChatId: message.sourceChatId ?? message.chatId ?? null,
+      sourceMessageId: message.sourceMessageId ?? message.messageId ?? null,
+      messageId: message.messageId ?? null,
+    });
 }
 
 export function resolveRecognitionImageInputMode(env = process.env, sourceChannel = 'telegram') {
@@ -129,11 +197,14 @@ async function resolveRecognitionImageUrl({ mode, botToken, fileId, fetchImageFi
     if (!fetchImageFileById) {
       throw new Error('recognition inline image input requires file download support');
     }
-    const inlineImageUrl = await buildInlineImageUrl(fetchImageFileById, fileId, { message, photo });
-    if (!inlineImageUrl) {
-      throw new Error('Unable to build inline image input');
+    const inlineImage = await buildInlineImageUrl(fetchImageFileById, fileId, { message, photo });
+    if (!inlineImage.ok) {
+      const error = new Error(inlineImage.error);
+      error.failureCategory = inlineImage.failureCategory;
+      error.summary = inlineImage.summary ?? null;
+      throw error;
     }
-    return inlineImageUrl;
+    return inlineImage.imageUrl;
   }
   return resolveTelegramFileUrl(botToken, fileId);
 }
@@ -143,11 +214,180 @@ function normalizeRecognitionOutput(output) {
     return {
       recognitions: output.filter(Boolean),
       recognitionErrors: [],
+      syncStages: null,
     };
   }
   return {
     recognitions: Array.isArray(output?.recognitions) ? output.recognitions.filter(Boolean) : [],
     recognitionErrors: Array.isArray(output?.recognitionErrors) ? output.recognitionErrors : [],
+    syncStages: normalizeSyncStages(output?.syncStages),
+  };
+}
+
+const IMAGE_SYNC_STAGE_NAMES = ['image_download', 'cache_read', 'ai_schema', 'db_persist'];
+
+function createImageSyncStages() {
+  return Object.fromEntries(
+    IMAGE_SYNC_STAGE_NAMES.map((stage) => [
+      stage,
+      {
+        status: 'skipped',
+        durationMs: 0,
+        failureCategory: null,
+        failureReason: null,
+      },
+    ]),
+  );
+}
+
+async function measureBatchStage(syncStages, stage, run) {
+  const startedAt = Date.now();
+  try {
+    const result = await run();
+    markImageStage(syncStages, stage, {
+      status: 'succeeded',
+      durationMs: Date.now() - startedAt,
+      failureCategory: null,
+      failureReason: null,
+    });
+    return result;
+  } catch (error) {
+    markImageStageFailure(syncStages, stage, error instanceof Error ? error.message : String(error), {
+      failureCategory: error?.failureCategory ?? classifyFailureCategory(error, { phase: stage }),
+      durationMs: Date.now() - startedAt,
+    });
+    throw error;
+  }
+}
+
+function markImageStage(syncStages, stage, update = {}) {
+  if (!syncStages || !IMAGE_SYNC_STAGE_NAMES.includes(stage)) {
+    return;
+  }
+  const current = syncStages[stage] ?? createImageSyncStages()[stage];
+  const nextStatus = normalizeStageStatus(update.status) ?? current.status;
+  const currentDuration = Number.isFinite(current.durationMs) ? current.durationMs : 0;
+  const nextDuration = Number.isFinite(update.durationMs) ? Math.max(0, Math.round(update.durationMs)) : 0;
+  const status = current.status === 'failed' ? 'failed' : nextStatus;
+  syncStages[stage] = {
+    status,
+    durationMs: currentDuration + nextDuration,
+    failureCategory:
+      current.failureCategory ?? update.failureCategory ?? (status === 'failed' ? 'system_bug' : null),
+    failureReason: current.failureReason ?? update.failureReason ?? null,
+  };
+}
+
+function markImageStageFailure(syncStages, stage, failureReason, options = {}) {
+  markImageStage(syncStages, stage, {
+    status: 'failed',
+    durationMs: options.durationMs,
+    failureCategory: options.failureCategory ?? classifyFailureCategory(failureReason, { phase: stage }),
+    failureReason,
+  });
+}
+
+export function markImageSyncStage(batch, stage, update = {}) {
+  if (!batch || !IMAGE_SYNC_STAGE_NAMES.includes(stage)) {
+    return batch;
+  }
+  batch.syncStages = finalizeImageSyncStages(batch.syncStages);
+  markImageStage(batch.syncStages, stage, update);
+  batch.syncStages = finalizeImageSyncStages(batch.syncStages);
+  return batch;
+}
+
+export function markImageSyncStageFailure(batch, stage, failureReason, options = {}) {
+  if (!batch || !IMAGE_SYNC_STAGE_NAMES.includes(stage)) {
+    return batch;
+  }
+  batch.syncStages = finalizeImageSyncStages(batch.syncStages);
+  markImageStageFailure(batch.syncStages, stage, failureReason, options);
+  batch.syncStages = finalizeImageSyncStages(batch.syncStages);
+  return batch;
+}
+
+function markCacheReadStage(syncStages, recognition) {
+  const status = String(recognition?.cacheStatus ?? '').trim();
+  if (!status) {
+    return;
+  }
+  markImageStage(syncStages, 'cache_read', {
+    status: status === 'disabled' ? 'skipped' : 'succeeded',
+    durationMs: 0,
+    failureCategory: null,
+    failureReason: null,
+  });
+}
+
+function classifyFailureStage(error, imageInputMode) {
+  if (error?.failureCategory === 'image_download') {
+    return 'image_download';
+  }
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  if (imageInputMode === 'inline' && /image input|image download|download failed|unsupported content-type|empty/i.test(message)) {
+    return 'image_download';
+  }
+  return 'ai_schema';
+}
+
+function inferImageSyncStages({ syncStages, recognitions, recognitionErrors }) {
+  const inferred = normalizeSyncStages(syncStages);
+  if ((recognitions ?? []).length > 0) {
+    markImageStage(inferred, 'ai_schema', { status: 'succeeded', durationMs: 0 });
+  }
+  for (const error of recognitionErrors ?? []) {
+    const stage = error?.failureCategory === 'image_download' ? 'image_download' : 'ai_schema';
+    markImageStageFailure(inferred, stage, error?.error ?? 'recognition failed', {
+      failureCategory: error?.failureCategory,
+    });
+  }
+  return finalizeImageSyncStages(inferred);
+}
+
+function normalizeSyncStages(value) {
+  const normalized = createImageSyncStages();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  for (const stage of IMAGE_SYNC_STAGE_NAMES) {
+    const input = value[stage];
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      continue;
+    }
+    normalized[stage] = {
+      status: normalizeStageStatus(input.status) ?? 'skipped',
+      durationMs: Number.isFinite(input.durationMs) && input.durationMs >= 0
+        ? Math.round(input.durationMs)
+        : 0,
+      failureCategory: input.failureCategory ?? null,
+      failureReason: input.failureReason ?? null,
+    };
+  }
+  return normalized;
+}
+
+function finalizeImageSyncStages(syncStages) {
+  return normalizeSyncStages(syncStages) ?? createImageSyncStages();
+}
+
+function normalizeStageStatus(status) {
+  const normalized = String(status ?? '').trim();
+  return ['succeeded', 'failed', 'skipped'].includes(normalized) ? normalized : null;
+}
+
+function buildRecognitionErrorAiAudit(error) {
+  const audit = error?.aiAudit;
+  if (!audit || typeof audit !== 'object' || Array.isArray(audit)) {
+    return {};
+  }
+  return {
+    provider: audit.provider ?? null,
+    model: audit.model ?? null,
+    promptVersion: audit.promptVersion ?? null,
+    aiAttemptKind: audit.aiAttemptKind ?? null,
+    aiIdempotencyKey: audit.aiIdempotencyKey ?? null,
+    aiLatencyMs: Number.isFinite(audit.aiLatencyMs) ? Math.round(audit.aiLatencyMs) : null,
   };
 }
 
@@ -225,27 +465,6 @@ function attachFailureMetadata(batch) {
   return batch;
 }
 
-function shouldQueueRecognitionFailure(batch) {
-  if (!batch || batch.kind !== 'image') {
-    return false;
-  }
-  if (batch.recognitionPendingStatus === 'queued') {
-    return false;
-  }
-
-  if (batch.status === 'ready' && hasPartialRecognitionFailure(batch)) {
-    return true;
-  }
-
-  if (batch.status !== 'skipped') {
-    return false;
-  }
-  if (batch.failureCategory !== 'ai_service') {
-    return false;
-  }
-  return Array.isArray(batch.messages) && batch.messages.some((message) => (message.photos?.length ?? 0) > 0);
-}
-
 function shouldRetryRecognitionInline(error) {
   if (error?.status === 400) {
     return true;
@@ -269,6 +488,7 @@ export async function buildImageProcessingBatch({
 }) {
   let recognitions = [];
   let recognitionErrors = [];
+  let syncStages = createImageSyncStages();
   const messages = batch.messages ?? [];
 
   if ((batch.kind ?? 'image') === 'image') {
@@ -276,13 +496,23 @@ export async function buildImageProcessingBatch({
       const recognitionOutput = normalizeRecognitionOutput(await recognizeBatchRunner(batch, env));
       recognitions = recognitionOutput.recognitions;
       recognitionErrors = recognitionOutput.recognitionErrors;
+      syncStages = recognitionOutput.syncStages ?? inferImageSyncStages({
+        syncStages,
+        recognitions,
+        recognitionErrors,
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       recognitionErrors = messages.map((message) => ({
         messageId: message.messageId,
         error: errorMessage,
         failureCategory: classifyFailureCategory(errorMessage, { phase: 'ai_recognition' }),
+        ...buildRecognitionErrorAiAudit(error),
       }));
+      markImageStageFailure(syncStages, 'ai_schema', errorMessage, {
+        failureCategory: classifyFailureCategory(errorMessage, { phase: 'ai_recognition' }),
+      });
+      syncStages = finalizeImageSyncStages(syncStages);
       process.stderr.write(`[telegram-sync] ${logPrefix} for ${batch.batchId}: ${errorMessage}\n`);
     }
   }
@@ -298,6 +528,7 @@ export async function buildImageProcessingBatch({
     messages,
     recognitions,
     recognitionErrors,
+    syncStages,
     pendingReplay,
   };
   attachFailureMetadata(persistedBatch);
@@ -419,7 +650,9 @@ export async function queueRecognitionFailureIfNeeded({
       batch: {
         kind: batch.kind ?? 'image',
         batchId: batch.batchId,
+        sourceChannel: batch.sourceChannel ?? 'telegram',
         messages: batch.messages ?? [],
+        recognitionErrors: batch.recognitionErrors ?? [],
       },
       failureCategory: batch.failureCategory,
       error: batch.failureReason,
@@ -427,6 +660,7 @@ export async function queueRecognitionFailureIfNeeded({
       nextRetryAt: nextRetryAt ?? (immediateRetry ? now : undefined),
     });
     batch.recognitionPendingStatus = queueResult.status;
+    batch.aiCallLogStatus = queueResult.aiCallLogStatus ?? batch.aiCallLogStatus ?? null;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     batch.recognitionPendingStatus = 'failed';
@@ -442,14 +676,64 @@ export async function queueRecognitionFailureIfNeeded({
 async function buildInlineImageUrl(fetchImageFileById, fileId, context = {}) {
   try {
     const file = await fetchImageFileById(fileId, context);
-    const contentType = normalizeInlineImageContentType(file);
-    if (!contentType || !(file?.data instanceof Uint8Array) || file.data.length === 0) {
-      return null;
+    if (!(file?.data instanceof Uint8Array) || file.data.length === 0) {
+      return inlineImageFailure('empty_data', 'inline image input is empty', { fileId, context });
     }
-    return `data:${contentType};base64,${Buffer.from(file.data).toString('base64')}`;
-  } catch {
-    return null;
+    const contentType = normalizeInlineImageContentType(file);
+    if (!contentType) {
+      return inlineImageFailure(
+        'unsupported_type',
+        `inline image input has unsupported content-type: ${file?.contentType || 'unknown'}`,
+        { fileId, context },
+      );
+    }
+    return {
+      ok: true,
+      imageUrl: `data:${contentType};base64,${Buffer.from(file.data).toString('base64')}`,
+    };
+  } catch (error) {
+    return inlineImageFailure('image_download', sanitizeInlineImageError(error, { fileId, context }), {
+      fileId,
+      context,
+    });
   }
+}
+
+function inlineImageFailure(reason, error, { fileId, context }) {
+  return {
+    ok: false,
+    error: `${error} (${describeInlineImageSource({ fileId, context })})`,
+    failureCategory: reason === 'image_download' ? 'image_download' : 'user_input',
+    summary: {
+      phase: 'inline_image_input',
+      reason,
+      fileId: String(fileId ?? ''),
+      sourceChannel: context?.message?.sourceChannel ?? 'telegram',
+      sourceMessageId: context?.message?.sourceMessageId ?? null,
+    },
+  };
+}
+
+function sanitizeInlineImageError(error, { fileId, context }) {
+  const message = error instanceof Error ? error.message : String(error);
+  const withoutUrls = message
+    .replace(/https?:\/\/\S+/gi, '[redacted-url]')
+    .replace(/bot[A-Za-z0-9:_+\-/=]+/g, 'bot[redacted]');
+  const sourceChannel = context?.message?.sourceChannel;
+  if (sourceChannel === 'feishu' && !withoutUrls.includes(String(fileId))) {
+    return `${withoutUrls}; image_key=${fileId}`;
+  }
+  if (!withoutUrls.includes(String(fileId))) {
+    return `${withoutUrls}; file_id=${fileId}`;
+  }
+  return withoutUrls;
+}
+
+function describeInlineImageSource({ fileId, context }) {
+  if (context?.message?.sourceChannel === 'feishu') {
+    return `feishu image_key=${fileId}`;
+  }
+  return `telegram file_id=${fileId}`;
 }
 
 function attachSourceMessageId(recognition, message) {

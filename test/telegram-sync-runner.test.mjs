@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -9,6 +9,7 @@ import {
   buildTelegramSyncReport,
   createRecognitionAiProvider,
   loadRecognitionSystemPrompt,
+  runMessageSync,
   runTelegramSync,
   shouldPersistTelegramArtifacts,
 } from '../tools/telegram-sync.mjs';
@@ -202,6 +203,169 @@ test('telegram sync entrypoint consumes inline queued dispatch payloads without 
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
 });
 
+test('runMessageSync keeps Telegram behavior while exposing task results', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'message-sync-telegram-'));
+  const persisted = [];
+
+  const result = await runMessageSync({
+    adapter: { channel: 'telegram' },
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 71,
+          date: 1746748800,
+          chat: { id: 42 },
+          text: '/随想 今天训练后恢复不错',
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch, sourceChannel }) => {
+      persisted.push({ batch, sourceChannel });
+      return { status: 'stored', messageId: batch.thought.telegramMessageId };
+    },
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.tasks.length, 1);
+  assert.deepEqual(Object.keys(result.tasks[0]).sort(), [
+    'archivedDate',
+    'batchId',
+    'channel',
+    'chatIds',
+    'failureCategory',
+    'failureReason',
+    'kind',
+    'persistenceStatus',
+    'sourceMessageIds',
+    'taskId',
+    'taskStatus',
+  ].sort());
+  assert.deepEqual(result.tasks[0], {
+    taskId: `telegram:thought:${result.batchResults[0].batchId}`,
+    channel: 'telegram',
+    kind: 'thought',
+    batchId: result.batchResults[0].batchId,
+    taskStatus: 'ready',
+    persistenceStatus: 'stored',
+    failureCategory: null,
+    failureReason: null,
+    archivedDate: null,
+    chatIds: [42],
+    sourceMessageIds: [71],
+  });
+  assert.deepEqual(persisted.map((entry) => entry.sourceChannel), ['telegram']);
+});
+
+test('runMessageSync clamps oversized AI_CONCURRENCY before image recognition', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'message-sync-ai-concurrency-'));
+  const observedConcurrency = [];
+
+  const result = await runMessageSync({
+    adapter: { channel: 'telegram' },
+    rootDir: tempRoot,
+    env: telegramSyncEnv({
+      AI_CONCURRENCY: '50',
+    }),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 71,
+          date: Math.floor(new Date('2026-05-31T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          photo: [{ file_id: 'file-71', file_unique_id: 'uniq-71' }],
+        },
+      },
+    ],
+    recognizeBatch: async (batch, env) => {
+      observedConcurrency.push(env.aiConcurrency);
+      return {
+        recognitions: batch.messages.map((message) => ({
+          messageId: message.messageId,
+          imageType: 'workout',
+          detectedDate: '2026-05-31',
+          dateEvidence: 'image header: 2026-05-31',
+          confidence: 0.98,
+          warnings: [],
+          records: {
+            measurement: null,
+            activities: [{ time: '19:13', type: '力量训练', detail: '总消耗 241 千卡' }],
+            meals: [],
+            totalCalories: null,
+            details: [],
+            dailyWorkoutSummary: null,
+          },
+        })),
+        recognitionErrors: [],
+      };
+    },
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.deepEqual(observedConcurrency, [5]);
+});
+
+test('runMessageSync respects AI_CONCURRENCY_MAX when clamping image recognition', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'message-sync-ai-concurrency-max-'));
+  const observedConcurrency = [];
+
+  const result = await runMessageSync({
+    adapter: { channel: 'telegram' },
+    rootDir: tempRoot,
+    env: telegramSyncEnv({
+      AI_CONCURRENCY: '50',
+      AI_CONCURRENCY_MAX: '2',
+    }),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 72,
+          date: Math.floor(new Date('2026-05-31T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          photo: [{ file_id: 'file-72', file_unique_id: 'uniq-72' }],
+        },
+      },
+    ],
+    recognizeBatch: async (batch, env) => {
+      observedConcurrency.push(env.aiConcurrency);
+      return {
+        recognitions: batch.messages.map((message) => ({
+          messageId: message.messageId,
+          imageType: 'workout',
+          detectedDate: '2026-05-31',
+          dateEvidence: 'image header: 2026-05-31',
+          confidence: 0.98,
+          warnings: [],
+          records: {
+            measurement: null,
+            activities: [{ time: '19:13', type: '力量训练', detail: '总消耗 241 千卡' }],
+            meals: [],
+            totalCalories: null,
+            details: [],
+            dailyWorkoutSummary: null,
+          },
+        })),
+        recognitionErrors: [],
+      };
+    },
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.deepEqual(observedConcurrency, [2]);
+});
+
 test('does not persist telegram artifacts when no updates were fetched and nothing changed', () => {
   assert.equal(
     shouldPersistTelegramArtifacts({
@@ -300,6 +464,57 @@ test('createRecognitionAiProvider overrides only the image recognition model whe
   assert.equal(recognitionProvider.env.model, 'gpt-vision-fast');
 });
 
+test('createRecognitionAiProvider applies recognition scene model and timeout overrides', () => {
+  const defaultProvider = {
+    name: 'test-provider',
+    env: { model: 'gpt-default', timeoutMs: 45000 },
+    async requestChatCompletion() {
+      throw new Error('not used');
+    },
+  };
+
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-default',
+      AI_TIMEOUT_MS: '45000',
+      AI_RECOGNITION_MODEL: 'gpt-recognition',
+      AI_RECOGNITION_TIMEOUT_MS: '17000',
+    },
+    defaultProvider,
+  );
+
+  assert.notEqual(recognitionProvider, defaultProvider);
+  assert.equal(recognitionProvider.env.model, 'gpt-recognition');
+  assert.equal(recognitionProvider.env.timeoutMs, 17000);
+});
+
+test('createRecognitionAiProvider ignores new scene overrides when scheduler is disabled', () => {
+  const defaultProvider = {
+    name: 'test-provider',
+    env: { model: 'gpt-default', timeoutMs: 45000 },
+    async requestChatCompletion() {
+      throw new Error('not used');
+    },
+  };
+
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-default',
+      AI_TIMEOUT_MS: '45000',
+      AI_SCHEDULER_ENABLED: 'false',
+      AI_RECOGNITION_MODEL: 'gpt-recognition',
+      AI_RECOGNITION_TIMEOUT_MS: '17000',
+    },
+    defaultProvider,
+  );
+
+  assert.equal(recognitionProvider, defaultProvider);
+});
+
 test('createRecognitionAiProvider attaches a configured fallback provider for image recognition', () => {
   const defaultProvider = {
     name: 'test-provider',
@@ -327,6 +542,32 @@ test('createRecognitionAiProvider attaches a configured fallback provider for im
   assert.equal(recognitionProvider.fallbackProvider.env.baseUrl, 'https://fallback.example.com/v1');
   assert.equal(recognitionProvider.fallbackProvider.env.model, 'gpt-vision-backup');
   assert.equal(recognitionProvider.fallbackProvider.env.timeoutMs, 15000);
+});
+
+test('createRecognitionAiProvider lets recognition scene fallback timeout override legacy fallback timeout', () => {
+  const defaultProvider = {
+    name: 'test-provider',
+    env: { model: 'gpt-default' },
+    async requestChatCompletion() {
+      throw new Error('not used');
+    },
+  };
+
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'primary-key',
+      AI_BASE_URL: 'https://primary.example.com/v1',
+      AI_MODEL: 'gpt-default',
+      TELEGRAM_RECOGNITION_FALLBACK_API_KEY: 'fallback-key',
+      TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: 'https://fallback.example.com/v1/',
+      TELEGRAM_RECOGNITION_FALLBACK_MODEL: 'gpt-vision-backup',
+      TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: '15000',
+      AI_RECOGNITION_FALLBACK_TIMEOUT_MS: '12000',
+    },
+    defaultProvider,
+  );
+
+  assert.equal(recognitionProvider.fallbackProvider.env.timeoutMs, 12000);
 });
 
 test('recognizeBatch sends inline Telegram image data when inline mode is configured', async () => {
@@ -417,7 +658,10 @@ test('runTelegramSync persists ready image batches to the database without writi
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: telegramSyncEnv(),
+    env: {
+      ...telegramSyncEnv(),
+      TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING: 'true',
+    },
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -484,7 +728,10 @@ test('runTelegramSync leaves existing markdown untouched after storing an image 
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: telegramSyncEnv(),
+    env: {
+      ...telegramSyncEnv(),
+      TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING: 'true',
+    },
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -680,7 +927,6 @@ test('runTelegramSync runs sleep backfill for a fresh stored sleep image by defa
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-sleep-backfill-'));
   await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');
   const backfillCalls = [];
-
   const result = await runTelegramSync({
     rootDir: tempRoot,
     env: telegramSyncEnv(),
@@ -1035,6 +1281,156 @@ test('runTelegramSync queues database replay when image persistence fails', asyn
   await assert.rejects(readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'), /ENOENT/);
 });
 
+test('runTelegramSync treats DB-rejected invalid image archive dates as manual intervention without pending replay', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-invalid-archive-date-'));
+  const queuedPersistenceFailures = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 71,
+          media_group_id: 'album-invalid-date',
+          date: 1746748800,
+          chat: { id: 42 },
+          caption: '归档到 2026-05-09',
+          photo: [{ file_id: 'file-a', file_unique_id: 'uniq-a' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 71,
+        imageType: 'nutrition',
+        detectedDate: '2026-05-09',
+        dateEvidence: 'image header',
+        confidence: 0.96,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [{ name: '晚餐', calories: 1065, recommendedMin: 317, recommendedMax: 740 }],
+          totalCalories: 1593,
+          details: ['晚餐 1065 千卡'],
+          dailyWorkoutSummary: null,
+        },
+      },
+    ],
+    persistNormalizedBatch: async () => {
+      throw new Error('invalid archivedDate: 2023-02-30');
+    },
+    appendPendingRecognitionBatch: async (entry) => {
+      queuedPersistenceFailures.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
+  });
+
+  const report = buildTelegramSyncReport(result);
+  const [batch] = report.batches;
+  assert.equal(batch.persistenceStatus, 'manual_intervention');
+  assert.equal(batch.failureCategory, 'user_input');
+  assert.equal(batch.failureDisposition, 'manual_intervention');
+  assert.equal(batch.retryState, 'none');
+  assert.equal(queuedPersistenceFailures.length, 0);
+});
+
+test('runTelegramSync replays a ready batch from pending after database recovery', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-db-recovery-'));
+  const pendingRows = [];
+  const persistedBatchIds = [];
+  const resolved = [];
+
+  const firstRun = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 71,
+          media_group_id: 'album-1',
+          date: 1746748800,
+          chat: { id: 42 },
+          caption: '归档到 2026-05-09',
+          photo: [{ file_id: 'file-a', file_unique_id: 'uniq-a' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 71,
+        imageType: 'nutrition',
+        detectedDate: '2026-05-09',
+        dateEvidence: 'image header',
+        confidence: 0.96,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [{ name: '晚餐', calories: 1065, recommendedMin: 317, recommendedMax: 740 }],
+          totalCalories: 1593,
+          details: ['晚餐 1065 千卡'],
+          dailyWorkoutSummary: null,
+        },
+      },
+    ],
+    persistNormalizedBatch: async () => {
+      throw new Error('database unavailable');
+    },
+    appendPendingRecognitionBatch: async (entry) => {
+      pendingRows.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
+  });
+
+  assert.equal(firstRun.batchResults[0].persistenceStatus, 'pending_replay');
+  assert.equal(firstRun.batchResults[0].failureCategory, 'database');
+  assert.equal(pendingRows.length, 1);
+  assert.equal(pendingRows[0].batch.batchId, 'album-1');
+  assert.equal(pendingRows[0].batch.nutrition.totalCalories, 1593);
+
+  const secondRun = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 901,
+    fetchTelegramUpdates: async () => [],
+    readPendingRecognitionBatches: async () =>
+      pendingRows.map((entry) => ({
+        batchId: entry.batch.batchId,
+        batch: entry.batch,
+        failureCategory: entry.failureCategory,
+        failureReason: entry.error,
+      })),
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatchIds.push(batch.batchId);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    markPendingRecognitionResolved: async ({ batchId }) => {
+      resolved.push(batchId);
+      return { status: 'resolved', batchId };
+    },
+    buildTrainingSnapshot: async () => ({
+      generatedAt: '2026-05-09T00:00:00.000Z',
+      latest: { measurement: null, daily: { date: '2026-05-09' } },
+      daily: [],
+      charts: emptyTrainingCharts(),
+    }),
+    exportTrainingMarkdown: () => '### 2026-05-09\n',
+  });
+
+  assert.deepEqual(persistedBatchIds, ['album-1']);
+  assert.deepEqual(resolved, ['album-1']);
+  assert.equal(secondRun.batchResults[0].pendingReplay, true);
+  assert.equal(secondRun.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(secondRun.batchResults[0].recognitionPendingStatus, 'resolved');
+  assert.equal(buildTelegramSyncReport(secondRun).batches[0].retryState, 'resolved');
+});
+
 test('runTelegramSync skips undated batches without persisting fallback or markdown writes', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-skip-undated-'));
   const persistedBatches = [];
@@ -1317,7 +1713,16 @@ test('buildTelegramSyncReport exposes pending replay and archived date details f
     ],
   });
 
-  assert.deepEqual(report, {
+  assert.deepEqual(
+    {
+      changed: report.changed,
+      fallbackUsed: report.fallbackUsed,
+      updatesFetched: report.updatesFetched,
+      lastProcessedUpdateId: report.lastProcessedUpdateId,
+      readyBatches: report.readyBatches,
+      batches: report.batches,
+    },
+    {
     changed: true,
     fallbackUsed: false,
     updatesFetched: 1,
@@ -1348,18 +1753,69 @@ test('buildTelegramSyncReport exposes pending replay and archived date details f
         failureDisposition: 'auto_retry',
         recognitionPendingStatus: null,
         recognitionPendingError: null,
+        aiCallLogStatus: null,
         pendingReplay: false,
         sourceImageCount: 0,
         recognizedImageCount: 0,
         failedImageCount: 0,
+        recognitionAttemptKinds: [],
         recognitionErrors: [],
+        syncStages: {},
         warnings: [],
         issues: [],
         reason: null,
         dateSources: [],
+        dateConfidence: null,
+        dateStages: {},
+      },
+    ],
+    },
+  );
+  assert.deepEqual(report.batchResults, report.batches);
+  assert.deepEqual(report.tasks, [
+    {
+      taskId: 'telegram:image:album-1',
+      channel: 'telegram',
+      kind: 'image',
+      batchId: 'album-1',
+      taskStatus: 'deferred',
+      persistenceStatus: 'pending_replay',
+      failureCategory: null,
+      failureReason: null,
+      archivedDate: '2026-04-06',
+      chatIds: [],
+      sourceMessageIds: [],
+    },
+  ]);
+});
+
+test('buildTelegramSyncReport marks abandoned pending batches for manual handling', () => {
+  const report = buildTelegramSyncReport({
+    changed: false,
+    fallbackUsed: false,
+    updatesFetched: 0,
+    lastProcessedUpdateId: 520905402,
+    readyBatches: 0,
+    batchResults: [
+      {
+        kind: 'image',
+        batchId: 'single-abandoned',
+        status: 'failed',
+        persistenceStatus: 'abandoned',
+        failureCategory: 'ai_service',
+        failureReason: 'pending retry limit exceeded',
+        retryCount: 26,
+        messages: [{ chatId: 42, messageId: 482, updateId: 982 }],
       },
     ],
   });
+
+  assert.equal(report.batches[0].taskStatus, 'failed');
+  assert.equal(report.batches[0].retryState, 'abandoned');
+  assert.equal(report.batches[0].failureDisposition, 'manual_intervention');
+  assert.equal(report.tasks[0].persistenceStatus, 'abandoned');
+  assert.equal(report.tasks[0].failureCategory, 'ai_service');
+  assert.equal(report.tasks[0].failureReason, 'pending retry limit exceeded');
 });
 
 test('buildTelegramSyncReport includes optional sync stage timings', () => {
@@ -1386,6 +1842,43 @@ test('buildTelegramSyncReport includes optional sync stage timings', () => {
     persist: 22,
     total: 1300,
   });
+});
+
+test('buildTelegramSyncReport preserves image archive date confidence for summary gates', () => {
+  const report = buildTelegramSyncReport({
+    changed: true,
+    fallbackUsed: false,
+    updatesFetched: 1,
+    lastProcessedUpdateId: 960,
+    readyBatches: 1,
+    batchResults: [
+      {
+        kind: 'image',
+        batchId: 'album-date-confidence',
+        status: 'ready',
+        archivedDate: '2026-06-17',
+        dateConfidence: 'uncertain',
+        dateSources: [
+          { messageId: 601, detectedDate: '2026-06-17', source: 'image' },
+          { messageId: 602, detectedDate: '2026-06-17', source: 'sleep_bedtime' },
+          { messageId: 603, detectedDate: null, source: 'no_date' },
+        ],
+        dateStages: {
+          date_parse: { status: 'succeeded', resultDate: '2026-06-17' },
+          filename_fallback: { status: 'skipped', resultDate: null },
+          sleep_bedtime_shift: { status: 'succeeded', resultDate: '2026-06-17' },
+          date_confidence_gate: { status: 'manual_intervention', result: 'uncertain' },
+        },
+        warnings: ['detectedDate补全年份不确定，需程序确认'],
+      },
+    ],
+  });
+
+  assert.equal(report.batches[0].dateConfidence, 'uncertain');
+  assert.deepEqual(report.batches[0].dateSources.map((item) => item.source), ['image', 'sleep_bedtime', 'no_date']);
+  assert.equal(report.batches[0].dateStages.date_confidence_gate.result, 'uncertain');
+  assert.equal(report.batches[0].dateStages.sleep_bedtime_shift.status, 'succeeded');
+  assert.equal(report.batchResults[0].dateConfidence, 'uncertain');
 });
 
 test('buildTelegramSyncReport omits timings when unavailable for compatibility', () => {
@@ -1436,6 +1929,22 @@ test('buildTelegramSyncReport exposes normalized task status and identifiers for
   assert.equal(report.batches[0].retryCount, 1);
   assert.deepEqual(report.batches[0].messageIds, [501, 502]);
   assert.deepEqual(report.batches[0].updateIds, [931, 932]);
+  assert.equal(report.batchResults.length, 1);
+  assert.deepEqual(report.tasks, [
+    {
+      taskId: 'telegram:image:album-audit',
+      channel: 'telegram',
+      kind: 'image',
+      batchId: 'album-audit',
+      taskStatus: 'resolved',
+      persistenceStatus: 'stored',
+      failureCategory: null,
+      failureReason: null,
+      archivedDate: '2026-05-31',
+      chatIds: [42],
+      sourceMessageIds: [501, 502],
+    },
+  ]);
 });
 
 test('buildTelegramSyncReport keeps partial failure visible when failed images are queued', () => {
@@ -1500,6 +2009,35 @@ test('buildTelegramSyncReport exposes failure disposition for retry and manual h
   assert.equal(report.batches[2].failureDisposition, 'skip');
 });
 
+test('buildTelegramSyncReport classifies AI aborts and fallback failures as auto retry', () => {
+  const report = buildTelegramSyncReport({
+    changed: false,
+    fallbackUsed: true,
+    updatesFetched: 2,
+    lastProcessedUpdateId: 960,
+    readyBatches: 0,
+    batchResults: [
+      {
+        kind: 'image',
+        batchId: 'ai-abort',
+        status: 'skipped',
+        failureReason: 'AbortError: The operation was aborted',
+      },
+      {
+        kind: 'image',
+        batchId: 'fallback-failed',
+        status: 'skipped',
+        failureReason: 'fallback provider failed after primary AI timed out',
+      },
+    ],
+  });
+
+  assert.equal(report.batches[0].failureCategory, 'ai_service');
+  assert.equal(report.batches[0].failureDisposition, 'auto_retry');
+  assert.equal(report.batches[1].failureCategory, 'ai_service');
+  assert.equal(report.batches[1].failureDisposition, 'auto_retry');
+});
+
 test('buildTelegramSyncReport exposes the canonical sync task statuses', () => {
   const report = buildTelegramSyncReport({
     changed: false,
@@ -1535,7 +2073,7 @@ test('buildTelegramSyncReport exposes the canonical sync task statuses', () => {
   );
 });
 
-test('runTelegramSync replays pending fallback batches into the database before new updates', async () => {
+test('runTelegramSync skips runtime NDJSON pending by default after DB-only pending is enabled', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-replay-'));
   const runtimeDir = path.join(tempRoot, 'runtime');
   await import('node:fs/promises').then(({ mkdir, writeFile }) =>
@@ -1575,6 +2113,97 @@ test('runTelegramSync replays pending fallback batches into the database before 
   const result = await runTelegramSync({
     rootDir: tempRoot,
     env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [],
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatchIds.push(batch.batchId);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run when legacy NDJSON pending is skipped');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run when legacy NDJSON pending is skipped');
+    },
+    backfillCoreSleepFromIngestBatches: async () => {
+      throw new Error('sleep backfill should not run when legacy NDJSON pending is skipped');
+    },
+  });
+
+  assert.equal(result.changed, false);
+  assert.deepEqual(persistedBatchIds, []);
+  assert.equal(
+    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
+    `${JSON.stringify({
+      batch: {
+        batchId: 'pending-batch',
+        status: 'ready',
+        archivedDate: '2026-05-08',
+        measurement: null,
+        activities: [],
+        workoutDailySummary: null,
+        nutrition: {
+          meals: [{ name: '晚餐', calories: 800, recommendedMin: 300, recommendedMax: 700 }],
+          totalCalories: 800,
+          details: ['旧待同步晚餐 800 千卡'],
+        },
+        warnings: [],
+        issues: [],
+        confidence: 0.9,
+        updateIds: [899],
+        recognitions: [],
+        messages: [],
+      },
+      failedAt: '2026-05-13T00:00:00.000Z',
+    })}\n`,
+  );
+});
+
+test('runTelegramSync can explicitly replay legacy runtime NDJSON pending batches', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-replay-legacy-'));
+  const runtimeDir = path.join(tempRoot, 'runtime');
+  const originalPendingContent = `${JSON.stringify({
+    batch: {
+      batchId: 'pending-batch',
+      status: 'ready',
+      archivedDate: '2026-05-08',
+      measurement: null,
+      activities: [],
+      workoutDailySummary: null,
+      nutrition: {
+        meals: [{ name: '晚餐', calories: 800, recommendedMin: 300, recommendedMax: 700 }],
+        totalCalories: 800,
+        details: ['旧待同步晚餐 800 千卡'],
+      },
+      warnings: [],
+      issues: [],
+      confidence: 0.9,
+      updateIds: [899],
+      recognitions: [],
+      messages: [],
+    },
+    failedAt: '2026-05-13T00:00:00.000Z',
+  })}\n`;
+  await import('node:fs/promises').then(({ mkdir, writeFile }) =>
+    mkdir(runtimeDir, { recursive: true }).then(() =>
+      writeFile(
+        path.join(runtimeDir, 'telegram-sync-pending.ndjson'),
+        originalPendingContent,
+        'utf8',
+      ),
+    ),
+  );
+
+  const persistedBatchIds = [];
+  const backfillCalls = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    now: new Date('2026-05-14T08:09:10.011Z'),
+    env: {
+      ...telegramSyncEnv(),
+      TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING: 'true',
+    },
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
     persistNormalizedBatch: async ({ batch }) => {
@@ -1624,6 +2253,123 @@ test('runTelegramSync replays pending fallback batches into the database before 
   assert.equal(
     await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
     '',
+  );
+  const runtimeFiles = await readdir(runtimeDir);
+  const backupFiles = runtimeFiles.filter((file) =>
+    file.startsWith('telegram-sync-pending.ndjson.backup-')
+  );
+  assert.deepEqual(backupFiles, ['telegram-sync-pending.ndjson.backup-20260514T080910011Z']);
+  assert.equal(
+    await readFile(path.join(runtimeDir, backupFiles[0]), 'utf8'),
+    originalPendingContent,
+  );
+});
+
+test('runTelegramSync reads database pending queues before new updates without auto-consuming runtime NDJSON', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-dual-pending-'));
+  const runtimeDir = path.join(tempRoot, 'runtime');
+  await mkdir(runtimeDir, { recursive: true });
+  await writeFile(
+    path.join(runtimeDir, 'telegram-sync-pending.ndjson'),
+    `${JSON.stringify({
+      batch: {
+        kind: 'image',
+        batchId: 'ndjson-pending',
+        status: 'ready',
+        archivedDate: '2026-05-08',
+        measurement: null,
+        activities: [],
+        workoutDailySummary: null,
+        nutrition: {
+          meals: [{ name: '晚餐', calories: 800, recommendedMin: 300, recommendedMax: 700 }],
+          totalCalories: 800,
+          details: ['旧待同步晚餐 800 千卡'],
+        },
+        warnings: [],
+        issues: [],
+        confidence: 0.9,
+        updateIds: [899],
+        recognitions: [],
+        messages: [],
+      },
+      failedAt: '2026-05-13T00:00:00.000Z',
+    })}\n`,
+    'utf8',
+  );
+
+  const persistedBatchIds = [];
+  const resolved = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [],
+    readPendingRecognitionBatches: async () => [
+      {
+        batchId: 'db-pending',
+        batch: {
+          kind: 'image',
+          batchId: 'db-pending',
+          messages: [
+            {
+              messageId: 383,
+              updateId: 901,
+              mediaGroupId: null,
+              caption: '',
+              text: '',
+              chatId: 42,
+              dateUnix: Math.floor(new Date('2026-05-31T03:00:00Z').getTime() / 1000),
+              photos: [{ fileId: 'file-food-383', fileUniqueId: 'uniq-food-383', source: 'photo' }],
+            },
+          ],
+        },
+      },
+    ],
+    recognizeBatch: async () => ({
+      recognitions: [
+        {
+          messageId: 383,
+          imageType: 'nutrition',
+          detectedDate: '2026-05-31',
+          dateEvidence: 'image header',
+          confidence: 0.97,
+          warnings: [],
+          records: {
+            measurement: null,
+            activities: [],
+            meals: [{ name: '晚餐', calories: 868, recommendedMin: 310, recommendedMax: 723 }],
+            totalCalories: 868,
+            details: ['晚餐 868 千卡'],
+            dailyWorkoutSummary: null,
+          },
+        },
+      ],
+      recognitionErrors: [],
+    }),
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatchIds.push(batch.batchId);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    markPendingRecognitionResolved: async ({ batchId }) => {
+      resolved.push(batchId);
+      return { status: 'resolved', batchId };
+    },
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.updatesFetched, 0);
+  assert.deepEqual(persistedBatchIds, ['db-pending']);
+  assert.deepEqual(resolved, ['db-pending']);
+  assert.deepEqual(
+    result.batchResults.map((batch) => [batch.batchId, batch.persistenceStatus, batch.pendingReplay ?? false]),
+    [
+      ['db-pending', 'stored', true],
+    ],
+  );
+  assert.match(
+    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
+    /ndjson-pending/,
   );
 });
 
@@ -1992,6 +2738,7 @@ test('runTelegramSync skips an undated single nutrition screenshot without a fil
   assert.equal(result.batchResults[0].status, 'skipped');
   assert.match(result.batchResults[0].reason, /no reliable image or filename date/i);
   assert.match(result.batchResults[0].warnings.join('\n'), /photo 形式发送/);
+  assert.equal(buildTelegramSyncReport(result).batches[0].failureDisposition, 'manual_intervention');
   assert.doesNotMatch(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /晚餐：465千卡/);
 });
 
@@ -2036,7 +2783,10 @@ test('runTelegramSync stores a /thought telegram message in core without writing
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: telegramSyncEnv(),
+    env: {
+      ...telegramSyncEnv(),
+      TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING: 'true',
+    },
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -3616,7 +4366,10 @@ test('runTelegramSync replays pending thought batches without rewriting training
   const persistedBatchIds = [];
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: telegramSyncEnv(),
+    env: {
+      ...telegramSyncEnv(),
+      TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING: 'true',
+    },
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
     persistNormalizedBatch: async ({ batch }) => {
@@ -3702,6 +4455,129 @@ test('runTelegramSync replies to /analysis without image recognition or file wri
 
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
   await assert.rejects(readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-9011.md'), 'utf8'), /ENOENT/);
+});
+
+test('runTelegramSync keeps analysis reply text unchanged while reporting AI attempt metadata', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-analysis-audit-'));
+  const sentMessages = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 9015,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/analysis 今天怎么练',
+        },
+      },
+    ],
+    generateTrainingAnalysisReply: async () => ({
+      status: 'ok',
+      reply: '数据结论：最近训练稳定。',
+      snapshotSource: 'database',
+      aiAttemptKind: 'fallback',
+      model: 'gpt-analysis-fallback',
+    }),
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 10005 };
+    },
+  });
+
+  const report = buildTelegramSyncReport(result);
+
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].text, '数据结论：最近训练稳定。');
+  assert.equal(result.batchResults[0].analysisReplyStatus, 'sent');
+  assert.equal(result.batchResults[0].analysisAttemptKind, 'fallback');
+  assert.equal(result.batchResults[0].analysisModel, 'gpt-analysis-fallback');
+  assert.equal(result.batchResults[0].analysisSnapshotSource, 'database');
+  assert.equal(report.batches[0].analysisAttemptKind, 'fallback');
+  assert.equal(report.batches[0].analysisModel, 'gpt-analysis-fallback');
+  assert.equal(report.batches[0].analysisSnapshotSource, 'database');
+});
+
+test('runTelegramSync default analysis path reports primary model metadata without changing reply text', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-analysis-default-audit-'));
+  const sentMessages = [];
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      ...telegramSyncEnv(),
+      AI_MODEL: 'gpt-analysis-primary',
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    aiProvider: {
+      env: { model: 'gpt-analysis-primary' },
+      async requestChatCompletion() {
+        return {
+          ok: true,
+          async json() {
+            return {
+              choices: [
+                {
+                  message: {
+                    content: '数据结论：默认分析路径完成。',
+                  },
+                },
+              ],
+            };
+          },
+        };
+      },
+    },
+    snapshot: buildSyntheticAnalysisSnapshot(),
+    createClient() {
+      return fakeClient;
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 9016,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/analysis 今天怎么练',
+        },
+      },
+    ],
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 10006 };
+    },
+  });
+
+  assert.equal(sentMessages[0].text, '数据结论：默认分析路径完成。');
+  assert.equal(result.batchResults[0].analysisAttemptKind, 'primary');
+  assert.equal(result.batchResults[0].analysisModel, 'gpt-analysis-primary');
+  assert.equal(result.batchResults[0].analysisSnapshotSource, 'database');
+
+  const aiLogCall = calls.find(([sql]) => /insert into ingest\.ai_call_log/i.test(sql));
+  assert.ok(aiLogCall);
+  assert.equal(aiLogCall[1][1], 'analysis-9016');
+  assert.equal(aiLogCall[1][2], 'analysis');
+  assert.equal(aiLogCall[1][4], 'gpt-analysis-primary');
 });
 
 test('runTelegramSync replies with a short failure message when analysis generation fails', async () => {
@@ -4424,6 +5300,123 @@ test('runTelegramSync falls back to inline image data when AI rejects a Telegram
     assert.equal(remoteUrlAttempts, 1);
     assert.equal(inlineUrlAttempts, 1);
     assert.equal(persistedBatches.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('runTelegramSync keeps inline image download failures visible in the summary', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-inline-download-failure-'));
+  const originalFetch = globalThis.fetch;
+  let remoteUrlAttempts = 0;
+
+  globalThis.fetch = async (url, init = {}) => {
+    const requestUrl = String(url);
+
+    if (requestUrl.includes('/getFile?')) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          result: {
+            file_path: 'photos/file_804.jpg',
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      );
+    }
+
+    if (requestUrl.includes('/file/bottoken/photos/file_804.jpg')) {
+      return new Response('not found', { status: 404 });
+    }
+
+    if (requestUrl.includes('/chat/completions')) {
+      const body = JSON.parse(init.body);
+      const imagePart = body.messages?.[1]?.content?.find((part) => part.type === 'image_url');
+      const imageUrl = imagePart?.image_url?.url ?? '';
+      if (imageUrl === 'https://api.telegram.org/file/bottoken/photos/file_804.jpg') {
+        remoteUrlAttempts += 1;
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: 'remote image URL is not accessible',
+            },
+          }),
+          {
+            status: 400,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        );
+      }
+      throw new Error(`Unexpected image URL: ${imageUrl}`);
+    }
+
+    throw new Error(`Unexpected fetch call: ${requestUrl}`);
+  };
+
+  try {
+    const result = await runTelegramSync({
+      rootDir: tempRoot,
+      env: {
+        TELEGRAM_BOT_TOKEN: 'token',
+        AI_API_KEY: 'key',
+        AI_BASE_URL: 'https://example.com/v1',
+        AI_MODEL: 'gpt-test',
+        TELEGRAM_ALLOWED_CHAT_IDS: '42',
+        TRAINING_DB_ENABLED: 'true',
+        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      },
+      getLastProcessedUpdateId: async () => 900,
+      fetchTelegramUpdates: async () => [
+        {
+          update_id: 902,
+          message: {
+            message_id: 804,
+            date: Math.floor(new Date('2026-05-18T02:30:00Z').getTime() / 1000),
+            chat: { id: 42 },
+            photo: [{ file_id: 'file-download-fail', file_unique_id: 'uniq-download-fail' }],
+          },
+        },
+      ],
+      persistNormalizedBatch: async () => {
+        throw new Error('should not persist when inline image download fails');
+      },
+      buildTrainingSnapshot: async () => ({
+        generatedAt: '2026-05-18T00:00:00.000Z',
+        latest: {
+          measurement: null,
+          daily: { date: '2026-05-18' },
+        },
+        daily: [],
+        charts: {
+          weightKg: [],
+          bodyFatPct: [],
+          skeletalMuscleKg: [],
+          basalMetabolism: [],
+          visceralFatLevel: [],
+          intakeCalories: [],
+          trainingCalories: [],
+          cyclingDistanceKm: [],
+        },
+      }),
+      exportTrainingMarkdown: () => '### 2026-05-18\n',
+    });
+
+    const report = buildTelegramSyncReport(result);
+    const [batch] = report.batches;
+    assert.equal(remoteUrlAttempts, 1);
+    assert.equal(batch.failureCategory, 'image_download');
+    assert.equal(batch.failureDisposition, 'auto_retry');
+    assert.equal(batch.recognitionErrors[0].failureCategory, 'image_download');
+    assert.match(batch.recognitionErrors[0].error, /Telegram file download failed with HTTP 404/);
+    assert.match(batch.recognitionErrors[0].error, /file-download-fail/);
+    assert.doesNotMatch(batch.recognitionErrors[0].error, /bottoken|api\.telegram\.org/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -5381,6 +6374,7 @@ test('runTelegramSync defers Telegram success notification until the action fini
 test('runTelegramSync explains thought database fallback in Telegram notification', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-notification-thought-db-'));
   const sentMessages = [];
+  const queued = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -5409,6 +6403,10 @@ test('runTelegramSync explains thought database fallback in Telegram notificatio
     persistNormalizedBatch: async () => {
       throw new Error('database unavailable');
     },
+    appendPendingRecognitionBatch: async (entry) => {
+      queued.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId, aiCallLogStatus: 'written' };
+    },
     sendTelegramMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 9904 };
@@ -5417,6 +6415,11 @@ test('runTelegramSync explains thought database fallback in Telegram notificatio
 
   assert.equal(result.batchResults[0].persistenceStatus, 'pending_replay');
   assert.equal(result.batchResults[0].failureCategory, 'database');
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].batch.kind, 'thought');
+  assert.equal(queued[0].batch.batchId, 'thought-904');
+  assert.equal(queued[0].failureCategory, 'database');
+  assert.match(queued[0].error, /database unavailable/);
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].chatId, 42);
   assert.equal(sentMessages[0].replyToMessageId, 904);
@@ -5515,7 +6518,7 @@ test('runTelegramSync queues image batches when AI recognition fails before any 
     }),
     appendPendingRecognitionBatch: async (entry) => {
       queued.push(entry);
-      return { status: 'queued', batchId: entry.batch.batchId };
+      return { status: 'queued', batchId: entry.batch.batchId, aiCallLogStatus: 'written' };
     },
     sendTelegramMessage: async (message) => {
       sentMessages.push(message);
@@ -5527,6 +6530,7 @@ test('runTelegramSync queues image batches when AI recognition fails before any 
   assert.equal(batch.status, 'skipped');
   assert.equal(batch.failureCategory, 'ai_service');
   assert.equal(batch.recognitionPendingStatus, 'queued');
+  assert.equal(batch.aiCallLogStatus, 'written');
   assert.equal(queued.length, 1);
   assert.equal(queued[0].batch.batchId, 'single-383');
   assert.equal(queued[0].batch.messages[0].photos[0].fileId, 'file-food-383');
@@ -5534,10 +6538,97 @@ test('runTelegramSync queues image batches when AI recognition fails before any 
   assert.equal(queued[0].nextRetryAt.toISOString(), now.toISOString());
   const report = buildTelegramSyncReport(result);
   assert.equal(report.batches[0].recognitionPendingStatus, 'queued');
+  assert.equal(report.batches[0].aiCallLogStatus, 'written');
   assert.equal(report.batches[0].recognitionPendingError, null);
   assert.equal(report.batches[0].pendingReplay, false);
   assert.equal(sentMessages.length, 1);
   assert.match(sentMessages[0].text, /AI 识别失败（已识别 \d+\/\d+.*），已加入重试队列/);
+});
+
+test('runTelegramSync queues image batches when primary and fallback AI providers fail', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-primary-fallback-ai-failure-'));
+  const queued = [];
+  const providerCalls = [];
+  const sentMessages = [];
+  const now = new Date('2026-05-31T03:05:00.000Z');
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    now,
+    env: telegramSyncEnv({
+      TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: 'inline',
+      TELEGRAM_SYNC_NOTIFY: 'true',
+    }),
+    recognitionAiProvider: {
+      env: { model: 'gpt-primary' },
+      fallbackProvider: {
+        env: { model: 'gpt-fallback' },
+        async requestChatCompletion() {
+          providerCalls.push('fallback');
+          const error = new Error('fallback provider timed out');
+          error.name = 'TimeoutError';
+          throw error;
+        },
+      },
+      async requestChatCompletion() {
+        providerCalls.push('primary');
+        throw new Error('AI recognition request failed with HTTP 502');
+      },
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 383,
+          date: Math.floor(new Date('2026-05-31T03:00:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          photo: [{ file_id: 'file-food-383', file_unique_id: 'uniq-food-383' }],
+        },
+      },
+    ],
+    fetchTelegramFile: async () => ({
+      filePath: 'photos/file-food-383.jpg',
+      contentType: 'image/jpeg',
+      data: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+    }),
+    appendPendingRecognitionBatch: async (entry) => {
+      queued.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId, aiCallLogStatus: 'written' };
+    },
+    persistNormalizedBatch: async () => {
+      throw new Error('should not persist when both AI providers fail');
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { message_id: 9911 };
+    },
+  });
+
+  assert.deepEqual(providerCalls, ['primary', 'fallback']);
+  const batch = result.batchResults[0];
+  assert.equal(batch.status, 'skipped');
+  assert.equal(batch.failureCategory, 'ai_service');
+  assert.equal(batch.recognitionPendingStatus, 'queued');
+  assert.match(batch.failureReason, /fallback provider timed out/);
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].batch.batchId, 'single-383');
+  assert.equal(queued[0].batch.recognitionErrors[0].model, 'gpt-fallback');
+  assert.equal(queued[0].batch.recognitionErrors[0].aiAttemptKind, 'fallback');
+  assert.match(queued[0].batch.recognitionErrors[0].promptVersion, /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(
+    queued[0].batch.recognitionErrors[0].aiIdempotencyKey,
+    new RegExp(`^recognition:telegram_training_image:v2:${queued[0].batch.recognitionErrors[0].promptVersion}:gpt-primary:`),
+  );
+  assert.match(queued[0].error, /fallback provider timed out/);
+  assert.equal(queued[0].nextRetryAt.toISOString(), now.toISOString());
+  const report = buildTelegramSyncReport(result);
+  assert.equal(report.batches[0].taskStatus, 'deferred');
+  assert.equal(report.batches[0].aiCallLogStatus, 'written');
+  assert.equal(report.batches[0].retryState, 'queued');
+  assert.equal(report.batches[0].failureDisposition, 'auto_retry');
+  assert.equal(sentMessages.length, 1);
+  assert.match(sentMessages[0].text, /已加入重试队列/);
 });
 
 test('runTelegramSync replays pending recognition batches and marks them resolved after storage', async () => {
@@ -6148,3 +7239,67 @@ test('runTelegramSync report includes image counts for pending replay batches', 
   assert.equal(persistedBatches[0].failedImageCount, 0);
   assert.deepEqual(resolved, ['album-replay-counts']);
 });
+
+test('buildTelegramSyncReport exposes recognition attempt kinds for audit summaries', () => {
+  const report = buildTelegramSyncReport({
+    changed: true,
+    fallbackUsed: false,
+    updatesFetched: 1,
+    lastProcessedUpdateId: 901,
+    readyBatches: 1,
+    batchResults: [
+      {
+        kind: 'image',
+        batchId: 'album-recognition-attempts',
+        status: 'ready',
+        archivedDate: '2026-06-08',
+        persistenceStatus: 'stored',
+        messages: [
+          { chatId: 42, messageId: 701, updateId: 901, mediaGroupId: 'album-recognition-attempts' },
+          { chatId: 42, messageId: 702, updateId: 902, mediaGroupId: 'album-recognition-attempts' },
+        ],
+        recognitions: [
+          { messageId: 701, aiAttemptKind: 'normal' },
+          { messageId: 702, aiAttemptKind: 'fallback' },
+          { messageId: 703, aiAttemptKind: 'fallback' },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(report.batches[0].recognitionAttemptKinds, ['normal', 'fallback']);
+});
+
+function buildSyntheticAnalysisSnapshot() {
+  const daily = [
+    {
+      date: '2026-05-14',
+      measurement: {
+        archivedDate: '2026-05-14',
+        weightKg: 73.5,
+        bodyFatPct: 22.1,
+        skeletalMuscleKg: 30.8,
+      },
+      workoutSummary: {
+        trainingCalories: 420,
+        workoutDurationMinutes: 55,
+        cyclingDistanceKm: 0,
+        countsByType: {
+          力量训练: 1,
+        },
+      },
+      nutrition: {
+        totalCalories: 1580,
+      },
+    },
+  ];
+
+  return {
+    source: 'database',
+    daily,
+    latest: {
+      daily: daily[0],
+      measurement: daily[0].measurement,
+    },
+  };
+}

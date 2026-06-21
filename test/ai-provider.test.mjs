@@ -23,7 +23,7 @@ test('createAiProvider defaults to openai-compatible and trims the base url', ()
 
   assert.equal(provider.name, 'openai-compatible');
   assert.equal(provider.env.baseUrl, 'https://example.com/v1');
-  assert.equal(provider.env.timeoutMs, null);
+  assert.equal(provider.env.timeoutMs, 45000);
 });
 
 test('createAiProvider sends the same chat completion shape used by analysis and recognition', async () => {
@@ -76,6 +76,88 @@ test('createAiProvider sends the same chat completion shape used by analysis and
   assert.deepEqual(request.body.messages, [{ role: 'user', content: 'hello' }]);
   assert.equal(request.body.response_format.type, 'json_schema');
   assert.equal(response.ok, true);
+});
+
+test('createAiProvider forwards idempotency keys on chat completion requests', async () => {
+  let requestHeaders = null;
+  const provider = createAiProvider({
+    AI_API_KEY: 'key',
+    AI_BASE_URL: 'https://example.com/v1',
+    AI_MODEL: 'gpt-test',
+  });
+
+  await provider.requestChatCompletion({
+    messages: [{ role: 'user', content: 'hello' }],
+    idempotencyKey: 'recognition:abc123',
+    fetchImpl: async (_url, init) => {
+      requestHeaders = init.headers;
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [{ message: { content: 'ok' } }],
+          };
+        },
+      };
+    },
+  });
+
+  assert.equal(requestHeaders['Idempotency-Key'], 'recognition:abc123');
+});
+
+test('createAiProvider attaches an AbortController signal when AI_TIMEOUT_MS is omitted', async () => {
+  let signal = null;
+  const provider = createAiProvider({
+    AI_API_KEY: 'key',
+    AI_BASE_URL: 'https://example.com/v1',
+    AI_MODEL: 'gpt-test',
+  });
+
+  await provider.requestChatCompletion({
+    messages: [{ role: 'user', content: 'hello' }],
+    fetchImpl: async (_url, init) => {
+      signal = init.signal;
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [{ message: { content: 'ok' } }],
+          };
+        },
+      };
+    },
+  });
+
+  assert.ok(signal instanceof AbortSignal);
+  assert.equal(signal.aborted, false);
+});
+
+test('createAiProvider uses configured AI_TIMEOUT_MS for request aborts', async () => {
+  let signal = null;
+  const provider = createAiProvider({
+    AI_API_KEY: 'key',
+    AI_BASE_URL: 'https://example.com/v1',
+    AI_MODEL: 'gpt-test',
+    AI_TIMEOUT_MS: '5',
+  });
+
+  await assert.rejects(
+    provider.requestChatCompletion({
+      messages: [{ role: 'user', content: 'hello' }],
+      maxAttempts: 1,
+      fetchImpl: async (_url, init) => {
+        signal = init.signal;
+        await new Promise((_resolve, reject) => {
+          init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+        });
+      },
+    }),
+    /AI request failed/,
+  );
+
+  assert.ok(signal instanceof AbortSignal);
+  assert.equal(signal.aborted, true);
+  assert.match(String(signal.reason?.message ?? signal.reason), /timed out after 5ms/);
 });
 
 test('createAiProvider rejects unsupported providers with a typed adapter error', () => {

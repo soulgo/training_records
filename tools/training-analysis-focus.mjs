@@ -1,8 +1,12 @@
 const defaultQuestion = '请根据最近训练、体脂、饮食数据给出今天/明天的训练建议';
 const defaultTrainingGoal = '增肌减腹：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪；不追求单纯掉体重或局部减脂。';
+const DEFAULT_QUESTION_MAX_LENGTH = 1000;
 
-export function normalizeAnalysisQuestion(question) {
-  const normalized = question?.trim();
+export function normalizeAnalysisQuestion(question, { maxLength = DEFAULT_QUESTION_MAX_LENGTH } = {}) {
+  const normalized = String(question ?? '')
+    .trim()
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+    .slice(0, maxLength);
   return normalized || defaultQuestion;
 }
 

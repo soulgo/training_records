@@ -26,5 +26,7 @@ export {
   appendPendingRecognitionBatch,
   markPendingRecognitionResolved,
   readPendingRecognitionBatches,
+  readPendingRecognitionSummary,
+  writeStartedRecognitionAiCallLog,
 } from '../src/db/training/pending-recognition.mjs';
 export { exportTrainingMarkdown } from '../src/domain/training/training-exporter.mjs';

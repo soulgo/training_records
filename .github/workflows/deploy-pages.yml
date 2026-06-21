@@ -169,6 +169,18 @@ jobs:
             found=true
           fi
 
+          if [ "$expected" = "present" ] && [ "$found" = "false" ]; then
+            echo "Thought #${TARGET_THOUGHT_ID} not found on target URL; waiting 20s for Pages propagation and retrying..."
+            sleep 20
+            rm -f "$page_file"
+            page_file="$(mktemp)"
+            if curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$target_url" -o "$page_file"; then
+              if grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$page_file" >/dev/null; then
+                found=true
+              fi
+            fi
+          fi
+
           if { [ "$expected" = "present" ] && [ "$found" = "true" ]; } ||
              { [ "$expected" = "absent" ] && [ "$found" = "false" ]; }; then
             for module_path in "${module_paths[@]}"; do

@@ -1,5 +1,8 @@
+import { downloadBinaryWithLimit } from '../http/download-binary.mjs';
+
 const FEISHU_API_BASE_URL = 'https://open.feishu.cn';
 const tokenCache = new Map();
+const tokenRefreshPromises = new Map();
 
 export async function getFeishuTenantAccessToken({
   appId,
@@ -19,6 +22,33 @@ export async function getFeishuTenantAccessToken({
     return cached.token;
   }
 
+  const existingRefresh = tokenRefreshPromises.get(cacheKey);
+  if (existingRefresh) {
+    return existingRefresh;
+  }
+
+  const refreshPromise = refreshFeishuTenantAccessToken({
+    appId,
+    appSecret,
+    fetchImpl,
+    apiBaseUrl,
+    nowMs,
+    cacheKey,
+  }).finally(() => {
+    tokenRefreshPromises.delete(cacheKey);
+  });
+  tokenRefreshPromises.set(cacheKey, refreshPromise);
+  return refreshPromise;
+}
+
+async function refreshFeishuTenantAccessToken({
+  appId,
+  appSecret,
+  fetchImpl,
+  apiBaseUrl,
+  nowMs,
+  cacheKey,
+}) {
   const response = await fetchImpl(`${apiBaseUrl}/open-apis/auth/v3/tenant_access_token/internal`, {
     method: 'POST',
     headers: {
@@ -93,6 +123,7 @@ export async function fetchFeishuImageResource({
   imageKey,
   fetch: fetchImpl = globalThis.fetch,
   apiBaseUrl = FEISHU_API_BASE_URL,
+  maxDownloadBytes,
 } = {}) {
   const token =
     tenantAccessToken ??
@@ -114,7 +145,10 @@ export async function fetchFeishuImageResource({
   }
 
   const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
-  const data = new Uint8Array(await response.arrayBuffer());
+  const data = await downloadBinaryWithLimit(response, {
+    maxBytes: maxDownloadBytes,
+    label: 'Feishu image download',
+  });
   return {
     data,
     contentType,

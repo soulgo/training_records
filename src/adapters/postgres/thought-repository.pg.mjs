@@ -26,6 +26,27 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
     return result.rows[0] ?? null;
   }
 
+  async findBySourceIdentity(identity = {}) {
+    const sourceChannel = normalizeSourceChannel(identity.sourceChannel ?? 'telegram');
+    const sourceChatId = normalizeSourceId(identity.sourceChatId);
+    const sourceMessageId = normalizeSourceId(identity.sourceMessageId);
+    if (!sourceChatId || !sourceMessageId) {
+      return null;
+    }
+
+    const result = await this.client.query(
+      `
+        select *
+        from core.thought
+        where source_channel = $1
+          and source_chat_id = $2
+          and source_message_id = $3
+      `,
+      [sourceChannel, sourceChatId, sourceMessageId],
+    );
+    return result.rows[0] ?? null;
+  }
+
   async save(thought) {
     return persistThoughtToCore(this.client, thought);
   }
@@ -39,9 +60,12 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
       const messageId = normalizePositiveInteger(batch.thought?.telegramMessageId);
       const thoughtModule = normalizeThoughtModule(batch.thought?.thoughtModule);
       const sourceChannel = batch.sourceChannel ?? 'telegram';
+      const sourceMessage = resolveThoughtSourceMessage(batch, batch.thought?.sourceMessageId ?? messageId);
       await this.save({
         messageId,
         chatId: batch.thought?.telegramChatId,
+        sourceChatId: batch.thought?.sourceChatId ?? sourceMessage?.sourceChatId ?? sourceMessage?.chatId,
+        sourceMessageId: batch.thought?.sourceMessageId ?? sourceMessage?.sourceMessageId ?? messageId,
         sourceBatchId: batch.batchId,
         sourceChannel,
         command: batch.thought?.command ?? '/thought',
@@ -59,7 +83,14 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
 
     if (batch.kind === 'thought_edit') {
       const targetMessageId = normalizePositiveInteger(batch.thoughtEdit?.targetMessageId);
-      const existing = await this.findByTelegramMessageId(targetMessageId);
+      const sourceMessage = resolveThoughtSourceMessage(batch);
+      const targetIdentity = buildTargetSourceIdentity({
+        batch,
+        targetMessageId,
+        targetSourceMessageId: batch.thoughtEdit?.targetSourceMessageId,
+        sourceChatId: batch.thoughtEdit?.sourceChatId ?? sourceMessage?.sourceChatId ?? sourceMessage?.chatId,
+      });
+      const existing = await this.findBySourceIdentity(targetIdentity) ?? await this.findByTelegramMessageId(targetMessageId);
       if (!existing) {
         return { status: 'not_found', messageId: targetMessageId };
       }
@@ -67,10 +98,14 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
         normalizeThoughtModuleOrNull(batch.thoughtEdit?.thoughtModule) ??
         normalizeThoughtModule(existing.thought_module);
       const sourceChannel = batch.sourceChannel ?? existing.source_channel ?? 'telegram';
+      const sourceChatId = batch.thoughtEdit?.sourceChatId ?? existing.source_chat_id ?? sourceMessage?.sourceChatId ?? sourceMessage?.chatId ?? batch.thoughtEdit?.telegramChatId;
+      const sourceMessageId = batch.thoughtEdit?.targetSourceMessageId ?? existing.source_message_id ?? targetMessageId;
 
       await this.save({
         messageId: targetMessageId,
         chatId: batch.thoughtEdit?.telegramChatId,
+        sourceChatId,
+        sourceMessageId,
         sourceBatchId: batch.batchId,
         sourceChannel,
         command: batch.thoughtEdit?.command ?? '/thought',
@@ -88,7 +123,14 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
 
     if (batch.kind === 'thought_delete') {
       const targetMessageId = normalizePositiveInteger(batch.thoughtDelete?.targetMessageId);
-      const existing = await this.findByTelegramMessageId(targetMessageId);
+      const sourceMessage = resolveThoughtSourceMessage(batch);
+      const targetIdentity = buildTargetSourceIdentity({
+        batch,
+        targetMessageId,
+        targetSourceMessageId: batch.thoughtDelete?.targetSourceMessageId,
+        sourceChatId: batch.thoughtDelete?.sourceChatId ?? sourceMessage?.sourceChatId ?? sourceMessage?.chatId,
+      });
+      const existing = await this.findBySourceIdentity(targetIdentity) ?? await this.findByTelegramMessageId(targetMessageId);
       if (!existing) {
         return { status: 'not_found', messageId: targetMessageId };
       }
@@ -96,9 +138,13 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
         normalizeThoughtModuleOrNull(batch.thoughtDelete?.thoughtModule) ??
         normalizeThoughtModule(existing.thought_module);
       const sourceChannel = batch.sourceChannel ?? existing.source_channel ?? 'telegram';
+      const sourceChatId = batch.thoughtDelete?.sourceChatId ?? existing.source_chat_id ?? sourceMessage?.sourceChatId ?? sourceMessage?.chatId ?? batch.thoughtDelete?.telegramChatId;
+      const sourceMessageId = batch.thoughtDelete?.targetSourceMessageId ?? existing.source_message_id ?? targetMessageId;
       await this.markDeleted({
         messageId: targetMessageId,
         chatId: batch.thoughtDelete?.telegramChatId,
+        sourceChatId,
+        sourceMessageId,
         sourceBatchId: batch.batchId,
         sourceChannel,
         command: batch.thoughtDelete?.command ?? '/随想删',
@@ -114,7 +160,14 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
 
     if (batch.kind === 'thought_move') {
       const targetMessageId = normalizePositiveInteger(batch.thoughtMove?.targetMessageId);
-      const existing = await this.findByTelegramMessageId(targetMessageId);
+      const sourceMessage = resolveThoughtSourceMessage(batch);
+      const targetIdentity = buildTargetSourceIdentity({
+        batch,
+        targetMessageId,
+        targetSourceMessageId: batch.thoughtMove?.targetSourceMessageId,
+        sourceChatId: batch.thoughtMove?.sourceChatId ?? sourceMessage?.sourceChatId ?? sourceMessage?.chatId,
+      });
+      const existing = await this.findBySourceIdentity(targetIdentity) ?? await this.findByTelegramMessageId(targetMessageId);
       if (!existing) {
         return { status: 'not_found', messageId: targetMessageId };
       }
@@ -122,10 +175,14 @@ export class PostgresThoughtRepository extends ThoughtRepositoryPort {
         normalizeThoughtModuleOrNull(batch.thoughtMove?.thoughtModule) ??
         normalizeThoughtModule(existing.thought_module);
       const sourceChannel = batch.sourceChannel ?? existing.source_channel ?? 'telegram';
+      const sourceChatId = batch.thoughtMove?.sourceChatId ?? existing.source_chat_id ?? sourceMessage?.sourceChatId ?? sourceMessage?.chatId ?? batch.thoughtMove?.telegramChatId;
+      const sourceMessageId = batch.thoughtMove?.targetSourceMessageId ?? existing.source_message_id ?? targetMessageId;
 
       await this.save({
         messageId: targetMessageId,
         chatId: batch.thoughtMove?.telegramChatId,
+        sourceChatId,
+        sourceMessageId,
         sourceBatchId: batch.batchId,
         sourceChannel,
         command: batch.thoughtMove?.command ?? '/移动',
@@ -168,6 +225,8 @@ export async function persistThoughtToCore(client, thought) {
         telegram_chat_id,
         source_batch_id,
         source_channel,
+        source_chat_id,
+        source_message_id,
         command,
         body,
         thought_module,
@@ -179,11 +238,14 @@ export async function persistThoughtToCore(client, thought) {
         deleted_at,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, coalesce($6, ''), coalesce($7, 'workout'), coalesce($8::jsonb, '["训练","随想","Telegram"]'::jsonb), $9, $10, coalesce($11::jsonb, '[]'::jsonb), $12, null, $13)
-      on conflict (telegram_message_id) do update set
+      values ($1, $2, $3, $4, $14, $15, $5, coalesce($6, ''), coalesce($7, 'workout'), coalesce($8::jsonb, '["训练","随想","Telegram"]'::jsonb), $9, $10, coalesce($11::jsonb, '[]'::jsonb), $12, null, $13)
+      on conflict (source_channel, source_chat_id, source_message_id) do update set
+        telegram_message_id = excluded.telegram_message_id,
         telegram_chat_id = coalesce(excluded.telegram_chat_id, core.thought.telegram_chat_id),
         source_batch_id = excluded.source_batch_id,
         source_channel = coalesce(excluded.source_channel, core.thought.source_channel),
+        source_chat_id = coalesce(excluded.source_chat_id, core.thought.source_chat_id),
+        source_message_id = coalesce(excluded.source_message_id, core.thought.source_message_id),
         command = excluded.command,
         body = coalesce($6, core.thought.body),
         thought_module = coalesce($7, core.thought.thought_module),
@@ -214,6 +276,8 @@ export async function persistThoughtToCore(client, thought) {
       Array.isArray(thought.imageRefs) ? JSON.stringify(thought.imageRefs) : null,
       thought.status ?? 'active',
       thought.processedAt.toISOString(),
+      normalizeSourceId(thought.sourceChatId ?? thought.chatId ?? 'legacy-chat'),
+      normalizeSourceId(thought.sourceMessageId ?? messageId),
     ],
   );
 }
@@ -234,6 +298,8 @@ async function markThoughtMirrorDeleted(client, thought) {
         telegram_chat_id,
         source_batch_id,
         source_channel,
+        source_chat_id,
+        source_message_id,
         command,
         body,
         thought_module,
@@ -245,11 +311,14 @@ async function markThoughtMirrorDeleted(client, thought) {
         deleted_at,
         updated_at
       )
-      values ($1, $2, $3, $4, $5, '', coalesce($6, 'workout'), coalesce($7::jsonb, '["训练","随想","Telegram"]'::jsonb), $8, $9, $10::jsonb, 'deleted', $11, $12)
-      on conflict (telegram_message_id) do update set
+      values ($1, $2, $3, $4, $13, $14, $5, '', coalesce($6, 'workout'), coalesce($7::jsonb, '["训练","随想","Telegram"]'::jsonb), $8, $9, $10::jsonb, 'deleted', $11, $12)
+      on conflict (source_channel, source_chat_id, source_message_id) do update set
+        telegram_message_id = excluded.telegram_message_id,
         telegram_chat_id = coalesce(excluded.telegram_chat_id, core.thought.telegram_chat_id),
         source_batch_id = excluded.source_batch_id,
         source_channel = coalesce(excluded.source_channel, core.thought.source_channel),
+        source_chat_id = coalesce(excluded.source_chat_id, core.thought.source_chat_id),
+        source_message_id = coalesce(excluded.source_message_id, core.thought.source_message_id),
         command = excluded.command,
         thought_module = coalesce($6, core.thought.thought_module),
         markdown_path = coalesce(excluded.markdown_path, core.thought.markdown_path),
@@ -271,6 +340,8 @@ async function markThoughtMirrorDeleted(client, thought) {
       imageRefs,
       thought.processedAt.toISOString(),
       thought.processedAt.toISOString(),
+      normalizeSourceId(thought.sourceChatId ?? thought.chatId ?? 'legacy-chat'),
+      normalizeSourceId(thought.sourceMessageId ?? messageId),
     ],
   );
 }
@@ -292,16 +363,73 @@ function getThoughtStorageWriteStatus(batch) {
 }
 
 function normalizePositiveInteger(value) {
-  const number = Number(value);
-  return Number.isInteger(number) && number > 0 ? number : null;
+  const normalized = normalizeBigIntValue(value);
+  if (normalized === null) {
+    return null;
+  }
+  if (typeof normalized === 'number') {
+    return normalized > 0 ? normalized : null;
+  }
+  if (normalized.startsWith('-') || normalized === '0') {
+    return null;
+  }
+  return normalized;
 }
 
 function normalizeBigIntValue(value) {
-  const number = Number(value);
-  return Number.isInteger(number) ? number : null;
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) ? value : null;
+  }
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+  const text = String(value).trim();
+  if (!/^-?\d+$/.test(text)) {
+    return null;
+  }
+  const number = Number(text);
+  return Number.isSafeInteger(number) && String(number) === text ? number : text;
 }
 
 function normalizeSourceChannel(value) {
   const text = String(value ?? '').trim();
   return text || null;
+}
+
+function normalizeSourceId(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const text = String(value).trim();
+  return text || null;
+}
+
+function resolveThoughtSourceMessage(batch, sourceMessageId = null) {
+  const messages = batch.messages ?? [];
+  if (sourceMessageId !== null && sourceMessageId !== undefined) {
+    const sourceMessageText = String(sourceMessageId);
+    const match = messages.find((message) =>
+      String(message.sourceMessageId ?? message.messageId ?? '') === sourceMessageText
+    );
+    if (match) {
+      return match;
+    }
+  }
+  return messages[0] ?? null;
+}
+
+function buildTargetSourceIdentity({
+  batch,
+  targetMessageId,
+  targetSourceMessageId = null,
+  sourceChatId = null,
+}) {
+  return {
+    sourceChannel: batch.sourceChannel ?? 'telegram',
+    sourceChatId,
+    sourceMessageId: targetSourceMessageId ?? targetMessageId,
+  };
 }

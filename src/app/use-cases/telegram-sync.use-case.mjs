@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createAiProvider } from '../../ai/provider.mjs';
+import { createAiProvider, isAiSchedulerEnabled } from '../../ai/provider.mjs';
 import { groupTelegramUpdates } from '../../adapters/telegram/sync-batch.adapter.mjs';
 import {
   appendPendingRecognitionBatch as appendPendingRecognitionBatchToDatabase,
@@ -10,9 +10,10 @@ import {
   markPendingRecognitionResolved as markPendingRecognitionResolvedInDatabase,
   persistNormalizedBatch as persistNormalizedBatchToDatabase,
   readPendingRecognitionBatches as readPendingRecognitionBatchesFromDatabase,
+  writeStartedRecognitionAiCallLog as writeStartedRecognitionAiCallLogToDatabase,
 } from '../../../tools/training-db-core.mjs';
 import {
-  generateTrainingAnalysisReply,
+  generateTrainingAnalysisResult,
   splitTelegramMessage,
 } from '../../../tools/training-analysis.mjs';
 import {
@@ -53,6 +54,8 @@ import {
 import {
   buildImageProcessingBatch,
   loadRecognitionSystemPrompt,
+  markImageSyncStage,
+  markImageSyncStageFailure,
   queueRecognitionFailureIfNeeded,
   readPendingRecognitionBatchesForRun,
   recognizeBatch,
@@ -78,9 +81,20 @@ export async function main() {
 }
 
 export async function runTelegramSync(options = {}) {
+  return runMessageSync({
+    ...options,
+    adapter: {
+      channel: 'telegram',
+      ...(options.adapter ?? {}),
+    },
+  });
+}
+
+export async function runMessageSync(options = {}) {
   const timings = createSyncTimings();
+  const adapter = normalizeMessageSyncAdapter(options.adapter);
   const rawEnv = options.env ?? process.env;
-  const env = loadRequiredEnv(rawEnv);
+  const env = loadRequiredEnv(rawEnv, { adapter });
   const activeRootDir = options.rootDir ?? rootDir;
   const recordPath = path.join(activeRootDir, '训练记录.md');
   const thoughtsDir = path.join(activeRootDir, 'source', '_posts');
@@ -101,17 +115,49 @@ export async function runTelegramSync(options = {}) {
         offset: input.offset,
         limit: input.limit,
       }));
+  const fetchTelegramFileById =
+    options.fetchTelegramFile ??
+    ((fileId) =>
+      fetchTelegramFile({
+        botToken: env.botToken,
+        fileId,
+      }));
+  const fetchTelegramImageFileById =
+    options.fetchTelegramFile ??
+    ((fileId) =>
+      fetchTelegramFile({
+        botToken: env.botToken,
+        fileId,
+        maxDownloadBytes: rawEnv.MAX_IMAGE_DOWNLOAD_BYTES,
+      }));
+  const writeStartedRecognitionAiCallLog =
+    options.writeStartedRecognitionAiCallLog ??
+    (!options.persistNormalizedBatch && !options.recognizeBatch
+      ? (event) =>
+          writeStartedRecognitionAiCallLogToDatabase({
+            ...event,
+            env: options.env ?? process.env,
+            occurredAt: now,
+          })
+      : undefined);
   const recognizeBatchRunner =
     options.recognizeBatch ??
-    ((batch) => recognizeBatch(batch, env, { aiProvider: recognitionAiProvider, rawEnv, fetchTelegramFileById }));
-  const persistBatch =
+    ((batch) => recognizeBatch(batch, env, {
+      aiProvider: recognitionAiProvider,
+      rawEnv,
+      fetchTelegramFileById: fetchTelegramImageFileById,
+      writeStartedRecognitionAiCallLog,
+    }));
+  const sourceChannel = options.sourceChannel ?? adapter.channel;
+  const persistNormalizedBatchRunner =
     options.persistNormalizedBatch ??
-    ((input) =>
-      persistNormalizedBatchToDatabase({
-        ...input,
-        sourceChannel: input.sourceChannel ?? options.sourceChannel ?? 'telegram',
-        env: options.env ?? process.env,
-      }));
+    ((input) => persistNormalizedBatchToDatabase(input));
+  const persistBatch = (input) =>
+    persistNormalizedBatchRunner({
+      ...input,
+      sourceChannel: input.sourceChannel ?? sourceChannel,
+      env: input.env ?? options.env ?? process.env,
+    });
   const useDefaultPendingRecognitionStore =
     !options.persistNormalizedBatch &&
     !options.fetchTelegramUpdates &&
@@ -148,22 +194,18 @@ export async function runTelegramSync(options = {}) {
             now,
           })
       : async (input) => ({ status: 'skipped', reason: 'not_configured', batchId: input?.batchId }));
-  const fetchTelegramFileById =
-    options.fetchTelegramFile ??
-    ((fileId) =>
-      fetchTelegramFile({
-        botToken: env.botToken,
-        fileId,
-      }));
   const generateAnalysisReply =
     options.generateTrainingAnalysisReply ??
     ((input) =>
-      generateTrainingAnalysisReply({
+      generateTrainingAnalysisResult({
         ...input,
         rootDir: activeRootDir,
         env: rawEnv,
         now,
         aiProvider,
+        snapshot: options.snapshot,
+        buildTrainingSnapshot: options.buildTrainingSnapshot,
+        createClient: options.createClient,
       }));
   const sendMessage =
     options.sendTelegramMessage ??
@@ -185,8 +227,6 @@ export async function runTelegramSync(options = {}) {
   const resultPath = resolveTelegramSyncResultPath(rawEnv, activeRootDir, options.resultPath);
   const resolveDispatchUpdates = options.resolveDispatchUpdates ?? resolveDispatchTelegramUpdates;
   const groupUpdates = options.groupUpdates ?? groupTelegramUpdates;
-  const sourceChannel = options.sourceChannel ?? 'telegram';
-
   const dispatchUpdates = await measureSyncStage(timings, 'resolveUpdates', () =>
     resolveDispatchUpdates({
       repositoryDispatchEvent: options.repositoryDispatchEvent,
@@ -202,8 +242,11 @@ export async function runTelegramSync(options = {}) {
       allowFallback: Boolean(dispatchUpdates) || env.githubEventName === 'repository_dispatch',
     }),
   );
+  const shouldReplayLegacyNdjsonPending = shouldReplayLegacyPendingQueue(rawEnv, options);
   const pendingBatches = await measureSyncStage(timings, 'readPendingFallback', () =>
-    readPendingFallbackBatches(pendingQueuePath),
+    shouldReplayLegacyNdjsonPending
+      ? readPendingFallbackBatches(pendingQueuePath)
+      : [],
   );
   let replayStoredAny = false;
   let storedSleepAny = false;
@@ -233,12 +276,13 @@ export async function runTelegramSync(options = {}) {
   });
 
   await measureSyncStage(timings, 'writePendingFallback', async () => {
-    if (pendingBatches.length === 0) {
+    if (!shouldReplayLegacyNdjsonPending || pendingBatches.length === 0) {
       return;
     }
     await writePendingFallbackBatches(
       pendingQueuePath,
       pendingBatches.filter((pending) => !pending.replayed),
+      { backupBeforeWrite: true, now },
     );
   });
 
@@ -346,6 +390,9 @@ export async function runTelegramSync(options = {}) {
         analysisReplyStatus: analysisResult.status,
         analysisReplyError: analysisResult.error ?? null,
         analysisReplyParts: analysisResult.parts ?? 0,
+        analysisAttemptKind: analysisResult.aiAttemptKind ?? null,
+        analysisModel: analysisResult.model ?? null,
+        analysisSnapshotSource: analysisResult.snapshotSource ?? null,
         failureCategory:
           analysisResult.status === 'failed'
             ? classifyFailureCategory(analysisResult.error, { phase: 'ai_analysis' })
@@ -378,6 +425,7 @@ export async function runTelegramSync(options = {}) {
     }
 
     try {
+      const persistStartedAt = nowMs();
       const persistResult = await measureSyncStage(timings, 'persist', () =>
         persistBatch({
           batch: persistedBatch,
@@ -386,6 +434,12 @@ export async function runTelegramSync(options = {}) {
           env: options.env ?? process.env,
         }),
       );
+      markImageSyncStage(persistedBatch, 'db_persist', {
+        status: 'succeeded',
+        durationMs: elapsedMs(persistStartedAt),
+        failureCategory: null,
+        failureReason: null,
+      });
 
       const storedSleepImageBatch =
         isTrainingDataBatchKind(persistedBatch.kind) &&
@@ -403,10 +457,24 @@ export async function runTelegramSync(options = {}) {
     } catch (error) {
       if (persistedBatch.status === 'ready') {
         const errorMessage = error instanceof Error ? error.message : String(error);
+        const failureCategory = classifyFailureCategory(errorMessage, { phase: 'database' });
+        markImageSyncStageFailure(persistedBatch, 'db_persist', errorMessage, {
+          failureCategory,
+        });
+        if (failureCategory === 'user_input') {
+          batchResults.push({
+            ...persistedBatch,
+            persistenceStatus: 'manual_intervention',
+            persistenceError: errorMessage,
+            failureCategory,
+            failureReason: errorMessage,
+          });
+          continue;
+        }
         await measureSyncStage(timings, 'queuePersistenceReplay', () =>
           appendPendingRecognitionBatch({
             batch: persistedBatch,
-            failureCategory: 'database',
+            failureCategory,
             error: errorMessage,
             failedAt: now.toISOString(),
           }),
@@ -418,7 +486,7 @@ export async function runTelegramSync(options = {}) {
           ...persistedBatch,
           persistenceStatus: 'pending_replay',
           persistenceError: errorMessage,
-          failureCategory: classifyFailureCategory(errorMessage, { phase: 'database' }),
+          failureCategory,
           failureReason: errorMessage,
         });
         continue;
@@ -453,6 +521,7 @@ export async function runTelegramSync(options = {}) {
     lastProcessedUpdateId: nextLastProcessedUpdateId,
     readyBatches: batchResults.filter((batch) => batch.status === 'ready').length,
     batchResults,
+    tasks: buildMessageSyncTasks(batchResults, { channel: sourceChannel }),
     timingsMs: timings.timingsMs,
   };
   finalizeSyncTimings(timings, result);
@@ -527,12 +596,29 @@ function logSyncTimings(timingsMs) {
   process.stderr.write(`[telegram-sync] timings ${JSON.stringify(timingsMs)}\n`);
 }
 
+function shouldReplayLegacyPendingQueue(rawEnv, options = {}) {
+  if (options.replayLegacyNdjsonPending !== undefined) {
+    return Boolean(options.replayLegacyNdjsonPending);
+  }
+  return ['1', 'true', 'yes', 'on'].includes(
+    String(rawEnv.TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING ?? '').trim().toLowerCase(),
+  );
+}
+
 export function createRecognitionAiProvider(rawEnv, defaultProvider) {
-  const recognitionModel = String(rawEnv.TELEGRAM_RECOGNITION_MODEL ?? '').trim();
-  const primaryProvider = recognitionModel
+  const schedulerEnabled = isAiSchedulerEnabled(rawEnv);
+  const recognitionModel = String(
+    schedulerEnabled
+      ? rawEnv.AI_RECOGNITION_MODEL ?? rawEnv.TELEGRAM_RECOGNITION_MODEL ?? ''
+      : rawEnv.TELEGRAM_RECOGNITION_MODEL ?? '',
+  ).trim();
+  const recognitionTimeoutMs = String(schedulerEnabled ? rawEnv.AI_RECOGNITION_TIMEOUT_MS ?? '' : '').trim();
+  const shouldCreateSceneProvider = Boolean(recognitionModel || recognitionTimeoutMs);
+  const primaryProvider = shouldCreateSceneProvider
     ? createAiProvider({
         ...rawEnv,
-        AI_MODEL: recognitionModel,
+        ...(recognitionModel ? { AI_MODEL: recognitionModel } : {}),
+        ...(recognitionTimeoutMs ? { AI_TIMEOUT_MS: recognitionTimeoutMs } : {}),
       })
     : defaultProvider;
   const fallbackProvider = createRecognitionFallbackAiProvider(rawEnv);
@@ -566,7 +652,10 @@ function createRecognitionFallbackAiProvider(rawEnv) {
     AI_BASE_URL: baseUrl,
     AI_MODEL: model,
     AI_PROVIDER: rawEnv.TELEGRAM_RECOGNITION_FALLBACK_PROVIDER || rawEnv.AI_PROVIDER,
-    AI_TIMEOUT_MS: rawEnv.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS || rawEnv.AI_TIMEOUT_MS,
+    AI_TIMEOUT_MS:
+      (isAiSchedulerEnabled(rawEnv) ? rawEnv.AI_RECOGNITION_FALLBACK_TIMEOUT_MS : '') ||
+      rawEnv.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS ||
+      rawEnv.AI_TIMEOUT_MS,
   });
 }
 
@@ -718,30 +807,59 @@ async function readLastProcessedUpdateIdForRun({
   }
 }
 
-function loadRequiredEnv(env = process.env) {
-  const botToken = env.TELEGRAM_BOT_TOKEN;
+function normalizeMessageSyncAdapter(adapter = {}) {
+  const channel = String(adapter.channel ?? 'telegram').trim().toLowerCase() || 'telegram';
+  return {
+    channel,
+    botTokenEnvName: adapter.botTokenEnvName ?? (channel === 'telegram' ? 'TELEGRAM_BOT_TOKEN' : null),
+    allowedChatIdsEnvName:
+      adapter.allowedChatIdsEnvName ?? (channel === 'telegram' ? 'TELEGRAM_ALLOWED_CHAT_IDS' : null),
+    transportEnvName:
+      adapter.transportEnvName ?? (channel === 'telegram' ? 'TELEGRAM_SYNC_TRANSPORT' : null),
+  };
+}
+
+function loadRequiredEnv(env = process.env, options = {}) {
+  const adapter = options.adapter ?? normalizeMessageSyncAdapter();
+  const botToken = adapter.botTokenEnvName
+    ? env[adapter.botTokenEnvName]
+    : env.TELEGRAM_BOT_TOKEN ?? adapter.channel;
   const apiKey = env.AI_API_KEY;
   const baseUrl = env.AI_BASE_URL;
   const model = env.AI_MODEL;
-  const allowedChatIdsRaw = env.TELEGRAM_ALLOWED_CHAT_IDS;
+  const allowedChatIdsRaw = adapter.allowedChatIdsEnvName
+    ? env[adapter.allowedChatIdsEnvName]
+    : env.TELEGRAM_ALLOWED_CHAT_IDS;
   const dbEnabled = env.TRAINING_DB_ENABLED;
   const dbUrl = env.TRAINING_DB_URL;
   const pollLimit = Number(env.TELEGRAM_POLL_LIMIT ?? 20);
-  const aiConcurrency = Number(env.AI_CONCURRENCY ?? 3);
+  const aiConcurrency = normalizeAiConcurrency(env.AI_CONCURRENCY, {
+    maxValue: env.AI_CONCURRENCY_MAX,
+  });
 
-  for (const [name, value] of [
-    ['TELEGRAM_BOT_TOKEN', botToken],
+  const required = [
     ['AI_API_KEY', apiKey],
     ['AI_BASE_URL', baseUrl],
     ['AI_MODEL', model],
-    ['TELEGRAM_ALLOWED_CHAT_IDS', allowedChatIdsRaw],
     ['TRAINING_DB_ENABLED', dbEnabled],
     ['TRAINING_DB_URL', dbUrl],
-  ]) {
+  ];
+  if (adapter.botTokenEnvName) {
+    required.unshift([adapter.botTokenEnvName, botToken]);
+  }
+  if (adapter.allowedChatIdsEnvName) {
+    required.push([adapter.allowedChatIdsEnvName, allowedChatIdsRaw]);
+  }
+
+  for (const [name, value] of required) {
     if (!value) {
       throw new Error(`Missing required environment variable: ${name}`);
     }
   }
+
+  const syncTransportValue = adapter.transportEnvName
+    ? env[adapter.transportEnvName]
+    : env.TELEGRAM_SYNC_TRANSPORT;
 
   return {
     botToken,
@@ -749,16 +867,57 @@ function loadRequiredEnv(env = process.env) {
     baseUrl: baseUrl.replace(/\/+$/, ''),
     model,
     syncTransport:
-      String(env.TELEGRAM_SYNC_TRANSPORT ?? 'poll').toLowerCase() === 'webhook'
+      String(syncTransportValue ?? 'poll').toLowerCase() === 'webhook'
         ? 'webhook'
         : 'poll',
     githubEventName: env.GITHUB_EVENT_NAME?.trim() || '',
     githubEventPath: env.GITHUB_EVENT_PATH?.trim() || '',
     dispatchPayload: env.SYNC_DISPATCH_PAYLOAD ?? env.DISPATCH_PAYLOAD ?? '',
     pollLimit: Number.isFinite(pollLimit) && pollLimit > 0 ? pollLimit : 20,
-    aiConcurrency: Number.isFinite(aiConcurrency) && aiConcurrency > 0 ? aiConcurrency : 3,
+    aiConcurrency,
     allowedChatIds: parseAllowedChatIds(allowedChatIdsRaw),
   };
+}
+
+function normalizeAiConcurrency(value, options = {}) {
+  const defaultValue = 3;
+  const configured = Number(value ?? defaultValue);
+  const maxValue = Number(options.maxValue ?? 5);
+  const limit = Number.isFinite(maxValue) && maxValue > 0 ? Math.floor(maxValue) : 5;
+  const normalized =
+    Number.isFinite(configured) && configured > 0
+      ? Math.floor(configured)
+      : defaultValue;
+  return Math.min(normalized, limit);
+}
+
+function buildMessageSyncTasks(batchResults, { channel }) {
+  return (batchResults ?? []).map((batch) => {
+    const kind = batch.kind ?? 'image';
+    const messages = Array.isArray(batch.messages) ? batch.messages : [];
+    const chatIds = [
+      ...new Set(messages
+        .map((message) => message?.sourceChatId ?? message?.chatId)
+        .filter((value) => value !== null && value !== undefined && value !== '')),
+    ];
+    const sourceMessageIds = messages
+      .map((message) => message?.sourceMessageId ?? message?.messageId)
+      .filter((value) => value !== null && value !== undefined);
+
+    return {
+      taskId: `${channel}:${kind}:${batch.batchId ?? 'unknown'}`,
+      channel,
+      kind,
+      batchId: batch.batchId ?? null,
+      taskStatus: batch.taskStatus ?? batch.status ?? 'queued',
+      persistenceStatus: batch.persistenceStatus ?? null,
+      failureCategory: batch.failureCategory ?? null,
+      failureReason: batch.failureReason ?? batch.reason ?? null,
+      archivedDate: batch.archivedDate ?? null,
+      chatIds,
+      sourceMessageIds,
+    };
+  });
 }
 
 function parseAllowedChatIds(value) {
@@ -780,10 +939,11 @@ function parseAllowedChatIds(value) {
 async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }) {
   const message = batch.messages?.[0] ?? {};
   try {
-    const reply = await generateAnalysisReply({
+    const analysis = normalizeAnalysisReplyResult(await generateAnalysisReply({
+      taskId: batch.batchId,
       question: batch.analysis?.question ?? '',
-    });
-    const parts = splitTelegramMessage(reply);
+    }));
+    const parts = splitTelegramMessage(analysis.reply);
     for (const [index, part] of parts.entries()) {
       await sendMessage({
         chatId: message.chatId,
@@ -794,6 +954,9 @@ async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }
     return {
       status: 'sent',
       parts: parts.length,
+      aiAttemptKind: analysis.aiAttemptKind,
+      model: analysis.model,
+      snapshotSource: analysis.snapshotSource,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -808,6 +971,23 @@ async function handleAnalysisBatch({ batch, generateAnalysisReply, sendMessage }
       parts: 1,
     };
   }
+}
+
+function normalizeAnalysisReplyResult(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return {
+      reply: value.reply ?? '',
+      aiAttemptKind: value.aiAttemptKind ?? null,
+      model: value.model ?? null,
+      snapshotSource: value.snapshotSource ?? null,
+    };
+  }
+  return {
+    reply: String(value ?? ''),
+    aiAttemptKind: null,
+    model: null,
+    snapshotSource: null,
+  };
 }
 
 async function handleHelpBatch({ batch, sendMessage }) {

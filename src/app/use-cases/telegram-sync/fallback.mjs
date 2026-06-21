@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { applyTelegramSyncToMarkdown } from '../../../adapters/telegram/sync-batch.adapter.mjs';
@@ -26,8 +26,11 @@ export async function appendPendingFallbackBatch(queuePath, payload) {
   await writeFile(queuePath, content ? `${content}\n` : '', 'utf8');
 }
 
-export async function writePendingFallbackBatches(queuePath, entries) {
+export async function writePendingFallbackBatches(queuePath, entries, options = {}) {
   await mkdir(path.dirname(queuePath), { recursive: true });
+  if (options.backupBeforeWrite) {
+    await backupPendingFallbackQueue(queuePath, options.now);
+  }
   const trimmed = entries.length > MAX_PENDING_QUEUE_SIZE
     ? entries.slice(-MAX_PENDING_QUEUE_SIZE)
     : entries;
@@ -49,6 +52,11 @@ async function readPendingFallbackBatchesRaw(queuePath) {
   } catch {
     return [];
   }
+}
+
+async function backupPendingFallbackQueue(queuePath, now = new Date()) {
+  const suffix = now.toISOString().replaceAll('-', '').replaceAll(':', '').replace('.', '');
+  await copyFile(queuePath, `${queuePath}.backup-${suffix}`);
 }
 
 export function rebuildMarkdownFromPersistedBatches(markdown, batches) {

@@ -272,6 +272,31 @@ jobs:
           const report = result.batchResults ? buildTelegramSyncReport(result) : result;
           const batches = report.batches ?? result.batches ?? result.batchResults ?? [];
           const timings = report.timingsMs ?? result.timingsMs ?? {};
+          const businessIncomplete = [];
+          const resolveFailureDisposition = (batch) => batch.failureDisposition ??
+            (batch.recognitionPendingStatus === 'queued' || batch.persistenceStatus === 'pending_replay' ? 'auto_retry' :
+              (batch.status === 'skipped' || batch.status === 'ignored' ? 'skip' : 'none'));
+          const isBusinessIncompleteBatch = (batch, failureDisposition) =>
+            batch.persistenceStatus === 'pending_replay' ||
+            batch.taskStatus === 'partialFailure' ||
+            batch.status === 'partial_failed' ||
+            batch.partialFailure === true ||
+            failureDisposition === 'auto_retry' ||
+            failureDisposition === 'manual_intervention';
+          const formatSummaryCell = (value) => String(value ?? '')
+            .replace(/\|/g, '/')
+            .replace(/\r?\n/g, ' ')
+            .trim();
+          const formatDateSources = (dateSources) => Array.isArray(dateSources)
+            ? dateSources.map((source) => {
+                const sourceName = formatSummaryCell(source?.source ?? source?.type ?? 'unknown');
+                const detectedDate = formatSummaryCell(source?.detectedDate ?? source?.date ?? 'null') || 'null';
+                return `${sourceName}:${detectedDate}`;
+              }).filter(Boolean).join('; ')
+            : '';
+          const formatWarnings = (warnings) => Array.isArray(warnings)
+            ? warnings.map(formatSummaryCell).filter(Boolean).join('; ')
+            : formatSummaryCell(warnings);
           console.log('## Telegram sync result');
           console.log('');
           if (Object.keys(timings).length > 0) {
@@ -282,18 +307,26 @@ jobs:
             }
             console.log('');
           }
-          console.log('| batchId | taskStatus | persistenceStatus | archivedDate | images | pending | failureDisposition | failed messageIds |');
-          console.log('| --- | --- | --- | --- | --- | --- | --- | --- |');
+          console.log('| batchId | taskStatus | persistenceStatus | archivedDate | dateSources | warnings | dateConfidence | images | aiAttemptKinds | aiCallLogStatus | pending | failureDisposition | failed messageIds |');
+          console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
           for (const batch of batches) {
             const failedIds = (batch.recognitionErrors ?? [])
               .map((item) => item.messageId ?? item.message_id)
               .filter((value) => value !== null && value !== undefined)
               .join(', ');
             const images = `${batch.sourceImageCount ?? 0}/${batch.recognizedImageCount ?? 0}/${batch.failedImageCount ?? 0}`;
-            const failureDisposition = batch.failureDisposition ??
-              (batch.recognitionPendingStatus === 'queued' || batch.persistenceStatus === 'pending_replay' ? 'auto_retry' :
-                (batch.status === 'skipped' || batch.status === 'ignored' ? 'skip' : 'none'));
-            console.log(`| ${batch.batchId ?? ''} | ${batch.taskStatus ?? batch.status ?? ''} | ${batch.persistenceStatus ?? ''} | ${batch.archivedDate ?? ''} | ${images} | ${batch.recognitionPendingStatus ?? ''} | ${failureDisposition} | ${failedIds} |`);
+            const aiAttemptKinds = (batch.recognitionAttemptKinds ?? []).join(', ');
+            const failureDisposition = resolveFailureDisposition(batch);
+            const dateSources = formatDateSources(batch.dateSources);
+            const warnings = formatWarnings(batch.warnings);
+            console.log(`| ${batch.batchId ?? ''} | ${batch.taskStatus ?? batch.status ?? ''} | ${batch.persistenceStatus ?? ''} | ${batch.archivedDate ?? ''} | ${dateSources} | ${warnings} | ${batch.dateConfidence ?? ''} | ${images} | ${aiAttemptKinds} | ${batch.aiCallLogStatus ?? ''} | ${batch.recognitionPendingStatus ?? ''} | ${failureDisposition} | ${failedIds} |`);
+            if (isBusinessIncompleteBatch(batch, failureDisposition)) {
+              businessIncomplete.push(`${batch.batchId ?? '(unknown)'}:${batch.persistenceStatus ?? batch.taskStatus ?? batch.status ?? 'unknown'}:${failureDisposition}`);
+            }
+          }
+          if (businessIncomplete.length > 0) {
+            console.log('');
+            console.log(`::warning title=Telegram sync business incomplete::${businessIncomplete.join('; ')}`);
           }
           })().catch((error) => {
             console.error(error);
@@ -324,10 +357,35 @@ jobs:
           const { buildFeishuSyncReport } = await import(pathToFileURL(path.resolve('tools/feishu-sync.mjs')).href);
           const report = result.batchResults ? buildFeishuSyncReport(result) : result;
           const batches = report.batches ?? result.batches ?? result.batchResults ?? [];
+          const businessIncomplete = [];
+          const resolveFailureDisposition = (batch) => batch.failureDisposition ??
+            (batch.recognitionPendingStatus === 'queued' || batch.persistenceStatus === 'pending_replay' ? 'auto_retry' :
+              (batch.status === 'skipped' || batch.status === 'ignored' ? 'skip' : 'none'));
+          const isBusinessIncompleteBatch = (batch, failureDisposition) =>
+            batch.persistenceStatus === 'pending_replay' ||
+            batch.taskStatus === 'partialFailure' ||
+            batch.status === 'partial_failed' ||
+            batch.partialFailure === true ||
+            failureDisposition === 'auto_retry' ||
+            failureDisposition === 'manual_intervention';
+          const formatSummaryCell = (value) => String(value ?? '')
+            .replace(/\|/g, '/')
+            .replace(/\r?\n/g, ' ')
+            .trim();
+          const formatDateSources = (dateSources) => Array.isArray(dateSources)
+            ? dateSources.map((source) => {
+                const sourceName = formatSummaryCell(source?.source ?? source?.type ?? 'unknown');
+                const detectedDate = formatSummaryCell(source?.detectedDate ?? source?.date ?? 'null') || 'null';
+                return `${sourceName}:${detectedDate}`;
+              }).filter(Boolean).join('; ')
+            : '';
+          const formatWarnings = (warnings) => Array.isArray(warnings)
+            ? warnings.map(formatSummaryCell).filter(Boolean).join('; ')
+            : formatSummaryCell(warnings);
           console.log('## Feishu sync result');
           console.log('');
-          console.log('| batchId | sourceId | chatIds | taskStatus | persistenceStatus | archivedDate | images | pending | failureDisposition | failed messageIds |');
-          console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+          console.log('| batchId | sourceId | chatIds | taskStatus | persistenceStatus | archivedDate | dateSources | warnings | dateConfidence | images | aiAttemptKinds | aiCallLogStatus | pending | failureDisposition | failed messageIds |');
+          console.log('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
           for (const batch of batches) {
             const failedIds = (batch.recognitionErrors ?? [])
               .map((item) => item.sourceMessageId ?? item.messageId ?? item.message_id)
@@ -337,10 +395,18 @@ jobs:
               .filter((value) => value !== null && value !== undefined && value !== '')
               .join(', ');
             const images = `${batch.sourceImageCount ?? 0}/${batch.recognizedImageCount ?? 0}/${batch.failedImageCount ?? 0}`;
-            const failureDisposition = batch.failureDisposition ??
-              (batch.recognitionPendingStatus === 'queued' || batch.persistenceStatus === 'pending_replay' ? 'auto_retry' :
-                (batch.status === 'skipped' || batch.status === 'ignored' ? 'skip' : 'none'));
-            console.log(`| ${batch.batchId ?? ''} | ${batch.sourceId ?? ''} | ${chatIds} | ${batch.taskStatus ?? batch.status ?? ''} | ${batch.persistenceStatus ?? ''} | ${batch.archivedDate ?? ''} | ${images} | ${batch.recognitionPendingStatus ?? ''} | ${failureDisposition} | ${failedIds} |`);
+            const aiAttemptKinds = (batch.recognitionAttemptKinds ?? []).join(', ');
+            const failureDisposition = resolveFailureDisposition(batch);
+            const dateSources = formatDateSources(batch.dateSources);
+            const warnings = formatWarnings(batch.warnings);
+            console.log(`| ${batch.batchId ?? ''} | ${batch.sourceId ?? ''} | ${chatIds} | ${batch.taskStatus ?? batch.status ?? ''} | ${batch.persistenceStatus ?? ''} | ${batch.archivedDate ?? ''} | ${dateSources} | ${warnings} | ${batch.dateConfidence ?? ''} | ${images} | ${aiAttemptKinds} | ${batch.aiCallLogStatus ?? ''} | ${batch.recognitionPendingStatus ?? ''} | ${failureDisposition} | ${failedIds} |`);
+            if (isBusinessIncompleteBatch(batch, failureDisposition)) {
+              businessIncomplete.push(`${batch.batchId ?? '(unknown)'}:${batch.persistenceStatus ?? batch.taskStatus ?? batch.status ?? 'unknown'}:${failureDisposition}`);
+            }
+          }
+          if (businessIncomplete.length > 0) {
+            console.log('');
+            console.log(`::warning title=Feishu sync business incomplete::${businessIncomplete.join('; ')}`);
           }
           })().catch((error) => {
             console.error(error);
@@ -382,6 +448,18 @@ jobs:
           workflow_file="deploy-pages.yml"
           workflow_branch="main"
           dispatch_started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          appendDeploySummary() {
+            summary_status="$1"
+            summary_conclusion="$2"
+            summary_url="$3"
+            {
+              echo "## Site deploy result"
+              echo ""
+              echo "| workflow | runId | status | conclusion | url |"
+              echo "| --- | --- | --- | --- | --- |"
+              echo "| ${workflow_file} | ${deploy_run_id:-} | ${summary_status} | ${summary_conclusion} | ${summary_url} |"
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
           dispatch_body="$(node <<'NODE'
           const inputs = { strict_database_snapshot: 'true' };
           for (const [envName, inputName] of [
@@ -433,6 +511,7 @@ jobs:
           done
 
           if [ -z "$deploy_run_id" ]; then
+            appendDeploySummary "not_found" "failure" ""
             echo "::error title=Deploy workflow not found::Could not find the workflow_dispatch run for ${workflow_file} after dispatch."
             exit 1
           fi
@@ -450,9 +529,11 @@ jobs:
 
             if [ "$status" = "completed" ]; then
               if [ "$conclusion" = "success" ]; then
+                appendDeploySummary "$status" "$conclusion" "$html_url"
                 echo "Deploy workflow succeeded: ${html_url}"
                 exit 0
               fi
+              appendDeploySummary "$status" "$conclusion" "$html_url"
               echo "::error title=Deploy workflow failed::Deploy workflow ${deploy_run_id} completed with conclusion ${conclusion}. ${html_url}"
               exit 1
             fi
@@ -460,6 +541,7 @@ jobs:
             sleep 10
           done
 
+          appendDeploySummary "timed_out" "failure" ""
           echo "::error title=Deploy workflow timed out::Deploy workflow ${deploy_run_id} did not complete in time."
           exit 1
 

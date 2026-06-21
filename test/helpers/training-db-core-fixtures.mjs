@@ -46,6 +46,7 @@ export const normalizedBatch = {
   recognitions: [
     {
       messageId: 71,
+      aiAttemptKind: 'normal',
       imageType: 'workout',
       detectedApp: '华为健康',
       detectedDate: '2026-05-09',
