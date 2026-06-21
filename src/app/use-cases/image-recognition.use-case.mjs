@@ -655,13 +655,62 @@ function normalizeRecognitionPayload(value) {
     records: {
       measurement: records.measurement ?? null,
       activities: Array.isArray(records.activities) ? records.activities : [],
-      meals: Array.isArray(records.meals) ? records.meals : [],
-      totalCalories: records.totalCalories ?? null,
+      meals: normalizeRecognitionMeals(records.meals),
+      totalCalories: normalizeRecognitionNumber(records.totalCalories),
       details: normalizeRecognitionDetails(records.details),
       dailyWorkoutSummary: records.dailyWorkoutSummary ?? null,
       sleep: normalizeRecognitionSleep(records.sleep ?? null),
     },
   };
+}
+
+function normalizeRecognitionMeals(meals) {
+  if (!Array.isArray(meals)) {
+    return [];
+  }
+
+  return meals
+    .map((meal) => {
+      if (!isPlainObject(meal)) {
+        return null;
+      }
+      const calories = normalizeRecognitionNumber(meal.calories);
+      if (calories === null) {
+        return null;
+      }
+      return {
+        name: String(meal.name ?? '').trim() || '未命名餐次',
+        calories,
+        recommendedMin: normalizeRecognitionNumber(meal.recommendedMin),
+        recommendedMax: normalizeRecognitionNumber(meal.recommendedMax),
+      };
+    })
+    .filter(Boolean);
+}
+
+function normalizeRecognitionNumber(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().replace(/,/g, '');
+    if (!normalized) {
+      return null;
+    }
+    const exact = Number(normalized);
+    if (Number.isFinite(exact)) {
+      return exact;
+    }
+    const match = normalized.match(/-?\d+(?:\.\d+)?/);
+    if (match) {
+      const extracted = Number(match[0]);
+      return Number.isFinite(extracted) ? extracted : null;
+    }
+  }
+  return null;
 }
 
 function normalizeRecognitionDetails(details) {

@@ -1251,6 +1251,67 @@ test('recognizeTelegramImageMessage parses SSE-style data response bodies', asyn
   assert.equal(result.records.meals.length, 3);
 });
 
+test('recognizeTelegramImageMessage normalizes nutrition number fields before schema validation', async () => {
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      env: { model: 'gpt-test' },
+      async requestChatCompletion() {
+        return {
+          ok: true,
+          async json() {
+            return {
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      imageType: 'nutrition',
+                      detectedDate: '2026-06-20',
+                      dateEvidence: 'image header: 2026-06-20',
+                      confidence: 0.96,
+                      warnings: [],
+                      records: {
+                        measurement: null,
+                        activities: [],
+                        meals: [
+                          { name: '早餐', calories: '510 kcal', recommendedMin: null, recommendedMax: null },
+                          { name: '午餐', calories: '约360', recommendedMin: '608 kcal', recommendedMax: '1013 kcal' },
+                          { name: '晚餐', calories: null, recommendedMin: 304, recommendedMax: 709 },
+                        ],
+                        totalCalories: '870 kcal',
+                        details: [],
+                        dailyWorkoutSummary: null,
+                      },
+                    }),
+                  },
+                },
+              ],
+            };
+          },
+        };
+      },
+    },
+    message: {
+      messageId: 81,
+      caption: '',
+      text: '',
+      photos: [{ fileUniqueId: 'file-5' }],
+    },
+    imageUrl: 'https://example.com/image.jpg',
+    systemPrompt: 'system prompt',
+    promptMetadata,
+    env: {
+      AI_MODEL: 'gpt-test',
+      TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
+    },
+  });
+
+  assert.deepEqual(result.records.meals, [
+    { name: '早餐', calories: 510, recommendedMin: null, recommendedMax: null },
+    { name: '午餐', calories: 360, recommendedMin: 608, recommendedMax: 1013 },
+  ]);
+  assert.equal(result.records.totalCalories, 870);
+});
+
 test('recognizeTelegramImageMessage includes a safe summary when message content is invalid JSON', async () => {
   await assert.rejects(
     () =>

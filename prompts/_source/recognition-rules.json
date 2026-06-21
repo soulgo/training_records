@@ -110,8 +110,8 @@
     "rules": [
       "餐次汇总写入 `records.meals`：",
       "- `name`：餐次或包含餐次的名称，例如 `早餐`、`凉粉（早餐，1碗）`",
-      "- `calories`：该餐或该项热量，单位 kcal",
-      "- `recommendedMin`、`recommendedMax`：建议范围；没有可靠范围时填 `null`",
+      "- `calories`：该餐或该项热量，单位 kcal；必须输出 JSON number，例如 `510`，不要输出 `\"510 kcal\"` 或带单位文本",
+      "- `recommendedMin`、`recommendedMax`：建议范围；有可靠范围时输出 JSON number，没有可靠范围时填 `null`，不要输出带单位文本",
       "",
       "其他规则：",
       "- `records.totalCalories` 写当日截图内已记录总热量；没有就填 `null`。",
