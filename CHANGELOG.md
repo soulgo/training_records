@@ -33,6 +33,8 @@
 
 ### Fixed
 
+- 修复 Telegram/飞书纯文本随想已入库但不触发页面刷新的问题：新建随想即使没有图片附件也会标记为 `thought_database_only` 数据库内容变更，并在结果中保留持久化后的随想 ID，确保同步 workflow 能触发后续部署校验。
+- 修复生产/开发站点部署在严格数据库导出已成功后仍二次读取数据库、偶发 `database snapshot unavailable: timeout expired` 导致页面刷新失败的问题：site-build action 在 `export:markdown` 成功后切换为已导出的 Markdown 快照供后续测试和构建复用。
 - 修复 Telegram 饮食图片识别偶发 schema 校验失败的问题：AI 返回 `"510 kcal"`、`"约360"` 等带单位热量时会在校验前归一化为数字，无法确认热量的餐次会跳过；同时允许建议热量范围为 `null` 并收紧 prompt，避免 `records.meals[].calories` 因非数字触发重试。
 - 修复飞书单条文本随想也不触发 GitHub Actions 的问题：飞书 `text` 消息现在绕过 `FEISHU_IMAGE_BUFFER`，直接进入全局同步队列；图片消息仍保留 3 秒 burst 缓冲。同步队列在 `workflow_dispatch` 后长期找不到对应 run 时会 dead-letter 当前任务并继续处理后续消息，且在配置 Worker 级 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 时会向飞书回发“GitHub Action 未能启动”。
 - 修复飞书连续随想队列在 GitHub Actions run title 被截断后卡死的问题：`SyncDispatchQueue` 现在使用短稳定 `queue_task_id`（`channel:sortKey:eventType:hash`），避免把完整飞书 payload 写入 run 标题；同时兼容旧的超长队列 ID 前缀匹配，让已卡在 `wait_for_run` 的任务可以继续 drain 后续消息。

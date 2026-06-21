@@ -413,7 +413,7 @@ export async function runMessageSync(options = {}) {
           thoughtsDir,
           activeRootDir,
           now,
-          env,
+          env: rawEnv,
           persistBatch,
           appendPendingPersistenceBatch: appendPendingRecognitionBatch,
           fetchTelegramFile: options.fetchMessageFile ?? fetchTelegramFileById,
@@ -1091,7 +1091,8 @@ async function handleThoughtSyncBatch({
         ...baseBatchResult,
         persistenceStatus: persistResult.status,
         persistedThoughtModule: persistResult.thoughtModule ?? null,
-        persistedThoughtMessageId: persistResult.messageId ?? getThoughtTargetMessageId(thoughtStorageBatch),
+        persistedThoughtMessageId:
+          persistResult.messageId ?? getPersistedThoughtMessageId(thoughtStorageBatch),
       },
     };
   } catch (error) {
@@ -1122,6 +1123,10 @@ function getThoughtTargetMessageId(batch) {
     batch.thoughtMove?.targetMessageId ??
     null
   );
+}
+
+function getPersistedThoughtMessageId(batch) {
+  return batch.thought?.telegramMessageId ?? getThoughtTargetMessageId(batch);
 }
 
 async function prepareThoughtMarkdownBody({ batch, kind, fetchTelegramFile }) {
@@ -1233,11 +1238,18 @@ async function writeThoughtArtifact({
   fetchTelegramFile,
 }) {
   if (kind === 'thought') {
-    return writeThoughtImageArtifacts({
+    const result = await writeThoughtImageArtifacts({
       batch,
       rootDir: activeRootDir,
       fetchTelegramFile,
     });
+    if (result.status === 'no_images') {
+      return {
+        ...result,
+        status: 'thought_database_only',
+      };
+    }
+    return result;
   }
 
   if (kind === 'thought_edit') {
