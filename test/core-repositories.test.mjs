@@ -570,6 +570,124 @@ test('PostgresThoughtRepository locates migrated thought targets for edit delete
   assert.equal(writes[2][1][14], 'om_source_thought');
 });
 
+test('PostgresThoughtRepository preserves existing Feishu source identity when editing by numeric proxy id', async () => {
+  const calls = [];
+  const targetMessageId = 3248321714433710;
+  const repository = new PostgresThoughtRepository({
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from core\.thought/i.test(sql) && /source_channel = \$1/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.thought/i.test(sql) && /where telegram_message_id = \$1/i.test(sql)) {
+        return {
+          rows: [{
+            telegram_message_id: targetMessageId,
+            source_channel: 'feishu',
+            source_chat_id: 'oc_original_chat',
+            source_message_id: 'om_original_thought',
+            thought_module: 'body_feedback',
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+  });
+
+  const result = await repository.persistMirror(
+    {
+      kind: 'thought_edit',
+      batchId: 'feishu-edit-by-proxy-id',
+      sourceChannel: 'feishu',
+      messages: [{
+        messageId: 23,
+        chatId: 'oc_command_chat',
+        sourceChannel: 'feishu',
+        sourceChatId: 'oc_command_chat',
+        sourceMessageId: 'om_edit_command',
+      }],
+      thoughtEdit: {
+        command: '/随想编',
+        targetMessageId,
+        body: '测试23 23:00',
+        thoughtModule: 'body_feedback',
+        telegramChatId: null,
+        sourceChatId: 'oc_command_chat',
+        storage: {
+          writeStatus: 'thought_edit_database_only',
+          markdownPath: null,
+          photoPaths: null,
+        },
+      },
+    },
+    new Date('2026-06-20T15:00:00.000Z'),
+  );
+
+  assert.deepEqual(result, { status: 'stored', messageId: targetMessageId, thoughtModule: 'body_feedback' });
+  const upsertCall = calls.find(([sql]) => /insert into core\.thought/i.test(sql));
+  assert.ok(upsertCall, 'expected edit upsert');
+  assert.equal(upsertCall[1][3], 'feishu');
+  assert.equal(upsertCall[1][13], 'oc_original_chat');
+  assert.equal(upsertCall[1][14], 'om_original_thought');
+});
+
+test('PostgresThoughtRepository preserves existing Feishu source identity when Telegram deletes a Feishu thought', async () => {
+  const calls = [];
+  const targetMessageId = 1729845219532063;
+  const repository = new PostgresThoughtRepository({
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from core\.thought/i.test(sql) && /source_channel = \$1/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.thought/i.test(sql) && /where telegram_message_id = \$1/i.test(sql)) {
+        return {
+          rows: [{
+            telegram_message_id: targetMessageId,
+            source_channel: 'feishu',
+            source_chat_id: 'oc_feishu_chat',
+            source_message_id: 'om_replayed_failed_thought',
+            thought_module: 'misc',
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+  });
+
+  const result = await repository.persistMirror(
+    {
+      kind: 'thought_delete',
+      batchId: 'telegram-delete-feishu-thought',
+      sourceChannel: 'telegram',
+      messages: [{
+        messageId: 663,
+        chatId: 42,
+        sourceChatId: '42',
+        sourceMessageId: '663',
+      }],
+      thoughtDelete: {
+        command: '/随想删',
+        targetMessageId,
+        telegramChatId: 42,
+        storage: {
+          writeStatus: 'thought_delete_database_only',
+          markdownPath: null,
+          deletedPhotoPaths: [],
+        },
+      },
+    },
+    new Date('2026-06-20T15:05:00.000Z'),
+  );
+
+  assert.deepEqual(result, { status: 'stored', messageId: targetMessageId, thoughtModule: 'misc' });
+  const deleteCall = calls.find(([sql]) => /insert into core\.thought/i.test(sql));
+  assert.ok(deleteCall, 'expected delete upsert');
+  assert.equal(deleteCall[1][3], 'feishu');
+  assert.equal(deleteCall[1][12], 'oc_feishu_chat');
+  assert.equal(deleteCall[1][13], 'om_replayed_failed_thought');
+});
+
 test('PostgresThoughtRepository reports the effective module when editing without a module token', async () => {
   const calls = [];
   const repository = new PostgresThoughtRepository({
