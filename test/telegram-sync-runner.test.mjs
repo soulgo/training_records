@@ -2815,7 +2815,7 @@ test('runTelegramSync stores a /thought telegram message in core without writing
   assert.equal(result.fallbackUsed, false);
   assert.equal(result.batchResults.length, 1);
   assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'no_images');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_database_only');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].kind, 'thought');
@@ -2880,7 +2880,7 @@ test('runTelegramSync stores markdown document content as the thought body', asy
   assert.deepEqual(downloadedFileIds, ['markdown-file-503']);
   assert.equal(result.batchResults.length, 1);
   assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'no_images');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_database_only');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].thought.body, '# Markdown 标题\n\n- 动作更稳');
@@ -3272,7 +3272,7 @@ test('runTelegramSync stores body feedback /随想 metadata in core payload', as
   });
 
   assert.equal(result.batchResults[0].thought.thoughtModule, 'body_feedback');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'no_images');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_database_only');
   assert.equal(persistedBatches[0].thought.thoughtModule, 'body_feedback');
   assert.deepEqual(persistedBatches[0].thought.tags, ['身体反馈', '随想', 'Telegram']);
   assert.match(persistedBatches[0].thought.body, /今天硬拉后右侧腰背有点刺痛/);
@@ -3385,7 +3385,7 @@ test('runTelegramSync ignores existing markdown posts when storing new core thou
   });
 
   assert.equal(result.changed, true);
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'no_images');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_database_only');
   assert.equal(
     await readFile(path.join(postsDir, '2026-05-14-telegram-thought-501.md'), 'utf8'),
     'original thought content\n',
@@ -6300,7 +6300,7 @@ test('runTelegramSync sends Telegram result notification after writing a thought
   });
 
   assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'no_images');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_database_only');
   assert.equal(sentMessages.length, 1);
   assert.deepEqual(sentMessages[0], {
     chatId: 42,
@@ -6344,7 +6344,7 @@ test('runTelegramSync defers Telegram success notification until the action fini
 
   assert.equal(result.batchResults[0].kind, 'thought');
   const savedResult = JSON.parse(await readFile(resultPath, 'utf8'));
-  assert.equal(savedResult.batchResults[0].thoughtWriteStatus, 'no_images');
+  assert.equal(savedResult.batchResults[0].thoughtWriteStatus, 'thought_database_only');
   assert.equal(savedResult.batchResults[0].persistenceStatus, 'stored');
 
   const notifierMessages = [];

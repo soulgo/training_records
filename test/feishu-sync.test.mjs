@@ -681,7 +681,9 @@ test('runFeishuSync handles image and thought batches through the shared sync pi
   assert.equal(thoughtBatch.thought.telegramMessageId, thoughtBatch.messages[0].messageId);
   assert.equal(thoughtBatch.messages[0].sourceMessageId, 'om_thought_1');
   assert.deepEqual(thoughtBatch.thought.tags, ['训练', '随想', '飞书']);
-  assert.equal(thoughtBatch.thoughtWriteStatus, 'no_images');
+  assert.equal(thoughtBatch.thoughtWriteStatus, 'thought_database_only');
+  assert.equal(thoughtBatch.persistenceStatus, 'stored');
+  assert.equal(thoughtBatch.persistedThoughtMessageId, thoughtBatch.thought.telegramMessageId);
   assert.equal(sent.length, 0);
 
   const report = buildFeishuSyncReport(result);
@@ -1188,7 +1190,9 @@ test('runFeishuSync does not require Telegram placeholder env for Feishu payload
   assert.equal(result.batchResults.length, 1);
   assert.equal(result.batchResults[0].kind, 'thought');
   assert.equal(result.batchResults[0].sourceChannel, 'feishu');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_database_only');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batchResults[0].persistedThoughtMessageId, result.batchResults[0].thought.telegramMessageId);
   assert.equal(result.tasks.length, 1);
   assert.equal(result.tasks[0].channel, 'feishu');
   assert.equal(persisted.length, 1);
