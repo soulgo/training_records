@@ -962,7 +962,7 @@ test('markdown backup workflow exports database snapshots behind GitHub variable
   assert.match(workflow, /::warning title=Markdown backup changed without commit::/);
   assert.match(workflow, /Conclusion:/);
   const maintenanceGuide = await readFile(
-    new URL('../docs/部署维护/日常维护手册.md', import.meta.url),
+    new URL('../docs/运维手册/运维手册.md#日常维护', import.meta.url),
     'utf8',
   );
   assert.match(maintenanceGuide, /changed_without_commit/);

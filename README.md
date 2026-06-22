@@ -136,7 +136,7 @@ npm run server
 | `MARKDOWN_BACKUP_ENABLED` | 是否启用 DB -> Markdown 定时备份 |
 | `MARKDOWN_BACKUP_FREQUENCY` | Markdown 备份频率，`weekly` 或 `daily` |
 
-完整配置见 [GitHub 与 Cloudflare 配置](docs/部署维护/GitHub与Cloudflare配置.md) 和 [日常维护手册](docs/部署维护/日常维护手册.md)。
+完整配置见 [部署运维总览](docs/部署运维/部署运维.md)、[Secrets 与 Variables](docs/部署运维/部署运维.md#secrets-与-variables) 和 [日常维护](docs/运维手册/运维手册.md#日常维护)。
 
 ## 训练记录流程
 
@@ -157,7 +157,7 @@ npm run server
 6. PostgreSQL 失败时写 pending 队列。
 7. 内容变化后 workflow 只提交文件；站点构建部署由 push 或 DB-only 异步 deploy workflow 完成。
 
-详细规则见 [训练记录生成与解析](docs/训练系统/训练记录生成与解析.md)。
+详细规则见 [核心业务总览](docs/核心业务/核心业务.md)、[消息链路总览](docs/消息链路/消息链路.md) 和 [数据生命周期](docs/数据模型/数据模型.md#数据生命周期)。
 
 ## GitHub Pages 部署
 
@@ -220,16 +220,18 @@ PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`
 ## 文档导航
 
 - [文档总览](docs/README.md)
-- [系统总览](docs/系统架构/系统总览.md)
-- [内部接口手册](docs/系统架构/内部接口手册.md)
-- [数据流转说明](docs/数据流转/数据流转说明.md)
-- [数据模型规范](docs/数据模型规范.md)
-- [训练记录生成与解析](docs/训练系统/训练记录生成与解析.md)
-- [Telegram 使用说明](docs/训练系统/Telegram使用说明.md)
-- [飞书通道部署](docs/部署维护/飞书通道部署.md)
-- [GitHub 与 Cloudflare 配置](docs/部署维护/GitHub与Cloudflare配置.md)
-- [日常维护手册](docs/部署维护/日常维护手册.md)
-- [常见问题排查](docs/问题排查/常见问题排查.md)
+- [10 分钟系统导览](docs/总览/系统导览.md)
+- [当前状态与边界](docs/总览/系统导览.md)
+- [系统架构](docs/架构/系统架构.md)
+- [核心业务总览](docs/核心业务/核心业务.md)
+- [消息链路总览](docs/消息链路/消息链路.md)
+- [AI 识别体系](docs/AI识别体系/AI识别体系.md)
+- [数据模型总览](docs/数据模型/数据模型.md)
+- [部署运维总览](docs/部署运维/部署运维.md)
+- [开发指南](docs/开发指南/开发指南.md)
+- [运维总览](docs/运维手册/运维手册.md)
+- [故障排查总览](docs/故障排查/故障排查.md)
+- [AI Agent 入口](docs/AI-Agent/README.md)
 
 ## FAQ
 

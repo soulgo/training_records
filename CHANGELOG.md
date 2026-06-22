@@ -18,6 +18,7 @@
 - 新增 dev 统一同步入口 v19：`sync-dispatch-dev` 同时接收 Telegram webhook 和飞书事件回调，统一派发到 `.github/workflows/sync-dev.yml`，并由 `deploy-cloudflare-worker-dev.yml` 部署单一 dev Worker 和刷新 dev Telegram webhook。
 - 新增 `tools/feishu-action-monitor.mjs`，当 `Feishu Sync` / `Feishu Sync (Dev)` 的 `repository_dispatch` workflow 失败时，会读取原始 `feishu_update(s)` payload 并向对应飞书 chat 回发失败阶段和 GitHub Actions run URL。
 - 新增文档优化删除 v22 执行记录，沉淀 README 与 docs 收敛目标、删除清单、迁移规则和验证命令。
+- 新增 v23 文档体系精简与系统行为校准文档，补齐 `docs/总览/系统行为手册.md`、AI Agent 入口、文档盘点、重复冗余分析、合并方案、可删除清单和迁移 checklist，把图片输入、随想输入、分析输入、Markdown 输入收敛为四类用户行为事实源。
 
 ### Changed
 
@@ -25,14 +26,17 @@
 - 精简 README 与 docs 推荐阅读路径，只保留当前维护入口，并统一 Telegram/飞书共用 Worker、`sync.yml`、`sync-dev.yml` 与当前部署 workflow 口径。
 - 将 AI 备用方案、AI 返回 schema 校验、Telegram 命令优先级等仍有维护价值的信息合并进长期维护文档，避免小文档分散维护。
 - 统一 main 和 dev 部署 workflow 的随想页面验证 base URL 配置方式：main `deploy-pages.yml` 从硬编码 `https://soulgo.chat` 改为读取 GitHub 变量 `CLOUDFLARE_PAGES_BASE_URL`，dev 继续使用独立的 `CLOUDFLARE_PAGES_DEV_BASE_URL`；两个环境各有专属变量，配置文档同步补齐说明。
+- 重构长期 docs 目录为总览、架构、核心业务、消息链路、AI 识别体系、数据模型、部署运维、开发指南、运维手册、故障排查、参考资料和 AI-Agent，并将 README 与维护测试指向新的长期事实文档。
 
 ### Removed
 
 - 删除旧 dev 双入口配置：`wrangler.feishu-dev.toml`、`telegram-sync-dev.yml`、`feishu-sync-dev.yml` 和 `deploy-cloudflare-feishu-worker-dev.yml`，dev Telegram 与飞书改为共用 `sync-dispatch-dev`。
 - 删除历史归档目录、v5-v12/v14-v17 旧阶段优化方案，以及已合并的 dev 配置清单、AI 备用方案、AI schema 校验和 Telegram 命令注册表等过时文档。
+- 删除已迁移或被新主文档覆盖的旧 docs 路径，包括 `dev_env`、旧 `系统架构`、`数据流转`、`训练系统`、`部署维护`、`问题排查` 和旧 `优化重构` 目录，避免同一事实在主文档体系中保留多份入口。
 
 ### Fixed
 
+- 修复 README、docs 索引和维护测试仍引用旧文档路径的问题，统一改为 `docs/部署运维/部署运维.md`、`docs/运维手册/运维手册.md`、`docs/故障排查/故障排查.md`、`docs/参考资料/参考资料.md` 等新入口。
 - 修复 Telegram/飞书跨通道 `/随想编`、`/随想删`、`/移动` 已存在随想时错误使用命令消息来源覆盖目标随想来源的问题：DB-only 写回现在优先沿用目标行原有 `source_channel`、`source_chat_id` 和 `source_message_id`，避免飞书显式 ID 编辑进入 `source_message_id` 为空的 `pending_replay`，以及 Telegram 删除飞书随想时触发 `thought_pkey` 主键冲突。
 - 修复 Telegram/飞书纯文本随想已入库但不触发页面刷新的问题：新建随想即使没有图片附件也会标记为 `thought_database_only` 数据库内容变更，并在结果中保留持久化后的随想 ID，确保同步 workflow 能触发后续部署校验。
 - 修复生产/开发站点部署在严格数据库导出已成功后仍二次读取数据库、偶发 `database snapshot unavailable: timeout expired` 导致页面刷新失败的问题：site-build action 在 `export:markdown` 成功后切换为已导出的 Markdown 快照供后续测试和构建复用。
