@@ -7,9 +7,34 @@ $(document).ready(function() {
     $("#header > #nav > ul").toggleClass("responsive");
   });
 
+  $(".thought-card__id").click(function() {
+    var button = $(this);
+    var thoughtId = button.data("thought-id");
+    if (!thoughtId || !navigator.clipboard || !navigator.clipboard.writeText) {
+      return;
+    }
+
+    navigator.clipboard.writeText(String(thoughtId)).then(function() {
+      var originalLabel = button.data("copy-label") || "ID";
+      button.text("已复制");
+      button.attr("aria-label", "已复制 ID");
+      window.setTimeout(function() {
+        button.text(originalLabel);
+        button.attr("aria-label", "点击复制 ID");
+      }, 1000);
+    }).catch(function() {
+      button.text("复制失败");
+      button.attr("aria-label", "复制失败");
+      window.setTimeout(function() {
+        button.text(button.data("copy-label") || "ID");
+        button.attr("aria-label", "点击复制 ID");
+      }, 1000);
+    });
+  });
+
 
   /**
-   * Controls the different versions of  the menu in blog post articles 
+   * Controls the different versions of  the menu in blog post articles
    * for Desktop, tablet and mobile.
    */
   if ($(".post").length) {
