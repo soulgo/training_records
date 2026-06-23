@@ -428,6 +428,10 @@ photos:
       mkdirSync(path.dirname(imagePath), { recursive: true });
       writeFileSync(imagePath, 'fake image content', 'utf8');
 
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'clean'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
       execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
         cwd: rootDir,
         stdio: 'pipe',
@@ -447,6 +451,17 @@ photos:
       assert.match(thoughtsIndex, /src="\/images\/thoughts\/2026\/05\/2026-05-14-telegram-thought-502-1\.jpg"/);
       assert.match(detailPage, /class="article-gallery"/);
       assert.match(detailPage, /href="\/images\/thoughts\/2026\/05\/2026-05-14-telegram-thought-502-1\.jpg"/);
+      assert.equal(
+        detailPage.indexOf('今天深蹲动作轨迹更稳了') < detailPage.indexOf('class="article-gallery"'),
+        true,
+      );
+
+      const siteCss = readFileSync(path.join(rootDir, 'public', 'css', 'style.css'), 'utf8');
+      assert.match(siteCss, /\.article-gallery/);
+      assert.match(siteCss, /max-width:\s*22rem/);
+      assert.match(siteCss, /max-height:\s*36rem/);
+      assert.match(siteCss, /max-height:\s*72vh/);
+      assert.match(siteCss, /object-fit:\s*contain/);
     } finally {
       restoreOptionalFile(thoughtPostPath, originalThoughtPost);
       restoreOptionalFile(imagePath, originalImage);
