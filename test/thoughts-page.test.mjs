@@ -161,8 +161,9 @@ telegram_chat_id: 42
       assert.match(thoughtsIndex, /锻炼模块默认随想/);
       assert.match(
         thoughtsIndex,
-        /<span class="thought-card__id"[^>]*title="Telegram message id"[^>]*data-thought-id="501"[^>]*>#501<\/span>/,
+        /<button class="thought-card__id"(?=[^>]*title="点击复制 ID")(?=[^>]*data-thought-id="501")(?=[^>]*data-copy-label="ID")[^>]*>ID<\/button>/,
       );
+      assert.doesNotMatch(thoughtsIndex, />#501<\/button>/);
       assert.doesNotMatch(thoughtsIndex, /杂七杂八模块随想/);
       assert.doesNotMatch(thoughtsIndex, /身体反馈模块随想/);
       assert.match(miscIndex, /杂七杂八模块随想/);
@@ -453,7 +454,7 @@ photos:
   });
 });
 
-test('thoughts page shows telegram message ids for telegram thoughts', () => {
+test('thoughts page hides telegram message ids behind copyable ID labels', () => {
   withSharedSiteFixture(() => {
     const thoughtPostPath = path.join(rootDir, 'source', '_posts', '2026-05-14-telegram-thought-501.md');
     const originalThoughtPost = readOptionalFile(thoughtPostPath);
@@ -487,14 +488,37 @@ telegram_chat_id: 42
 
       const thoughtsIndex = readFileSync(path.join(rootDir, 'public', 'thoughts', 'index.html'), 'utf8');
 
-      assert.match(thoughtsIndex, /class="thought-card__id"[^>]*>#501<\/span>/);
+      assert.match(
+        thoughtsIndex,
+        /<button class="thought-card__id"(?=[^>]*type="button")(?=[^>]*data-thought-id="501")(?=[^>]*data-copy-label="ID")[^>]*>ID<\/button>/,
+      );
+      assert.doesNotMatch(thoughtsIndex, />#501<\/button>/);
     } finally {
       restoreOptionalFile(thoughtPostPath, originalThoughtPost);
     }
   });
 });
 
-test('thoughts page shows Feishu thought ids for follow-up commands', () => {
+test('thoughts page script copies the hidden thought id from the ID label', () => {
+  withSharedSiteFixture(() => {
+    execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+      cwd: rootDir,
+      stdio: 'pipe',
+    });
+    execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+      cwd: rootDir,
+      stdio: 'pipe',
+    });
+
+    const mainScript = readFileSync(path.join(rootDir, 'public', 'js', 'main.js'), 'utf8');
+
+    assert.match(mainScript, /\.thought-card__id/);
+    assert.match(mainScript, /data\("thought-id"\)/);
+    assert.match(mainScript, /navigator\.clipboard\.writeText/);
+  });
+});
+
+test('thoughts page hides Feishu thought ids behind copyable ID labels', () => {
   withSharedSiteFixture(() => {
     const thoughtPostPath = path.join(rootDir, 'source', '_posts', '2026-06-16-feishu-thought-338182848231024.md');
     const originalThoughtPost = readOptionalFile(thoughtPostPath);
@@ -535,8 +559,9 @@ telegram_chat_id:
       assert.match(thoughtsIndex, /飞书随想正文/);
       assert.match(
         thoughtsIndex,
-        /<span class="thought-card__id"[^>]*title="Feishu thought id"[^>]*data-thought-id="338182848231024"[^>]*>#338182848231024<\/span>/,
+        /<button class="thought-card__id"(?=[^>]*title="点击复制 ID")(?=[^>]*data-thought-id="338182848231024")(?=[^>]*data-copy-label="ID")[^>]*>ID<\/button>/,
       );
+      assert.doesNotMatch(thoughtsIndex, />#338182848231024<\/button>/);
     } finally {
       restoreOptionalFile(thoughtPostPath, originalThoughtPost);
     }
@@ -583,8 +608,9 @@ telegram_chat_id:
       assert.match(thoughtsIndex, /历史飞书随想正文/);
       assert.match(
         thoughtsIndex,
-        /<span class="thought-card__id"[^>]*title="Feishu thought id"[^>]*data-thought-id="338182848231025"[^>]*>#338182848231025<\/span>/,
+        /<button class="thought-card__id"(?=[^>]*title="点击复制 ID")(?=[^>]*data-thought-id="338182848231025")(?=[^>]*data-copy-label="ID")[^>]*>ID<\/button>/,
       );
+      assert.doesNotMatch(thoughtsIndex, />#338182848231025<\/button>/);
     } finally {
       restoreOptionalFile(thoughtPostPath, originalThoughtPost);
     }

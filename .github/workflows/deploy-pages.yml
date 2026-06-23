@@ -149,8 +149,33 @@ jobs:
           if [ "$expected" != "absent" ]; then
             expected="present"
           fi
+          verification_attempts=12
+          verification_delay_seconds=10
 
-          if ! curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$target_url" -o "$page_file"; then
+          found=false
+          fetch_succeeded=false
+          for attempt in $(seq 1 "$verification_attempts"); do
+            rm -f "$page_file"
+            page_file="$(mktemp)"
+            if curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$target_url" -o "$page_file"; then
+              fetch_succeeded=true
+              if grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$page_file" >/dev/null; then
+                found=true
+                break
+              fi
+            fi
+
+            if [ "$expected" = "absent" ]; then
+              break
+            fi
+
+            if [ "$attempt" -lt "$verification_attempts" ]; then
+              echo "Thought #${TARGET_THOUGHT_ID} not found on target URL (attempt ${attempt}/${verification_attempts}); waiting ${verification_delay_seconds}s for Pages propagation..."
+              sleep "$verification_delay_seconds"
+            fi
+          done
+
+          if [ "$fetch_succeeded" = "false" ]; then
             echo "::error title=Thought page verification failed::Could not fetch ${target_url} after deploy."
             {
               echo "## Thought page verification"
@@ -162,23 +187,6 @@ jobs:
               echo "- URL: ${target_url}"
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
-          fi
-
-          found=false
-          if grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$page_file" >/dev/null; then
-            found=true
-          fi
-
-          if [ "$expected" = "present" ] && [ "$found" = "false" ]; then
-            echo "Thought #${TARGET_THOUGHT_ID} not found on target URL; waiting 20s for Pages propagation and retrying..."
-            sleep 20
-            rm -f "$page_file"
-            page_file="$(mktemp)"
-            if curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$target_url" -o "$page_file"; then
-              if grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$page_file" >/dev/null; then
-                found=true
-              fi
-            fi
           fi
 
           if { [ "$expected" = "present" ] && [ "$found" = "true" ]; } ||

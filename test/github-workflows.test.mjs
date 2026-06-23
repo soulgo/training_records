@@ -128,8 +128,12 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
   assert.match(workflow, /curl -fsSL --retry 6 --retry-delay 10/);
   assert.match(workflow, /data-thought-id=\\?"\$\{TARGET_THOUGHT_ID\}\\?"/);
-  assert.match(workflow, /Thought #\$\{TARGET_THOUGHT_ID\} not found on target URL; waiting 20s for Pages propagation and retrying/);
-  assert.match(workflow, /sleep 20/);
+  assert.match(workflow, /verification_attempts=12/);
+  assert.match(workflow, /for attempt in \$\(seq 1 "\$verification_attempts"\)/);
+  assert.match(workflow, /Thought #\$\{TARGET_THOUGHT_ID\} not found on target URL \(attempt \$\{attempt\}\/\$\{verification_attempts\}\); waiting \$\{verification_delay_seconds\}s for Pages propagation/);
+  assert.match(workflow, /sleep "\$verification_delay_seconds"/);
+  assert.doesNotMatch(workflow, /waiting 20s for Pages propagation and retrying/);
+  assert.doesNotMatch(workflow, /sleep 20/);
   assert.doesNotMatch(workflow, /grep -F "#\$\{TARGET_THOUGHT_ID\}"/);
   assert.match(workflow, /module_paths=\("\/thoughts\/" "\/misc\/" "\/body-feedback\/"\)/);
   assert.match(workflow, /Unexpected thought #\$\{TARGET_THOUGHT_ID\}/);

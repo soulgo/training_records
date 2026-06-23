@@ -13,6 +13,8 @@
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-23
+
 ### Added
 
 - 新增 dev 统一同步入口 v19：`sync-dispatch-dev` 同时接收 Telegram webhook 和飞书事件回调，统一派发到 `.github/workflows/sync-dev.yml`，并由 `deploy-cloudflare-worker-dev.yml` 部署单一 dev Worker 和刷新 dev Telegram webhook。
@@ -33,6 +35,9 @@
 
 ### Fixed
 
+- 修复 main 分支生产 Pages 部署后随想模块页校验因 Cloudflare/GitHub Pages 自定义域名传播延迟短暂读到旧 HTML 而误报失败的问题；`deploy-pages.yml` 现在会对目标随想页做最多 12 次、每 10 秒一次的有限轮询，命中 `data-thought-id` 后立即通过，超过上限才失败。
+- 修复随想列表页直接暴露 Telegram/飞书长 ID 导致页面信息噪音较高的问题；随想 ID 现在隐藏在可点击的 `ID` 按钮后，通过 `data-thought-id` 保留部署校验能力，并支持点击复制真实 ID 供后续编辑、移动或删除命令使用。
+- 修复 README、docs 索引和维护测试仍引用旧文档路径的问题，统一改为 `docs/部署运维/部署运维.md`、`docs/运维手册/运维手册.md`、`docs/故障排查/故障排查.md`、`docs/参考资料/参考资料.md` 等新入口。
 - 修复 Telegram/飞书跨通道 `/随想编`、`/随想删`、`/移动` 已存在随想时错误使用命令消息来源覆盖目标随想来源的问题：DB-only 写回现在优先沿用目标行原有 `source_channel`、`source_chat_id` 和 `source_message_id`，避免飞书显式 ID 编辑进入 `source_message_id` 为空的 `pending_replay`，以及 Telegram 删除飞书随想时触发 `thought_pkey` 主键冲突。
 - 修复 Telegram/飞书纯文本随想已入库但不触发页面刷新的问题：新建随想即使没有图片附件也会标记为 `thought_database_only` 数据库内容变更，并在结果中保留持久化后的随想 ID，确保同步 workflow 能触发后续部署校验。
 - 修复生产/开发站点部署在严格数据库导出已成功后仍二次读取数据库、偶发 `database snapshot unavailable: timeout expired` 导致页面刷新失败的问题：site-build action 在 `export:markdown` 成功后切换为已导出的 Markdown 快照供后续测试和构建复用。

@@ -65,14 +65,14 @@ function getThoughtDisplayMeta(post) {
   }
   if (getThoughtSourceChannel(post) === 'feishu') {
     return {
-      title: 'Feishu thought id',
-      label: `#${post.telegram_message_id}`,
+      title: '点击复制 ID',
+      label: 'ID',
       dataThoughtId: post.telegram_message_id,
     };
   }
   return {
-    title: 'Telegram message id',
-    label: `#${post.telegram_message_id}`,
+    title: '点击复制 ID',
+    label: 'ID',
     dataThoughtId: post.telegram_message_id,
   };
 }
@@ -124,7 +124,7 @@ const excerptLimit = Number(page.thought_excerpt_limit || 180);
                 </div>
               <% } %>
               <% if (thoughtDisplayMeta) { %>
-                <span class="thought-card__id" title="<%= thoughtDisplayMeta.title %>"<% if (thoughtDisplayMeta.dataThoughtId) { %> data-thought-id="<%= thoughtDisplayMeta.dataThoughtId %>"<% } %>><%= thoughtDisplayMeta.label %></span>
+                <button class="thought-card__id" type="button" title="<%= thoughtDisplayMeta.title %>" aria-label="<%= thoughtDisplayMeta.title %>" data-copy-label="<%= thoughtDisplayMeta.label %>"<% if (thoughtDisplayMeta.dataThoughtId) { %> data-thought-id="<%= thoughtDisplayMeta.dataThoughtId %>"<% } %>><%= thoughtDisplayMeta.label %></button>
               <% } %>
             </div>
           </div>
