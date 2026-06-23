@@ -24,6 +24,8 @@ article
       display: inline
 
   .content
+    font-size: 1rem
+
     h2:before
       position: absolute
       top: -4px
@@ -118,6 +120,31 @@ article
   font-size: 1.5em
   line-height: 1.25
 
+.article-gallery
+  display: flex
+  flex-wrap: wrap
+  gap: .75rem
+  margin-top: 1.5rem
+
+.gallery-item
+  flex: 0 1 auto
+  width: 100%
+  max-width: 22rem
+  overflow: hidden
+  border-radius: 10px
+  background: #f1f5f9
+  background-image: none
+
+  &:hover
+    background-image: none
+
+  img
+    display: block
+    width: 100%
+    max-height: 36rem
+    height: auto
+    object-fit: contain
+
 .article-tag
   .tag-link
     &:before
@@ -135,3 +162,14 @@ article
 
     &:before
       content: "|"
+
+@media (max-width: 480px)
+  .article-gallery
+    gap: .65rem
+    margin-top: 1.25rem
+
+  .gallery-item
+    max-width: 100%
+
+    img
+      max-height: 72vh
