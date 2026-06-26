@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 export {
   buildTelegramSyncReport,
+  createImageStorage,
   createRecognitionAiProvider,
   loadRecognitionSystemPrompt,
   main,

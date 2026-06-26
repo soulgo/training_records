@@ -31,6 +31,7 @@
 - Telegram 和飞书是消息通道，不是业务边界。
 - Cloudflare Worker 只做入口校验、帮助回复和 GitHub dispatch。
 - GitHub Actions 负责同步、构建、备份和部署。
+- 随想图片引用保存在 `core.thought.image_refs_json`；启用 COS 时为腾讯云 COS 公有读 URL，未启用时为本地 `/images/thoughts/...`。
 - 图片识别 schema 位于 `src/core/ai/telegram-recognition-schema.mjs`。
 - Prompt 生成结果是 `prompts/telegram-training-image-recognition.md` 和 `prompts/training-analysis.md`。
 
@@ -41,6 +42,7 @@
 - `/分析` 只读取数据并回发建议，不写入训练事实。
 - `训练记录.md` 不应被当作正常图片同步成功路径的即时写入目标。
 - `归档/` 不维护当前事实。
+- Cloudflare Worker 不接触 COS Secret；COS 上传只发生在 GitHub Actions 同步 workflow 的图片存储边界。
 - Telegram 和飞书核心业务语义必须一致；平台差异只能停留在 webhook、附件、消息格式、文件下载和回执层。
 
 
@@ -60,6 +62,7 @@
 - 涉及 AI 识别时读 [AI 识别体系](../AI识别体系/AI识别体系.md)。
 - 涉及 AI fallback 时读 [AI 主备容灾演练](../AI识别体系/AI识别体系.md#ai-主备容灾演练)。
 - 涉及数据库时读 [数据模型](../数据模型/数据模型.md) 和 [图片识别字段映射](../数据模型/图片识别字段映射.md)。
+- 涉及随想图片存储时读 [系统行为手册](../总览/系统行为手册.md#图片附件)、[部署运维](../部署运维/部署运维.md#腾讯云-cos-图片存储) 和 [故障排查](../故障排查/故障排查.md#图片存储异常)。
 - 涉及验收时读 [端到端验收标准](../开发指南/开发指南.md#端到端验收标准)。
 
 ## 运维任务

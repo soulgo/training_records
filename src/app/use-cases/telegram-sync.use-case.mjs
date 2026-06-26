@@ -23,6 +23,7 @@ import {
   fetchTelegramFile,
 } from '../../../tools/telegram-transport.mjs';
 import {
+  createImageStorage,
   writeThoughtImageArtifacts,
   readExistingThoughtMessageKeys,
 } from '../../../tools/telegram-thoughts.mjs';
@@ -64,6 +65,7 @@ import {
 
 export {
   buildTelegramSyncReport,
+  createImageStorage,
   loadRecognitionSystemPrompt,
   notifyTelegramSyncResultFromFile,
   notifyTelegramSyncResultFromReport,
@@ -101,6 +103,11 @@ export async function runMessageSync(options = {}) {
   const runtimeDir = path.join(activeRootDir, 'runtime');
   const pendingQueuePath = path.join(runtimeDir, 'telegram-sync-pending.ndjson');
   const now = options.now ?? new Date();
+  const imageStorage = options.imageStorage ?? createImageStorage({
+    env: rawEnv,
+    rootDir: activeRootDir,
+    createCosClient: options.createCosClient,
+  });
   const aiProvider = options.aiProvider ?? createAiProvider(rawEnv);
   const recognitionAiProvider =
     options.recognitionAiProvider ?? createRecognitionAiProvider(rawEnv, aiProvider);
@@ -417,6 +424,7 @@ export async function runMessageSync(options = {}) {
           persistBatch,
           appendPendingPersistenceBatch: appendPendingRecognitionBatch,
           fetchTelegramFile: options.fetchMessageFile ?? fetchTelegramFileById,
+          imageStorage,
         }),
       );
       changed ||= thoughtResult.changed;
@@ -708,6 +716,7 @@ function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {
       .map((photoPath) => toPublicThoughtImagePath(photoPath, activeRootDir))
       .filter(Boolean),
     writeStatus: writeResult.status ?? null,
+    imageUploadStats: writeResult.storageStats ?? null,
   };
 
   if (batch.kind === 'thought') {
@@ -1019,6 +1028,7 @@ async function handleThoughtSyncBatch({
   persistBatch,
   appendPendingPersistenceBatch,
   fetchTelegramFile,
+  imageStorage,
 }) {
   const preparedThoughtBatch = await prepareThoughtMarkdownBody({
     batch,
@@ -1048,6 +1058,7 @@ async function handleThoughtSyncBatch({
     activeRootDir,
     fetchTelegramFile,
     env,
+    imageStorage,
   });
   const thoughtStorageBatch = attachThoughtStorageMetadata(
     batchWithMarkdownBody,
@@ -1236,12 +1247,14 @@ async function writeThoughtArtifact({
   thoughtsDir,
   activeRootDir,
   fetchTelegramFile,
+  imageStorage,
 }) {
   if (kind === 'thought') {
     const result = await writeThoughtImageArtifacts({
       batch,
       rootDir: activeRootDir,
       fetchTelegramFile,
+      imageStorage,
     });
     if (result.status === 'no_images') {
       return {
@@ -1258,6 +1271,7 @@ async function writeThoughtArtifact({
         batch,
         rootDir: activeRootDir,
         fetchTelegramFile,
+        imageStorage,
         overwrite: true,
       });
     }

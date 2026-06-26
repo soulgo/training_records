@@ -718,6 +718,75 @@ test('runFeishuSync handles image and thought batches through the shared sync pi
   assert.deepEqual(report.tasks[0].sourceMessageIds, ['om_feishu_1']);
 });
 
+test('runFeishuSync stores COS image URLs from shared image storage in thought metadata', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'feishu-sync-thought-cos-'));
+  const persisted = [];
+  const uploadedItems = [];
+  const cosUrl = 'https://training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com/dev/thoughts/2026/06/2026-06-14-feishu-thought-1442054985160403-1.jpg';
+
+  const result = await runFeishuSync({
+    rootDir: tempRoot,
+    env: feishuSyncEnv(),
+    repositoryDispatchEvent: {
+      client_payload: {
+        feishu_updates: [
+          createFeishuImageEvent({
+            eventId: 'evt-thought-cos-image-1',
+            messageId: 'om_thought_cos_image_1',
+            chatId: 'oc_chat_1',
+            imageKey: 'img_thought_cos_1',
+            caption: '/随想 飞书 COS 图片落库',
+            createTime: '1781398800000',
+          }),
+        ],
+      },
+    },
+    imageStorage: {
+      provider: 'tencent_cos',
+      lastUploadStats: null,
+      async upload(items) {
+        uploadedItems.push(...items);
+        this.lastUploadStats = {
+          provider: 'tencent_cos',
+          bucket: 'training-images-dev-1250000000',
+          pathPrefix: 'dev',
+          uploaded: 1,
+          skipped: 0,
+          failed: 0,
+          totalUploadMs: 8,
+          maxSingleUploadMs: 8,
+          firstUrlHost: 'training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+        };
+        return [cosUrl];
+      },
+    },
+    fetchImageFileById: async () => ({
+      filePath: 'feishu/img_thought_cos_1.jpg',
+      contentType: 'image/jpeg',
+      data: Buffer.from('feishu cos image content'),
+    }),
+    recognizeBatch: async () => [],
+    persistNormalizedBatch: async ({ batch, sourceChannel }) => {
+      persisted.push({ batch, sourceChannel });
+      return { status: 'stored', archivedDate: batch.archivedDate ?? null };
+    },
+    sendFeishuMessage: async () => ({ ok: true }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'images_written');
+  assert.deepEqual(persisted.map((entry) => entry.sourceChannel), ['feishu']);
+  assert.deepEqual(persisted[0].batch.thought.storage.photoPaths, [cosUrl]);
+  assert.equal(uploadedItems.length, 1);
+  assert.equal(uploadedItems[0].channelSlug, 'feishu');
+  assert.equal(uploadedItems[0].index, 1);
+  assert.equal(uploadedItems[0].extension, '.jpg');
+  assert.equal(persisted[0].batch.thought.storage.imageUploadStats?.provider, 'tencent_cos');
+  assert.equal(result.batchResults[0].thought.storage.imageUploadStats?.provider, 'tencent_cos');
+});
+
 test('buildFeishuSyncReport preserves image archive date confidence for summary gates', () => {
   const report = buildFeishuSyncReport({
     changed: true,
@@ -1830,13 +1899,16 @@ function buildSyntheticAnalysisSnapshot() {
   };
 }
 
-function createFeishuImageEvent({ eventId, messageId, chatId, imageKey, createTime }) {
+function createFeishuImageEvent({ eventId, messageId, chatId, imageKey, createTime, caption }) {
   return createFeishuEvent({
     eventId,
     messageId,
     chatId,
     messageType: 'image',
-    content: { image_key: imageKey },
+    content: {
+      image_key: imageKey,
+      ...(caption ? { caption } : {}),
+    },
     createTime,
   });
 }

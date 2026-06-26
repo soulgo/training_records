@@ -140,6 +140,14 @@ jobs:
           FEISHU_SYNC_TRANSPORT: webhook
           FEISHU_SYNC_NOTIFY_STAGE: after_action
           FEISHU_SYNC_RESULT_PATH: ${{ runner.temp }}/feishu-sync-result.json
+          COS_ENABLED: ${{ vars.COS_ENABLED }}
+          COS_PROVIDER: ${{ vars.COS_PROVIDER || 'tencent_cos' }}
+          COS_SECRET_ID: ${{ secrets.COS_SECRET_ID }}
+          COS_SECRET_KEY: ${{ secrets.COS_SECRET_KEY }}
+          COS_BUCKET: ${{ vars.COS_BUCKET }}
+          COS_REGION: ${{ vars.COS_REGION }}
+          COS_DOMAIN: ${{ vars.COS_DOMAIN }}
+          COS_PATH_PREFIX: ${{ vars.COS_PATH_PREFIX }}
         run: |
           CHANNEL="${{ steps.channel.outputs.channel }}"
           if [ "$CHANNEL" = "feishu" ] && [ -z "${TRAINING_DB_APP_NAME:-}" ]; then
@@ -324,6 +332,30 @@ jobs:
               businessIncomplete.push(`${batch.batchId ?? '(unknown)'}:${batch.persistenceStatus ?? batch.taskStatus ?? batch.status ?? 'unknown'}:${failureDisposition}`);
             }
           }
+          const imageStorageTotals = batches
+            .map((batch) => batch.imageUploadStats)
+            .filter((stats) => stats && (stats.uploaded || stats.skipped || stats.failed));
+          if (imageStorageTotals.length > 0) {
+            const totals = imageStorageTotals.reduce((acc, stats) => {
+              acc.provider = acc.provider ?? stats.provider;
+              acc.bucket = acc.bucket ?? stats.bucket;
+              acc.pathPrefix = acc.pathPrefix ?? stats.pathPrefix;
+              acc.uploaded += stats.uploaded ?? 0;
+              acc.skipped += stats.skipped ?? 0;
+              acc.failed += stats.failed ?? 0;
+              acc.totalUploadMs += stats.totalUploadMs ?? 0;
+              acc.maxSingleUploadMs = Math.max(acc.maxSingleUploadMs, stats.maxSingleUploadMs ?? 0);
+              acc.firstUrlHost = acc.firstUrlHost ?? stats.firstUrlHost;
+              return acc;
+            }, { uploaded: 0, skipped: 0, failed: 0, totalUploadMs: 0, maxSingleUploadMs: 0 });
+            console.log('');
+            console.log('## Image storage');
+            console.log('');
+            console.log('| provider | bucket | pathPrefix | uploaded | skipped | failed | totalUploadMs | maxSingleUploadMs | firstUrlHost |');
+            console.log('| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |');
+            console.log(`| ${totals.provider ?? ''} | ${totals.bucket ?? ''} | ${totals.pathPrefix ?? ''} | ${totals.uploaded} | ${totals.skipped} | ${totals.failed} | ${totals.totalUploadMs} | ${totals.maxSingleUploadMs} | ${totals.firstUrlHost ?? ''} |`);
+            console.log('');
+          }
           if (businessIncomplete.length > 0) {
             console.log('');
             console.log(`::warning title=Telegram sync business incomplete::${businessIncomplete.join('; ')}`);
@@ -403,6 +435,30 @@ jobs:
             if (isBusinessIncompleteBatch(batch, failureDisposition)) {
               businessIncomplete.push(`${batch.batchId ?? '(unknown)'}:${batch.persistenceStatus ?? batch.taskStatus ?? batch.status ?? 'unknown'}:${failureDisposition}`);
             }
+          }
+          const imageStorageTotals = batches
+            .map((batch) => batch.imageUploadStats)
+            .filter((stats) => stats && (stats.uploaded || stats.skipped || stats.failed));
+          if (imageStorageTotals.length > 0) {
+            const totals = imageStorageTotals.reduce((acc, stats) => {
+              acc.provider = acc.provider ?? stats.provider;
+              acc.bucket = acc.bucket ?? stats.bucket;
+              acc.pathPrefix = acc.pathPrefix ?? stats.pathPrefix;
+              acc.uploaded += stats.uploaded ?? 0;
+              acc.skipped += stats.skipped ?? 0;
+              acc.failed += stats.failed ?? 0;
+              acc.totalUploadMs += stats.totalUploadMs ?? 0;
+              acc.maxSingleUploadMs = Math.max(acc.maxSingleUploadMs, stats.maxSingleUploadMs ?? 0);
+              acc.firstUrlHost = acc.firstUrlHost ?? stats.firstUrlHost;
+              return acc;
+            }, { uploaded: 0, skipped: 0, failed: 0, totalUploadMs: 0, maxSingleUploadMs: 0 });
+            console.log('');
+            console.log('## Image storage');
+            console.log('');
+            console.log('| provider | bucket | pathPrefix | uploaded | skipped | failed | totalUploadMs | maxSingleUploadMs | firstUrlHost |');
+            console.log('| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |');
+            console.log(`| ${totals.provider ?? ''} | ${totals.bucket ?? ''} | ${totals.pathPrefix ?? ''} | ${totals.uploaded} | ${totals.skipped} | ${totals.failed} | ${totals.totalUploadMs} | ${totals.maxSingleUploadMs} | ${totals.firstUrlHost ?? ''} |`);
+            console.log('');
           }
           if (businessIncomplete.length > 0) {
             console.log('');

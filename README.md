@@ -9,6 +9,7 @@
 - 从 PostgreSQL `core.*` 读取结构化训练数据。
 - 通过 Telegram 发送锻炼、饮食、体脂秤和睡眠截图，并调用 AI 识别归档。
 - Telegram `/随想` / `/thought` 写入随想和身体反馈，支持编辑、删除、移动、带图和 Markdown 文档附件正文。
+- 随想图片默认写本地静态路径；启用腾讯云 COS 后，图片上传 COS 并把公有读 URL 写入 PostgreSQL。
 - Telegram `/分析` / `/analysis` 基于训练快照生成训练建议，只回发 Telegram，不写入数据。
 - PostgreSQL 写入失败时，批次进入待补偿队列，数据库恢复后重放。
 - 定时从数据库导出 Markdown 备份。
@@ -131,6 +132,8 @@ npm run server
 | `AI_CONCURRENCY` | 图片识别并发数，默认 3 |
 | `TRAINING_DB_TIMEOUT_MS` | 训练数据库连接超时时间，默认 5000ms；数据库偶发抖动时可适当调大 |
 | `TRAINING_ANALYSIS_GOAL` | `/分析` 长期训练目标覆盖值 |
+| `COS_ENABLED` | 可选，启用随想图片腾讯云 COS 存储 |
+| `COS_BUCKET` / `COS_REGION` / `COS_DOMAIN` / `COS_PATH_PREFIX` | COS 图片存储位置与公开 URL 配置 |
 | `TELEGRAM_WEBHOOK_URL` | Telegram webhook 目标地址 |
 | `TELEGRAM_SECRET_TOKEN` | Telegram webhook secret header 校验值 |
 | `MARKDOWN_BACKUP_ENABLED` | 是否启用 DB -> Markdown 定时备份 |
@@ -153,7 +156,7 @@ npm run server
 2. Worker 校验 secret / 飞书签名；Telegram 帮助消息可直接回复，其它消息触发 GitHub `repository_dispatch`。
 3. `sync.yml` 或 `sync-dev.yml` 判断 channel，再执行 `npm run sync:telegram` 或 `npm run sync:feishu`。
 4. 图片批次调用 AI 识别；随想、Markdown 附件随想、帮助和分析按通道能力分支处理。
-5. 图片、随想和身体反馈写 PostgreSQL。
+5. 带图随想先写本地图片 artifact 或腾讯云 COS，再把图片引用、随想和身体反馈写 PostgreSQL。
 6. PostgreSQL 失败时写 pending 队列。
 7. 内容变化后 workflow 只提交文件；站点构建部署由 push 或 DB-only 异步 deploy workflow 完成。
 
@@ -249,6 +252,9 @@ PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`
 
 **`/分析` 会改训练记录吗？**
 不会。它只读取 `TrainingSnapshot`，调用 AI 后回发 Telegram。
+
+**随想图片现在存在哪里？**
+未启用 COS 时仍在 `source/images/thoughts`。启用 `COS_ENABLED=true` 后，新随想图片上传腾讯云 COS，`core.thought.image_refs_json` 保存完整公有读 URL；历史本地图片不会自动迁移。
 
 **数据库挂了会丢数据吗？**
 批次会进入 pending 队列。数据库恢复后，下次同步会先重放队列；Markdown 备份由数据库恢复后的导出 workflow 生成。

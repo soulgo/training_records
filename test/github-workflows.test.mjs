@@ -516,6 +516,33 @@ test('telegram-sync workflows keep dev and main environment sources isolated', a
   assert.equal(devSyncEnv.FEISHU_APP_SECRET, '${{ secrets.DEV_FEISHU_APP_SECRET || secrets.FEISHU_APP_SECRET }}');
   assert.equal(devSyncEnv.FEISHU_ALLOWED_CHAT_IDS, '${{ vars.DEV_FEISHU_ALLOWED_CHAT_IDS || vars.FEISHU_ALLOWED_CHAT_IDS }}');
 
+  assert.equal(mainSyncEnv.COS_ENABLED, '${{ vars.COS_ENABLED }}');
+  assert.equal(mainSyncEnv.COS_PROVIDER, "${{ vars.COS_PROVIDER || 'tencent_cos' }}");
+  assert.equal(mainSyncEnv.COS_SECRET_ID, '${{ secrets.COS_SECRET_ID }}');
+  assert.equal(mainSyncEnv.COS_SECRET_KEY, '${{ secrets.COS_SECRET_KEY }}');
+  assert.equal(mainSyncEnv.COS_BUCKET, '${{ vars.COS_BUCKET }}');
+  assert.equal(mainSyncEnv.COS_REGION, '${{ vars.COS_REGION }}');
+  assert.equal(mainSyncEnv.COS_DOMAIN, '${{ vars.COS_DOMAIN }}');
+  assert.equal(mainSyncEnv.COS_PATH_PREFIX, '${{ vars.COS_PATH_PREFIX }}');
+
+  assert.equal(devSyncEnv.COS_ENABLED, '${{ vars.DEV_COS_ENABLED }}');
+  assert.equal(devSyncEnv.COS_PROVIDER, "${{ vars.DEV_COS_PROVIDER || 'tencent_cos' }}");
+  assert.equal(devSyncEnv.COS_SECRET_ID, '${{ secrets.DEV_COS_SECRET_ID }}');
+  assert.equal(devSyncEnv.COS_SECRET_KEY, '${{ secrets.DEV_COS_SECRET_KEY }}');
+  assert.equal(devSyncEnv.COS_BUCKET, '${{ vars.DEV_COS_BUCKET }}');
+  assert.equal(devSyncEnv.COS_REGION, '${{ vars.DEV_COS_REGION }}');
+  assert.equal(devSyncEnv.COS_DOMAIN, '${{ vars.DEV_COS_DOMAIN }}');
+  assert.equal(devSyncEnv.COS_PATH_PREFIX, '${{ vars.DEV_COS_PATH_PREFIX }}');
+  assert.notEqual(devSyncEnv.COS_SECRET_ID, mainSyncEnv.COS_SECRET_ID);
+  assert.notEqual(devSyncEnv.COS_BUCKET, mainSyncEnv.COS_BUCKET);
+
+  // dev workflow 必须在启用 COS 时校验 dev bucket/domain 与 main 不同，防止污染生产图片
+  const devSyncRun = getWorkflowStep(dev, 'sync', 'Sync updates').run;
+  assert.match(devSyncRun, /COS_BUCKET.*=.*\$\{\{ vars\.COS_BUCKET \}\}/);
+  assert.match(devSyncRun, /COS_DOMAIN.*=.*\$\{\{ vars\.COS_DOMAIN \}\}/);
+  assert.match(devSyncRun, /dev COS bucket must differ from main COS bucket/);
+  assert.match(devSyncRun, /dev COS domain must differ from main COS domain/);
+
   for (const envName of [
     'AI_API_KEY',
     'AI_PROVIDER',
@@ -835,6 +862,103 @@ test('telegram-sync workflow summary normalizes partial failure task status from
     assert.match(output, /\| album-partial-summary \| partialFailure \| stored \| 2026-06-13 \| image:2026-06-13; no_date:null \| detectedDate missing year \/ needs review \| uncertain \| 2\/1\/1 \|  \| written \|/);
     assert.match(output, /\| auto_retry \| 6102 \|/);
     assert.doesNotMatch(output, /\| album-partial-summary \| ready \| stored/);
+  }
+});
+
+test('sync workflow summaries emit image storage stats when batches upload to COS', async () => {
+  const workflows = [
+    await readWorkflow('.github/workflows/sync.yml'),
+    await readWorkflow('.github/workflows/sync-dev.yml'),
+  ];
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'sync-workflow-image-storage-'));
+  const resultPath = path.join(tempRoot, 'telegram-sync-result.json');
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'thought',
+          status: 'ready',
+          batchId: 'thought-cos-1',
+          archivedDate: '2026-06-13',
+          persistenceStatus: 'stored',
+          thoughtWriteStatus: 'images_written',
+          messages: [{ chatId: 42, messageId: 700, updateId: 9200 }],
+          thought: {
+            storage: {
+              imageUploadStats: {
+                provider: 'tencent_cos',
+                bucket: 'training-images-dev-1250000000',
+                pathPrefix: 'dev',
+                uploaded: 1,
+                skipped: 0,
+                failed: 0,
+                totalUploadMs: 42,
+                maxSingleUploadMs: 42,
+                firstUrlHost: 'training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+              },
+            },
+          },
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  for (const workflow of workflows) {
+    const summaryScript = extractTelegramSyncSummaryScript(workflow);
+    const output = execFileSync(process.execPath, ['-e', summaryScript], {
+      encoding: 'utf8',
+      cwd: rootDir,
+      env: {
+        ...process.env,
+        TELEGRAM_SYNC_RESULT_PATH: resultPath,
+      },
+    });
+
+    assert.match(output, /## Image storage/);
+    assert.match(output, /\| tencent_cos \| training-images-dev-1250000000 \| dev \| 1 \| 0 \| 0 \| 42 \| 42 \| training-images-dev-1250000000\.cos\.ap-shanghai\.myqcloud\.com \|/);
+  }
+});
+
+test('sync workflow summaries omit image storage section when no COS uploads occurred', async () => {
+  const workflows = [
+    await readWorkflow('.github/workflows/sync.yml'),
+    await readWorkflow('.github/workflows/sync-dev.yml'),
+  ];
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'sync-workflow-no-image-storage-'));
+  const resultPath = path.join(tempRoot, 'telegram-sync-result.json');
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'image',
+          status: 'ready',
+          batchId: 'album-no-cos',
+          archivedDate: '2026-06-13',
+          persistenceStatus: 'stored',
+          messages: [{ chatId: 42, messageId: 701, updateId: 9201 }],
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  for (const workflow of workflows) {
+    const summaryScript = extractTelegramSyncSummaryScript(workflow);
+    const output = execFileSync(process.execPath, ['-e', summaryScript], {
+      encoding: 'utf8',
+      cwd: rootDir,
+      env: {
+        ...process.env,
+        TELEGRAM_SYNC_RESULT_PATH: resultPath,
+      },
+    });
+
+    assert.doesNotMatch(output, /## Image storage/);
   }
 });
 

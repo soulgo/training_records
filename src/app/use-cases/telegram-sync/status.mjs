@@ -103,7 +103,13 @@ function normalizeSyncReportBatch(batch) {
     dateSources: batch.dateSources ?? [],
     dateConfidence: batch.dateConfidence ?? null,
     dateStages: normalizeDateStages(batch.dateStages),
+    imageUploadStats: resolveImageUploadStats(batch),
   };
+}
+
+function resolveImageUploadStats(batch) {
+  const storage = batch.thought?.storage ?? batch.thoughtEdit?.storage ?? batch.thoughtDelete?.storage ?? batch.thoughtMove?.storage;
+  return storage?.imageUploadStats ?? null;
 }
 
 function normalizeBatchFailureCategory(batch) {
