@@ -569,7 +569,7 @@ function createTencentCosImageStorage({ env, createCosClient } = {}) {
             client,
             config,
             key,
-            body: item.data,
+            body: normalizeCosObjectBody(item.data),
             contentType: inferContentType(item.extension),
             stats,
           });
@@ -663,6 +663,19 @@ function resolveTencentCosConfig(env = process.env) {
 
 function trimEnv(value) {
   return String(value ?? '').trim();
+}
+
+function normalizeCosObjectBody(value) {
+  if (Buffer.isBuffer(value) || typeof value === 'string') {
+    return value;
+  }
+  if (value instanceof ArrayBuffer) {
+    return Buffer.from(value);
+  }
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  }
+  return value;
 }
 
 async function uploadTencentCosObject({ client, config, key, body, contentType, stats }) {

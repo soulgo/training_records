@@ -3399,6 +3399,60 @@ test('createImageStorage uploads thought images to COS with stable keys and retu
   );
 });
 
+test('createImageStorage converts Uint8Array thought image data to Buffer for COS uploads', async () => {
+  const calls = [];
+  const storage = createImageStorage({
+    env: {
+      COS_ENABLED: 'true',
+      COS_PROVIDER: 'tencent_cos',
+      COS_SECRET_ID: 'secret-id',
+      COS_SECRET_KEY: 'secret-key',
+      COS_BUCKET: 'training-images-dev-1250000000',
+      COS_REGION: 'ap-shanghai',
+      COS_DOMAIN: 'https://training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+      COS_PATH_PREFIX: 'dev',
+    },
+    rootDir: process.cwd(),
+    createCosClient() {
+      return {
+        headObject(input, callback) {
+          calls.push(['headObject', input]);
+          const error = new Error('not found');
+          error.statusCode = 404;
+          callback(error);
+        },
+        putObject(input, callback) {
+          calls.push(['putObject', input]);
+          if (!Buffer.isBuffer(input.Body)) {
+            callback({
+              Code: 'Error',
+              message: 'params Body format error, Only allow Buffer|Stream|String.',
+            });
+            return;
+          }
+          callback(null, { ETag: '"etag"' });
+        },
+      };
+    },
+  });
+
+  await storage.upload([
+    {
+      data: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+      extension: '.jpg',
+      channelSlug: 'telegram',
+      dateParts: { date: '2026-05-14' },
+      sourceMessageId: 513,
+      index: 1,
+    },
+  ]);
+
+  const putObjectCall = calls.find(([name]) => name === 'putObject');
+  assert.ok(putObjectCall, 'expected COS PutObject call');
+  assert.ok(Buffer.isBuffer(putObjectCall[1].Body));
+  assert.deepEqual([...putObjectCall[1].Body], [0xff, 0xd8, 0xff, 0xd9]);
+});
+
 test('createImageStorage records skipped uploads when COS HeadObject finds existing object', async () => {
   const calls = [];
   const storage = createImageStorage({
