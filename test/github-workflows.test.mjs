@@ -524,6 +524,7 @@ test('telegram-sync workflows keep dev and main environment sources isolated', a
   assert.equal(mainSyncEnv.COS_REGION, '${{ vars.COS_REGION }}');
   assert.equal(mainSyncEnv.COS_DOMAIN, '${{ vars.COS_DOMAIN }}');
   assert.equal(mainSyncEnv.COS_PATH_PREFIX, '${{ vars.COS_PATH_PREFIX }}');
+  assert.equal(mainSyncEnv.SYNC_FAILURE_SUMMARY_PATH, '${{ runner.temp }}/sync-failure-summary.txt');
 
   assert.equal(devSyncEnv.COS_ENABLED, '${{ vars.DEV_COS_ENABLED }}');
   assert.equal(devSyncEnv.COS_PROVIDER, "${{ vars.DEV_COS_PROVIDER || 'tencent_cos' }}");
@@ -533,6 +534,7 @@ test('telegram-sync workflows keep dev and main environment sources isolated', a
   assert.equal(devSyncEnv.COS_REGION, '${{ vars.DEV_COS_REGION }}');
   assert.equal(devSyncEnv.COS_DOMAIN, '${{ vars.DEV_COS_DOMAIN }}');
   assert.equal(devSyncEnv.COS_PATH_PREFIX, '${{ vars.DEV_COS_PATH_PREFIX }}');
+  assert.equal(devSyncEnv.SYNC_FAILURE_SUMMARY_PATH, '${{ runner.temp }}/sync-failure-summary.txt');
   assert.notEqual(devSyncEnv.COS_SECRET_ID, mainSyncEnv.COS_SECRET_ID);
   assert.notEqual(devSyncEnv.COS_BUCKET, mainSyncEnv.COS_BUCKET);
 
@@ -542,6 +544,15 @@ test('telegram-sync workflows keep dev and main environment sources isolated', a
   assert.match(devSyncRun, /COS_DOMAIN.*=.*\$\{\{ vars\.COS_DOMAIN \}\}/);
   assert.match(devSyncRun, /dev COS bucket must differ from main COS bucket/);
   assert.match(devSyncRun, /dev COS domain must differ from main COS domain/);
+
+  for (const workflow of [main, dev]) {
+    const syncRun = getWorkflowStep(workflow, 'sync', 'Sync updates').run;
+    const notifyFailureEnv = getWorkflowStep(workflow, 'sync', 'Notify Telegram sync failure').env;
+    assert.match(syncRun, /sync-command\.log/);
+    assert.match(syncRun, /SYNC_FAILURE_SUMMARY_PATH/);
+    assert.match(syncRun, /grep -E/);
+    assert.equal(notifyFailureEnv.SYNC_FAILURE_SUMMARY_PATH, '${{ runner.temp }}/sync-failure-summary.txt');
+  }
 
   for (const envName of [
     'AI_API_KEY',

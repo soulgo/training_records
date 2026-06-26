@@ -13,6 +13,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 增强 Telegram/飞书同步的 COS 上传失败诊断：同步 workflow 现在会在失败时提取高信号日志摘要并回传到 Telegram 失败通知；COS SDK 普通对象错误会输出 `Code`、`statusCode`、`RequestId` 等字段，不再显示 `[object Object]`，便于定位 CAM 权限、bucket/region 或签名问题。
+
 ## [1.3.1] - 2026-06-26
 
 ### Added

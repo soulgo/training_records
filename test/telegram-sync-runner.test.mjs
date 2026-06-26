@@ -3512,6 +3512,66 @@ test('createImageStorage treats transient initial COS HeadObject failures as upl
   assert.deepEqual(calls.map(([name]) => name), ['headObject', 'putObject']);
 });
 
+test('createImageStorage reports COS plain object errors with diagnostic fields', async () => {
+  const storage = createImageStorage({
+    env: {
+      COS_ENABLED: 'true',
+      COS_PROVIDER: 'tencent_cos',
+      COS_SECRET_ID: 'secret-id',
+      COS_SECRET_KEY: 'secret-key',
+      COS_BUCKET: 'training-images-dev-1250000000',
+      COS_REGION: 'ap-shanghai',
+      COS_DOMAIN: 'https://training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+      COS_PATH_PREFIX: 'dev',
+    },
+    rootDir: process.cwd(),
+    createCosClient() {
+      return {
+        headObject(input, callback) {
+          const error = new Error('not found');
+          error.statusCode = 404;
+          callback(error);
+        },
+        putObject(input, callback) {
+          callback({
+            Code: 'AccessDenied',
+            statusCode: 403,
+            RequestId: 'cos-request-123',
+            message: 'policy denies PutObject',
+            headers: {
+              'x-cos-request-id': 'cos-header-request-456',
+              authorization: 'secret-signature',
+            },
+          });
+        },
+      };
+    },
+  });
+
+  await assert.rejects(
+    storage.upload([
+      {
+        data: Buffer.from('image'),
+        extension: '.jpg',
+        channelSlug: 'telegram',
+        dateParts: { date: '2026-05-14' },
+        sourceMessageId: 512,
+        index: 1,
+      },
+    ]),
+    (error) => {
+      assert.match(error.message, /COS PutObject failed/);
+      assert.match(error.message, /AccessDenied/);
+      assert.match(error.message, /statusCode=403/);
+      assert.match(error.message, /RequestId=cos-request-123/);
+      assert.match(error.message, /policy denies PutObject/);
+      assert.doesNotMatch(error.message, /\[object Object\]/);
+      assert.doesNotMatch(error.message, /secret-signature/);
+      return true;
+    },
+  );
+});
+
 test('createImageStorage fails fast when COS is enabled without required configuration', () => {
   assert.throws(
     () => createImageStorage({
@@ -5039,6 +5099,58 @@ test('telegram action monitor reports the failed workflow stage to the original 
   assert.equal(sentMessages[0].chatId, 42);
   assert.equal(sentMessages[0].replyToMessageId, 77);
   assert.match(sentMessages[0].text, /GitHub Action 执行失败：Sync Telegram updates/);
+  assert.match(sentMessages[0].text, /https:\/\/github\.com\/soulgo\/training_records\/actions\/runs\/123456/);
+});
+
+test('telegram action monitor includes sync failure summary when available', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-action-monitor-summary-'));
+  const eventPath = path.join(tempRoot, 'event.json');
+  const summaryPath = path.join(tempRoot, 'sync-failure-summary.txt');
+  const sentMessages = [];
+  await writeFile(
+    eventPath,
+    JSON.stringify({
+      client_payload: {
+        telegram_updates: [
+          {
+            update_id: 901,
+            message: {
+              message_id: 77,
+              chat: { id: 42 },
+            },
+          },
+        ],
+      },
+    }),
+    'utf8',
+  );
+  await writeFile(
+    summaryPath,
+    'COS PutObject failed for dev/thoughts/2026/06/image.jpg: AccessDenied statusCode=403 RequestId=req-1\n',
+    'utf8',
+  );
+
+  const result = await notifyTelegramActionFailure({
+    env: {
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+      GITHUB_EVENT_PATH: eventPath,
+      GITHUB_SERVER_URL: 'https://github.com',
+      GITHUB_REPOSITORY: 'soulgo/training_records',
+      GITHUB_RUN_ID: '123456',
+      TELEGRAM_BOT_TOKEN: 'token',
+      STEP_SYNC_OUTCOME: 'failure',
+      SYNC_FAILURE_SUMMARY_PATH: summaryPath,
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.match(sentMessages[0].text, /GitHub Action 执行失败：Sync Telegram updates/);
+  assert.match(sentMessages[0].text, /失败摘要：COS PutObject failed/);
+  assert.match(sentMessages[0].text, /AccessDenied statusCode=403 RequestId=req-1/);
   assert.match(sentMessages[0].text, /https:\/\/github\.com\/soulgo\/training_records\/actions\/runs\/123456/);
 });
 

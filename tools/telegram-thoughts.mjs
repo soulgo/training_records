@@ -768,7 +768,57 @@ function inferContentType(extension) {
 }
 
 function formatErrorMessage(error) {
-  return error instanceof Error ? error.message : String(error ?? 'unknown error');
+  if (error instanceof Error) {
+    return error.message || 'unknown error';
+  }
+  if (!error || typeof error !== 'object') {
+    return String(error ?? 'unknown error');
+  }
+
+  const fields = [];
+  const addField = (label, value) => {
+    const normalized = String(value ?? '').trim();
+    if (normalized) {
+      fields.push(`${label}=${normalized}`);
+    }
+  };
+
+  const message = String(error.message ?? error.Message ?? '').trim();
+  const code = error.Code ?? error.code ?? error.Error?.Code ?? error.Error?.code;
+  const statusCode = error.statusCode ?? error.status ?? error.Error?.statusCode;
+  const requestId =
+    error.RequestId ??
+    error.requestId ??
+    error.headers?.['x-cos-request-id'] ??
+    error.headers?.['x-ci-request-id'] ??
+    error.headers?.['X-Cos-Request-Id'] ??
+    error.headers?.['X-Ci-Request-Id'];
+
+  if (message) {
+    fields.push(message);
+  }
+  addField('Code', code);
+  addField('statusCode', statusCode);
+  addField('RequestId', requestId);
+
+  if (fields.length === 0) {
+    for (const [key, value] of Object.entries(error)) {
+      const normalizedKey = String(key);
+      if (/secret|authorization|signature|token|key/iu.test(normalizedKey)) {
+        continue;
+      }
+      if (value === null || value === undefined || typeof value === 'object') {
+        continue;
+      }
+      addField(normalizedKey, value);
+    }
+  }
+
+  return truncateErrorMessage(fields.join(' ') || 'unknown error');
+}
+
+function truncateErrorMessage(message, maxLength = 500) {
+  return message.length > maxLength ? `${message.slice(0, maxLength - 3)}...` : message;
 }
 
 function resolveThoughtPostMessage(batch) {

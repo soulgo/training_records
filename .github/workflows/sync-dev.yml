@@ -138,7 +138,19 @@ jobs:
           COS_REGION: ${{ vars.DEV_COS_REGION }}
           COS_DOMAIN: ${{ vars.DEV_COS_DOMAIN }}
           COS_PATH_PREFIX: ${{ vars.DEV_COS_PATH_PREFIX }}
+          SYNC_FAILURE_SUMMARY_PATH: ${{ runner.temp }}/sync-failure-summary.txt
         run: |
+          log_path="${RUNNER_TEMP}/sync-command.log"
+          rm -f "$SYNC_FAILURE_SUMMARY_PATH" "$log_path"
+          summarizeFailure() {
+            grep -E "COS|PutObject|HeadObject|Error:|failed|AccessDenied|RequestId|statusCode" "$log_path" \
+              | tail -n 8 \
+              | sed -E 's/\x1b\[[0-9;]*m//g' \
+              > "$SYNC_FAILURE_SUMMARY_PATH" || true
+            if [ ! -s "$SYNC_FAILURE_SUMMARY_PATH" ]; then
+              tail -n 8 "$log_path" > "$SYNC_FAILURE_SUMMARY_PATH" || true
+            fi
+          }
           if [ "${COS_ENABLED}" = "true" ]; then
             if [ -n "${{ vars.COS_BUCKET }}" ] && [ "${COS_BUCKET}" = "${{ vars.COS_BUCKET }}" ]; then
               echo "::error::dev COS bucket must differ from main COS bucket (DEV_COS_BUCKET != COS_BUCKET)"
@@ -153,7 +165,14 @@ jobs:
           if [ "$CHANNEL" = "feishu" ] && [ -z "${TRAINING_DB_APP_NAME:-}" ]; then
             export TRAINING_DB_APP_NAME=sync-dev-feishu
           fi
-          npm run ${{ steps.channel.outputs.sync_command }}
+          set +e
+          npm run ${{ steps.channel.outputs.sync_command }} 2>&1 | tee "$log_path"
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ]; then
+            summarizeFailure
+            exit "$status"
+          fi
 
       - name: Detect changes
         id: detect
@@ -598,6 +617,7 @@ jobs:
           STEP_COMMIT_OUTCOME: ${{ steps.commit.outcome }}
           STEP_PUSH_OUTCOME: ${{ steps.push.outcome }}
           STEP_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          SYNC_FAILURE_SUMMARY_PATH: ${{ runner.temp }}/sync-failure-summary.txt
         run: node tools/telegram-action-monitor.mjs
 
       - name: Notify Feishu sync failure
