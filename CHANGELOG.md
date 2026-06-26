@@ -19,6 +19,7 @@
 
 ### Fixed
 
+- 修复日志泄露修复引入的 Telegram/飞书队列回归：`workflow_dispatch` 不能通过 `$GITHUB_ENV` 覆盖受保护的 `GITHUB_EVENT_PATH`，导致同步 step 读回原始 workflow 事件、实际消费 0 条 webhook update；现在 workflow 通过 `SYNC_DISPATCH_EVENT_PATH` 传递 runner 临时事件文件路径，保留 payload 不落日志的同时恢复 Telegram 图片随想处理、结果通知和页面部署触发。
 - 增强 Telegram/飞书同步的 COS 上传失败诊断：同步 workflow 现在会在失败时提取高信号日志摘要并回传到 Telegram 失败通知；COS SDK 普通对象错误会输出 `Code`、`statusCode`、`RequestId` 等字段，不再显示 `[object Object]`，便于定位 CAM 权限、bucket/region 或签名问题。
 - 修复 Telegram/飞书随想图片通过 COS 上传时，下载层返回 `Uint8Array` 被腾讯云 COS SDK 拒绝为 `params Body format error` 的问题；COS provider 现在会在上传前转换为 Node `Buffer`，保持本地图片写入路径不变。
 

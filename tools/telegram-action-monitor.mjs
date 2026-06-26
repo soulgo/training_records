@@ -32,7 +32,7 @@ export async function notifyTelegramActionFailure(options = {}) {
   }
 
   const updates = await readRepositoryDispatchUpdates({
-    eventPath: env.GITHUB_EVENT_PATH,
+    eventPath: env.SYNC_DISPATCH_EVENT_PATH ?? env.GITHUB_EVENT_PATH,
     githubEventName: env.GITHUB_EVENT_NAME,
     dispatchPayload: env.SYNC_DISPATCH_PAYLOAD ?? env.DISPATCH_PAYLOAD,
   });

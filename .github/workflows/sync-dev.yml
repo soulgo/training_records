@@ -87,7 +87,7 @@ jobs:
           )"
             if [ -s "$GITHUB_EVENT_PATH" ]; then
               IS_WEBHOOK_DISPATCH=true
-              echo "GITHUB_EVENT_PATH=$GITHUB_EVENT_PATH" >> "$GITHUB_ENV"
+              echo "SYNC_DISPATCH_EVENT_PATH=$GITHUB_EVENT_PATH" >> "$GITHUB_ENV"
             else
               GITHUB_EVENT_PATH="$ORIGINAL_GITHUB_EVENT_PATH"
               export GITHUB_EVENT_PATH

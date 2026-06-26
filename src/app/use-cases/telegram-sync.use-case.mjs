@@ -880,7 +880,7 @@ function loadRequiredEnv(env = process.env, options = {}) {
         ? 'webhook'
         : 'poll',
     githubEventName: env.GITHUB_EVENT_NAME?.trim() || '',
-    githubEventPath: env.GITHUB_EVENT_PATH?.trim() || '',
+    githubEventPath: env.SYNC_DISPATCH_EVENT_PATH?.trim() || env.GITHUB_EVENT_PATH?.trim() || '',
     dispatchPayload: env.SYNC_DISPATCH_PAYLOAD ?? env.DISPATCH_PAYLOAD ?? '',
     pollLimit: Number.isFinite(pollLimit) && pollLimit > 0 ? pollLimit : 20,
     aiConcurrency,

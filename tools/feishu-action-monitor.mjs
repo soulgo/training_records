@@ -31,7 +31,7 @@ export async function notifyFeishuActionFailure(options = {}) {
 
   const updates = await resolveDispatchFeishuUpdates({
     githubEventName: env.GITHUB_EVENT_NAME,
-    githubEventPath: env.GITHUB_EVENT_PATH,
+    githubEventPath: env.SYNC_DISPATCH_EVENT_PATH ?? env.GITHUB_EVENT_PATH,
     dispatchPayload: env.SYNC_DISPATCH_PAYLOAD ?? env.DISPATCH_PAYLOAD,
   });
   const targets = collectFeishuTargets(updates);
