@@ -61,29 +61,37 @@ jobs:
 
       - name: Determine sync channel
         id: channel
-        env:
-          DISPATCH_PAYLOAD: ${{ github.event.inputs.dispatch_payload }}
         run: |
           EVENT_TYPE="${{ github.event.action }}"
           INPUT_CHANNEL="${{ github.event.inputs.channel || 'telegram' }}"
           IS_WEBHOOK_DISPATCH=false
-          if [ -n "${DISPATCH_PAYLOAD:-}" ]; then
-            IS_WEBHOOK_DISPATCH=true
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ORIGINAL_GITHUB_EVENT_PATH="$GITHUB_EVENT_PATH"
             GITHUB_EVENT_PATH="$RUNNER_TEMP/queued-dispatch-event.json"
-            export GITHUB_EVENT_PATH
-            node <<'NODE'
+            export ORIGINAL_GITHUB_EVENT_PATH GITHUB_EVENT_PATH
+            EVENT_TYPE="$(node <<'NODE'
           const fs = require('fs');
-          const payload = JSON.parse(process.env.DISPATCH_PAYLOAD || '{}');
-          fs.writeFileSync(process.env.GITHUB_EVENT_PATH, JSON.stringify({
+          const workflowEvent = JSON.parse(fs.readFileSync(process.env.ORIGINAL_GITHUB_EVENT_PATH, 'utf8'));
+          const dispatchPayloadRaw = workflowEvent.inputs?.dispatch_payload ?? '';
+          if (!dispatchPayloadRaw) {
+            process.exit(0);
+          }
+          const payload = JSON.parse(dispatchPayloadRaw);
+          const event = {
             action: payload.action || '',
             client_payload: payload.client_payload ?? payload,
-          }));
+          };
+          fs.writeFileSync(process.env.GITHUB_EVENT_PATH, JSON.stringify(event));
+          process.stdout.write(event.action || '');
           NODE
-            echo "GITHUB_EVENT_PATH=$GITHUB_EVENT_PATH" >> "$GITHUB_ENV"
-            echo "SYNC_DISPATCH_PAYLOAD<<SYNC_DISPATCH_PAYLOAD_EOF" >> "$GITHUB_ENV"
-            echo "$DISPATCH_PAYLOAD" >> "$GITHUB_ENV"
-            echo "SYNC_DISPATCH_PAYLOAD_EOF" >> "$GITHUB_ENV"
-            EVENT_TYPE="$(node -e "const data=JSON.parse(process.env.DISPATCH_PAYLOAD || '{}'); process.stdout.write(data.action || '')")"
+          )"
+            if [ -s "$GITHUB_EVENT_PATH" ]; then
+              IS_WEBHOOK_DISPATCH=true
+              echo "GITHUB_EVENT_PATH=$GITHUB_EVENT_PATH" >> "$GITHUB_ENV"
+            else
+              GITHUB_EVENT_PATH="$ORIGINAL_GITHUB_EVENT_PATH"
+              export GITHUB_EVENT_PATH
+            fi
           elif [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             IS_WEBHOOK_DISPATCH=true
           fi

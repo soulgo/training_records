@@ -13,6 +13,10 @@
 
 ## [Unreleased]
 
+### Security
+
+- 修复 `sync.yml` / `sync-dev.yml` 在 `workflow_dispatch` 队列任务中把完整 Telegram/飞书 `dispatch_payload` 注入 GitHub Actions step env 和 `$GITHUB_ENV` 的问题，避免 `chat_id`、用户名、消息正文、图片 `file_id` 等 webhook payload 内容出现在 Action 日志；同步和失败通知改为通过 runner 临时事件文件读取队列 payload。
+
 ### Fixed
 
 - 增强 Telegram/飞书同步的 COS 上传失败诊断：同步 workflow 现在会在失败时提取高信号日志摘要并回传到 Telegram 失败通知；COS SDK 普通对象错误会输出 `Code`、`statusCode`、`RequestId` 等字段，不再显示 `[object Object]`，便于定位 CAM 权限、bucket/region 或签名问题。

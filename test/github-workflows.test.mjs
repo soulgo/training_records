@@ -758,11 +758,14 @@ test('sync workflows accept queued workflow dispatch payloads and expose a webho
     assert.match(workflow, /IS_WEBHOOK_DISPATCH=true/);
     assert.match(workflow, /echo "is_webhook_dispatch=\$\{IS_WEBHOOK_DISPATCH\}" >> "\$GITHUB_OUTPUT"/);
     assert.match(workflow, /GITHUB_EVENT_PATH="\$RUNNER_TEMP\/queued-dispatch-event\.json"/);
-    assert.match(workflow, /SYNC_DISPATCH_PAYLOAD<<SYNC_DISPATCH_PAYLOAD_EOF/);
-    assert.match(workflow, /echo "\$DISPATCH_PAYLOAD" >> "\$GITHUB_ENV"/);
-    assert.match(workflow, /SYNC_DISPATCH_PAYLOAD_EOF/);
+    assert.match(workflow, /ORIGINAL_GITHUB_EVENT_PATH="\$GITHUB_EVENT_PATH"/);
+    assert.match(workflow, /const workflowEvent = JSON\.parse\(fs\.readFileSync\(process\.env\.ORIGINAL_GITHUB_EVENT_PATH, 'utf8'\)\);/);
+    assert.match(workflow, /const dispatchPayloadRaw = workflowEvent\.inputs\?\.dispatch_payload \?\? '';/);
     assert.match(workflow, /client_payload: payload\.client_payload \?\? payload/);
     assert.match(workflow, /steps\.channel\.outputs\.is_webhook_dispatch == 'true'/);
+    assert.doesNotMatch(workflow, /DISPATCH_PAYLOAD:\s*\$\{\{\s*github\.event\.inputs\.dispatch_payload\s*\}\}/);
+    assert.doesNotMatch(workflow, /SYNC_DISPATCH_PAYLOAD/);
+    assert.doesNotMatch(workflow, /echo "\$DISPATCH_PAYLOAD" >> "\$GITHUB_ENV"/);
     assert.doesNotMatch(workflow, /\$\{\{\s*env\.SYNC_DISPATCH_PAYLOAD\s*\}\}/);
     assert.doesNotMatch(workflow, /if:\s*(?:always\(\) && |success\(\) && |failure\(\) && )?github\.event_name == 'repository_dispatch'/);
   }
