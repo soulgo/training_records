@@ -578,7 +578,7 @@ test('current maintenance docs and scripts document inspect sync and migrate com
     await readFile(new URL('../package.json', import.meta.url), 'utf8'),
   );
   const maintenanceGuide = await readFile(
-    new URL('../docs/运维手册/运维手册.md#日常维护', import.meta.url),
+    new URL('../docs/系统核心.md#日常维护', import.meta.url),
     'utf8',
   );
 
@@ -607,7 +607,7 @@ test('current maintenance docs and scripts document inspect sync and migrate com
 
 test('maintenance guide includes onboarding exercise prompts for production handoff', async () => {
   const maintenanceGuide = await readFile(
-    new URL('../docs/运维手册/运维手册.md#日常维护', import.meta.url),
+    new URL('../docs/系统核心.md#日常维护', import.meta.url),
     'utf8',
   );
 
@@ -631,15 +631,15 @@ test('current long-term docs cover maintenance phases and CI/test controls', asy
     await readFile(new URL('../package.json', import.meta.url), 'utf8'),
   );
   const interfaceManual = await readFile(
-    new URL('../docs/参考资料/参考资料.md', import.meta.url),
+    new URL('../docs/系统核心.md#内部接口索引', import.meta.url),
     'utf8',
   );
   const maintenanceGuide = await readFile(
-    new URL('../docs/运维手册/运维手册.md', import.meta.url),
+    new URL('../docs/系统核心.md#日常维护', import.meta.url),
     'utf8',
   );
   const workflowGuide = await readFile(
-    new URL('../docs/部署运维/部署运维.md', import.meta.url),
+    new URL('../docs/系统配置.md#github-actions-workflow-清单', import.meta.url),
     'utf8',
   );
 
@@ -664,11 +664,11 @@ test('current long-term docs cover maintenance phases and CI/test controls', asy
 
 test('current long-term docs cover GitHub Actions queue failure timeout and rerun recovery', async () => {
   const maintenanceGuide = await readFile(
-    new URL('../docs/运维手册/运维手册.md', import.meta.url),
+    new URL('../docs/系统核心.md#日常维护', import.meta.url),
     'utf8',
   );
   const troubleshootingGuide = await readFile(
-    new URL('../docs/故障排查/故障排查.md', import.meta.url),
+    new URL('../docs/系统核心.md#故障排查', import.meta.url),
     'utf8',
   );
 
@@ -689,13 +689,15 @@ test('current docs index points maintainers to long-term operational entries ins
     'utf8',
   );
   const maintenanceGuide = await readFile(
-    new URL('../docs/运维手册/运维手册.md', import.meta.url),
+    new URL('../docs/系统核心.md#日常维护', import.meta.url),
     'utf8',
   );
 
-  assert.match(docsIndex, /运维手册\/运维手册\.md#日常维护/);
-  assert.match(docsIndex, /参考资料\/参考资料\.md#内部接口索引|内部接口/);
-  assert.match(docsIndex, /消息链路\/消息链路\.md|消息链路总览/);
+  assert.match(docsIndex, /系统核心\.md/);
+  assert.match(docsIndex, /系统配置\.md/);
+  assert.match(docsIndex, /命令接口参考/);
+  assert.match(docsIndex, /消息链路/);
   assert.doesNotMatch(docsIndex, /部署与同步优化_v8/);
+  assert.doesNotMatch(docsIndex, /docs\/归档|\[归档\]|\(归档\/\)|归档\//);
   assert.doesNotMatch(maintenanceGuide, /部署与同步优化_v8/);
 });

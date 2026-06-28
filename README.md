@@ -139,7 +139,7 @@ npm run server
 | `MARKDOWN_BACKUP_ENABLED` | 是否启用 DB -> Markdown 定时备份 |
 | `MARKDOWN_BACKUP_FREQUENCY` | Markdown 备份频率，`weekly` 或 `daily` |
 
-完整配置见 [部署运维总览](docs/部署运维/部署运维.md)、[Secrets 与 Variables](docs/部署运维/部署运维.md#secrets-与-variables) 和 [日常维护](docs/运维手册/运维手册.md#日常维护)。
+完整配置见 [系统配置](docs/系统配置.md) 和 [系统核心 > 运维与排障 > 日常维护](docs/系统核心.md#日常维护)。
 
 ## 训练记录流程
 
@@ -160,7 +160,7 @@ npm run server
 6. PostgreSQL 失败时写 pending 队列。
 7. 内容变化后 workflow 只提交文件；站点构建部署由 push 或 DB-only 异步 deploy workflow 完成。
 
-详细规则见 [核心业务总览](docs/核心业务/核心业务.md)、[消息链路总览](docs/消息链路/消息链路.md) 和 [数据生命周期](docs/数据模型/数据模型.md#数据生命周期)。
+详细规则见 [系统核心 > 核心业务能力](docs/系统核心.md#三核心业务能力)、[系统核心 > 消息链路](docs/系统核心.md#四消息链路) 和 [系统核心 > 数据生命周期](docs/系统核心.md#数据生命周期)。
 
 ## GitHub Pages 部署
 
@@ -223,18 +223,10 @@ PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`
 ## 文档导航
 
 - [文档总览](docs/README.md)
-- [10 分钟系统导览](docs/总览/系统导览.md)
-- [当前状态与边界](docs/总览/系统导览.md)
-- [系统架构](docs/架构/系统架构.md)
-- [核心业务总览](docs/核心业务/核心业务.md)
-- [消息链路总览](docs/消息链路/消息链路.md)
-- [AI 识别体系](docs/AI识别体系/AI识别体系.md)
-- [数据模型总览](docs/数据模型/数据模型.md)
-- [部署运维总览](docs/部署运维/部署运维.md)
-- [开发指南](docs/开发指南/开发指南.md)
-- [运维总览](docs/运维手册/运维手册.md)
-- [故障排查总览](docs/故障排查/故障排查.md)
-- [AI Agent 入口](docs/AI-Agent/README.md)
+- [系统核心](docs/系统核心.md)：架构、业务、消息链路、AI 识别、数据模型、运维排障、开发指南、命令接口参考
+- [系统配置](docs/系统配置.md)：参数总表 + 平台配置指南（GitHub / Cloudflare / Telegram / 飞书 / COS / PostgreSQL）
+- [重构历史](docs/重构历史/README.md)：以往重构优化历史文档索引
+- [后续规划_未实现](docs/后续规划_未实现/README.md)：未实现功能与后续计划索引
 
 ## FAQ
 
