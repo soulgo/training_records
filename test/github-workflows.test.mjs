@@ -516,6 +516,44 @@ test('telegram-sync workflows keep dev and main environment sources isolated', a
   assert.equal(devSyncEnv.FEISHU_APP_SECRET, '${{ secrets.DEV_FEISHU_APP_SECRET || secrets.FEISHU_APP_SECRET }}');
   assert.equal(devSyncEnv.FEISHU_ALLOWED_CHAT_IDS, '${{ vars.DEV_FEISHU_ALLOWED_CHAT_IDS || vars.FEISHU_ALLOWED_CHAT_IDS }}');
 
+  assert.equal(mainSyncEnv.COS_ENABLED, '${{ vars.COS_ENABLED }}');
+  assert.equal(mainSyncEnv.COS_PROVIDER, "${{ vars.COS_PROVIDER || 'tencent_cos' }}");
+  assert.equal(mainSyncEnv.COS_SECRET_ID, '${{ secrets.COS_SECRET_ID }}');
+  assert.equal(mainSyncEnv.COS_SECRET_KEY, '${{ secrets.COS_SECRET_KEY }}');
+  assert.equal(mainSyncEnv.COS_BUCKET, '${{ vars.COS_BUCKET }}');
+  assert.equal(mainSyncEnv.COS_REGION, '${{ vars.COS_REGION }}');
+  assert.equal(mainSyncEnv.COS_DOMAIN, '${{ vars.COS_DOMAIN }}');
+  assert.equal(mainSyncEnv.COS_PATH_PREFIX, '${{ vars.COS_PATH_PREFIX }}');
+  assert.equal(mainSyncEnv.SYNC_FAILURE_SUMMARY_PATH, '${{ runner.temp }}/sync-failure-summary.txt');
+
+  assert.equal(devSyncEnv.COS_ENABLED, '${{ vars.DEV_COS_ENABLED }}');
+  assert.equal(devSyncEnv.COS_PROVIDER, "${{ vars.DEV_COS_PROVIDER || 'tencent_cos' }}");
+  assert.equal(devSyncEnv.COS_SECRET_ID, '${{ secrets.DEV_COS_SECRET_ID }}');
+  assert.equal(devSyncEnv.COS_SECRET_KEY, '${{ secrets.DEV_COS_SECRET_KEY }}');
+  assert.equal(devSyncEnv.COS_BUCKET, '${{ vars.DEV_COS_BUCKET }}');
+  assert.equal(devSyncEnv.COS_REGION, '${{ vars.DEV_COS_REGION }}');
+  assert.equal(devSyncEnv.COS_DOMAIN, '${{ vars.DEV_COS_DOMAIN }}');
+  assert.equal(devSyncEnv.COS_PATH_PREFIX, '${{ vars.DEV_COS_PATH_PREFIX }}');
+  assert.equal(devSyncEnv.SYNC_FAILURE_SUMMARY_PATH, '${{ runner.temp }}/sync-failure-summary.txt');
+  assert.notEqual(devSyncEnv.COS_SECRET_ID, mainSyncEnv.COS_SECRET_ID);
+  assert.notEqual(devSyncEnv.COS_BUCKET, mainSyncEnv.COS_BUCKET);
+
+  // dev workflow 必须在启用 COS 时校验 dev bucket/domain 与 main 不同，防止污染生产图片
+  const devSyncRun = getWorkflowStep(dev, 'sync', 'Sync updates').run;
+  assert.match(devSyncRun, /COS_BUCKET.*=.*\$\{\{ vars\.COS_BUCKET \}\}/);
+  assert.match(devSyncRun, /COS_DOMAIN.*=.*\$\{\{ vars\.COS_DOMAIN \}\}/);
+  assert.match(devSyncRun, /dev COS bucket must differ from main COS bucket/);
+  assert.match(devSyncRun, /dev COS domain must differ from main COS domain/);
+
+  for (const workflow of [main, dev]) {
+    const syncRun = getWorkflowStep(workflow, 'sync', 'Sync updates').run;
+    const notifyFailureEnv = getWorkflowStep(workflow, 'sync', 'Notify Telegram sync failure').env;
+    assert.match(syncRun, /sync-command\.log/);
+    assert.match(syncRun, /SYNC_FAILURE_SUMMARY_PATH/);
+    assert.match(syncRun, /grep -E/);
+    assert.equal(notifyFailureEnv.SYNC_FAILURE_SUMMARY_PATH, '${{ runner.temp }}/sync-failure-summary.txt');
+  }
+
   for (const envName of [
     'AI_API_KEY',
     'AI_PROVIDER',
@@ -720,11 +758,16 @@ test('sync workflows accept queued workflow dispatch payloads and expose a webho
     assert.match(workflow, /IS_WEBHOOK_DISPATCH=true/);
     assert.match(workflow, /echo "is_webhook_dispatch=\$\{IS_WEBHOOK_DISPATCH\}" >> "\$GITHUB_OUTPUT"/);
     assert.match(workflow, /GITHUB_EVENT_PATH="\$RUNNER_TEMP\/queued-dispatch-event\.json"/);
-    assert.match(workflow, /SYNC_DISPATCH_PAYLOAD<<SYNC_DISPATCH_PAYLOAD_EOF/);
-    assert.match(workflow, /echo "\$DISPATCH_PAYLOAD" >> "\$GITHUB_ENV"/);
-    assert.match(workflow, /SYNC_DISPATCH_PAYLOAD_EOF/);
+    assert.match(workflow, /ORIGINAL_GITHUB_EVENT_PATH="\$GITHUB_EVENT_PATH"/);
+    assert.match(workflow, /const workflowEvent = JSON\.parse\(fs\.readFileSync\(process\.env\.ORIGINAL_GITHUB_EVENT_PATH, 'utf8'\)\);/);
+    assert.match(workflow, /const dispatchPayloadRaw = workflowEvent\.inputs\?\.dispatch_payload \?\? '';/);
     assert.match(workflow, /client_payload: payload\.client_payload \?\? payload/);
+    assert.match(workflow, /echo "SYNC_DISPATCH_EVENT_PATH=\$GITHUB_EVENT_PATH" >> "\$GITHUB_ENV"/);
     assert.match(workflow, /steps\.channel\.outputs\.is_webhook_dispatch == 'true'/);
+    assert.doesNotMatch(workflow, /DISPATCH_PAYLOAD:\s*\$\{\{\s*github\.event\.inputs\.dispatch_payload\s*\}\}/);
+    assert.doesNotMatch(workflow, /SYNC_DISPATCH_PAYLOAD/);
+    assert.doesNotMatch(workflow, /echo "\$DISPATCH_PAYLOAD" >> "\$GITHUB_ENV"/);
+    assert.doesNotMatch(workflow, /echo "GITHUB_EVENT_PATH=\$GITHUB_EVENT_PATH" >> "\$GITHUB_ENV"/);
     assert.doesNotMatch(workflow, /\$\{\{\s*env\.SYNC_DISPATCH_PAYLOAD\s*\}\}/);
     assert.doesNotMatch(workflow, /if:\s*(?:always\(\) && |success\(\) && |failure\(\) && )?github\.event_name == 'repository_dispatch'/);
   }
@@ -835,6 +878,103 @@ test('telegram-sync workflow summary normalizes partial failure task status from
     assert.match(output, /\| album-partial-summary \| partialFailure \| stored \| 2026-06-13 \| image:2026-06-13; no_date:null \| detectedDate missing year \/ needs review \| uncertain \| 2\/1\/1 \|  \| written \|/);
     assert.match(output, /\| auto_retry \| 6102 \|/);
     assert.doesNotMatch(output, /\| album-partial-summary \| ready \| stored/);
+  }
+});
+
+test('sync workflow summaries emit image storage stats when batches upload to COS', async () => {
+  const workflows = [
+    await readWorkflow('.github/workflows/sync.yml'),
+    await readWorkflow('.github/workflows/sync-dev.yml'),
+  ];
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'sync-workflow-image-storage-'));
+  const resultPath = path.join(tempRoot, 'telegram-sync-result.json');
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'thought',
+          status: 'ready',
+          batchId: 'thought-cos-1',
+          archivedDate: '2026-06-13',
+          persistenceStatus: 'stored',
+          thoughtWriteStatus: 'images_written',
+          messages: [{ chatId: 42, messageId: 700, updateId: 9200 }],
+          thought: {
+            storage: {
+              imageUploadStats: {
+                provider: 'tencent_cos',
+                bucket: 'training-images-dev-1250000000',
+                pathPrefix: 'dev',
+                uploaded: 1,
+                skipped: 0,
+                failed: 0,
+                totalUploadMs: 42,
+                maxSingleUploadMs: 42,
+                firstUrlHost: 'training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+              },
+            },
+          },
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  for (const workflow of workflows) {
+    const summaryScript = extractTelegramSyncSummaryScript(workflow);
+    const output = execFileSync(process.execPath, ['-e', summaryScript], {
+      encoding: 'utf8',
+      cwd: rootDir,
+      env: {
+        ...process.env,
+        TELEGRAM_SYNC_RESULT_PATH: resultPath,
+      },
+    });
+
+    assert.match(output, /## Image storage/);
+    assert.match(output, /\| tencent_cos \| training-images-dev-1250000000 \| dev \| 1 \| 0 \| 0 \| 42 \| 42 \| training-images-dev-1250000000\.cos\.ap-shanghai\.myqcloud\.com \|/);
+  }
+});
+
+test('sync workflow summaries omit image storage section when no COS uploads occurred', async () => {
+  const workflows = [
+    await readWorkflow('.github/workflows/sync.yml'),
+    await readWorkflow('.github/workflows/sync-dev.yml'),
+  ];
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'sync-workflow-no-image-storage-'));
+  const resultPath = path.join(tempRoot, 'telegram-sync-result.json');
+
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batchResults: [
+        {
+          kind: 'image',
+          status: 'ready',
+          batchId: 'album-no-cos',
+          archivedDate: '2026-06-13',
+          persistenceStatus: 'stored',
+          messages: [{ chatId: 42, messageId: 701, updateId: 9201 }],
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  for (const workflow of workflows) {
+    const summaryScript = extractTelegramSyncSummaryScript(workflow);
+    const output = execFileSync(process.execPath, ['-e', summaryScript], {
+      encoding: 'utf8',
+      cwd: rootDir,
+      env: {
+        ...process.env,
+        TELEGRAM_SYNC_RESULT_PATH: resultPath,
+      },
+    });
+
+    assert.doesNotMatch(output, /## Image storage/);
   }
 });
 

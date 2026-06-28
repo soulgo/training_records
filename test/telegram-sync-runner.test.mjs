@@ -7,6 +7,7 @@ import path from 'node:path';
 
 import {
   buildTelegramSyncReport,
+  createImageStorage,
   createRecognitionAiProvider,
   loadRecognitionSystemPrompt,
   runMessageSync,
@@ -112,6 +113,63 @@ test('telegram sync entrypoint consumes queued workflow dispatch payloads in web
 
   assert.equal(result.updatesFetched, 1);
   assert.equal(result.batchResults.length, 1);
+  assert.equal(result.batchResults[0].kind, 'thought_edit');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+});
+
+test('telegram sync entrypoint consumes queued payloads from a custom dispatch event path', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-custom-dispatch-path-'));
+  const originalEventPath = path.join(tempRoot, 'workflow-event.json');
+  const dispatchPath = path.join(tempRoot, 'queued-dispatch-event.json');
+  await writeFile(
+    originalEventPath,
+    JSON.stringify({
+      inputs: {
+        dispatch_payload: 'stored in original workflow event',
+      },
+    }),
+    'utf8',
+  );
+  await writeFile(
+    dispatchPath,
+    JSON.stringify({
+      action: 'telegram_update_dev',
+      client_payload: {
+        telegram_updates: [
+          {
+            update_id: 903,
+            message: {
+              message_id: 127,
+              date: 1781665850,
+              chat: { id: 42 },
+              text: '/随想编 127 杂七杂八 custom dispatch event path',
+            },
+          },
+        ],
+      },
+    }),
+    'utf8',
+  );
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv({
+      TELEGRAM_SYNC_TRANSPORT: 'webhook',
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_EVENT_PATH: originalEventPath,
+      SYNC_DISPATCH_EVENT_PATH: dispatchPath,
+    }),
+    getLastProcessedUpdateId: async () => 900,
+    readPendingRecognitionBatches: async () => [],
+    persistNormalizedBatch: async ({ batch }) => ({
+      status: 'stored',
+      messageId: batch.thoughtEdit.targetMessageId,
+      thoughtModule: batch.thoughtEdit.thoughtModule,
+    }),
+    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
+  });
+
+  assert.equal(result.updatesFetched, 1);
   assert.equal(result.batchResults[0].kind, 'thought_edit');
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
 });
@@ -1767,6 +1825,7 @@ test('buildTelegramSyncReport exposes pending replay and archived date details f
         dateSources: [],
         dateConfidence: null,
         dateStages: {},
+        imageUploadStats: null,
       },
     ],
     },
@@ -3190,6 +3249,452 @@ test('runTelegramSync writes /随想 image artifacts and stores core thought met
   assert.match(persistedBatches[0].thought.body, /今天深蹲动作轨迹更稳了/);
   assert.equal(await readFile(imagePath, 'utf8'), 'fake image content');
   await assert.rejects(readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-502.md'), 'utf8'), /ENOENT/);
+});
+
+test('runTelegramSync stores COS image URLs from injected image storage in core thought metadata', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-cos-'));
+  const persistedBatches = [];
+  const uploadedItems = [];
+  const cosUrl = 'https://training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com/dev/thoughts/2026/05/2026-05-14-telegram-thought-508-1.jpg';
+  const imageStorage = {
+    provider: 'tencent_cos',
+    lastUploadStats: null,
+    async upload(items) {
+      uploadedItems.push(...items);
+      this.lastUploadStats = {
+        provider: 'tencent_cos',
+        bucket: 'training-images-dev-1250000000',
+        pathPrefix: 'dev',
+        uploaded: 1,
+        skipped: 0,
+        failed: 0,
+        totalUploadMs: 12,
+        maxSingleUploadMs: 12,
+        firstUrlHost: 'training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+      };
+      return [cosUrl];
+    },
+  };
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    imageStorage,
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 508,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          caption: '/随想 COS 图片落库',
+          photo: [{ file_id: 'photo-cos', file_unique_id: 'photo-cos-u' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [],
+    fetchTelegramFile: async () => ({
+      filePath: 'photos/file_508.jpg',
+      contentType: 'image/jpeg',
+      data: Buffer.from('cos image content'),
+    }),
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'images_written');
+  assert.deepEqual(persistedBatches[0].thought.storage.photoPaths, [cosUrl]);
+  assert.equal(uploadedItems.length, 1);
+  assert.deepEqual(
+    {
+      extension: uploadedItems[0].extension,
+      channelSlug: uploadedItems[0].channelSlug,
+      sourceMessageId: uploadedItems[0].sourceMessageId,
+      index: uploadedItems[0].index,
+      date: uploadedItems[0].dateParts.date,
+    },
+    {
+      extension: '.jpg',
+      channelSlug: 'telegram',
+      sourceMessageId: 508,
+      index: 1,
+      date: '2026-05-14',
+    },
+  );
+  assert.deepEqual(persistedBatches[0].thought.storage.imageUploadStats, {
+    provider: 'tencent_cos',
+    bucket: 'training-images-dev-1250000000',
+    pathPrefix: 'dev',
+    uploaded: 1,
+    skipped: 0,
+    failed: 0,
+    totalUploadMs: 12,
+    maxSingleUploadMs: 12,
+    firstUrlHost: 'training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+  });
+  assert.equal(result.batchResults[0].thought.storage.imageUploadStats?.provider, 'tencent_cos');
+});
+
+test('runTelegramSync does not persist thought metadata when image storage upload fails', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-cos-fail-'));
+  let persisted = false;
+
+  await assert.rejects(
+    runTelegramSync({
+      rootDir: tempRoot,
+      env: telegramSyncEnv(),
+      imageStorage: {
+        provider: 'tencent_cos',
+        async upload() {
+          throw new Error('COS PutObject failed: AccessDenied');
+        },
+      },
+      getLastProcessedUpdateId: async () => 900,
+      fetchTelegramUpdates: async () => [
+        {
+          update_id: 901,
+          message: {
+            message_id: 509,
+            date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+            chat: { id: 42 },
+            caption: '/随想 COS 上传失败',
+            photo: [{ file_id: 'photo-cos-fail', file_unique_id: 'photo-cos-fail-u' }],
+          },
+        },
+      ],
+      recognizeBatch: async () => [],
+      fetchTelegramFile: async () => ({
+        filePath: 'photos/file_509.jpg',
+        contentType: 'image/jpeg',
+        data: Buffer.from('cos image content'),
+      }),
+      persistNormalizedBatch: async () => {
+        persisted = true;
+        return { status: 'stored' };
+      },
+    }),
+    /COS PutObject failed: AccessDenied/,
+  );
+
+  assert.equal(persisted, false);
+});
+
+test('createImageStorage uploads thought images to COS with stable keys and returns public URLs', async () => {
+  const calls = [];
+  const storage = createImageStorage({
+    env: {
+      COS_ENABLED: 'true',
+      COS_PROVIDER: 'tencent_cos',
+      COS_SECRET_ID: 'secret-id',
+      COS_SECRET_KEY: 'secret-key',
+      COS_BUCKET: 'training-images-dev-1250000000',
+      COS_REGION: 'ap-shanghai',
+      COS_DOMAIN: 'https://training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+      COS_PATH_PREFIX: 'dev',
+    },
+    rootDir: process.cwd(),
+    createCosClient() {
+      return {
+        headObject(input, callback) {
+          calls.push(['headObject', input]);
+          const error = new Error('not found');
+          error.statusCode = 404;
+          callback(error);
+        },
+        putObject(input, callback) {
+          calls.push(['putObject', input]);
+          callback(null, { ETag: '"etag"' });
+        },
+      };
+    },
+  });
+
+  const urls = await storage.upload([
+    {
+      data: Buffer.from('image'),
+      extension: '.jpg',
+      channelSlug: 'telegram',
+      dateParts: { date: '2026-05-14' },
+      sourceMessageId: 508,
+      index: 1,
+    },
+  ]);
+
+  const key = 'dev/thoughts/2026/05/2026-05-14-telegram-thought-508-1.jpg';
+  assert.equal(storage.provider, 'tencent_cos');
+  assert.deepEqual(urls, [
+    `https://training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com/${key}`,
+  ]);
+  assert.equal(calls[0][0], 'headObject');
+  assert.equal(calls[0][1].Key, key);
+  assert.equal(calls[1][0], 'putObject');
+  assert.equal(calls[1][1].Key, key);
+  assert.equal(calls[1][1].ContentType, 'image/jpeg');
+  assert.deepEqual(
+    {
+      provider: storage.lastUploadStats.provider,
+      bucket: storage.lastUploadStats.bucket,
+      pathPrefix: storage.lastUploadStats.pathPrefix,
+      uploaded: storage.lastUploadStats.uploaded,
+      skipped: storage.lastUploadStats.skipped,
+      failed: storage.lastUploadStats.failed,
+      firstUrlHost: storage.lastUploadStats.firstUrlHost,
+    },
+    {
+      provider: 'tencent_cos',
+      bucket: 'training-images-dev-1250000000',
+      pathPrefix: 'dev',
+      uploaded: 1,
+      skipped: 0,
+      failed: 0,
+      firstUrlHost: 'training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+    },
+  );
+});
+
+test('createImageStorage converts Uint8Array thought image data to Buffer for COS uploads', async () => {
+  const calls = [];
+  const storage = createImageStorage({
+    env: {
+      COS_ENABLED: 'true',
+      COS_PROVIDER: 'tencent_cos',
+      COS_SECRET_ID: 'secret-id',
+      COS_SECRET_KEY: 'secret-key',
+      COS_BUCKET: 'training-images-dev-1250000000',
+      COS_REGION: 'ap-shanghai',
+      COS_DOMAIN: 'https://training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+      COS_PATH_PREFIX: 'dev',
+    },
+    rootDir: process.cwd(),
+    createCosClient() {
+      return {
+        headObject(input, callback) {
+          calls.push(['headObject', input]);
+          const error = new Error('not found');
+          error.statusCode = 404;
+          callback(error);
+        },
+        putObject(input, callback) {
+          calls.push(['putObject', input]);
+          if (!Buffer.isBuffer(input.Body)) {
+            callback({
+              Code: 'Error',
+              message: 'params Body format error, Only allow Buffer|Stream|String.',
+            });
+            return;
+          }
+          callback(null, { ETag: '"etag"' });
+        },
+      };
+    },
+  });
+
+  await storage.upload([
+    {
+      data: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
+      extension: '.jpg',
+      channelSlug: 'telegram',
+      dateParts: { date: '2026-05-14' },
+      sourceMessageId: 513,
+      index: 1,
+    },
+  ]);
+
+  const putObjectCall = calls.find(([name]) => name === 'putObject');
+  assert.ok(putObjectCall, 'expected COS PutObject call');
+  assert.ok(Buffer.isBuffer(putObjectCall[1].Body));
+  assert.deepEqual([...putObjectCall[1].Body], [0xff, 0xd8, 0xff, 0xd9]);
+});
+
+test('createImageStorage records skipped uploads when COS HeadObject finds existing object', async () => {
+  const calls = [];
+  const storage = createImageStorage({
+    env: {
+      COS_ENABLED: 'true',
+      COS_PROVIDER: 'tencent_cos',
+      COS_SECRET_ID: 'secret-id',
+      COS_SECRET_KEY: 'secret-key',
+      COS_BUCKET: 'training-images-dev-1250000000',
+      COS_REGION: 'ap-shanghai',
+      COS_DOMAIN: 'https://training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+      COS_PATH_PREFIX: 'dev',
+    },
+    rootDir: process.cwd(),
+    createCosClient() {
+      return {
+        headObject(input, callback) {
+          calls.push(['headObject', input]);
+          callback(null, { headers: { 'content-length': '1234' } });
+        },
+        putObject(input, callback) {
+          calls.push(['putObject', input]);
+          callback(null, { ETag: '"etag"' });
+        },
+      };
+    },
+  });
+
+  const urls = await storage.upload([
+    {
+      data: Buffer.from('image'),
+      extension: '.jpg',
+      channelSlug: 'telegram',
+      dateParts: { date: '2026-05-14' },
+      sourceMessageId: 511,
+      index: 1,
+    },
+  ]);
+
+  const key = 'dev/thoughts/2026/05/2026-05-14-telegram-thought-511-1.jpg';
+  assert.deepEqual(urls, [
+    `https://training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com/${key}`,
+  ]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], 'headObject');
+  assert.equal(storage.lastUploadStats.uploaded, 0);
+  assert.equal(storage.lastUploadStats.skipped, 1);
+  assert.equal(storage.lastUploadStats.failed, 0);
+});
+
+test('createImageStorage fails fast when COS_DOMAIN does not match the default COS domain format', () => {
+  assert.throws(
+    () => createImageStorage({
+      env: {
+        COS_ENABLED: 'true',
+        COS_PROVIDER: 'tencent_cos',
+        COS_SECRET_ID: 'secret-id',
+        COS_SECRET_KEY: 'secret-key',
+        COS_BUCKET: 'training-images-dev-1250000000',
+        COS_REGION: 'ap-shanghai',
+        COS_DOMAIN: 'https://img-dev.soulgo.chat',
+        COS_PATH_PREFIX: 'dev',
+      },
+      rootDir: process.cwd(),
+    }),
+    /default COS domain format/,
+  );
+});
+
+test('createImageStorage treats transient initial COS HeadObject failures as upload attempts', async () => {
+  const calls = [];
+  const storage = createImageStorage({
+    env: {
+      COS_ENABLED: 'true',
+      COS_PROVIDER: 'tencent_cos',
+      COS_SECRET_ID: 'secret-id',
+      COS_SECRET_KEY: 'secret-key',
+      COS_BUCKET: 'training-images-dev-1250000000',
+      COS_REGION: 'ap-shanghai',
+      COS_DOMAIN: 'https://training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+      COS_PATH_PREFIX: 'dev',
+    },
+    rootDir: process.cwd(),
+    createCosClient() {
+      return {
+        headObject(input, callback) {
+          calls.push(['headObject', input]);
+          const error = new Error('socket timeout');
+          error.code = 'ETIMEDOUT';
+          callback(error);
+        },
+        putObject(input, callback) {
+          calls.push(['putObject', input]);
+          callback(null, { ETag: '"etag"' });
+        },
+      };
+    },
+  });
+
+  await storage.upload([
+    {
+      data: Buffer.from('image'),
+      extension: '.png',
+      channelSlug: 'telegram',
+      dateParts: { date: '2026-05-14' },
+      sourceMessageId: 510,
+      index: 1,
+    },
+  ]);
+
+  assert.deepEqual(calls.map(([name]) => name), ['headObject', 'putObject']);
+});
+
+test('createImageStorage reports COS plain object errors with diagnostic fields', async () => {
+  const storage = createImageStorage({
+    env: {
+      COS_ENABLED: 'true',
+      COS_PROVIDER: 'tencent_cos',
+      COS_SECRET_ID: 'secret-id',
+      COS_SECRET_KEY: 'secret-key',
+      COS_BUCKET: 'training-images-dev-1250000000',
+      COS_REGION: 'ap-shanghai',
+      COS_DOMAIN: 'https://training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
+      COS_PATH_PREFIX: 'dev',
+    },
+    rootDir: process.cwd(),
+    createCosClient() {
+      return {
+        headObject(input, callback) {
+          const error = new Error('not found');
+          error.statusCode = 404;
+          callback(error);
+        },
+        putObject(input, callback) {
+          callback({
+            Code: 'AccessDenied',
+            statusCode: 403,
+            RequestId: 'cos-request-123',
+            message: 'policy denies PutObject',
+            headers: {
+              'x-cos-request-id': 'cos-header-request-456',
+              authorization: 'secret-signature',
+            },
+          });
+        },
+      };
+    },
+  });
+
+  await assert.rejects(
+    storage.upload([
+      {
+        data: Buffer.from('image'),
+        extension: '.jpg',
+        channelSlug: 'telegram',
+        dateParts: { date: '2026-05-14' },
+        sourceMessageId: 512,
+        index: 1,
+      },
+    ]),
+    (error) => {
+      assert.match(error.message, /COS PutObject failed/);
+      assert.match(error.message, /AccessDenied/);
+      assert.match(error.message, /statusCode=403/);
+      assert.match(error.message, /RequestId=cos-request-123/);
+      assert.match(error.message, /policy denies PutObject/);
+      assert.doesNotMatch(error.message, /\[object Object\]/);
+      assert.doesNotMatch(error.message, /secret-signature/);
+      return true;
+    },
+  );
+});
+
+test('createImageStorage fails fast when COS is enabled without required configuration', () => {
+  assert.throws(
+    () => createImageStorage({
+      env: {
+        COS_ENABLED: 'true',
+        COS_PROVIDER: 'tencent_cos',
+        COS_SECRET_ID: 'secret-id',
+      },
+      rootDir: process.cwd(),
+    }),
+    /Missing required COS configuration: COS_SECRET_KEY/,
+  );
 });
 
 test('runTelegramSync stores module-scoped /随想 metadata in core payload', async () => {
@@ -4708,6 +5213,58 @@ test('telegram action monitor reports the failed workflow stage to the original 
   assert.match(sentMessages[0].text, /https:\/\/github\.com\/soulgo\/training_records\/actions\/runs\/123456/);
 });
 
+test('telegram action monitor includes sync failure summary when available', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-action-monitor-summary-'));
+  const eventPath = path.join(tempRoot, 'event.json');
+  const summaryPath = path.join(tempRoot, 'sync-failure-summary.txt');
+  const sentMessages = [];
+  await writeFile(
+    eventPath,
+    JSON.stringify({
+      client_payload: {
+        telegram_updates: [
+          {
+            update_id: 901,
+            message: {
+              message_id: 77,
+              chat: { id: 42 },
+            },
+          },
+        ],
+      },
+    }),
+    'utf8',
+  );
+  await writeFile(
+    summaryPath,
+    'COS PutObject failed for dev/thoughts/2026/06/image.jpg: AccessDenied statusCode=403 RequestId=req-1\n',
+    'utf8',
+  );
+
+  const result = await notifyTelegramActionFailure({
+    env: {
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+      GITHUB_EVENT_PATH: eventPath,
+      GITHUB_SERVER_URL: 'https://github.com',
+      GITHUB_REPOSITORY: 'soulgo/training_records',
+      GITHUB_RUN_ID: '123456',
+      TELEGRAM_BOT_TOKEN: 'token',
+      STEP_SYNC_OUTCOME: 'failure',
+      SYNC_FAILURE_SUMMARY_PATH: summaryPath,
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.match(sentMessages[0].text, /GitHub Action 执行失败：Sync Telegram updates/);
+  assert.match(sentMessages[0].text, /失败摘要：COS PutObject failed/);
+  assert.match(sentMessages[0].text, /AccessDenied statusCode=403 RequestId=req-1/);
+  assert.match(sentMessages[0].text, /https:\/\/github\.com\/soulgo\/training_records\/actions\/runs\/123456/);
+});
+
 test('telegram action monitor reports queued workflow dispatch failures to the original telegram message', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-action-monitor-workflow-dispatch-'));
   const eventPath = path.join(tempRoot, 'queued-dispatch-event.json');
@@ -4752,6 +5309,62 @@ test('telegram action monitor reports queued workflow dispatch failures to the o
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].chatId, 42);
   assert.equal(sentMessages[0].replyToMessageId, 79);
+});
+
+test('telegram action monitor reports queued failures from a custom dispatch event path', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-action-monitor-custom-dispatch-path-'));
+  const originalEventPath = path.join(tempRoot, 'workflow-event.json');
+  const eventPath = path.join(tempRoot, 'queued-dispatch-event.json');
+  const sentMessages = [];
+  await writeFile(
+    originalEventPath,
+    JSON.stringify({
+      inputs: {
+        dispatch_payload: 'stored in original workflow event',
+      },
+    }),
+    'utf8',
+  );
+  await writeFile(
+    eventPath,
+    JSON.stringify({
+      action: 'telegram_update_dev',
+      client_payload: {
+        telegram_updates: [
+          {
+            update_id: 904,
+            message: {
+              message_id: 80,
+              chat: { id: 42 },
+            },
+          },
+        ],
+      },
+    }),
+    'utf8',
+  );
+
+  const result = await notifyTelegramActionFailure({
+    env: {
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_EVENT_PATH: originalEventPath,
+      SYNC_DISPATCH_EVENT_PATH: eventPath,
+      GITHUB_SERVER_URL: 'https://github.com',
+      GITHUB_REPOSITORY: 'soulgo/training_records',
+      GITHUB_RUN_ID: '123460',
+      TELEGRAM_BOT_TOKEN: 'token',
+      STEP_SYNC_OUTCOME: 'failure',
+    },
+    sendTelegramMessage: async (message) => {
+      sentMessages.push(message);
+      return { ok: true };
+    },
+  });
+
+  assert.equal(result.notified, true);
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].chatId, 42);
+  assert.equal(sentMessages[0].replyToMessageId, 80);
 });
 
 test('telegram action monitor reports inline queued dispatch failures to the original telegram message', async () => {

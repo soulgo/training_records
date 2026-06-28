@@ -32,7 +32,7 @@ export async function notifyTelegramActionFailure(options = {}) {
   }
 
   const updates = await readRepositoryDispatchUpdates({
-    eventPath: env.GITHUB_EVENT_PATH,
+    eventPath: env.SYNC_DISPATCH_EVENT_PATH ?? env.GITHUB_EVENT_PATH,
     githubEventName: env.GITHUB_EVENT_NAME,
     dispatchPayload: env.SYNC_DISPATCH_PAYLOAD ?? env.DISPATCH_PAYLOAD,
   });
@@ -47,7 +47,8 @@ export async function notifyTelegramActionFailure(options = {}) {
   }
 
   const failure = resolveFailureStage(env);
-  const text = formatActionFailureMessage({ env, failure });
+  const failureSummary = await readFailureSummary(env.SYNC_FAILURE_SUMMARY_PATH);
+  const text = formatActionFailureMessage({ env, failure, failureSummary });
   const sendMessage = options.sendTelegramMessage ?? sendTelegramMessageViaApi;
   let sent = 0;
 
@@ -121,11 +122,32 @@ function resolveFailureStage(env) {
   };
 }
 
-function formatActionFailureMessage({ env, failure }) {
+async function readFailureSummary(summaryPath) {
+  if (!summaryPath) {
+    return '';
+  }
+  try {
+    return sanitizeFailureSummary(await readFile(summaryPath, 'utf8'));
+  } catch {
+    return '';
+  }
+}
+
+function sanitizeFailureSummary(content) {
+  const text = String(content ?? '')
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(' | ');
+  return text.length > 500 ? `${text.slice(0, 497)}...` : text;
+}
+
+function formatActionFailureMessage({ env, failure, failureSummary = '' }) {
   const runUrl = buildRunUrl(env);
   return [
     `GitHub Action 执行失败：${failure.stage}`,
     '失败分类：github_action',
+    failureSummary ? `失败摘要：${failureSummary}` : null,
     runUrl ? `查看日志：${runUrl}` : null,
   ].filter(Boolean).join('\n');
 }

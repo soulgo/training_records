@@ -13,9 +13,33 @@
 
 ## [Unreleased]
 
+### Security
+
+- 修复 `sync.yml` / `sync-dev.yml` 在 `workflow_dispatch` 队列任务中把完整 Telegram/飞书 `dispatch_payload` 注入 GitHub Actions step env 和 `$GITHUB_ENV` 的问题，避免 `chat_id`、用户名、消息正文、图片 `file_id` 等 webhook payload 内容出现在 Action 日志；同步和失败通知改为通过 runner 临时事件文件读取队列 payload。
+
+### Fixed
+
+- 修复日志泄露修复引入的 Telegram/飞书队列回归：`workflow_dispatch` 不能通过 `$GITHUB_ENV` 覆盖受保护的 `GITHUB_EVENT_PATH`，导致同步 step 读回原始 workflow 事件、实际消费 0 条 webhook update；现在 workflow 通过 `SYNC_DISPATCH_EVENT_PATH` 传递 runner 临时事件文件路径，保留 payload 不落日志的同时恢复 Telegram 图片随想处理、结果通知和页面部署触发。
+- 增强 Telegram/飞书同步的 COS 上传失败诊断：同步 workflow 现在会在失败时提取高信号日志摘要并回传到 Telegram 失败通知；COS SDK 普通对象错误会输出 `Code`、`statusCode`、`RequestId` 等字段，不再显示 `[object Object]`，便于定位 CAM 权限、bucket/region 或签名问题。
+- 修复 Telegram/飞书随想图片通过 COS 上传时，下载层返回 `Uint8Array` 被腾讯云 COS SDK 拒绝为 `params Body format error` 的问题；COS provider 现在会在上传前转换为 Node `Buffer`，保持本地图片写入路径不变。
+
+## [1.3.1] - 2026-06-26
+
+### Added
+
+- 随想图片存储新增腾讯云 COS 支持：默认仍使用本地 `source/images/thoughts`，启用 `COS_ENABLED=true` 后，Telegram/飞书随想图片会上传到 COS，并把完整公有读 URL 写入 `core.thought.image_refs_json`，Markdown 备份和站点页面继续从数据库引用原始 URL。
+- `sync.yml` 与 `sync-dev.yml` 新增 COS 运行时配置注入和 `## Image storage` summary，展示 provider、bucket、pathPrefix、上传/跳过/失败数量、上传耗时和首个 URL host；dev 环境会校验 bucket/domain 不得与 main 相同。
+
+### Changed
+
+- 同步项目包版本号到 `1.3.1`。
+- 系统长期文档补齐 COS 图片存储当前事实，明确 Cloudflare Worker 不接触 COS 凭据、Markdown backup 和 Pages 构建不上传图片、历史 `/images/thoughts/...` 路径不迁移且继续可访问。
+- 将 `docs/后续规划_未实现/图片oss存储/` 标记为已实现方案文档，保留实施报告用于追溯；`docs/后续规划_未实现/` 其它目录仍为未实现规划或审计资料。
+
 ### Fixed
 
 - 修复随想详情页中带图内容的排版不协调问题：详情页现在先显示正文、再显示图片；图片会按容器自适应，桌面端限制最大宽高，手机端限制为容器宽度和 72vh 高度，避免原图过大导致正文显得过小或页面比例失衡。
+- 加固 COS 图片上传失败路径：上传失败时不写入错误 URL、不调用随想持久化，避免污染数据库图片引用。
 
 ## [1.3.0] - 2026-06-23
 
@@ -482,7 +506,9 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.2.9...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/soulgo/training_records/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/soulgo/training_records/compare/v1.2.9...v1.3.0
 [1.2.9]: https://github.com/soulgo/training_records/compare/v1.2.8...v1.2.9
 [1.2.8]: https://github.com/soulgo/training_records/compare/v1.2.7...v1.2.8
 [1.2.7]: https://github.com/soulgo/training_records/compare/v1.2.6...v1.2.7
