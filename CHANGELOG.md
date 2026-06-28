@@ -13,6 +13,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 完成 action 日志排查优化文档第三轮审计：通过 GitHub API 拉取实际运行日志（Sync #112/#117、Deploy #350/#233、Markdown Backup #20、CI Tests #285、Refresh Webhook #130）与 `main`/`dev` 两分支源码交叉验证，发现前两轮文档以 dev 工作树为"当前源码"导致生产 main 分支的 dispatch payload 泄漏被误判为"不成立问题"。新增 `07_第三轮审计_实际日志复核.md`，并修订 01-06 全部文档：dispatch payload 泄漏回退为 P0 安全阻塞项（实测 main 仍写 `SYNC_DISPATCH_PAYLOAD` 原文到 `$GITHUB_ENV`，dev 修复未合并）；Markdown snapshot 泄漏范围从"仅 backup"扩大到两个 deploy workflow（实测 Deploy #350 含 399 处、#233 含 223 处健康字段）；测试 fixture 噪声归属从 CI 修正为 deploy（site-build `run_tests:'true'`）；补全飞书 `oc_` chat_id 在 sync stdout 的脱敏规则；05 实施顺序前置 main 合并项；06 阻塞项从 1 个增至 2 个。
+
 ### Security
 
 - 修复 `sync.yml` / `sync-dev.yml` 在 `workflow_dispatch` 队列任务中把完整 Telegram/飞书 `dispatch_payload` 注入 GitHub Actions step env 和 `$GITHUB_ENV` 的问题，避免 `chat_id`、用户名、消息正文、图片 `file_id` 等 webhook payload 内容出现在 Action 日志；同步和失败通知改为通过 runner 临时事件文件读取队列 payload。
