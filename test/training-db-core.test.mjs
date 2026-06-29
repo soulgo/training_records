@@ -613,6 +613,86 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls.at(-1)[0], 'end');
 });
 
+test('persistNormalizedBatch returns safe persistence summary with row counts and slow queries', async () => {
+  const fakeClient = {
+    async connect() {},
+    async query(sql) {
+      if (/insert into ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (/insert into ingest\.telegram_message/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (/insert into ingest\.telegram_recognition/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (/insert into core\.training_day/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (/insert into core\.measurement/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (/insert into core\.activity/i.test(sql)) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (/insert into core\.meal/i.test(sql)) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (/insert into core\.sleep/i.test(sql)) {
+        return { rows: [], rowCount: 0 };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+    async end() {},
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: normalizedBatch,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TRAINING_DB_SLOW_QUERY_MS: '0',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+    sourceChannel: 'telegram',
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.match(result.transactionId, /^dbtx_[a-f0-9]{16}$/);
+  assert.equal(result.sourceChannel, 'telegram');
+  assert.deepEqual(result.rowCounts, {
+    ingestBatch: 1,
+    ingestMessage: 1,
+    ingestRecognition: 1,
+    aiCallLog: 0,
+    coreTrainingDay: 2,
+    coreMeasurement: 1,
+    coreActivity: 0,
+    coreMeal: 0,
+    coreSleep: 0,
+    coreThought: 0,
+  });
+  assert.equal(typeof result.durationMs, 'number');
+  assert.ok(result.slowQueries.length > 0);
+  assert.ok(result.slowQueries.every((query) => query.operation && query.table && Number.isFinite(query.durationMs)));
+  assert.doesNotMatch(JSON.stringify(result.slowQueries), /postgresql:\/\/|training_writer|secret|select|insert|\$/i);
+  assert.deepEqual(result.persistenceResult, {
+    status: 'stored',
+    batchId: normalizedBatch.batchId,
+    archivedDate: '2026-05-09',
+    transactionId: result.transactionId,
+    sourceChannel: 'telegram',
+    rowCounts: result.rowCounts,
+    durationMs: result.durationMs,
+    slowQueries: result.slowQueries,
+    pendingStatus: null,
+    rollbackStatus: null,
+  });
+});
+
 test('persistNormalizedBatch preserves fallback AI audit fields in recognition json', async () => {
   const calls = [];
   const fakeClient = {
@@ -2556,17 +2636,27 @@ test('persistNormalizedBatch rolls back the transaction when a core write fails'
   };
 
   await assert.rejects(
-    persistNormalizedBatch({
-      batch: normalizedBatch,
-      env: {
-        TRAINING_DB_ENABLED: 'true',
-        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-      },
-      createClient() {
-        return fakeClient;
-      },
-      processedAt: new Date('2026-05-13T00:00:00.000Z'),
-    }),
+    async () => {
+      try {
+        await persistNormalizedBatch({
+          batch: normalizedBatch,
+          env: {
+            TRAINING_DB_ENABLED: 'true',
+            TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+          },
+          createClient() {
+            return fakeClient;
+          },
+          processedAt: new Date('2026-05-13T00:00:00.000Z'),
+        });
+      } catch (error) {
+        assert.equal(error.persistenceResult.status, 'failed');
+        assert.equal(error.persistenceResult.rollbackStatus, 'succeeded');
+        assert.match(error.persistenceResult.transactionId, /^dbtx_[a-f0-9]{16}$/);
+        assert.doesNotMatch(JSON.stringify(error.persistenceResult), /postgresql:\/\/|training_writer|secret|insert into|core write failed/i);
+        throw error;
+      }
+    },
     /core write failed/,
   );
 
@@ -2671,6 +2761,11 @@ test('persistNormalizedBatch returns unchanged from atomic batch upsert when pay
 
   assert.equal(result.status, 'unchanged');
   assert.equal(result.batchId, normalizedBatch.batchId);
+  assert.equal(result.reason, 'payload_hash_unchanged');
+  assert.match(result.transactionId, /^dbtx_[a-f0-9]{16}$/);
+  assert.equal(result.persistenceResult.status, 'unchanged');
+  assert.equal(result.persistenceResult.reason, 'payload_hash_unchanged');
+  assert.equal(result.persistenceResult.rollbackStatus, 'not_needed');
   const statements = calls.map(([sql]) => sql);
   const beginIndex = statements.indexOf('BEGIN');
   const batchUpsertIndex = calls.findIndex(([sql]) => /insert into ingest\.telegram_batch/i.test(sql));
@@ -3021,12 +3116,13 @@ test('persistNormalizedBatch reports missing thought edit targets without insert
     processedAt: new Date('2026-06-15T09:15:00.000Z'),
   });
 
-  assert.deepEqual(result, {
-    status: 'not_found',
-    batchId: 'thought-edit-999',
-    messageId: 501,
-    archivedDate: null,
-  });
+  assert.equal(result.status, 'not_found');
+  assert.equal(result.batchId, 'thought-edit-999');
+  assert.equal(result.messageId, 501);
+  assert.equal(result.archivedDate, null);
+  assert.match(result.transactionId, /^dbtx_[a-f0-9]{16}$/);
+  assert.equal(result.persistenceResult.status, 'not_found');
+  assert.equal(result.persistenceResult.batchId, 'thought-edit-999');
   assert.equal(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)), true);
   assert.equal(calls.some(([sql]) => /insert into core\.thought/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => sql === 'COMMIT'), true);

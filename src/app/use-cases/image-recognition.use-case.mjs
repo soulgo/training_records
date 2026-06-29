@@ -149,6 +149,7 @@ export async function recognizeTelegramImageMessage({
     aiAttemptKind: recognitionResult.attemptKind ?? 'normal',
     aiIdempotencyKey: recognitionResult.idempotencyKey,
     aiUsage: recognitionResult.aiUsage,
+    provider: recognitionResult.aiProvider?.name ?? 'openai-compatible',
     promptVersion,
     schemaName,
     schemaVersion,

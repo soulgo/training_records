@@ -305,16 +305,18 @@ test('deploy-cloudflare-worker-dev workflow deploys the unified dev worker and r
   assert.match(workflow, /TELEGRAM_SECRET_TOKEN:\s*\$\{\{\s*secrets\.DEV_TELEGRAM_SECRET_TOKEN\s*\}\}/);
 });
 
-test('feishu-sync workflows expose source ids and chat ids in dispatch summaries', async () => {
+test('feishu-sync workflows render dispatch summaries through the shared redacting script', async () => {
   for (const workflowPath of ['.github/workflows/sync.yml', '.github/workflows/sync-dev.yml']) {
     const workflow = await readWorkflow(workflowPath);
 
     assert.match(workflow, /- name: Write Feishu sync summary/);
     assert.match(workflow, /GITHUB_STEP_SUMMARY/);
-    assert.match(workflow, /batchId \| sourceId \| chatIds \| taskStatus/);
-    assert.match(workflow, /aiCallLogStatus/);
-    assert.match(workflow, /batch\.sourceId/);
-    assert.match(workflow, /batch\.chatIds/);
+    assert.match(workflow, /node tools\/action-sync-summary\.mjs/);
+    assert.match(workflow, /--channel feishu/);
+    assert.match(workflow, /--trace-id "\$TRACE_ID"/);
+    assert.match(workflow, /--queue-task-id "\$QUEUE_TASK_ID"/);
+    assert.doesNotMatch(workflow, /batch\.sourceId/);
+    assert.doesNotMatch(workflow, /batch\.chatIds/);
   }
 });
 
@@ -404,8 +406,10 @@ test('main sync workflow notifies after sync and waits for site deploy completio
   assert.doesNotMatch(workflow, /id:\s*site_build/);
   assert.match(workflow, /- name: Write Telegram sync summary/);
   assert.match(workflow, /GITHUB_STEP_SUMMARY/);
-  assert.match(workflow, /stage \| ms/);
-  assert.match(workflow, /batchId \| taskStatus \| persistenceStatus \| archivedDate \| dateSources \| warnings \| dateConfidence \| images \| aiAttemptKinds \| aiCallLogStatus \| pending \| failureDisposition \| failed messageIds/);
+  assert.match(workflow, /node tools\/action-sync-summary\.mjs/);
+  assert.match(workflow, /--channel telegram/);
+  assert.match(workflow, /TRACE_ID=/);
+  assert.match(workflow, /QUEUE_TASK_ID:/);
   assert.match(workflow, /TELEGRAM_SYNC_NOTIFY_STAGE: after_action/);
   assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH: \$\{\{ runner\.temp \}\}\/telegram-sync-result\.json/);
   assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
@@ -436,8 +440,11 @@ test('main sync workflow notifies after sync and waits for site deploy completio
   assert.match(deployStep, /Deploy workflow failed/);
   assert.match(deployStep, /GITHUB_STEP_SUMMARY/);
   assert.match(deployStep, /## Site deploy result/);
-  assert.match(deployStep, /\| workflow \| runId \| status \| conclusion \| url \|/);
+  assert.match(deployStep, /\| workflow \| runId \| status \| conclusion \| durationMs \| url \|/);
   assert.match(deployStep, /appendDeploySummary/);
+  assert.match(deployStep, /\[action-log\]/);
+  assert.match(deployStep, /workflow\.waiting/);
+  assert.match(deployStep, /elapsedMs/);
   assert.match(deployStep, /Deploy workflow succeeded/);
   assert.ok(
     workflow.indexOf('- name: Notify Telegram sync result') > workflow.indexOf('- name: Push changes'),
@@ -775,6 +782,18 @@ test('sync workflows accept queued workflow dispatch payloads and expose a webho
   }
 });
 
+test('sync workflows use the shared action summary formatter instead of inline Node summary blocks', async () => {
+  for (const workflowPath of ['.github/workflows/sync.yml', '.github/workflows/sync-dev.yml']) {
+    const workflow = await readWorkflow(workflowPath);
+
+    assert.match(workflow, /node tools\/action-sync-summary\.mjs[\s\S]*>> "\$GITHUB_STEP_SUMMARY"/);
+    assert.match(workflow, /--workflow "\$\{\{ github\.workflow \}\}"/);
+    assert.match(workflow, /--run-id "\$\{\{ github\.run_id \}\}"/);
+    assert.doesNotMatch(workflow, /node <<'NODE' >> "\$GITHUB_STEP_SUMMARY"/);
+    assert.doesNotMatch(workflow, /batch\.sourceId|batch\.chatIds|totals\.bucket|totals\.pathPrefix/);
+  }
+});
+
 test('sync workflow run scripts are valid bash after YAML parsing', async () => {
   for (const workflowPath of ['.github/workflows/sync.yml', '.github/workflows/sync-dev.yml']) {
     const scripts = await readWorkflowRunScripts(workflowPath);
@@ -863,14 +882,11 @@ test('telegram-sync workflow summary normalizes partial failure task status from
   );
 
   for (const workflow of workflows) {
-    const summaryScript = extractTelegramSyncSummaryScript(workflow);
-    const output = execFileSync(process.execPath, ['-e', summaryScript], {
-      encoding: 'utf8',
-      cwd: rootDir,
-      env: {
-        ...process.env,
-        TELEGRAM_SYNC_RESULT_PATH: resultPath,
-      },
+    assert.match(workflow, /node tools\/action-sync-summary\.mjs/);
+    const output = runActionSyncSummary({
+      channel: 'telegram',
+      resultPath,
+      traceId: 'tr_partialsummary000',
     });
 
     assert.match(output, /archivedDate \| dateSources \| warnings \| dateConfidence \| images \| aiAttemptKinds \| aiCallLogStatus/);
@@ -925,18 +941,16 @@ test('sync workflow summaries emit image storage stats when batches upload to CO
   );
 
   for (const workflow of workflows) {
-    const summaryScript = extractTelegramSyncSummaryScript(workflow);
-    const output = execFileSync(process.execPath, ['-e', summaryScript], {
-      encoding: 'utf8',
-      cwd: rootDir,
-      env: {
-        ...process.env,
-        TELEGRAM_SYNC_RESULT_PATH: resultPath,
-      },
+    assert.match(workflow, /node tools\/action-sync-summary\.mjs/);
+    const output = runActionSyncSummary({
+      channel: 'telegram',
+      resultPath,
+      traceId: 'tr_imagestorage00',
     });
 
     assert.match(output, /## Image storage/);
-    assert.match(output, /\| tencent_cos \| training-images-dev-1250000000 \| dev \| 1 \| 0 \| 0 \| 42 \| 42 \| training-images-dev-1250000000\.cos\.ap-shanghai\.myqcloud\.com \|/);
+    assert.match(output, /\| tencent_cos \| sha256:[a-f0-9]{16} \| sha256:[a-f0-9]{16} \| 1 \| 0 \| 0 \| 42 \| 42 \| training-images-dev-1250000000\.cos\.ap-shanghai\.myqcloud\.com \|/);
+    assert.doesNotMatch(output, /training-images-dev-1250000000 \| dev/);
   }
 });
 
@@ -966,14 +980,11 @@ test('sync workflow summaries omit image storage section when no COS uploads occ
   );
 
   for (const workflow of workflows) {
-    const summaryScript = extractTelegramSyncSummaryScript(workflow);
-    const output = execFileSync(process.execPath, ['-e', summaryScript], {
-      encoding: 'utf8',
-      cwd: rootDir,
-      env: {
-        ...process.env,
-        TELEGRAM_SYNC_RESULT_PATH: resultPath,
-      },
+    assert.match(workflow, /node tools\/action-sync-summary\.mjs/);
+    const output = runActionSyncSummary({
+      channel: 'telegram',
+      resultPath,
+      traceId: 'tr_noimagestorage',
     });
 
     assert.doesNotMatch(output, /## Image storage/);
@@ -1051,13 +1062,11 @@ test('sync workflow summaries emit warnings for business-incomplete batches', as
       'sync',
       'Write Telegram sync summary',
     ).run;
-    const telegramOutput = execFileSync(process.execPath, ['-e', extractNodeHereDocScript(telegramSummary)], {
-      encoding: 'utf8',
-      cwd: rootDir,
-      env: {
-        ...process.env,
-        TELEGRAM_SYNC_RESULT_PATH: telegramResultPath,
-      },
+    assert.match(telegramSummary, /node tools\/action-sync-summary\.mjs/);
+    const telegramOutput = runActionSyncSummary({
+      channel: 'telegram',
+      resultPath: telegramResultPath,
+      traceId: 'tr_businesswarning',
     });
 
     assert.match(telegramOutput, /::warning title=Telegram sync business incomplete::/);
@@ -1069,13 +1078,11 @@ test('sync workflow summaries emit warnings for business-incomplete batches', as
       'sync',
       'Write Feishu sync summary',
     ).run;
-    const feishuOutput = execFileSync(process.execPath, ['-e', extractNodeHereDocScript(feishuSummary)], {
-      encoding: 'utf8',
-      cwd: rootDir,
-      env: {
-        ...process.env,
-        FEISHU_SYNC_RESULT_PATH: feishuResultPath,
-      },
+    assert.match(feishuSummary, /node tools\/action-sync-summary\.mjs/);
+    const feishuOutput = runActionSyncSummary({
+      channel: 'feishu',
+      resultPath: feishuResultPath,
+      traceId: 'tr_feishuwarning0',
     });
 
     assert.match(feishuOutput, /::warning title=Feishu sync business incomplete::/);
@@ -1211,7 +1218,7 @@ test('telegram-sync dev workflow waits for the dev deploy workflow', async () =>
   assert.match(deployStep, /Deploy workflow failed/);
   assert.match(deployStep, /GITHUB_STEP_SUMMARY/);
   assert.match(deployStep, /## Site deploy result/);
-  assert.match(deployStep, /\| workflow \| runId \| status \| conclusion \| url \|/);
+  assert.match(deployStep, /\| workflow \| runId \| status \| conclusion \| durationMs \| url \|/);
   assert.match(deployStep, /appendDeploySummary/);
   assert.match(deployStep, /Deploy workflow succeeded/);
   assert.match(workflow, /STEP_DEPLOY_OUTCOME: \$\{\{ steps\.deploy\.outcome \}\}/);
@@ -1337,20 +1344,27 @@ function matchCount(value, pattern) {
   return Array.from(value.matchAll(pattern)).length;
 }
 
+function runActionSyncSummary({ channel, resultPath, traceId }) {
+  return execFileSync(
+    process.execPath,
+    [
+      'tools/action-sync-summary.mjs',
+      '--channel',
+      channel,
+      '--result-path',
+      resultPath,
+      '--trace-id',
+      traceId,
+    ],
+    {
+      encoding: 'utf8',
+      cwd: rootDir,
+    },
+  );
+}
+
 function extractDatabaseContentDetectionScript(workflow) {
   const match = workflow.match(/node <<'NODE' >> "\$GITHUB_OUTPUT"\n([\s\S]*?readyStored[\s\S]*?)\n\s*NODE/);
   assert.ok(match, 'missing database content detection script');
-  return match[1];
-}
-
-function extractTelegramSyncSummaryScript(workflow) {
-  const match = workflow.match(/node <<'NODE' >> "\$GITHUB_STEP_SUMMARY"\n([\s\S]*?)\n\s*NODE/);
-  assert.ok(match, 'missing Telegram sync summary script');
-  return match[1];
-}
-
-function extractNodeHereDocScript(runScript) {
-  const match = runScript.match(/node <<'NODE' >> "\$GITHUB_STEP_SUMMARY"\n([\s\S]*?)\n\s*NODE/);
-  assert.ok(match, 'missing Node summary here-doc');
   return match[1];
 }

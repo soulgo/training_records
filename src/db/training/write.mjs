@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 import pg from 'pg';
 import { parseTrainingRecord } from '../../domain/training/training-parser.mjs';
@@ -37,6 +37,19 @@ const SLEEP_HEALTH_FIELDS = [
   'analysisText',
   'suggestionText',
 ];
+const DEFAULT_DB_SLOW_QUERY_MS = 1000;
+const EMPTY_ROW_COUNTS = {
+  ingestBatch: 0,
+  ingestMessage: 0,
+  ingestRecognition: 0,
+  aiCallLog: 0,
+  coreTrainingDay: 0,
+  coreMeasurement: 0,
+  coreActivity: 0,
+  coreMeal: 0,
+  coreSleep: 0,
+  coreThought: 0,
+};
 
 export async function persistNormalizedBatch(options) {
   const config = resolveTrainingCoreConfig(options.env);
@@ -67,22 +80,44 @@ export async function persistNormalizedBatch(options) {
   const client = createClient(config);
   const processedAt = options.processedAt ?? new Date();
   let transactionStarted = false;
+  const transactionId = createTransactionId();
+  const rowCounts = { ...EMPTY_ROW_COUNTS };
+  const slowQueries = [];
+  const startedAt = nowMs();
+  const slowQueryThresholdMs = parseNonNegativeInteger(
+    options.env?.TRAINING_DB_SLOW_QUERY_MS,
+    DEFAULT_DB_SLOW_QUERY_MS,
+  );
+  const observedClient = createObservedClient(client, {
+    rowCounts,
+    slowQueries,
+    thresholdMs: slowQueryThresholdMs,
+  });
 
   try {
     await client.connect();
-    await ensureCoreSchema(client);
-    await client.query('BEGIN');
+    await ensureCoreSchema(observedClient);
+    await observedClient.query('BEGIN');
     transactionStarted = true;
 
-    const telegramBatchRepository = new PostgresTelegramBatchRepository(client);
+    const telegramBatchRepository = new PostgresTelegramBatchRepository(observedClient);
     const batchUpsertResult = await telegramBatchRepository.upsertBatch(batch, payloadHash, processedAt);
     if (batchUpsertResult?.rowCount === 0) {
-      await client.query('ROLLBACK');
+      await observedClient.query('ROLLBACK');
       transactionStarted = false;
-      return {
+      return withPersistenceSummary({
         status: 'unchanged',
         batchId: batch.batchId,
-      };
+        reason: 'payload_hash_unchanged',
+      }, {
+        transactionId,
+        sourceChannel,
+        rowCounts,
+        durationMs: elapsedMs(startedAt),
+        slowQueries,
+        pendingStatus: null,
+        rollbackStatus: 'not_needed',
+      });
     }
 
     await telegramBatchRepository.upsertMessages(batch, processedAt);
@@ -90,19 +125,19 @@ export async function persistNormalizedBatch(options) {
 
     let thoughtMirrorResult = null;
     if (isThoughtBatchKind(batch.kind) && batch.status === 'ready') {
-      thoughtMirrorResult = await new PostgresThoughtRepository(client).persistMirror(batch, processedAt);
+      thoughtMirrorResult = await new PostgresThoughtRepository(observedClient).persistMirror(batch, processedAt);
     } else if (isTelegramImageBatch(batch) && batch.status === 'ready' && batch.archivedDate) {
-      await persistTelegramImageBatchIncremental(client, batch, processedAt, { sourceChannel });
+      await persistTelegramImageBatchIncremental(observedClient, batch, processedAt, { sourceChannel });
     } else if (batch.kind !== 'image' && batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
-      const existingDay = await readCoreDay(client, batch.archivedDate);
+      const existingDay = await readCoreDay(observedClient, batch.archivedDate);
       const mergedDay = mergeBatchIntoDay(existingDay, batch);
-      await replaceCoreDay(client, mergedDay, batch.batchId, processedAt, {
+      await replaceCoreDay(observedClient, mergedDay, batch.batchId, processedAt, {
         sourceHash: payloadHash,
         writeArchiveSleep: isTelegramImageBatch(batch) ? false : undefined,
       });
     }
 
-    await client.query('COMMIT');
+    await observedClient.query('COMMIT');
     transactionStarted = false;
 
     try {
@@ -115,15 +150,23 @@ export async function persistNormalizedBatch(options) {
     }
 
     if (thoughtMirrorResult?.status === 'not_found') {
-      return {
+      return withPersistenceSummary({
         status: 'not_found',
         batchId: batch.batchId,
         messageId: thoughtMirrorResult.messageId ?? null,
         archivedDate: batch.archivedDate ?? null,
-      };
+      }, {
+        transactionId,
+        sourceChannel,
+        rowCounts,
+        durationMs: elapsedMs(startedAt),
+        slowQueries,
+        pendingStatus: null,
+        rollbackStatus: null,
+      });
     }
 
-    return {
+    return withPersistenceSummary({
       status: 'stored',
       batchId: batch.batchId,
       ...(thoughtMirrorResult
@@ -133,22 +176,180 @@ export async function persistNormalizedBatch(options) {
           }
         : {}),
       archivedDate: batch.archivedDate ?? null,
-    };
+    }, {
+      transactionId,
+      sourceChannel,
+      rowCounts,
+      durationMs: elapsedMs(startedAt),
+      slowQueries,
+      pendingStatus: null,
+      rollbackStatus: null,
+    });
   } catch (error) {
+    let rollbackStatus = transactionStarted ? 'not_attempted' : 'not_started';
     if (transactionStarted) {
       try {
-        await client.query('ROLLBACK');
+        await observedClient.query('ROLLBACK');
+        rollbackStatus = 'succeeded';
       } catch (rollbackError) {
+        rollbackStatus = 'failed';
         const message = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
         process.stderr.write(
           `[training-db] rollback failed after persistNormalizedBatch error for ${batch.batchId}: ${message}\n`,
         );
       }
     }
+    attachPersistenceResult(error, {
+      status: 'failed',
+      batchId: batch.batchId,
+      transactionId,
+      sourceChannel,
+      rowCounts,
+      durationMs: elapsedMs(startedAt),
+      slowQueries,
+      pendingStatus: null,
+      rollbackStatus,
+    });
     throw error;
   } finally {
     await client.end();
   }
+}
+
+function createTransactionId() {
+  return `dbtx_${randomBytes(8).toString('hex')}`;
+}
+
+function createObservedClient(client, { rowCounts, slowQueries, thresholdMs }) {
+  return {
+    async query(sql, params) {
+      const startedAt = nowMs();
+      try {
+        const result = await client.query(sql, params);
+        observeQuery({ sql, result, startedAt, rowCounts, slowQueries, thresholdMs });
+        return result;
+      } catch (error) {
+        observeQuery({ sql, result: null, startedAt, rowCounts, slowQueries, thresholdMs });
+        throw error;
+      }
+    },
+  };
+}
+
+function observeQuery({ sql, result, startedAt, rowCounts, slowQueries, thresholdMs }) {
+  const durationMs = elapsedMs(startedAt);
+  const target = classifyDatabaseQuery(sql);
+  if (target.rowCountKey && Number.isFinite(result?.rowCount)) {
+    rowCounts[target.rowCountKey] = (rowCounts[target.rowCountKey] ?? 0) + Math.max(0, Math.round(result.rowCount));
+  }
+  if (durationMs >= thresholdMs) {
+    slowQueries.push({
+      operation: target.operation,
+      table: target.table,
+      durationMs,
+      thresholdMs,
+    });
+  }
+}
+
+function classifyDatabaseQuery(sql) {
+  const normalized = String(sql ?? '').replace(/\s+/gu, ' ').trim().toLowerCase();
+  if (/ingest\.telegram_batch/u.test(normalized)) {
+    return { operation: 'persist.batch', table: 'ingest.telegram_batch', rowCountKey: 'ingestBatch' };
+  }
+  if (/ingest\.telegram_message/u.test(normalized)) {
+    return { operation: 'persist.message', table: 'ingest.telegram_message', rowCountKey: 'ingestMessage' };
+  }
+  if (/ingest\.telegram_recognition/u.test(normalized)) {
+    return { operation: 'persist.recognition', table: 'ingest.telegram_recognition', rowCountKey: 'ingestRecognition' };
+  }
+  if (/ingest\.ai_call_log/u.test(normalized)) {
+    return { operation: 'persist.ai_call_log', table: 'ingest.ai_call_log', rowCountKey: 'aiCallLog' };
+  }
+  if (/core\.training_day/u.test(normalized)) {
+    return { operation: 'persist.core_training_day', table: 'core.training_day', rowCountKey: 'coreTrainingDay' };
+  }
+  if (/core\.measurement/u.test(normalized)) {
+    return { operation: 'persist.core_measurement', table: 'core.measurement', rowCountKey: 'coreMeasurement' };
+  }
+  if (/core\.activity/u.test(normalized)) {
+    return { operation: 'persist.core_activity', table: 'core.activity', rowCountKey: 'coreActivity' };
+  }
+  if (/core\.meal/u.test(normalized)) {
+    return { operation: 'persist.core_meal', table: 'core.meal', rowCountKey: 'coreMeal' };
+  }
+  if (/core\.sleep/u.test(normalized)) {
+    return { operation: 'persist.core_sleep', table: 'core.sleep', rowCountKey: 'coreSleep' };
+  }
+  if (/core\.thought/u.test(normalized)) {
+    return { operation: 'persist.core_thought', table: 'core.thought', rowCountKey: 'coreThought' };
+  }
+  return { operation: 'database.query', table: 'unknown', rowCountKey: null };
+}
+
+function withPersistenceSummary(result, summary) {
+  const persistenceResult = compactObject({
+    status: result.status,
+    batchId: result.batchId,
+    archivedDate: result.archivedDate,
+    reason: result.reason,
+    transactionId: summary.transactionId,
+    sourceChannel: summary.sourceChannel,
+    rowCounts: { ...summary.rowCounts },
+    durationMs: summary.durationMs,
+    slowQueries: [...summary.slowQueries],
+    pendingStatus: summary.pendingStatus,
+    rollbackStatus: summary.rollbackStatus,
+  });
+  return {
+    ...result,
+    transactionId: summary.transactionId,
+    sourceChannel: summary.sourceChannel,
+    rowCounts: { ...summary.rowCounts },
+    durationMs: summary.durationMs,
+    slowQueries: [...summary.slowQueries],
+    persistenceResult,
+  };
+}
+
+function attachPersistenceResult(error, summary) {
+  if (!error || typeof error !== 'object') {
+    return;
+  }
+  Object.defineProperty(error, 'persistenceResult', {
+    configurable: true,
+    enumerable: false,
+    value: {
+      status: summary.status,
+      batchId: summary.batchId,
+      transactionId: summary.transactionId,
+      sourceChannel: summary.sourceChannel,
+      rowCounts: { ...summary.rowCounts },
+      durationMs: summary.durationMs,
+      slowQueries: [...summary.slowQueries],
+      pendingStatus: summary.pendingStatus,
+      rollbackStatus: summary.rollbackStatus,
+    },
+  });
+}
+
+function compactObject(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entryValue]) => entryValue !== undefined),
+  );
+}
+
+function parseNonNegativeInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback;
+}
+
+function elapsedMs(startedAt) {
+  return Math.max(0, Math.round(nowMs() - startedAt));
+}
+
+function nowMs() {
+  return Number(globalThis.performance?.now?.() ?? Date.now());
 }
 
 export async function persistTrainingSnapshotToCore(options) {
