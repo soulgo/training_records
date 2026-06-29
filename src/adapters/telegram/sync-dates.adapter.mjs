@@ -143,36 +143,61 @@ export function resolveDetectedDate(detectedDates) {
   return null;
 }
 
-export function resolveSleepArchiveDate(sleep, detectedDate, message) {
+export function resolveSleepArchiveDate(sleep, detectedDate, message, options = {}) {
   const messageYear = dateFromUnix(message?.dateUnix).year;
-  const wakeTime = String(sleep?.wakeTime ?? '').trim();
 
-  const wakeDate = extractDateFromText(wakeTime, {
-    allowMonthDay: true,
-    messageYear,
-  });
+  const bedtimeDate = extractSleepTimeDate(sleep?.bedtime, messageYear);
+  if (bedtimeDate) {
+    return bedtimeDate;
+  }
+
+  const wakeDate = extractSleepTimeDate(sleep?.wakeTime, messageYear);
   if (wakeDate) {
     return shiftDateByDays(wakeDate, -1);
   }
 
-  const slashMonthDay = wakeTime.match(/(\d{1,2})\/(\d{1,2})/);
-  if (slashMonthDay && Number.isInteger(messageYear)) {
-    return shiftDateByDays(
-      normalizeDateParts({
-        year: messageYear,
-        month: Number(slashMonthDay[1]),
-        day: Number(slashMonthDay[2]),
-        messageYear,
-      }),
-      -1,
-    );
+  if (detectedDate && dateEvidenceUsesSleepStartDate(options.dateEvidence)) {
+    return detectedDate;
   }
-
   if (detectedDate) {
     return shiftDateByDays(detectedDate, -1);
   }
 
   return null;
+}
+
+function extractSleepTimeDate(value, messageYear) {
+  const text = String(value ?? '').trim();
+  if (!text) {
+    return null;
+  }
+
+  const date = extractDateFromText(text, {
+    allowMonthDay: true,
+    messageYear,
+  });
+  if (date) {
+    return date;
+  }
+
+  const slashMonthDay = text.match(/(?:^|[^\d])(\d{1,2})\/(\d{1,2})(?=$|[^\d])/);
+  if (!slashMonthDay || !Number.isInteger(messageYear)) {
+    return null;
+  }
+  return normalizeDateParts({
+    year: messageYear,
+    month: Number(slashMonthDay[1]),
+    day: Number(slashMonthDay[2]),
+    messageYear,
+  });
+}
+
+function dateEvidenceUsesSleepStartDate(dateEvidence) {
+  const text = String(dateEvidence ?? '');
+  if (!text.trim()) {
+    return false;
+  }
+  return /(?:sleep|睡眠).*(?:start|bedtime|入睡|开始)|(?:start|bedtime|入睡).*(?:date|日期)|using visible sleep start date/i.test(text);
 }
 
 export function shiftDateByDays(dateString, offsetDays) {

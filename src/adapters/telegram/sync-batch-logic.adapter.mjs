@@ -289,7 +289,9 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     }
 
     const archiveDate = recognition.imageType === 'sleep'
-      ? resolveSleepArchiveDate(recognition.records?.sleep, normalizedDetectedDate, message)
+      ? resolveSleepArchiveDate(recognition.records?.sleep, normalizedDetectedDate, message, {
+          dateEvidence: recognition.dateEvidence,
+        })
       : normalizedDetectedDate;
 
     dateSources.push({

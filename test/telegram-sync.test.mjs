@@ -270,6 +270,69 @@ test('sleep screenshots are archived by bedtime date and keep Huawei sleep healt
   assert.equal(analyzed.sleep.records[0].analysisText, '睡眠质量良好。睡眠时长6小时51分钟，在正常范围内。');
 });
 
+test('sleep screenshots keep detected bedtime date when time fields only contain clock times', async () => {
+  const lib = await importTelegramSyncLib();
+
+  assert.ok(lib?.groupTelegramUpdates, 'groupTelegramUpdates export missing');
+  assert.ok(lib?.analyzeTelegramBatch, 'analyzeTelegramBatch export missing');
+
+  const [batch] = lib.groupTelegramUpdates([
+    telegramUpdate(181, {
+      messageId: 81,
+      date: Math.floor(new Date('2026-06-30T01:30:00Z').getTime() / 1000),
+      telegram: {
+        photo: [telegramPhoto({ fileId: 'sleep-file-jun-30', fileUniqueId: 'sleep-uniq-jun-30' })],
+      },
+    }),
+  ]);
+  const analyzed = lib.analyzeTelegramBatch(batch, [
+    {
+      messageId: 81,
+      imageType: 'sleep',
+      detectedDate: '2026-06-29',
+      dateEvidence: 'image shows 6/30 and sleep timeline start 6/29 23:48 with wake 6/30 06:34; using visible sleep start date',
+      confidence: 0.98,
+      warnings: [],
+      records: {
+        sleep: {
+          sleepType: '夜间睡眠',
+          bedtime: '23:48',
+          wakeTime: '06:34',
+          nightSleepMinutes: 267,
+          totalSleepMinutes: 267,
+          napMinutes: null,
+          deepSleepMinutes: 65,
+          lightSleepMinutes: 142,
+          remSleepMinutes: 60,
+          awakeMinutes: null,
+          sleepStageText: '深睡、浅睡、快速眼动',
+          sleepStageDetail: ['深睡 65分钟', '浅睡 142分钟', '快速眼动 60分钟'],
+          sleepScore: 74,
+          sleepScorePercentile: null,
+          deepSleepRatioPct: null,
+          lightSleepRatioPct: null,
+          remSleepRatioPct: null,
+          deepSleepContinuityScore: null,
+          wakeCount: null,
+          breathingQualityScore: null,
+          averageHeartRateBpm: null,
+          hrvMs: null,
+          averageSpo2Pct: null,
+          averageRespiratoryRate: null,
+          analysisText: null,
+          suggestionText: null,
+        },
+      },
+    },
+  ]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-06-29');
+  assert.equal(analyzed.dateSources[0].source, 'image');
+  assert.equal(analyzed.dateStages.sleep_bedtime_shift.status, 'skipped');
+  assert.equal(analyzed.sleep.totalSleepMinutes, 267);
+});
+
 test('sleep screenshots derive total sleep from night sleep when recognition omits total duration', async () => {
   const lib = await importTelegramSyncLib();
 

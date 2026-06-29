@@ -28,6 +28,7 @@
 
 ### Fixed
 
+- 修复 Telegram 睡眠截图归档日期被多减一天的问题：当 AI 已根据睡眠时间轴识别出入睡日期，但 `bedtime` / `wakeTime` 只包含时分时，程序不再把该日期当作醒来日期再次前移，避免睡眠数据写入前一天、导致目标日页面显示为空。
 - 修复 docs 体系重构后 CI 文档契约测试仍读取 `docs/系统核心.md`、`docs/系统配置.md` 和缺失的 `docs/README.md` 导致 `test:fast` 失败的问题；新增当前 `docs/README.md`，同步根 README 链接、维护/排障文档和相关测试到新的分层 docs 入口。
 - 修复日志泄露修复引入的 Telegram/飞书队列回归：`workflow_dispatch` 不能通过 `$GITHUB_ENV` 覆盖受保护的 `GITHUB_EVENT_PATH`，导致同步 step 读回原始 workflow 事件、实际消费 0 条 webhook update；现在 workflow 通过 `SYNC_DISPATCH_EVENT_PATH` 传递 runner 临时事件文件路径，保留 payload 不落日志的同时恢复 Telegram 图片随想处理、结果通知和页面部署触发。
 - 增强 Telegram/飞书同步的 COS 上传失败诊断：同步 workflow 现在会在失败时提取高信号日志摘要并回传到 Telegram 失败通知；COS SDK 普通对象错误会输出 `Code`、`statusCode`、`RequestId` 等字段，不再显示 `[object Object]`，便于定位 CAM 权限、bucket/region 或签名问题。
