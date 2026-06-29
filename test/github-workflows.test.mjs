@@ -9,6 +9,8 @@ import { load as parseYaml } from 'js-yaml';
 
 const rootDir = new URL('../', import.meta.url);
 
+const readRepoFile = (relativePath) => readFile(new URL(relativePath, rootDir), 'utf8');
+
 test('shared site build action centralizes Hexo build cache and deploy steps', async () => {
   const action = await readWorkflow('.github/actions/site-build/action.yml');
 
@@ -1105,10 +1107,10 @@ test('markdown backup workflow exports database snapshots behind GitHub variable
   assert.match(workflow, /backup_alert=changed_without_commit/);
   assert.match(workflow, /::warning title=Markdown backup changed without commit::/);
   assert.match(workflow, /Conclusion:/);
-  const maintenanceGuide = await readFile(
-    new URL('../docs/系统核心.md#日常维护', import.meta.url),
-    'utf8',
-  );
+  const maintenanceGuide = [
+    await readRepoFile('docs/02_系统核心逻辑/Action日志与失败补偿.md'),
+    await readRepoFile('docs/04_问题与排查/Action日志.md'),
+  ].join('\n\n');
   assert.match(maintenanceGuide, /changed_without_commit/);
   assert.match(maintenanceGuide, /workflow_failed_before_alert_evaluation/);
   assert.match(workflow, /git commit -m "chore: backup markdown from database"/);

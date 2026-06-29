@@ -9,6 +9,34 @@ import {
   runTrainingMaintenance,
 } from '../tools/training-maintenance.mjs';
 
+const readRepoFile = (relativePath) => readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
+
+const readMaintenanceGuide = async () => [
+  await readRepoFile('docs/02_系统核心逻辑/系统总览.md'),
+  await readRepoFile('docs/02_系统核心逻辑/Action日志与失败补偿.md'),
+  await readRepoFile('docs/02_系统核心逻辑/数据入库流程.md'),
+  await readRepoFile('docs/04_问题与排查/Action日志.md'),
+].join('\n\n');
+
+const readInterfaceManual = async () => [
+  await readRepoFile('docs/02_系统核心逻辑/README.md'),
+  await readRepoFile('docs/02_系统核心逻辑/Action日志与失败补偿.md'),
+  await readRepoFile('docs/02_系统核心逻辑/时间归档逻辑.md'),
+].join('\n\n');
+
+const readWorkflowGuide = async () => [
+  await readRepoFile('docs/01_系统配置/README.md'),
+  await readRepoFile('docs/01_系统配置/dev.md'),
+  await readRepoFile('docs/01_系统配置/main.md'),
+  await readRepoFile('docs/02_系统核心逻辑/Action日志与失败补偿.md'),
+].join('\n\n');
+
+const readTroubleshootingGuide = async () => [
+  await readRepoFile('docs/04_问题与排查/Action日志.md'),
+  await readRepoFile('docs/04_问题与排查/Telegram.md'),
+  await readRepoFile('docs/04_问题与排查/飞书.md'),
+].join('\n\n');
+
 test('training maintenance inspect is read-only and reports database pending queue counts', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-maintenance-inspect-'));
   const runtimeDir = path.join(tempRoot, 'runtime');
@@ -577,10 +605,7 @@ test('current maintenance docs and scripts document inspect sync and migrate com
   const packageJson = JSON.parse(
     await readFile(new URL('../package.json', import.meta.url), 'utf8'),
   );
-  const maintenanceGuide = await readFile(
-    new URL('../docs/系统核心.md#日常维护', import.meta.url),
-    'utf8',
-  );
+  const maintenanceGuide = await readMaintenanceGuide();
 
   assert.equal(packageJson.scripts['maintenance:inspect'], 'node tools/training-maintenance.mjs inspect');
   assert.equal(packageJson.scripts['maintenance:sync'], 'node tools/training-maintenance.mjs sync');
@@ -606,10 +631,7 @@ test('current maintenance docs and scripts document inspect sync and migrate com
 });
 
 test('maintenance guide includes onboarding exercise prompts for production handoff', async () => {
-  const maintenanceGuide = await readFile(
-    new URL('../docs/系统核心.md#日常维护', import.meta.url),
-    'utf8',
-  );
+  const maintenanceGuide = await readMaintenanceGuide();
 
   assert.match(maintenanceGuide, /接手演练题卡/);
   assert.match(maintenanceGuide, /Telegram\/飞书 -> Worker -> Queue -> Action -> AI -> DB -> Pages/);
@@ -630,18 +652,9 @@ test('current long-term docs cover maintenance phases and CI/test controls', asy
   const packageJson = JSON.parse(
     await readFile(new URL('../package.json', import.meta.url), 'utf8'),
   );
-  const interfaceManual = await readFile(
-    new URL('../docs/系统核心.md#内部接口索引', import.meta.url),
-    'utf8',
-  );
-  const maintenanceGuide = await readFile(
-    new URL('../docs/系统核心.md#日常维护', import.meta.url),
-    'utf8',
-  );
-  const workflowGuide = await readFile(
-    new URL('../docs/系统配置.md#github-actions-workflow-清单', import.meta.url),
-    'utf8',
-  );
+  const interfaceManual = await readInterfaceManual();
+  const maintenanceGuide = await readMaintenanceGuide();
+  const workflowGuide = await readWorkflowGuide();
 
   assert.match(packageJson.scripts['backfill:core'], /--phase archive/);
   assert.match(packageJson.scripts['import:markdown'], /--phase markdown/);
@@ -663,14 +676,8 @@ test('current long-term docs cover maintenance phases and CI/test controls', asy
 });
 
 test('current long-term docs cover GitHub Actions queue failure timeout and rerun recovery', async () => {
-  const maintenanceGuide = await readFile(
-    new URL('../docs/系统核心.md#日常维护', import.meta.url),
-    'utf8',
-  );
-  const troubleshootingGuide = await readFile(
-    new URL('../docs/系统核心.md#故障排查', import.meta.url),
-    'utf8',
-  );
+  const maintenanceGuide = await readMaintenanceGuide();
+  const troubleshootingGuide = await readTroubleshootingGuide();
 
   for (const documentText of [maintenanceGuide, troubleshootingGuide]) {
     assert.match(documentText, /queue_task_id/);
@@ -688,15 +695,14 @@ test('current docs index points maintainers to long-term operational entries ins
     new URL('../docs/README.md', import.meta.url),
     'utf8',
   );
-  const maintenanceGuide = await readFile(
-    new URL('../docs/系统核心.md#日常维护', import.meta.url),
-    'utf8',
-  );
+  const maintenanceGuide = await readMaintenanceGuide();
 
-  assert.match(docsIndex, /系统核心\.md/);
-  assert.match(docsIndex, /系统配置\.md/);
-  assert.match(docsIndex, /命令接口参考/);
+  assert.match(docsIndex, /02_系统核心逻辑\/README\.md/);
+  assert.match(docsIndex, /01_系统配置\/README\.md/);
+  assert.match(docsIndex, /维护命令/);
   assert.match(docsIndex, /消息链路/);
+  assert.doesNotMatch(docsIndex, /系统核心\.md/);
+  assert.doesNotMatch(docsIndex, /系统配置\.md/);
   assert.doesNotMatch(docsIndex, /部署与同步优化_v8/);
   assert.doesNotMatch(docsIndex, /docs\/归档|\[归档\]|\(归档\/\)|归档\//);
   assert.doesNotMatch(maintenanceGuide, /部署与同步优化_v8/);

@@ -139,7 +139,7 @@ npm run server
 | `MARKDOWN_BACKUP_ENABLED` | 是否启用 DB -> Markdown 定时备份 |
 | `MARKDOWN_BACKUP_FREQUENCY` | Markdown 备份频率，`weekly` 或 `daily` |
 
-完整配置见 [系统配置](docs/系统配置.md) 和 [系统核心 > 运维与排障 > 日常维护](docs/系统核心.md#日常维护)。
+完整配置见 [系统配置](docs/01_系统配置/README.md) 和 [Action 日志与失败补偿 > 日常维护](docs/02_系统核心逻辑/Action日志与失败补偿.md#日常维护)。
 
 ## 训练记录流程
 
@@ -160,7 +160,7 @@ npm run server
 6. PostgreSQL 失败时写 pending 队列。
 7. 内容变化后 workflow 只提交文件；站点构建部署由 push 或 DB-only 异步 deploy workflow 完成。
 
-详细规则见 [系统核心 > 核心业务能力](docs/系统核心.md#三核心业务能力)、[系统核心 > 消息链路](docs/系统核心.md#四消息链路) 和 [系统核心 > 数据生命周期](docs/系统核心.md#数据生命周期)。
+详细规则见 [系统总览](docs/02_系统核心逻辑/系统总览.md)、[Action 日志与失败补偿](docs/02_系统核心逻辑/Action日志与失败补偿.md) 和 [数据入库流程](docs/02_系统核心逻辑/数据入库流程.md)。
 
 ## GitHub Pages 部署
 
@@ -223,10 +223,11 @@ PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`
 ## 文档导航
 
 - [文档总览](docs/README.md)
-- [系统核心](docs/系统核心.md)：架构、业务、消息链路、AI 识别、数据模型、运维排障、开发指南、命令接口参考
-- [系统配置](docs/系统配置.md)：参数总表 + 平台配置指南（GitHub / Cloudflare / Telegram / 飞书 / COS / PostgreSQL）
-- [重构历史](docs/重构历史/README.md)：以往重构优化历史文档索引
-- [后续规划_未实现](docs/后续规划_未实现/README.md)：未实现功能与后续计划索引
+- [系统核心逻辑](docs/02_系统核心逻辑/README.md)：架构、消息链路、AI 识别、数据入库、展示读取、Action 日志与失败补偿
+- [系统配置](docs/01_系统配置/README.md)：dev/main 配置差异、GitHub Actions、Wrangler、Secret/Variable 读取位置
+- [问题与排查](docs/04_问题与排查/README.md)：PostgreSQL、OSS、Telegram、飞书、AI、Action 日志、部署和资源问题
+- [日常规则](docs/05_日常规则/README.md)：dev/main 合并、后续规划落地和文档同步规则
+- [历史重构记录](docs/03_历史重构记录/README.md)：旧文档入口和历史方案归档
 
 ## FAQ
 
