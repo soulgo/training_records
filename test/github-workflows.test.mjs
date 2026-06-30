@@ -75,8 +75,18 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /- name: Build and deploy site/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
-  assert.match(workflow, /sync_db_mode:\s*'auto'/);
-  assert.match(workflow, /run_tests:\s*'true'/);
+  assert.match(workflow, /sync_db_mode:/);
+  assert.match(workflow, /sync_db_mode:[\s\S]*?default:\s*'auto'/);
+  assert.match(workflow, /run_tests:/);
+  assert.match(workflow, /run_tests:[\s\S]*?default:\s*'true'/);
+  assert.match(
+    workflow,
+    /sync_db_mode:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch' && inputs\.sync_db_mode \|\| 'auto'\s*\}\}/,
+  );
+  assert.match(
+    workflow,
+    /run_tests:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch' && inputs\.run_tests \|\| 'true'\s*\}\}/,
+  );
   assert.match(workflow, /deploy:\s*'true'/);
   assert.match(workflow, /strict_database_snapshot:/);
   assert.match(workflow, /strict_database_snapshot:[\s\S]*?default:\s*'true'/);
@@ -221,8 +231,18 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.doesNotMatch(workflow, /ref:\s*dev/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
-  assert.match(workflow, /sync_db_mode:\s*'auto'/);
-  assert.match(workflow, /run_tests:\s*'true'/);
+  assert.match(workflow, /sync_db_mode:/);
+  assert.match(workflow, /sync_db_mode:[\s\S]*?default:\s*'auto'/);
+  assert.match(workflow, /run_tests:/);
+  assert.match(workflow, /run_tests:[\s\S]*?default:\s*'true'/);
+  assert.match(
+    workflow,
+    /sync_db_mode:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch' && inputs\.sync_db_mode \|\| 'auto'\s*\}\}/,
+  );
+  assert.match(
+    workflow,
+    /run_tests:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch' && inputs\.run_tests \|\| 'true'\s*\}\}/,
+  );
   assert.match(workflow, /deploy:\s*'false'/);
   assert.match(workflow, /rm -f public\/CNAME/);
   assert.doesNotMatch(workflow, /cloudflare\/wrangler-action@v3/);
@@ -432,6 +452,8 @@ test('main sync workflow notifies after sync and waits for site deploy completio
   assert.match(workflow, /target_thought_module/);
   assert.match(workflow, /target_thought_path/);
   assert.match(workflow, /target_thought_expectation/);
+  assert.match(workflow, /sync_db_mode: 'never'/);
+  assert.match(workflow, /run_tests: 'false'/);
   const deployStep = workflow.slice(
     workflow.indexOf('- name: Trigger and wait for site deploy'),
     workflow.indexOf('- name: Notify Telegram sync failure'),
@@ -1215,6 +1237,8 @@ test('telegram-sync dev workflow waits for the dev deploy workflow', async () =>
   assert.match(workflow, /dispatch_body="\$\(node <<'NODE'/);
   assert.match(workflow, /process\.stdout\.write\(JSON\.stringify\(\{ ref: 'dev', inputs \}\)\)/);
   assert.match(workflow, /target_thought_expectation/);
+  assert.match(workflow, /sync_db_mode: 'never'/);
+  assert.match(workflow, /run_tests: 'false'/);
   assert.match(workflow, /- name: Trigger and wait for async dev site deploy\n\s+id: deploy/);
   assert.match(workflow, /-d "\$dispatch_body"/);
   const deployStep = workflow.slice(

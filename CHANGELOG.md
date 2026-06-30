@@ -30,6 +30,7 @@
 - `export:markdown` 默认 stdout 改为 compact summary，完整导出 payload 仅允许本地显式 `--debug-json` 查看。
 - 下线业务路径默认运行时 DDL：`persistNormalizedBatch()` 与 `export:markdown` 默认不再执行 schema preflight，只有显式开启 `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED=true` 时才保留过渡期 preflight。
 - 拆分数据库读取配置：快照读取、Markdown 导出、`maintenance:inspect`、单批次审计、pending summary、AI monitoring 和 `check:data-consistency` 优先使用 `TRAINING_DB_READONLY_URL`，未配置时再回退 `TRAINING_DB_URL`；main/dev workflow 同步注入只读连接串 Secret。
+- 优化 Telegram/飞书 webhook 同步后的 Pages 刷新耗时：`sync.yml` / `sync-dev.yml` 自动触发部署时传入 `sync_db_mode=never` 与 `run_tests=false`，跳过已由同步链路完成后的维护型全量 DB 修复和部署前测试；手动部署与 push 部署仍默认保留 `sync_db_mode=auto` 和 `run_tests=true` 完整校验。
 
 ### Security
 
