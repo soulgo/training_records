@@ -559,6 +559,7 @@ test('PostgresThoughtRepository locates migrated thought targets for edit delete
   const writes = calls.filter(([sql]) => /insert into core\.thought/i.test(sql));
   assert.equal(writes.length, 3);
   assert.equal(writes[0][1][0], 501);
+  assert.equal(writes[0][1][10], null);
   assert.equal(writes[0][1][13], '42');
   assert.equal(writes[0][1][14], '501');
   assert.match(writes[1][0], /'deleted'/);
@@ -566,6 +567,7 @@ test('PostgresThoughtRepository locates migrated thought targets for edit delete
   assert.equal(writes[1][1][12], 'oc_chat_legacy');
   assert.equal(writes[1][1][13], 'om_legacy_proxy');
   assert.equal(writes[2][1][0], 338182848231025);
+  assert.equal(writes[2][1][10], null);
   assert.equal(writes[2][1][13], 'oc_chat_new');
   assert.equal(writes[2][1][14], 'om_source_thought');
 });
