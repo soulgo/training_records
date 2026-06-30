@@ -88,7 +88,7 @@ Action 日志现在由 workflow、同步结果文件、统一 summary 脚本和�
 
 | 命令 | 说明 |
 | --- | --- |
-| `npm run maintenance:inspect` | 只读巡检 pending 队列、归档失败和 AI monitoring 来源。 |
+| `npm run maintenance:inspect` | 只读巡检 pending 队列、归档失败、AI monitoring 来源和 DB 账号权限摘要。 |
 | `npm run maintenance:inspect -- --batch-id <batchId>` | 只读审计单个批次的识别 JSON、core 目标和 `recoveryTargetDays`。 |
 | `npm run maintenance:sync` | 显式运行维护同步入口。 |
 | `npm run maintenance:migrate` | 迁移入口，写入前必须 dry-run 或显式 confirm。 |
@@ -102,7 +102,9 @@ Action 日志现在由 workflow、同步结果文件、统一 summary 脚本和�
 
 安全数据库修复：`sync:db` 内部按维护阶段执行，可显式使用 `--phase archive`、`--phase ingest`、`--phase markdown`、`--phase thoughts` 或 `--phase all`。Markdown 导入属于 legacy 修复阶段，生产写入前先 dry-run 并核对 affected days。
 
-pending 队列巡检重点看 `pendingDatabaseOldestAgeMinutes`、`pendingDatabaseMaxAttemptCount`、`pendingDatabaseAlertLevel` 和 `pendingDatabaseAlertReasons`。AI monitoring 重点看 `aiMonitoringFallbackRate`、`aiMonitoringSchemaFailureCount`、`aiMonitoringAvgRecognitionLatencyMs`、`aiMonitoringTotalCostUsd`，来源是 `ingest.ai_call_log` 和 `ingest.telegram_recognition.recognition_json.aiAttemptKind`。
+pending 队列巡检重点看 `pendingDatabaseOldestAgeMinutes`、`pendingDatabaseMaxAttemptCount`、`pendingDatabaseAlertLevel` 和 `pendingDatabaseAlertReasons`。AI monitoring 重点看 `aiMonitoringFallbackRate`、`aiMonitoringSchemaFailureCount`、`aiMonitoringAvgRecognitionLatencyMs`、`aiMonitoringTotalCostUsd`，来源是 `ingest.ai_call_log` 和 `ingest.telegram_recognition.recognition_json.aiAttemptKind`。DB 权限巡检重点看 `database.permissionAudit.isSuperuser`、`database.permissionAudit.isMigratorLikeUser`、`database.permissionAudit.schemaCreatePrivileges` 和 `database.permissionAudit.dangerousPrivilegeReasons`；这些字段只来自只读权限查询，不会输出 DB URL 或 Secret。
+
+配置 `TRAINING_DB_READONLY_URL` 后，`maintenance:inspect` 的 pending summary、AI monitoring、单批次审计和 DB 权限巡检优先使用只读连接；未配置时才回退 `TRAINING_DB_URL`。
 
 旧 NDJSON pending 只在兼容恢复时使用。需要先运行 `node tools/telegram-sync-fallback.mjs inspect`，确认后才允许 `TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING=true npm run sync:telegram`。重放前备份文件名使用 `telegram-sync-pending.ndjson.backup-<UTC timestamp>`。
 

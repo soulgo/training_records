@@ -16,6 +16,53 @@ test('checkTrainingDataConsistency skips when database is disabled', async () =>
   assert.equal(result.reason, 'disabled');
 });
 
+test('checkTrainingDataConsistency prefers readonly database url when configured', async () => {
+  const observedUrls = [];
+  const queries = [];
+  const result = await checkTrainingDataConsistency({
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_app:secret@example.com:5432/training_records',
+      TRAINING_DB_READONLY_URL: 'postgresql://training_readonly:secret@example.com:5432/training_records',
+    },
+    createClient: (config) => ({
+      async connect() {
+        observedUrls.push(config.url);
+      },
+      async query(sql) {
+        queries.push(sql);
+        assert.doesNotMatch(sql, /\b(insert|update|delete|create|alter|drop)\b/i);
+        if (/core_count/i.test(sql)) {
+          return { rows: [{ core_count: 10, archive_count: 10 }] };
+        }
+        if (/information_schema\.columns/i.test(sql)) {
+          return {
+            rows: [
+              'sleep_total_minutes',
+              'night_sleep_minutes',
+              'nap_minutes',
+              'sleep_start_time',
+              'sleep_end_time',
+              'deep_sleep_minutes',
+              'light_sleep_minutes',
+              'rem_sleep_minutes',
+              'awake_minutes',
+            ].map((column_name) => ({ column_name })),
+          };
+        }
+        return { rows: [{ count: 0 }] };
+      },
+      async end() {},
+    }),
+  });
+
+  assert.equal(result.status, 'ok');
+  assert.deepEqual(observedUrls, [
+    'postgresql://training_readonly:secret@example.com:5432/training_records',
+  ]);
+  assert.ok(queries.length > 0);
+});
+
 test('checkTrainingDataConsistencyClient reports failed row count checks', async () => {
   const queries = [];
   const client = {

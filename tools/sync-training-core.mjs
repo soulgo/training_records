@@ -27,7 +27,7 @@ export async function syncTrainingCore(options = {}) {
         ? await syncTrainingCoreWithInjectedPhases(options, stderr, phase)
         : await syncTrainingCoreDefault(options, stderr, phase);
 
-  if ((phase === 'safe' || phase === 'all' || phase === 'thoughts') && !result.thoughts) {
+  if ((phase === 'all' || phase === 'thoughts') && !result.thoughts) {
     result.thoughts = await runPhase(
       'thoughts',
       options.backfillThoughtsToCore ?? backfillThoughtsToCore,

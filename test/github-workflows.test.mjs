@@ -75,8 +75,18 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /- name: Build and deploy site/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
-  assert.match(workflow, /sync_db_mode:\s*'auto'/);
-  assert.match(workflow, /run_tests:\s*'true'/);
+  assert.match(workflow, /sync_db_mode:/);
+  assert.match(workflow, /sync_db_mode:[\s\S]*?default:\s*'auto'/);
+  assert.match(workflow, /run_tests:/);
+  assert.match(workflow, /run_tests:[\s\S]*?default:\s*'true'/);
+  assert.match(
+    workflow,
+    /sync_db_mode:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch' && inputs\.sync_db_mode \|\| 'auto'\s*\}\}/,
+  );
+  assert.match(
+    workflow,
+    /run_tests:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch' && inputs\.run_tests \|\| 'true'\s*\}\}/,
+  );
   assert.match(workflow, /deploy:\s*'true'/);
   assert.match(workflow, /strict_database_snapshot:/);
   assert.match(workflow, /strict_database_snapshot:[\s\S]*?default:\s*'true'/);
@@ -88,6 +98,7 @@ test('deploy-pages workflow uses the shared site build action', async () => {
     workflow,
     /TRAINING_SNAPSHOT_STRICT_DATABASE:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch' && inputs\.strict_database_snapshot \|\| 'true'\s*\}\}/,
   );
+  assert.match(workflow, /TRAINING_DB_READONLY_URL:\s*\$\{\{\s*secrets\.TRAINING_DB_READONLY_URL\s*\}\}/);
   assert.match(workflow, /TRAINING_BUILD_ARCHIVE_WRITE:\s*false/);
   assert.match(workflow, /CLOUDFLARE_ZONE_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ZONE_ID\s*\}\}/);
   assert.match(workflow, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
@@ -209,6 +220,7 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.match(workflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
   assert.match(workflow, /group:\s*cloudflare-pages-dev/);
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_URL\s*\}\}/);
+  assert.match(workflow, /TRAINING_DB_READONLY_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_READONLY_URL\s*\}\}/);
   assert.match(workflow, /TRAINING_DB_APP_NAME:\s*\$\{\{\s*vars\.DEV_TRAINING_DB_APP_NAME\s*\}\}/);
   assert.match(
     workflow,
@@ -219,8 +231,18 @@ test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pa
   assert.doesNotMatch(workflow, /ref:\s*dev/);
   assert.match(workflow, /uses:\s*\.\/\.github\/actions\/site-build/);
   assert.match(workflow, /run_backfill:\s*'true'/);
-  assert.match(workflow, /sync_db_mode:\s*'auto'/);
-  assert.match(workflow, /run_tests:\s*'true'/);
+  assert.match(workflow, /sync_db_mode:/);
+  assert.match(workflow, /sync_db_mode:[\s\S]*?default:\s*'auto'/);
+  assert.match(workflow, /run_tests:/);
+  assert.match(workflow, /run_tests:[\s\S]*?default:\s*'true'/);
+  assert.match(
+    workflow,
+    /sync_db_mode:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch' && inputs\.sync_db_mode \|\| 'auto'\s*\}\}/,
+  );
+  assert.match(
+    workflow,
+    /run_tests:\s*\$\{\{\s*github\.event_name == 'workflow_dispatch' && inputs\.run_tests \|\| 'true'\s*\}\}/,
+  );
   assert.match(workflow, /deploy:\s*'false'/);
   assert.match(workflow, /rm -f public\/CNAME/);
   assert.doesNotMatch(workflow, /cloudflare\/wrangler-action@v3/);
@@ -430,6 +452,8 @@ test('main sync workflow notifies after sync and waits for site deploy completio
   assert.match(workflow, /target_thought_module/);
   assert.match(workflow, /target_thought_path/);
   assert.match(workflow, /target_thought_expectation/);
+  assert.match(workflow, /sync_db_mode: 'never'/);
+  assert.match(workflow, /run_tests: 'false'/);
   const deployStep = workflow.slice(
     workflow.indexOf('- name: Trigger and wait for site deploy'),
     workflow.indexOf('- name: Notify Telegram sync failure'),
@@ -506,13 +530,17 @@ test('telegram-sync workflows keep dev and main environment sources isolated', a
 
   assert.equal(main.jobs.sync.env.TRAINING_DB_ENABLED, '${{ vars.TRAINING_DB_ENABLED }}');
   assert.equal(main.jobs.sync.env.TRAINING_DB_URL, '${{ secrets.TRAINING_DB_URL }}');
+  assert.equal(main.jobs.sync.env.TRAINING_DB_READONLY_URL, '${{ secrets.TRAINING_DB_READONLY_URL }}');
   assert.equal(main.jobs.sync.env.TRAINING_DB_APP_NAME, '${{ vars.TRAINING_DB_APP_NAME }}');
   assert.notEqual(main.jobs.sync.env.TRAINING_DB_URL, '${{ secrets.DEV_TRAINING_DB_URL }}');
+  assert.notEqual(main.jobs.sync.env.TRAINING_DB_READONLY_URL, '${{ secrets.DEV_TRAINING_DB_READONLY_URL }}');
 
   assert.equal(dev.jobs.sync.env.TRAINING_DB_ENABLED, 'true');
   assert.equal(dev.jobs.sync.env.TRAINING_DB_URL, '${{ secrets.DEV_TRAINING_DB_URL }}');
+  assert.equal(dev.jobs.sync.env.TRAINING_DB_READONLY_URL, '${{ secrets.DEV_TRAINING_DB_READONLY_URL }}');
   assert.equal(dev.jobs.sync.env.TRAINING_DB_APP_NAME, '${{ vars.DEV_TRAINING_DB_APP_NAME }}');
   assert.notEqual(dev.jobs.sync.env.TRAINING_DB_URL, '${{ secrets.TRAINING_DB_URL }}');
+  assert.notEqual(dev.jobs.sync.env.TRAINING_DB_READONLY_URL, '${{ secrets.TRAINING_DB_READONLY_URL }}');
 
   assert.equal(mainSyncEnv.TELEGRAM_BOT_TOKEN, '${{ secrets.TELEGRAM_BOT_TOKEN }}');
   assert.equal(devSyncEnv.TELEGRAM_BOT_TOKEN, '${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}');
@@ -1105,6 +1133,7 @@ test('markdown backup workflow exports database snapshots behind GitHub variable
   assert.match(workflow, /MARKDOWN_BACKUP_BRANCH:\s*\$\{\{\s*vars\.MARKDOWN_BACKUP_BRANCH \|\| 'main'\s*\}\}/);
   assert.match(workflow, /MARKDOWN_BACKUP_COMMIT:\s*\$\{\{\s*vars\.MARKDOWN_BACKUP_COMMIT \|\| 'true'\s*\}\}/);
   assert.match(workflow, /TRAINING_SNAPSHOT_SOURCE:\s*database/);
+  assert.match(workflow, /TRAINING_DB_READONLY_URL:\s*\$\{\{\s*secrets\.TRAINING_DB_READONLY_URL\s*\}\}/);
   assert.match(workflow, /TRAINING_SNAPSHOT_STRICT_DATABASE:\s*'true'/);
   assert.match(workflow, /if \[ "\$enabled" != "true" \]/);
   assert.match(workflow, /if \[ "\$frequency" = "daily" \]/);
@@ -1143,6 +1172,7 @@ test('main sync workflow handles production dispatches and writes main branch', 
   assert.match(workflow, /- name: Checkout main branch\s*\n\s+uses: actions\/checkout@v4\s*\n\s+with:\s*\n\s+ref:\s*main/);
   assert.match(workflow, /permissions:\s*\n\s+contents:\s*write\s*\n\s+actions:\s*write/);
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.TRAINING_DB_URL\s*\}\}/);
+  assert.match(workflow, /TRAINING_DB_READONLY_URL:\s*\$\{\{\s*secrets\.TRAINING_DB_READONLY_URL\s*\}\}/);
   assert.match(workflow, /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.TELEGRAM_BOT_TOKEN\s*\}\}/);
   assert.match(workflow, /FEISHU_APP_ID:\s*\$\{\{\s*secrets\.FEISHU_APP_ID\s*\}\}/);
   assert.match(workflow, /FEISHU_ALLOWED_CHAT_IDS:\s*\$\{\{\s*vars\.FEISHU_ALLOWED_CHAT_IDS\s*\}\}/);
@@ -1173,6 +1203,7 @@ test('telegram-sync dev workflow only handles dev dispatches and writes dev bran
   assert.match(workflow, /- name: Checkout dev branch\s*\n\s+uses: actions\/checkout@v4\s*\n\s+with:\s*\n\s+ref:\s*dev/);
   assert.match(workflow, /permissions:\s*\n\s+contents:\s*write\s*\n\s+actions:\s*write/);
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_URL\s*\}\}/);
+  assert.match(workflow, /TRAINING_DB_READONLY_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_READONLY_URL\s*\}\}/);
   assert.match(workflow, /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.DEV_TELEGRAM_BOT_TOKEN\s*\}\}/);
   assert.match(workflow, /FEISHU_APP_ID:\s*\$\{\{\s*secrets\.DEV_FEISHU_APP_ID \|\| secrets\.FEISHU_APP_ID\s*\}\}/);
   assert.match(workflow, /FEISHU_ALLOWED_CHAT_IDS:\s*\$\{\{\s*vars\.DEV_FEISHU_ALLOWED_CHAT_IDS \|\| vars\.FEISHU_ALLOWED_CHAT_IDS\s*\}\}/);
@@ -1206,6 +1237,8 @@ test('telegram-sync dev workflow waits for the dev deploy workflow', async () =>
   assert.match(workflow, /dispatch_body="\$\(node <<'NODE'/);
   assert.match(workflow, /process\.stdout\.write\(JSON\.stringify\(\{ ref: 'dev', inputs \}\)\)/);
   assert.match(workflow, /target_thought_expectation/);
+  assert.match(workflow, /sync_db_mode: 'never'/);
+  assert.match(workflow, /run_tests: 'false'/);
   assert.match(workflow, /- name: Trigger and wait for async dev site deploy\n\s+id: deploy/);
   assert.match(workflow, /-d "\$dispatch_body"/);
   const deployStep = workflow.slice(

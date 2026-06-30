@@ -92,7 +92,7 @@ test('exportDerivedTrainingMarkdown uses database when no telegram fallback batc
   assert.deepEqual(observedStrictValues, ['true']);
 });
 
-test('exportDerivedTrainingMarkdown runs database schema preflight before strict database export', async () => {
+test('exportDerivedTrainingMarkdown does not run database schema preflight by default', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const calls = [];
   const fakeClient = {
@@ -113,6 +113,62 @@ test('exportDerivedTrainingMarkdown runs database schema preflight before strict
     env: {
       TRAINING_DB_ENABLED: 'true',
       TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    ensureCoreSchema: async (client) => {
+      await client.query('alter table core.training_day add column if not exists sleep_total_minutes integer null');
+    },
+    buildTrainingSnapshot: async () => {
+      calls.push('snapshot');
+      return {
+        generatedAt: '2026-06-12T00:00:00.000Z',
+        latest: {
+          measurement: null,
+          daily: { date: '2026-06-12' },
+        },
+        daily: [],
+        charts: {
+          weightKg: [],
+          bodyFatPct: [],
+          skeletalMuscleKg: [],
+          basalMetabolism: [],
+          visceralFatLevel: [],
+          intakeCalories: [],
+          trainingCalories: [],
+          cyclingDistanceKm: [],
+        },
+      };
+    },
+    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-12\n',
+  });
+
+  assert.deepEqual(calls, ['snapshot']);
+});
+
+test('exportDerivedTrainingMarkdown runs database schema preflight when explicitly enabled', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push('connect');
+    },
+    async query(sql) {
+      calls.push(sql);
+      return { rows: [] };
+    },
+    async end() {
+      calls.push('end');
+    },
+  };
+
+  await exportDerivedTrainingMarkdown({
+    rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED: 'true',
     },
     createClient() {
       return fakeClient;
@@ -342,6 +398,7 @@ test('exportDerivedTrainingMarkdown retries transient schema preflight connectio
     env: {
       TRAINING_DB_ENABLED: 'true',
       TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED: 'true',
       TRAINING_DB_PREFLIGHT_RETRY_DELAY_MS: '1',
     },
     createClient() {
@@ -476,7 +533,7 @@ test('exportDerivedTrainingMarkdown surfaces unavailable database snapshots', as
   assert.match(await readFile(recordPath, 'utf8'), /2026-05-14/);
 });
 
-test('exportDerivedTrainingMarkdown does not overwrite markdown when schema preflight fails', async () => {
+test('exportDerivedTrainingMarkdown does not let disabled schema preflight block markdown export', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const recordPath = path.join(tempRoot, '训练记录.md');
   const calls = [];
@@ -494,35 +551,32 @@ test('exportDerivedTrainingMarkdown does not overwrite markdown when schema pref
 
   await writeFile(recordPath, '# 训练记录\n\n### 2026-05-14\n', 'utf8');
 
-  await assert.rejects(
-    exportDerivedTrainingMarkdown({
-      rootDir: tempRoot,
-      env: {
-        TRAINING_DB_ENABLED: 'true',
-        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-      },
-      createClient() {
-        return fakeClient;
-      },
-      ensureCoreSchema: async (client) => {
-        await client.query('alter table core.training_day add column if not exists sleep_total_minutes integer null');
-      },
-      buildTrainingSnapshot: async () => {
-        calls.push('snapshot');
-        return {
-          generatedAt: '2026-06-12T00:00:00.000Z',
-          latest: { measurement: null, daily: { date: '2026-06-12' } },
-          daily: [],
-          charts: {},
-        };
-      },
-      exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-12\n',
-    }),
-    /permission denied for schema core/i,
-  );
+  await exportDerivedTrainingMarkdown({
+    rootDir: tempRoot,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    ensureCoreSchema: async (client) => {
+      await client.query('alter table core.training_day add column if not exists sleep_total_minutes integer null');
+    },
+    buildTrainingSnapshot: async () => {
+      calls.push('snapshot');
+      return {
+        generatedAt: '2026-06-12T00:00:00.000Z',
+        latest: { measurement: null, daily: { date: '2026-06-12' } },
+        daily: [],
+        charts: {},
+      };
+    },
+    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-12\n',
+  });
 
-  assert.deepEqual(calls, ['connect', 'end']);
-  assert.match(await readFile(recordPath, 'utf8'), /2026-05-14/);
+  assert.deepEqual(calls, ['snapshot']);
+  assert.match(await readFile(recordPath, 'utf8'), /2026-06-12/);
 });
 
 test('exportDerivedTrainingMarkdown does not hide incomplete database snapshots when database is not configured', async () => {

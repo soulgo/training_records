@@ -77,6 +77,7 @@ export async function persistNormalizedBatch(options) {
         connectionTimeoutMillis: dbConfig.timeoutMs,
         application_name: dbConfig.appName,
       }));
+  const ensureCoreSchemaRunner = options.ensureCoreSchema ?? ensureCoreSchema;
   const client = createClient(config);
   const processedAt = options.processedAt ?? new Date();
   let transactionStarted = false;
@@ -96,7 +97,9 @@ export async function persistNormalizedBatch(options) {
 
   try {
     await client.connect();
-    await ensureCoreSchema(observedClient);
+    if (config.schemaPreflightEnabled) {
+      await ensureCoreSchemaRunner(observedClient);
+    }
     await observedClient.query('BEGIN');
     transactionStarted = true;
 

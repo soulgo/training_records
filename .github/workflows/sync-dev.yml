@@ -39,6 +39,7 @@ jobs:
     env:
       TRAINING_DB_ENABLED: 'true'
       TRAINING_DB_URL: ${{ secrets.DEV_TRAINING_DB_URL }}
+      TRAINING_DB_READONLY_URL: ${{ secrets.DEV_TRAINING_DB_READONLY_URL }}
       TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
       TRAINING_DB_APP_NAME: ${{ vars.DEV_TRAINING_DB_APP_NAME }}
       TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
@@ -358,7 +359,11 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           }
           dispatch_body="$(node <<'NODE'
-          const inputs = { strict_database_snapshot: 'true' };
+          const inputs = {
+            strict_database_snapshot: 'true',
+            sync_db_mode: 'never',
+            run_tests: 'false',
+          };
           for (const [envName, inputName] of [
             ['THOUGHT_CHECK_ID', 'target_thought_id'],
             ['THOUGHT_CHECK_MODULE', 'target_thought_module'],

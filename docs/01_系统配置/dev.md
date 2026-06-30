@@ -21,6 +21,8 @@ dev 环境对应：
 | Secret 名称 | 是否必填 | 用途 |
 | --- | --- | --- |
 | `DEV_TRAINING_DB_URL` | 必填 | dev PostgreSQL 连接串，同步、构建、导出都读这个库。 |
+| `DEV_TRAINING_DB_READONLY_URL` | 可选 | dev 只读 PostgreSQL 连接串；workflow 映射为运行时 `TRAINING_DB_READONLY_URL`，站点构建、数据库快照读取、Markdown 导出、巡检和一致性检查优先使用，未配置时回退 `DEV_TRAINING_DB_URL` 映射后的运行时 `TRAINING_DB_URL`。 |
+| `DEV_TRAINING_DB_MIGRATION_URL` | 手动迁移时必填 | dev 迁移 PostgreSQL 连接串；执行 `npm run maintenance:migrate -- --confirm` 前手动映射为运行时 `TRAINING_DB_MIGRATION_URL`，不注入日常 dev 同步 workflow。 |
 | `AI_API_KEY` | 必填 | AI 服务鉴权。dev 和 main 当前共用这个名称。 |
 | `DEV_TELEGRAM_BOT_TOKEN` | 必填 | dev Telegram Bot token，用于拉取消息、下载图片、通知结果、刷新 webhook。 |
 | `DEV_TELEGRAM_SECRET_TOKEN` | 必填 | dev Telegram webhook secret。必须和 Cloudflare Worker Secret `TELEGRAM_SECRET_TOKEN` 的值一致。 |
@@ -39,6 +41,7 @@ dev 环境对应：
 | --- | --- | --- | --- |
 | `TRAINING_DB_TIMEOUT_MS` | `5000` | 建议填 | 数据库连接超时。 |
 | `DEV_TRAINING_DB_APP_NAME` | `sync-dev` | 建议填 | PostgreSQL `application_name`，便于在 DB 侧区分来源。 |
+| `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED` | `false` | 可选 | 过渡期 DDL preflight 开关；默认关闭，日常 dev 业务账号不应启用。 |
 | `TRAINING_SNAPSHOT_SOURCE` | `database` | 建议填 | 构建站点时从数据库还是 Markdown 生成快照。 |
 | `AI_PROVIDER` | `openai-compatible` | 建议填 | 当前代码支持 OpenAI-compatible provider。 |
 | `AI_BASE_URL` | `https://.../v1` | 必填 | Chat Completions base URL。 |
@@ -151,11 +154,14 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.dev.toml
 | 参数 | 来源 | 说明 |
 | --- | --- | --- |
 | `DEV_TRAINING_DB_URL` | PostgreSQL 服务商 | dev 数据库连接串，放 GitHub Secrets。 |
+| `DEV_TRAINING_DB_READONLY_URL` | PostgreSQL 服务商 | 可选只读连接串，放 GitHub Secrets；workflow 映射为运行时 `TRAINING_DB_READONLY_URL`，读取快照、巡检和一致性检查优先使用。 |
+| `DEV_TRAINING_DB_MIGRATION_URL` | PostgreSQL 服务商 | 显式迁移连接串，放受控 Secret 或本地 `.env`；执行迁移前手动映射为 `TRAINING_DB_MIGRATION_URL`。 |
 | `TRAINING_DB_TIMEOUT_MS` | 自定义 | 连接超时，放 GitHub Variables。 |
 | `DEV_TRAINING_DB_APP_NAME` | 自定义 | DB 连接名，便于排查。 |
+| `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED` | 自定义 | 默认 `false`；只有显式迁移兜底时才临时打开。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 建议 dev 使用 `database`。 |
 
-数据库 schema 以 `sql/pgsql17.sql` 为准。
+数据库 schema 以 `sql/pgsql17.sql` 为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `DEV_TRAINING_DB_URL` 映射后的默认路径。
 
 ### 3.5 COS 图片存储
 

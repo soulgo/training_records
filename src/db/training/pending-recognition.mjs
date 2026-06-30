@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import pg from 'pg';
 
 import { normalizeAiUsage } from '../../core/ai/schema-validator.mjs';
-import { resolveTrainingCoreConfig } from './config.mjs';
+import { resolveTrainingCoreConfig, resolveTrainingReadonlyConfig } from './config.mjs';
 
 const { Client } = pg;
 const DEFAULT_RETRY_DELAY_MINUTES = 10;
@@ -86,7 +86,7 @@ export async function readPendingRecognitionBatches(options = {}) {
 }
 
 export async function readPendingRecognitionSummary(options = {}) {
-  const config = resolveTrainingCoreConfig(options.env);
+  const config = resolveTrainingReadonlyConfig(options.env);
   if (!config.enabled || !config.url) {
     return [];
   }

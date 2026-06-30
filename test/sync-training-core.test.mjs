@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { syncTrainingCore } from '../tools/sync-training-core.mjs';
 
-test('syncTrainingCore defaults to safe archive ingest and thought sync results', async () => {
+test('syncTrainingCore defaults to safe archive and ingest repairs only', async () => {
   const calls = [];
 
   const result = await syncTrainingCore({
@@ -29,12 +29,11 @@ test('syncTrainingCore defaults to safe archive ingest and thought sync results'
     stdout: { write() {} },
   });
 
-  assert.deepEqual(calls, ['archive', 'ingest', 'thoughts']);
+  assert.deepEqual(calls, ['archive', 'ingest']);
   assert.deepEqual(result, {
-    status: 'stored',
+    status: 'unchanged',
     archive: { status: 'unchanged', daysBackfilled: 0 },
     ingest: { status: 'unchanged', batchesBackfilled: 0, daysBackfilled: [] },
-    thoughts: { status: 'stored', importedCount: 1 },
   });
 });
 
@@ -62,7 +61,7 @@ test('syncTrainingCore keeps running when one sync phase defers', async () => {
     error: 'database unavailable',
   });
   assert.equal(result.archive.status, 'stored');
-  assert.equal(result.thoughts.status, 'unchanged');
+  assert.equal(result.thoughts, undefined);
   assert.match(stderrChunks.join(''), /database unavailable/);
 });
 
@@ -133,7 +132,7 @@ test('syncTrainingCore dry-runs markdown phase without requiring database config
   });
 });
 
-test('syncTrainingCore default shared client does not run markdown phase', async () => {
+test('syncTrainingCore default shared client does not run markdown or thoughts phases', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'sync-training-core-shared-client-'));
   await mkdir(path.join(tempRoot, 'source', '_posts'), { recursive: true });
   await writeFile(
@@ -202,8 +201,8 @@ test('syncTrainingCore default shared client does not run markdown phase', async
   assert.equal(result.archive.status, 'unchanged');
   assert.equal(result.ingest.status, 'unchanged');
   assert.equal(result.markdown, undefined);
-  assert.equal(result.thoughts.status, 'stored');
-  assert.equal(clients.length, 2);
+  assert.equal(result.thoughts, undefined);
+  assert.equal(clients.length, 1);
   assert.ok(clients[0].calls.some(([sql]) => /from archive\.training_day/i.test(sql)));
   assert.equal(clients[0].calls.some(([sql]) => /from core\.training_day/i.test(sql) && /where archived_date = any/i.test(sql)), false);
 }
@@ -240,7 +239,7 @@ test('syncTrainingCore defers phases when closing shared client fails', async ()
     },
   });
 
-  assert.equal(result.status, 'partial');
+  assert.equal(result.status, 'deferred');
   assert.deepEqual(result.archive, {
     status: 'deferred',
     error: 'connect unavailable',
@@ -250,7 +249,7 @@ test('syncTrainingCore defers phases when closing shared client fails', async ()
     error: 'connect unavailable',
   });
   assert.equal(result.markdown, undefined);
-  assert.equal(result.thoughts.status, 'skipped');
+  assert.equal(result.thoughts, undefined);
   assert.match(stderrChunks.join(''), /connect unavailable/);
   assert.match(stderrChunks.join(''), /close unavailable/);
 });

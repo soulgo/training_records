@@ -7,6 +7,23 @@ on:
         description: Fail the build instead of falling back to Markdown when the database snapshot is unavailable.
         required: false
         default: 'true'
+      sync_db_mode:
+        description: Safe database sync strategy before building.
+        required: false
+        type: choice
+        default: 'auto'
+        options:
+          - auto
+          - always
+          - never
+      run_tests:
+        description: Whether to run the fast test suite before building.
+        required: false
+        type: choice
+        default: 'true'
+        options:
+          - 'true'
+          - 'false'
       target_thought_id:
         description: Optional thought id to verify on the deployed module page.
         required: false
@@ -55,6 +72,7 @@ jobs:
     env:
       TRAINING_DB_ENABLED: ${{ vars.TRAINING_DB_ENABLED }}
       TRAINING_DB_URL: ${{ secrets.TRAINING_DB_URL }}
+      TRAINING_DB_READONLY_URL: ${{ secrets.TRAINING_DB_READONLY_URL }}
       TRAINING_DB_TIMEOUT_MS: ${{ vars.TRAINING_DB_TIMEOUT_MS }}
       TRAINING_DB_APP_NAME: ${{ vars.TRAINING_DB_APP_NAME }}
       TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
@@ -74,8 +92,8 @@ jobs:
         uses: ./.github/actions/site-build
         with:
           run_backfill: 'true'
-          sync_db_mode: 'auto'
-          run_tests: 'true'
+          sync_db_mode: ${{ github.event_name == 'workflow_dispatch' && inputs.sync_db_mode || 'auto' }}
+          run_tests: ${{ github.event_name == 'workflow_dispatch' && inputs.run_tests || 'true' }}
           deploy: 'true'
 
       - name: Purge Cloudflare cache

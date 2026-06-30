@@ -1,15 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import {
+  readTrainingBatchAudit,
   readTrainingBatchAuditClient,
   runTrainingMaintenance,
 } from '../tools/training-maintenance.mjs';
 
 const readRepoFile = (relativePath) => readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
+
+const readMigrationChecksum = async (relativePath) => {
+  const sql = await readRepoFile(relativePath);
+  return createHash('sha256').update(sql, 'utf8').digest('hex');
+};
 
 const readMaintenanceGuide = async () => [
   await readRepoFile('docs/02_系统核心逻辑/系统总览.md'),
@@ -105,26 +112,107 @@ test('training maintenance inspect reports pending queue age attempts and thresh
   });
 });
 
-test('training maintenance inspect uses the default pending summary without claiming rows', async () => {
-  const calls = [];
+test('training maintenance inspect reports a read-only database permission audit', async () => {
+  const queries = [];
   const result = await runTrainingMaintenance({
     argv: ['inspect'],
     env: {
       TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TRAINING_DB_URL: 'postgresql://training_app:secret@example.com:5432/training_records',
+    },
+    readPendingBatches: async () => [],
+    createClient() {
+      return {
+        async connect() {
+          queries.push('connect');
+        },
+        async query(sql) {
+          queries.push(sql);
+          if (/from ingest\.ai_call_log/i.test(sql)) {
+            return {
+              rows: [{
+                total_calls: 0,
+                recognition_calls: 0,
+                analysis_calls: 0,
+                failed_calls: 0,
+                schema_failure_count: 0,
+                avg_recognition_latency_ms: null,
+                max_recognition_latency_ms: null,
+                total_tokens: 0,
+                total_cost_usd: '0',
+              }],
+            };
+          }
+          if (/from ingest\.telegram_recognition/i.test(sql)) {
+            return {
+              rows: [{
+                recognition_fallback_count: 0,
+                recognition_total_count: 0,
+              }],
+            };
+          }
+          if (/current_user::text as current_user/i.test(sql)) {
+            return {
+              rows: [{
+                current_user: 'training_app',
+                session_user: 'training_app',
+                is_superuser: false,
+                can_create_core: false,
+                can_create_ingest: false,
+                can_create_archive: false,
+                can_create_public: false,
+              }],
+            };
+          }
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        async end() {
+          queries.push('end');
+        },
+      };
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(result.data.database.permissionAudit.status, 'ok');
+  assert.equal(result.data.database.permissionAudit.currentUser, 'training_app');
+  assert.equal(result.data.database.permissionAudit.isSuperuser, false);
+  assert.equal(result.data.database.permissionAudit.isMigratorLikeUser, false);
+  assert.deepEqual(result.data.database.permissionAudit.schemaCreatePrivileges, {
+    archive: false,
+    core: false,
+    ingest: false,
+    public: false,
+  });
+  assert.deepEqual(result.data.database.permissionAudit.dangerousPrivilegeReasons, []);
+  assert.equal(queries.some((sql) => /create table|alter table|create index/i.test(sql)), false);
+  assert.doesNotMatch(JSON.stringify(result), /postgresql:\/\/|secret/i);
+});
+
+test('training maintenance inspect uses the default pending summary without claiming rows', async () => {
+  const calls = [];
+  const observedUrls = [];
+  const result = await runTrainingMaintenance({
+    argv: ['inspect'],
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_app:secret@example.com:5432/training_records',
+      TRAINING_DB_READONLY_URL: 'postgresql://training_readonly:secret@example.com:5432/training_records',
     },
     now: new Date('2026-06-21T00:00:00.000Z'),
-    createClient: () => ({
+    createClient: (config) => ({
       async connect() {
+        observedUrls.push(config.url);
         calls.push(['connect']);
       },
       async query(sql, params = []) {
         calls.push([sql, params]);
         assert.doesNotMatch(sql, /\bupdate\b/i);
         assert.doesNotMatch(sql, /for update/i);
-        return {
-          rows: [
-            {
+
+        if (/from ingest\.telegram_pending_batch/i.test(sql)) {
+          return {
+            rows: [{
               batch_id: 'pending-old',
               kind: 'image',
               failure_category: 'database',
@@ -134,9 +222,46 @@ test('training maintenance inspect uses the default pending summary without clai
               last_failed_at: '2026-06-20T00:00:00.000Z',
               created_at: '2026-06-20T23:00:00.000Z',
               updated_at: '2026-06-20T23:00:00.000Z',
-            },
-          ],
-        };
+            }],
+          };
+        }
+        if (/from ingest\.ai_call_log/i.test(sql)) {
+          return {
+            rows: [{
+              total_calls: 0,
+              recognition_calls: 0,
+              analysis_calls: 0,
+              failed_calls: 0,
+              schema_failure_count: 0,
+              avg_recognition_latency_ms: null,
+              max_recognition_latency_ms: null,
+              total_tokens: 0,
+              total_cost_usd: '0',
+            }],
+          };
+        }
+        if (/from ingest\.telegram_recognition/i.test(sql)) {
+          return {
+            rows: [{
+              recognition_fallback_count: 0,
+              recognition_total_count: 0,
+            }],
+          };
+        }
+        if (/current_user::text as current_user/i.test(sql)) {
+          return {
+            rows: [{
+              current_user: 'training_readonly',
+              session_user: 'training_readonly',
+              is_superuser: false,
+              can_create_core: false,
+              can_create_ingest: false,
+              can_create_archive: false,
+              can_create_public: false,
+            }],
+          };
+        }
+        throw new Error(`Unexpected SQL: ${sql}`);
       },
       async end() {
         calls.push(['end']);
@@ -150,6 +275,9 @@ test('training maintenance inspect uses the default pending summary without clai
   assert.equal(result.data.pendingDatabaseAlertLevel, 'P2');
   assert.deepEqual(result.data.pendingDatabaseAlertReasons, ['pending_oldest_gt_30m']);
   assert.equal(calls.some(([sql]) => sql === 'BEGIN' || sql === 'COMMIT'), false);
+  assert.deepEqual([...new Set(observedUrls)], [
+    'postgresql://training_readonly:secret@example.com:5432/training_records',
+  ]);
 });
 
 test('training maintenance inspect reports AI monitoring source from database logs', async () => {
@@ -406,6 +534,53 @@ test('readTrainingBatchAuditClient traces recognition json and core target dates
   assert.deepEqual(audit.recoveryTargetDays, ['2026-06-14']);
 });
 
+test('readTrainingBatchAudit prefers readonly database url when configured', async () => {
+  const observedUrls = [];
+  const queries = [];
+  const audit = await readTrainingBatchAudit({
+    batchId: 'album-ai-wrong',
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_app:secret@example.com:5432/training_records',
+      TRAINING_DB_READONLY_URL: 'postgresql://training_readonly:secret@example.com:5432/training_records',
+    },
+    createClient: (config) => ({
+      async connect() {
+        observedUrls.push(config.url);
+      },
+      async query(sql, params = []) {
+        queries.push({ sql, params });
+        assert.doesNotMatch(sql, /\b(insert|update|delete|create|alter|drop)\b/i);
+
+        if (/from ingest\.telegram_batch/i.test(sql)) {
+          return {
+            rows: [{
+              batch_id: 'album-ai-wrong',
+              status: 'ready',
+              archived_date: '2026-06-14',
+              reason: null,
+              confidence: 'high',
+              processed_at: '2026-06-14T10:00:00.000Z',
+            }],
+          };
+        }
+        if (/from ingest\.telegram_recognition/i.test(sql)) {
+          return { rows: [] };
+        }
+        return { rows: [] };
+      },
+      async end() {},
+    }),
+  });
+
+  assert.equal(audit.status, 'ok');
+  assert.equal(audit.readonly, true);
+  assert.deepEqual(observedUrls, [
+    'postgresql://training_readonly:secret@example.com:5432/training_records',
+  ]);
+  assert.equal(queries.length, 3);
+});
+
 test('training maintenance sync can explicitly run all database phases', async () => {
   const calls = [];
   const result = await runTrainingMaintenance({
@@ -571,25 +746,264 @@ test('training maintenance migrate supports dry-run without running sync', async
   assert.equal(result.mode, 'migrate');
   assert.equal(result.status, 'planned');
   assert.equal(result.dryRun, true);
-  assert.deepEqual(result.plan, ['sync committed archive, ingest repairs, and thoughts into core tables']);
+  assert.ok(result.plan.some((entry) => entry.id === '001_runtime_schema_preflight_backfill'));
+  assert.deepEqual(
+    result.plan.map((entry) => entry.status),
+    ['pending'],
+  );
+  assert.match(result.plan[0].file, /sql\/training_records\/migrations\/001_runtime_schema_preflight_backfill\.sql$/);
 });
 
-test('training maintenance migrate runs only with explicit confirm', async () => {
-  const calls = [];
+test('training maintenance migrate dry-run reads applied migration status when migration url is configured', async () => {
+  const queries = [];
+  const checksum = await readMigrationChecksum('sql/training_records/migrations/001_runtime_schema_preflight_backfill.sql');
+  const result = await runTrainingMaintenance({
+    argv: ['migrate', '--dry-run'],
+    env: {
+      TRAINING_DB_MIGRATION_URL: 'postgresql://training_migrator:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return {
+        async connect() {
+          queries.push('connect');
+        },
+        async query(sql) {
+          queries.push(sql);
+          if (/to_regclass\('maintenance\.schema_migration'\)/i.test(sql)) {
+            return { rows: [{ table_name: 'maintenance.schema_migration' }] };
+          }
+          if (/select migration_id/i.test(sql)) {
+            return {
+              rows: [{
+                migration_id: '001_runtime_schema_preflight_backfill',
+                checksum_sha256: checksum,
+              }],
+            };
+          }
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        async end() {
+          queries.push('end');
+        },
+      };
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(result.status, 'planned');
+  assert.equal(result.migrationHistory.status, 'read');
+  assert.deepEqual(result.plan.map((entry) => entry.status), ['applied']);
+  assert.equal(queries.some((sql) => /alter table core\.sleep/i.test(sql)), false);
+});
+
+test('training maintenance migrate dry-run reports checksum drift for changed migration sql', async () => {
+  const queries = [];
+  const result = await runTrainingMaintenance({
+    argv: ['migrate', '--dry-run'],
+    env: {
+      TRAINING_DB_MIGRATION_URL: 'postgresql://training_migrator:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return {
+        async connect() {
+          queries.push('connect');
+        },
+        async query(sql) {
+          queries.push(sql);
+          if (/to_regclass\('maintenance\.schema_migration'\)/i.test(sql)) {
+            return { rows: [{ table_name: 'maintenance.schema_migration' }] };
+          }
+          if (/select migration_id/i.test(sql)) {
+            return {
+              rows: [{
+                migration_id: '001_runtime_schema_preflight_backfill',
+                checksum_sha256: 'old-checksum',
+              }],
+            };
+          }
+          throw new Error(`Unexpected SQL: ${sql}`);
+        },
+        async end() {
+          queries.push('end');
+        },
+      };
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(result.status, 'planned');
+  assert.equal(result.migrationHistory.checksumMismatchCount, 1);
+  assert.deepEqual(result.plan.map((entry) => entry.status), ['checksum_mismatch']);
+  assert.equal(queries.some((sql) => /alter table core\.sleep/i.test(sql)), false);
+});
+
+test('training maintenance migrate dry-run redacts migration history errors', async () => {
+  const result = await runTrainingMaintenance({
+    argv: ['migrate', '--dry-run'],
+    env: {
+      TRAINING_DB_MIGRATION_URL: 'postgresql://training_migrator:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return {
+        async connect() {
+          throw new Error(
+            'connect failed for postgresql://training_migrator:secret@example.com:5432/training_records',
+          );
+        },
+        async end() {},
+      };
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(result.status, 'planned');
+  assert.equal(result.migrationHistory.status, 'unavailable');
+  assert.match(result.migrationHistory.error, /\[redacted-db-url\]/);
+  assert.doesNotMatch(JSON.stringify(result), /training_migrator|secret|postgresql:\/\//i);
+});
+
+test('training maintenance migrate confirm requires migration database url', async () => {
+  let syncCalled = false;
   const result = await runTrainingMaintenance({
     argv: ['migrate', '--confirm'],
-    syncTrainingCore: async (options) => {
-      calls.push(options);
+    syncTrainingCore: async () => {
+      syncCalled = true;
       return { status: 'stored' };
     },
     stdout: { write() {} },
   });
 
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].sourceChannel, 'maintenance_migrate');
+  assert.equal(syncCalled, false);
   assert.equal(result.mode, 'migrate');
-  assert.equal(result.status, 'stored');
+  assert.equal(result.status, 'blocked');
+  assert.match(result.error, /TRAINING_DB_MIGRATION_URL/);
+});
+
+test('training maintenance migrate confirm executes explicit migration sql', async () => {
+  const queries = [];
+  const observedUrls = [];
+  let syncCalled = false;
+  const result = await runTrainingMaintenance({
+    argv: ['migrate', '--confirm'],
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_app:secret@example.com:5432/training_records',
+      TRAINING_DB_MIGRATION_URL: 'postgresql://training_migrator:secret@example.com:5432/training_records',
+    },
+    syncTrainingCore: async () => {
+      syncCalled = true;
+      return { status: 'stored' };
+    },
+    createClient(config) {
+      observedUrls.push(config.url);
+      return {
+        async connect() {
+          queries.push('connect');
+        },
+        async query(sql) {
+          queries.push(sql);
+          return { rows: [], rowCount: 0 };
+        },
+        async end() {
+          queries.push('end');
+        },
+      };
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(syncCalled, false);
+  assert.deepEqual([...new Set(observedUrls)], [
+    'postgresql://training_migrator:secret@example.com:5432/training_records',
+  ]);
+  assert.ok(queries.some((sql) => /alter table core\.sleep add column if not exists total_sleep_minutes/i.test(sql)));
+  assert.equal(result.mode, 'migrate');
+  assert.equal(result.status, 'applied');
   assert.equal(result.confirmed, true);
+  assert.deepEqual(result.appliedMigrations.map((entry) => entry.id), ['001_runtime_schema_preflight_backfill']);
+});
+
+test('training maintenance migrate confirm skips migration sql already recorded in history', async () => {
+  const queries = [];
+  const checksum = await readMigrationChecksum('sql/training_records/migrations/001_runtime_schema_preflight_backfill.sql');
+  const result = await runTrainingMaintenance({
+    argv: ['migrate', '--confirm'],
+    env: {
+      TRAINING_DB_MIGRATION_URL: 'postgresql://training_migrator:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return {
+        async connect() {
+          queries.push('connect');
+        },
+        async query(sql) {
+          queries.push(sql);
+          if (/to_regclass\('maintenance\.schema_migration'\)/i.test(sql)) {
+            return { rows: [{ table_name: 'maintenance.schema_migration' }] };
+          }
+          if (/select migration_id/i.test(sql)) {
+            return {
+              rows: [{
+                migration_id: '001_runtime_schema_preflight_backfill',
+                checksum_sha256: checksum,
+              }],
+            };
+          }
+          return { rows: [], rowCount: 0 };
+        },
+        async end() {
+          queries.push('end');
+        },
+      };
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(result.status, 'unchanged');
+  assert.deepEqual(result.appliedMigrations, []);
+  assert.deepEqual(result.skippedMigrations.map((entry) => entry.id), ['001_runtime_schema_preflight_backfill']);
+  assert.equal(queries.some((sql) => /alter table core\.sleep/i.test(sql)), false);
+});
+
+test('training maintenance migrate confirm blocks when applied migration checksum changed', async () => {
+  const queries = [];
+  const result = await runTrainingMaintenance({
+    argv: ['migrate', '--confirm'],
+    env: {
+      TRAINING_DB_MIGRATION_URL: 'postgresql://training_migrator:secret@example.com:5432/training_records',
+    },
+    createClient() {
+      return {
+        async connect() {
+          queries.push('connect');
+        },
+        async query(sql) {
+          queries.push(sql);
+          if (/to_regclass\('maintenance\.schema_migration'\)/i.test(sql)) {
+            return { rows: [{ table_name: 'maintenance.schema_migration' }] };
+          }
+          if (/select migration_id/i.test(sql)) {
+            return {
+              rows: [{
+                migration_id: '001_runtime_schema_preflight_backfill',
+                checksum_sha256: 'old-checksum',
+              }],
+            };
+          }
+          return { rows: [], rowCount: 0 };
+        },
+        async end() {
+          queries.push('end');
+        },
+      };
+    },
+    stdout: { write() {} },
+  });
+
+  assert.equal(result.status, 'blocked');
+  assert.equal(result.error, 'applied migration checksum mismatch');
+  assert.deepEqual(result.plan.map((entry) => entry.status), ['checksum_mismatch']);
+  assert.equal(queries.some((sql) => /alter table core\.sleep/i.test(sql)), false);
 });
 
 test('package exposes explicit maintenance command boundaries', async () => {
