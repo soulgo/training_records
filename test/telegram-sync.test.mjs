@@ -298,16 +298,16 @@ test('sleep screenshots keep detected bedtime date when time fields only contain
           sleepType: '夜间睡眠',
           bedtime: '23:48',
           wakeTime: '06:34',
-          nightSleepMinutes: 267,
-          totalSleepMinutes: 267,
+          nightSleepMinutes: 387,
+          totalSleepMinutes: null,
           napMinutes: null,
-          deepSleepMinutes: 65,
-          lightSleepMinutes: 142,
-          remSleepMinutes: 60,
+          deepSleepMinutes: 121,
+          lightSleepMinutes: 151,
+          remSleepMinutes: 115,
           awakeMinutes: null,
           sleepStageText: '深睡、浅睡、快速眼动',
-          sleepStageDetail: ['深睡 65分钟', '浅睡 142分钟', '快速眼动 60分钟'],
-          sleepScore: 74,
+          sleepStageDetail: ['深睡 2小时1分钟', '浅睡 2小时31分钟', '快速眼动 1小时55分钟'],
+          sleepScore: 78,
           sleepScorePercentile: null,
           deepSleepRatioPct: null,
           lightSleepRatioPct: null,
@@ -330,7 +330,7 @@ test('sleep screenshots keep detected bedtime date when time fields only contain
   assert.equal(analyzed.archivedDate, '2026-06-29');
   assert.equal(analyzed.dateSources[0].source, 'image');
   assert.equal(analyzed.dateStages.sleep_bedtime_shift.status, 'skipped');
-  assert.equal(analyzed.sleep.totalSleepMinutes, 267);
+  assert.equal(analyzed.sleep.totalSleepMinutes, 387);
 });
 
 test('sleep screenshots derive total sleep from night sleep when recognition omits total duration', async () => {
