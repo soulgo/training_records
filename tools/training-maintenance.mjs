@@ -65,6 +65,7 @@ export async function runTrainingMaintenance(options = {}) {
       env,
       stderr,
       target: argv[1],
+      flags,
       exportDerivedTrainingMarkdown,
     });
   } else if (command === 'migrate') {
@@ -669,7 +670,7 @@ async function runSyncMaintenance({ rootDir, env, stderr, flags, syncTrainingCor
   };
 }
 
-async function runExportMaintenance({ rootDir, env, stderr, target, exportDerivedTrainingMarkdown }) {
+async function runExportMaintenance({ rootDir, env, stderr, target, flags, exportDerivedTrainingMarkdown }) {
   if (target !== 'markdown') {
     return {
       status: 'failed',
@@ -680,19 +681,39 @@ async function runExportMaintenance({ rootDir, env, stderr, target, exportDerive
     };
   }
 
+  const debugJson = flags.has('--debug-json');
+  if (debugJson && isGithubActions(env)) {
+    return {
+      status: 'failed',
+      mode: 'export',
+      target,
+      readonly: false,
+      error: '--debug-json is disabled in GitHub Actions',
+    };
+  }
+
+  const startedAt = nowMs();
   const result = await exportDerivedTrainingMarkdown({
     rootDir,
     env,
     stderr,
   });
-
-  return {
+  const summary = {
     status: 'stored',
     mode: 'export',
     target,
     readonly: false,
-    result,
+    outputPath: result.outputPath ?? null,
+    dailyCount: Array.isArray(result.snapshot?.daily) ? result.snapshot.daily.length : 0,
+    thoughtExportedCount: result.thoughts?.exportedCount ?? 0,
+    thoughtRemovedCount: result.thoughts?.removedCount ?? 0,
+    durationMs: elapsedMs(startedAt),
   };
+  if (debugJson) {
+    summary.result = result;
+  }
+
+  return summary;
 }
 
 async function runMigrateMaintenance({ rootDir, env, stderr, flags, syncTrainingCore }) {
@@ -803,6 +824,18 @@ function resolveValueFlag(values, flagName) {
 function normalizeSyncPhase(value) {
   const phase = String(value ?? 'safe').trim();
   return ['safe', 'all', 'archive', 'ingest', 'markdown', 'thoughts'].includes(phase) ? phase : 'safe';
+}
+
+function isGithubActions(env) {
+  return String(env?.GITHUB_ACTIONS ?? '').trim().toLowerCase() === 'true';
+}
+
+function elapsedMs(startedAt) {
+  return Math.max(0, Math.round(nowMs() - startedAt));
+}
+
+function nowMs() {
+  return Number(globalThis.performance?.now?.() ?? Date.now());
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

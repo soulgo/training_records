@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { sendTelegramMessage } from '../../../adapters/telegram/index.mjs';
 import { isThoughtBatchKind } from '../../../core/thought-modules.mjs';
+import { buildPersistenceSummary } from './persistence-summary.mjs';
 
 export function shouldPersistTelegramArtifacts({
   updatesFetched,
@@ -65,7 +66,7 @@ export function buildTelegramSyncReport(result) {
 function normalizeSyncReportBatch(batch) {
   const taskAudit = buildSyncTaskAuditFields(batch);
   const failureCategory = normalizeBatchFailureCategory(batch);
-  return {
+  const normalized = {
     kind: batch.kind ?? 'image',
     batchId: batch.batchId,
     taskId: taskAudit.taskId,
@@ -105,9 +106,23 @@ function normalizeSyncReportBatch(batch) {
     dateStages: normalizeDateStages(batch.dateStages),
     imageUploadStats: resolveImageUploadStats(batch),
   };
+  const ai = buildAiSummary(batch);
+  if (ai) {
+    normalized.ai = ai;
+  }
+  const persistenceResult = hasPersistenceSummaryFields(batch)
+    ? buildPersistenceSummary(batch.persistenceResult ?? batch)
+    : null;
+  if (persistenceResult) {
+    normalized.persistenceResult = persistenceResult;
+  }
+  return normalized;
 }
 
 function resolveImageUploadStats(batch) {
+  if (batch.imageUploadStats) {
+    return batch.imageUploadStats;
+  }
   const storage = batch.thought?.storage ?? batch.thoughtEdit?.storage ?? batch.thoughtDelete?.storage ?? batch.thoughtMove?.storage;
   return storage?.imageUploadStats ?? null;
 }
@@ -131,6 +146,78 @@ function normalizeRecognitionAttemptKinds(recognitions) {
         .filter(Boolean),
     ),
   ];
+}
+
+function buildAiSummary(batch) {
+  const recognitions = Array.isArray(batch.recognitions) ? batch.recognitions : [];
+  if (recognitions.length === 0 && !batch.ai) {
+    return null;
+  }
+  if (batch.ai && typeof batch.ai === 'object' && !Array.isArray(batch.ai)) {
+    return {
+      provider: batch.ai.provider ?? null,
+      model: batch.ai.model ?? null,
+      promptVersion: batch.ai.promptVersion ?? null,
+      attemptKinds: Array.isArray(batch.ai.attemptKinds) ? [...new Set(batch.ai.attemptKinds.filter(Boolean))] : [],
+      fallbackUsed: Boolean(batch.ai.fallbackUsed),
+      retryCount: normalizeNonNegativeInteger(batch.ai.retryCount, 0),
+      durationMs: normalizeNullableNonNegativeInteger(batch.ai.durationMs),
+      totalTokens: normalizeNonNegativeInteger(batch.ai.totalTokens, 0),
+    };
+  }
+  const attemptKinds = normalizeRecognitionAttemptKinds(recognitions);
+  const provider = firstRecognitionField(recognitions, 'provider');
+  const model = firstRecognitionField(recognitions, 'model');
+  const promptVersion = firstRecognitionField(recognitions, 'promptVersion');
+  const totalTokens = recognitions.reduce(
+    (sum, recognition) => sum + normalizeNonNegativeInteger(recognition?.aiUsage?.totalTokens, 0),
+    0,
+  );
+  if (!provider && !model && !promptVersion && attemptKinds.length === 0 && !totalTokens) {
+    return null;
+  }
+  return {
+    provider,
+    model,
+    promptVersion,
+    attemptKinds,
+    fallbackUsed: attemptKinds.includes('fallback'),
+    retryCount: normalizeNonNegativeInteger(batch.retryCount, 0),
+    durationMs: normalizeNullableNonNegativeInteger(batch.syncStages?.ai_schema?.durationMs),
+    totalTokens,
+  };
+}
+
+function hasPersistenceSummaryFields(batch) {
+  return Boolean(
+    batch?.persistenceResult ||
+    batch?.transactionId ||
+    batch?.rowCounts ||
+    batch?.slowQueries ||
+    batch?.pendingStatus ||
+    batch?.rollbackStatus ||
+    batch?.durationMs,
+  );
+}
+
+function firstRecognitionField(recognitions, field) {
+  for (const recognition of recognitions) {
+    const value = String(recognition?.[field] ?? '').trim();
+    if (value) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function normalizeNonNegativeInteger(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.round(number) : fallback;
+}
+
+function normalizeNullableNonNegativeInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.round(number) : null;
 }
 
 function normalizeSyncStages(value) {

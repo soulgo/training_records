@@ -62,6 +62,7 @@ import {
   recognizeBatch,
   replayPendingRecognitionBatches,
 } from './telegram-sync/image-processing.mjs';
+import { buildPersistenceSummary } from './telegram-sync/persistence-summary.mjs';
 
 export {
   buildTelegramSyncReport,
@@ -455,9 +456,11 @@ export async function runMessageSync(options = {}) {
         hasSleepBatchPayload(persistedBatch);
       changed ||= persistedBatch.status === 'ready' && persistResult.status === 'stored';
       storedSleepAny ||= storedSleepImageBatch;
+      const persistenceResult = buildPersistenceSummary(persistResult);
       batchResults.push({
         ...persistedBatch,
         persistenceStatus: persistResult.status,
+        ...(persistenceResult ? { persistenceResult } : {}),
       });
       await measureSyncStage(timings, 'markRecognitionResolved', () =>
         markPendingRecognitionResolved({ batchId: persistedBatch.batchId }),
@@ -470,12 +473,14 @@ export async function runMessageSync(options = {}) {
           failureCategory,
         });
         if (failureCategory === 'user_input') {
+          const persistenceResult = withPendingStatus(buildPersistenceSummary(error.persistenceResult), null);
           batchResults.push({
             ...persistedBatch,
             persistenceStatus: 'manual_intervention',
             persistenceError: errorMessage,
             failureCategory,
             failureReason: errorMessage,
+            ...(persistenceResult ? { persistenceResult } : {}),
           });
           continue;
         }
@@ -490,12 +495,14 @@ export async function runMessageSync(options = {}) {
         process.stderr.write(
           `[telegram-sync] queued database replay for ${persistedBatch.batchId} (${persistedBatch.archivedDate ?? 'unknown date'}): ${errorMessage}\n`,
         );
+        const persistenceResult = withPendingStatus(buildPersistenceSummary(error.persistenceResult), 'queued');
         batchResults.push({
           ...persistedBatch,
           persistenceStatus: 'pending_replay',
           persistenceError: errorMessage,
           failureCategory,
           failureReason: errorMessage,
+          ...(persistenceResult ? { persistenceResult } : {}),
         });
         continue;
       }
@@ -602,6 +609,16 @@ function logSyncTimings(timingsMs) {
     return;
   }
   process.stderr.write(`[telegram-sync] timings ${JSON.stringify(timingsMs)}\n`);
+}
+
+function withPendingStatus(summary, pendingStatus) {
+  if (!summary) {
+    return null;
+  }
+  return {
+    ...summary,
+    pendingStatus,
+  };
 }
 
 function shouldReplayLegacyPendingQueue(rawEnv, options = {}) {
@@ -1080,6 +1097,7 @@ async function handleThoughtSyncBatch({
       processedAt: now,
       env,
     });
+    const persistenceResult = buildPersistenceSummary(persistResult);
     if (persistResult.status === 'not_found') {
       const targetMessageId = persistResult.messageId ?? getThoughtTargetMessageId(thoughtStorageBatch);
       const reason = `target thought ${targetMessageId ?? 'unknown'} not found`;
@@ -1093,6 +1111,7 @@ async function handleThoughtSyncBatch({
           persistenceStatus: 'not_found',
           failureCategory: 'user_input',
           failureReason: reason,
+          ...(persistenceResult ? { persistenceResult } : {}),
         },
       };
     }
@@ -1101,6 +1120,7 @@ async function handleThoughtSyncBatch({
       batchResult: {
         ...baseBatchResult,
         persistenceStatus: persistResult.status,
+        ...(persistenceResult ? { persistenceResult } : {}),
         persistedThoughtModule: persistResult.thoughtModule ?? null,
         persistedThoughtMessageId:
           persistResult.messageId ?? getPersistedThoughtMessageId(thoughtStorageBatch),
@@ -1114,6 +1134,7 @@ async function handleThoughtSyncBatch({
       error: errorMessage,
       failedAt: now.toISOString(),
     });
+    const persistenceResult = withPendingStatus(buildPersistenceSummary(error.persistenceResult), 'queued');
     return {
       changed: thoughtWriteResult.changed,
       batchResult: {
@@ -1122,6 +1143,7 @@ async function handleThoughtSyncBatch({
         persistenceError: errorMessage,
         failureCategory: classifyFailureCategory(errorMessage, { phase: 'database' }),
         failureReason: errorMessage,
+        ...(persistenceResult ? { persistenceResult } : {}),
       },
     };
   }

@@ -754,7 +754,26 @@ test('runTelegramSync persists ready image batches to the database without writi
     ],
     persistNormalizedBatch: async ({ batch }) => {
       persistedBatches.push(batch);
-      return { status: 'stored', archivedDate: batch.archivedDate };
+      return {
+        status: 'stored',
+        archivedDate: batch.archivedDate,
+        transactionId: 'dbtx_1234567890abcdef',
+        rowCounts: { ingestBatch: 1, ingestMessage: 1, ingestRecognition: 1, coreMeal: 1 },
+        durationMs: 42,
+        slowQueries: [],
+        persistenceResult: {
+          status: 'stored',
+          batchId: batch.batchId,
+          transactionId: 'dbtx_1234567890abcdef',
+          sourceChannel: 'telegram',
+          rowCounts: { ingestBatch: 1, ingestMessage: 1, ingestRecognition: 1, coreMeal: 1 },
+          durationMs: 42,
+          slowQueries: [],
+          pendingStatus: null,
+          rollbackStatus: null,
+          sql: 'insert into core.meal values ($1)',
+        },
+      };
     },
     buildTrainingSnapshot: async () => {
       throw new Error('buildTrainingSnapshot should not run for stored image batches');
@@ -768,6 +787,18 @@ test('runTelegramSync persists ready image batches to the database without writi
   assert.equal(result.changed, true);
   assert.equal(persistedBatches.length, 1);
   assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.deepEqual(result.batchResults[0].persistenceResult, {
+    status: 'stored',
+    batchId: result.batchResults[0].batchId,
+    transactionId: 'dbtx_1234567890abcdef',
+    sourceChannel: 'telegram',
+    rowCounts: { ingestBatch: 1, ingestMessage: 1, ingestRecognition: 1, coreMeal: 1 },
+    durationMs: 42,
+    slowQueries: [],
+    pendingStatus: null,
+    rollbackStatus: null,
+  });
+  assert.doesNotMatch(JSON.stringify(result.batchResults[0].persistenceResult), /insert into|\$1/i);
   assert.equal(persistedBatches[0].archivedDate, '2026-05-09');
   assert.equal(persistedBatches[0].nutrition.meals[0].name, '晚餐');
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
@@ -1846,6 +1877,84 @@ test('buildTelegramSyncReport exposes pending replay and archived date details f
       sourceMessageIds: [],
     },
   ]);
+});
+
+test('buildTelegramSyncReport exposes safe AI and database summaries for action logs', () => {
+  const report = buildTelegramSyncReport({
+    changed: true,
+    fallbackUsed: false,
+    updatesFetched: 1,
+    lastProcessedUpdateId: 701,
+    readyBatches: 1,
+    batchResults: [
+      {
+        kind: 'image',
+        batchId: 'single-701',
+        status: 'ready',
+        archivedDate: '2026-06-13',
+        persistenceStatus: 'stored',
+        messages: [{ chatId: 42, messageId: 701, updateId: 9201 }],
+        recognitions: [
+          {
+            messageId: 701,
+            provider: 'openai-compatible',
+            model: 'gpt-vision-fast',
+            promptVersion: '2026-06-20',
+            aiAttemptKind: 'normal',
+            aiUsage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+          },
+          {
+            messageId: 702,
+            provider: 'openai-compatible',
+            model: 'gpt-vision-fast',
+            promptVersion: '2026-06-20',
+            aiAttemptKind: 'fallback',
+            aiUsage: { totalTokens: 80 },
+          },
+        ],
+        syncStages: {
+          ai_schema: { status: 'succeeded', durationMs: 3210 },
+        },
+        persistenceResult: {
+          status: 'stored',
+          batchId: 'single-701',
+          transactionId: 'dbtx_1234567890abcdef',
+          sourceChannel: 'telegram',
+          rowCounts: { ingestBatch: 1, ingestMessage: 1, ingestRecognition: 2, coreMeasurement: 1 },
+          durationMs: 87,
+          slowQueries: [{ operation: 'persist.batch', table: 'core.measurement', durationMs: 1500, thresholdMs: 1000 }],
+          pendingStatus: null,
+          rollbackStatus: null,
+          sql: 'insert into core.measurement values ($1)',
+          params: ['secret'],
+        },
+      },
+    ],
+  });
+
+  const batch = report.batches[0];
+  assert.deepEqual(batch.ai, {
+    provider: 'openai-compatible',
+    model: 'gpt-vision-fast',
+    promptVersion: '2026-06-20',
+    attemptKinds: ['normal', 'fallback'],
+    fallbackUsed: true,
+    retryCount: 0,
+    durationMs: 3210,
+    totalTokens: 230,
+  });
+  assert.deepEqual(batch.persistenceResult, {
+    status: 'stored',
+    batchId: 'single-701',
+    transactionId: 'dbtx_1234567890abcdef',
+    sourceChannel: 'telegram',
+    rowCounts: { ingestBatch: 1, ingestMessage: 1, ingestRecognition: 2, coreMeasurement: 1 },
+    durationMs: 87,
+    slowQueries: [{ operation: 'persist.batch', table: 'core.measurement', durationMs: 1500, thresholdMs: 1000 }],
+    pendingStatus: null,
+    rollbackStatus: null,
+  });
+  assert.doesNotMatch(JSON.stringify(batch.persistenceResult), /insert into|secret|\$1/i);
 });
 
 test('buildTelegramSyncReport marks abandoned pending batches for manual handling', () => {

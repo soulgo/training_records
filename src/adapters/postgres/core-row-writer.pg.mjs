@@ -300,6 +300,8 @@ export async function insertCoreSleep(client, days, options, processedAtIso) {
     return;
   }
 
+  await deleteCoreSleepRowsByIdentity(client, rows);
+
   await client.query(
     `
       insert into core.sleep (
@@ -432,6 +434,33 @@ export async function insertCoreSleep(client, days, options, processedAtIso) {
       rows.map((row) => row.analysisText),
       rows.map((row) => row.suggestionText),
       rows.map((row) => row.updatedAt),
+    ],
+  );
+}
+
+async function deleteCoreSleepRowsByIdentity(client, rows) {
+  await client.query(
+    `
+      delete from core.sleep existing
+      using (
+        select *
+        from unnest(
+          $1::date[],
+          $2::text[],
+          $3::text[],
+          $4::text[]
+        ) as incoming(archived_date, sleep_type, bedtime, wake_time)
+      ) incoming
+      where existing.archived_date = incoming.archived_date
+        and coalesce(existing.sleep_type, '夜间睡眠') = coalesce(incoming.sleep_type, '夜间睡眠')
+        and coalesce(existing.bedtime, '') = coalesce(incoming.bedtime, '')
+        and coalesce(existing.wake_time, '') = coalesce(incoming.wake_time, '')
+    `,
+    [
+      rows.map((row) => row.archivedDate),
+      rows.map((row) => row.sleepType),
+      rows.map((row) => row.bedtime),
+      rows.map((row) => row.wakeTime),
     ],
   );
 }
@@ -596,7 +625,7 @@ function buildSleepRows(days, options, processedAtIso) {
       const sourceChannel = options.sourceChannel ?? 'telegram';
       return {
         sleepKey: createHash('md5')
-          .update([sourceChannel, day.date, sleepType, bedtime ?? '', wakeTime ?? '', sleep.totalSleepMinutes ?? ''].join('|'))
+          .update([day.date, sleepType, bedtime ?? '', wakeTime ?? ''].join('|'))
           .digest('hex'),
         archivedDate: day.date,
         sourceChannel,

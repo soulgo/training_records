@@ -13,12 +13,26 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 重构当前 docs 目录为 `01_系统配置`、`02_系统核心逻辑`、`03_历史重构记录`、`04_问题与排查`、`05_日常规则` 五类入口：重写 dev/main 环境配置文档，在开头直接列出 GitHub Settings 与 Cloudflare 必填参数；新增 dev/main 分支合并数据隔离规则和后续规划落地后的当前文档同步规则，明确 `dev` 与 `main` 运行数据互相独立、历史规划不能替代当前系统文档。
+- 重构并校准 docs 长期文档入口：将当前系统事实收敛到 `docs/01_系统配置/`、`docs/02_系统核心逻辑/`、`docs/04_问题与排查/` 和 `docs/05_日常规则/`，删除旧 `docs/归档/` 与临时 superpowers spec，保留 `docs/03_历史重构记录/` 作为非当前事实资料；同步修正 main/dev 配置、Cloudflare Worker secrets、Durable Object 绑定名、图片日期归档和随想命令合同。
+- 完成 action 日志排查优化文档第三轮审计：通过 GitHub API 拉取实际运行日志（Sync #112/#117、Deploy #350/#233、Markdown Backup #20、CI Tests #285、Refresh Webhook #130）与 `main`/`dev` 两分支源码交叉验证，发现前两轮文档以 dev 工作树为"当前源码"导致生产 main 分支的 dispatch payload 泄漏被误判为"不成立问题"。新增 `07_第三轮审计_实际日志复核.md`，并修订 01-06 全部文档：dispatch payload 泄漏回退为 P0 安全阻塞项（实测 main 仍写 `SYNC_DISPATCH_PAYLOAD` 原文到 `$GITHUB_ENV`，dev 修复未合并）；Markdown snapshot 泄漏范围从"仅 backup"扩大到两个 deploy workflow（实测 Deploy #350 含 399 处、#233 含 223 处健康字段）；测试 fixture 噪声归属从 CI 修正为 deploy（site-build `run_tests:'true'`）；补全飞书 `oc_` chat_id 在 sync stdout 的脱敏规则；05 实施顺序前置 main 合并项；06 阻塞项从 1 个增至 2 个。
+- 落地 action 日志排查优化高收益项：新增统一 `[action-log]` JSON logger 与 `tools/action-sync-summary.mjs`，`sync.yml` / `sync-dev.yml` 共用 Telegram/飞书 summary formatter，summary 补齐 traceId、queueTaskId、AI provider/model/promptVersion/token、DB transaction/rowCounts/slowQueries、deploy duration 等排障字段，并删除重复 inline Node summary。
+- 按后续规划落地文档同步规则完成 action 日志排查优化归档：将已实现规划从 `docs/03_历史重构记录/后续规划_未实现/` 移入 `docs/03_历史重构记录/重构历史/action日志排查优化/`，并把当前日志链路、summary 字段、失败补偿、排查步骤和脱敏规则写回 `docs/02_系统核心逻辑/Action日志与失败补偿.md` 与 `docs/04_问题与排查/Action日志.md`。
+- `export:markdown` 默认 stdout 改为 compact summary，完整导出 payload 仅允许本地显式 `--debug-json` 查看。
+
 ### Security
 
 - 修复 `sync.yml` / `sync-dev.yml` 在 `workflow_dispatch` 队列任务中把完整 Telegram/飞书 `dispatch_payload` 注入 GitHub Actions step env 和 `$GITHUB_ENV` 的问题，避免 `chat_id`、用户名、消息正文、图片 `file_id` 等 webhook payload 内容出现在 Action 日志；同步和失败通知改为通过 runner 临时事件文件读取队列 payload。
+- 同步 summary 与 action logger 默认 hash 飞书 `oc_`、chat id、file/image key、COS bucket/pathPrefix 等敏感字段；GitHub Actions 中禁止 `--debug-json`，避免 snapshot/健康明细进入 Action 日志。
 
 ### Fixed
 
+- 修复华为运动健康睡眠详情图在 AI 识别时误把阶段图/趋势小卡片推算值当作睡眠总时长的问题：睡眠 prompt 现在明确以 `夜间睡眠 X小时Y分钟` 文字行为权威来源，单独缺少 `总睡眠` 标签时只写 `nightSleepMinutes` 并由程序侧回退展示；同步 bump recognition prompt version 以避开旧识别缓存，并更新 Telegram 睡眠截图回归用例。
+- 修复睡眠图片重发后旧错误时长仍污染 dev 页面的问题：`core.sleep` 现在按归档日期、睡眠类型、入睡时间和醒来时间 canonicalize，同一段睡眠跨 Telegram/飞书或分钟数修正时会替换旧行；sleep backfill 会重放已有 ingest 睡眠批次修复旧数据，Pages 构建也改为先执行安全数据库修复再导出 Markdown。
+- 修复 Telegram 睡眠截图归档日期被多减一天的问题：当 AI 已根据睡眠时间轴识别出入睡日期，但 `bedtime` / `wakeTime` 只包含时分时，程序不再把该日期当作醒来日期再次前移，避免睡眠数据写入前一天、导致目标日页面显示为空。
+- 修复 docs 体系重构后 CI 文档契约测试仍读取 `docs/系统核心.md`、`docs/系统配置.md` 和缺失的 `docs/README.md` 导致 `test:fast` 失败的问题；新增当前 `docs/README.md`，同步根 README 链接、维护/排障文档和相关测试到新的分层 docs 入口。
 - 修复日志泄露修复引入的 Telegram/飞书队列回归：`workflow_dispatch` 不能通过 `$GITHUB_ENV` 覆盖受保护的 `GITHUB_EVENT_PATH`，导致同步 step 读回原始 workflow 事件、实际消费 0 条 webhook update；现在 workflow 通过 `SYNC_DISPATCH_EVENT_PATH` 传递 runner 临时事件文件路径，保留 payload 不落日志的同时恢复 Telegram 图片随想处理、结果通知和页面部署触发。
 - 增强 Telegram/飞书同步的 COS 上传失败诊断：同步 workflow 现在会在失败时提取高信号日志摘要并回传到 Telegram 失败通知；COS SDK 普通对象错误会输出 `Code`、`statusCode`、`RequestId` 等字段，不再显示 `[object Object]`，便于定位 CAM 权限、bucket/region 或签名问题。
 - 修复 Telegram/飞书随想图片通过 COS 上传时，下载层返回 `Uint8Array` 被腾讯云 COS SDK 拒绝为 `params Body format error` 的问题；COS provider 现在会在上传前转换为 Node `Buffer`，保持本地图片写入路径不变。

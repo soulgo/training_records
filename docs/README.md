@@ -1,72 +1,41 @@
-# Training Records Docs
+# Training Records 文档
 
-本目录是当前项目的唯一长期文档入口。历史方案、审查记录和重构包只保存在
-`归档/`，用于追溯，不作为当前行为依据。
+本目录是当前系统维护入口。当前事实只以代码、SQL、workflow、prompt source 和本目录的一线文档为准；历史重构记录只用于追溯背景。
 
-## 10 分钟阅读路径
+## 快速导航
 
-1. [10 分钟系统导览](总览/系统导览.md)
-2. [系统行为手册](总览/系统行为手册.md)
-3. [核心业务总览](核心业务/核心业务.md)
-4. [消息链路总览](消息链路/消息链路.md)
-5. [AI 识别体系](AI识别体系/AI识别体系.md)
-6. [数据模型总览](数据模型/数据模型.md)
-7. [部署运维总览](部署运维/部署运维.md)
-8. [故障排查总览](故障排查/故障排查.md)
-
-## 按角色阅读
-
-| 角色 | 先读 | 再读 |
-| --- | --- | --- |
-| 新人 | [10 分钟系统导览](总览/系统导览.md) | [系统行为手册](总览/系统行为手册.md)、[文档地图](总览/系统导览.md) |
-| 架构师 | [系统架构](架构/系统架构.md) | [架构决策记录](架构/架构决策记录/README.md) |
-| 开发人员 | [项目结构](开发指南/开发指南.md#项目结构) | [核心模块](开发指南/开发指南.md#核心模块)、[测试方式](开发指南/开发指南.md#测试方式) |
-| 运维人员 | [部署运维总览](部署运维/部署运维.md) | [日常维护](运维手册/运维手册.md#日常维护)、[故障排查](故障排查/故障排查.md) |
-| AI Agent | [AI Agent 入口](AI-Agent/README.md) | [事实与不变量](AI-Agent/README.md#事实与不变量)、[验证命令](AI-Agent/README.md#验证命令) |
-
-## 关键维护入口
-
-- 日常维护：[运维手册/运维手册.md#日常维护](运维手册/运维手册.md#日常维护)
-- 内部接口：[参考资料/参考资料.md#内部接口索引](参考资料/参考资料.md#内部接口索引)
-- 消息链路：[消息链路/消息链路.md](消息链路/消息链路.md)
-- 数据恢复：[运维手册/运维手册.md#数据恢复](运维手册/运维手册.md#数据恢复)
-- 后续规划状态：[后续规划_未实现/README.md](后续规划_未实现/README.md)
-
-## 当前事实源规则
-
-- 代码、SQL、workflow、prompt source 是最终事实源。
-- 当前长期文档只存在于本目录的正式分类中。
-- `归档/` 是历史证据层，不作为当前操作入口。
-- PostgreSQL `core.*` 是训练、饮食、体脂、睡眠、随想和分析读取的事实源。
-- Markdown 和 `source/_posts` 是 DB 派生备份或静态站点内容，不是正常图片同步成功路径的即时写入目标。
-- 随想图片引用保存在 `core.thought.image_refs_json`；默认可为本地 `/images/thoughts/...`，启用腾讯云 COS 后为完整 `https://...` 公有读 URL。
-- Telegram 和飞书是通道；业务能力按训练、饮食、体脂、睡眠、随想、分析组织。
-- AI 输出不是事实，必须经过 schema、置信度、日期和业务规则校验后才可入库。
-
-## 目录
-
-| 目录 | 作用 |
+| 文档 | 作用 |
 | --- | --- |
-| [总览](总览/) | 新人导览、系统上下文、系统行为、当前边界、文档地图 |
-| [架构](架构/) | 系统架构、消息架构、数据源策略、ADR |
-| [核心业务](核心业务/) | 训练、饮食、体脂、睡眠、随想、分析业务说明 |
-| [消息链路](消息链路/) | Telegram、飞书、Cloudflare、Actions、AI、DB、Markdown 链路 |
-| [AI 识别体系](AI识别体系/) | 图片分类、Prompt、schema、主备 AI、分析 AI、AI 审计 |
-| [数据模型](数据模型/) | core/ingest/archive schema、数据生命周期、幂等、事务、索引和查询 |
-| [部署运维](部署运维/) | GitHub Actions、Cloudflare、Telegram、飞书、Pages、配置矩阵 |
-| [开发指南](开发指南/) | 项目结构、核心模块、本地开发、调试、测试、验收、改动 checklist |
-| [运维手册](运维手册/) | 日常维护、pending、数据恢复、Markdown 互导、监控告警 |
-| [故障排查](故障排查/) | AI、Action、DB、通道、Worker、数据质量、站点故障排查 |
-| [参考资料](参考资料/) | CLI、环境变量、内部接口、命令、术语 |
-| [AI Agent](AI-Agent/) | 面向 AI Agent 的任务路由、边界和验证命令 |
-| [后续规划_未实现](后续规划_未实现/) | 未实现规划和已实施方案追溯索引，不作为正式事实入口 |
-| [归档](归档/) | 历史文档、重构方案和审查证据 |
+| [系统配置](01_系统配置/README.md) | dev/main 配置差异、GitHub Actions、Wrangler、Secret/Variable 读取位置。 |
+| [系统核心逻辑](02_系统核心逻辑/README.md) | 架构、消息链路、AI 识别、数据入库、展示读取、Action 日志与失败补偿。 |
+| [问题与排查](04_问题与排查/README.md) | PostgreSQL、OSS、Telegram、飞书、AI、Action 日志、部署和资源问题。 |
+| [日常规则](05_日常规则/README.md) | dev/main 合并、后续规划落地和文档同步规则。 |
+| [历史重构记录](03_历史重构记录/README.md) | 旧文档入口和历史方案归档，不作为当前操作入口。 |
 
-## 维护规则
+## 推荐阅读路径
 
-1. 改代码、SQL、workflow、prompt 时，同步更新对应正式文档。
-2. 不把新事实写进 `归档/`。
-3. 同一主题只能有一个 SSOT 文档；其它文档只链接它。
-4. 文档迁移时先保留历史归档，再删除重复内容。
-5. 纯文档整理不得修改运行逻辑。
-6. `后续规划_未实现/` 中只有状态索引标为已实现的目录可作为追溯材料；当前事实必须落在正式分类文档。
+1. 先读 [系统总览](02_系统核心逻辑/系统总览.md)，理解 Telegram/飞书 -> Worker -> Queue -> Action -> AI -> DB -> Pages 的消息链路。
+2. 配置或排查环境时读 [系统配置](01_系统配置/README.md)、[dev 配置](01_系统配置/dev.md) 和 [main 配置](01_系统配置/main.md)。
+3. 排查同步结果时读 [Action 日志与失败补偿](02_系统核心逻辑/Action日志与失败补偿.md) 和 [Action 日志排查](04_问题与排查/Action日志.md)。
+4. 做日常维护命令时使用 `npm run maintenance:inspect`、`npm run sync:db`、`npm run import:markdown`、`npm run export:markdown`、`npm run reconcile:markdown`、`npm run backfill:core` 和 `npm run backfill:thoughts`。
+
+## 当前事实规则
+
+- PostgreSQL `core.*` 是训练、饮食、体脂、睡眠、随想和展示读取的业务事实源。
+- `ingest.*` 保存消息批次、识别结果、AI 调用日志和 pending 队列。
+- `archive.*` 保存历史 Markdown 解析和归档。
+- Markdown 是数据库派生备份，不是图片同步的主写入路径。
+- 历史目录中的旧入口、旧配置和旧核心文档只能用于追溯，不得作为当前维护入口。
+
+## 维护命令
+
+| 命令 | 用途 |
+| --- | --- |
+| `npm run maintenance:inspect` | 只读巡检 pending 队列、AI monitoring、归档失败和单批次恢复目标。 |
+| `npm run maintenance:inspect -- --batch-id <batchId>` | 只读审计单个批次的识别 JSON、core 目标和 `recoveryTargetDays`。 |
+| `npm run sync:db` | 安全数据库修复入口。 |
+| `npm run import:markdown` | 显式 Markdown 导入数据库。 |
+| `npm run export:markdown` | 数据库导出 Markdown 备份。 |
+| `npm run reconcile:markdown` | 显式 Markdown 与数据库对账。 |
+| `npm run backfill:core` | 重放 archive 到 core。 |
+| `npm run backfill:thoughts` | 随想 Markdown 回填 core。 |

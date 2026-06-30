@@ -613,6 +613,86 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls.at(-1)[0], 'end');
 });
 
+test('persistNormalizedBatch returns safe persistence summary with row counts and slow queries', async () => {
+  const fakeClient = {
+    async connect() {},
+    async query(sql) {
+      if (/insert into ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (/insert into ingest\.telegram_message/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (/insert into ingest\.telegram_recognition/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (/insert into core\.training_day/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (/insert into core\.measurement/i.test(sql)) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (/insert into core\.activity/i.test(sql)) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (/insert into core\.meal/i.test(sql)) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (/insert into core\.sleep/i.test(sql)) {
+        return { rows: [], rowCount: 0 };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+    async end() {},
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: normalizedBatch,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TRAINING_DB_SLOW_QUERY_MS: '0',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+    sourceChannel: 'telegram',
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.match(result.transactionId, /^dbtx_[a-f0-9]{16}$/);
+  assert.equal(result.sourceChannel, 'telegram');
+  assert.deepEqual(result.rowCounts, {
+    ingestBatch: 1,
+    ingestMessage: 1,
+    ingestRecognition: 1,
+    aiCallLog: 0,
+    coreTrainingDay: 2,
+    coreMeasurement: 1,
+    coreActivity: 0,
+    coreMeal: 0,
+    coreSleep: 0,
+    coreThought: 0,
+  });
+  assert.equal(typeof result.durationMs, 'number');
+  assert.ok(result.slowQueries.length > 0);
+  assert.ok(result.slowQueries.every((query) => query.operation && query.table && Number.isFinite(query.durationMs)));
+  assert.doesNotMatch(JSON.stringify(result.slowQueries), /postgresql:\/\/|training_writer|secret|select|insert|\$/i);
+  assert.deepEqual(result.persistenceResult, {
+    status: 'stored',
+    batchId: normalizedBatch.batchId,
+    archivedDate: '2026-05-09',
+    transactionId: result.transactionId,
+    sourceChannel: 'telegram',
+    rowCounts: result.rowCounts,
+    durationMs: result.durationMs,
+    slowQueries: result.slowQueries,
+    pendingStatus: null,
+    rollbackStatus: null,
+  });
+});
+
 test('persistNormalizedBatch preserves fallback AI audit fields in recognition json', async () => {
   const calls = [];
   const fakeClient = {
@@ -1119,7 +1199,7 @@ test('persistTelegramImageBatchIncremental requires explicit sourceChannel', asy
   assert.equal(calls.length, 0);
 });
 
-test('core detail keys keep Telegram and Feishu sources from overwriting each other', async () => {
+test('core detail keys keep source-specific facts separate but canonicalize sleep identity across channels', async () => {
   const { calls, client } = createIncrementalPersistClient();
   const processedAt = new Date('2026-06-14T00:00:00.000Z');
   const batch = {
@@ -1138,7 +1218,7 @@ test('core detail keys keep Telegram and Feishu sources from overwriting each ot
   await persistTelegramImageBatchIncremental(client, batch, processedAt, { sourceChannel: 'telegram' });
   await persistTelegramImageBatchIncremental(client, batch, processedAt, { sourceChannel: 'feishu' });
 
-  const keyPairs = [
+  const [measurementKeys, activityKeys, mealKeys, sleepKeys] = [
     /insert into core\.measurement/i,
     /insert into core\.activity/i,
     /insert into core\.meal/i,
@@ -1149,10 +1229,12 @@ test('core detail keys keep Telegram and Feishu sources from overwriting each ot
       .map(([, params]) => params[0][0])
   );
 
-  for (const keys of keyPairs) {
+  for (const keys of [measurementKeys, activityKeys, mealKeys]) {
     assert.equal(keys.length, 2);
     assert.notEqual(keys[0], keys[1]);
   }
+  assert.equal(sleepKeys.length, 2);
+  assert.equal(sleepKeys[0], sleepKeys[1]);
 });
 
 test('persistNormalizedBatch does not treat image batches without photos as Telegram image batches', async () => {
@@ -1495,7 +1577,8 @@ test('persistNormalizedBatch upserts sleep without deleting nutrition details', 
   assert.equal(calls.some(([sql]) => /insert into core\.measurement/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /insert into core\.activity/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => /insert into core\.meal/i.test(sql)), false);
-  assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal|sleep)/i.test(sql)), false);
+  assert.ok(calls.some(([sql]) => /delete from core\.sleep/i.test(sql)));
+  assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal)(?!\w)/i.test(sql)), false);
   assert.match(trainingDayInsert[0], /existing_day/i);
   assert.match(trainingDayInsert[0], /sleep_summary/i);
   assert.match(trainingDayInsert[0], /sleep_total_minutes/i);
@@ -1636,7 +1719,7 @@ test('persistNormalizedBatch stores sleep payload in core without writing archiv
   assert.ok(ingestBatchInsert);
   assert.match(sleepInsert[0], /\$16::text\[\]/i);
   assert.doesNotMatch(sleepInsert[0], /sleep_stage_detail[\s\S]*jsonb\[\]/i);
-  assert.equal(sleepInsert[1][0][0], createHash('md5').update('telegram|2026-06-03|夜间睡眠|23:26|06:19|411').digest('hex'));
+  assert.equal(sleepInsert[1][0][0], createHash('md5').update('2026-06-03|夜间睡眠|23:26|06:19').digest('hex'));
   assert.deepEqual(sleepInsert[1][1], ['2026-06-03']);
   assert.deepEqual(sleepInsert[1][7], [411]);
   assert.deepEqual(sleepInsert[1][8], [411]);
@@ -1647,7 +1730,14 @@ test('persistNormalizedBatch stores sleep payload in core without writing archiv
   assert.deepEqual(sleepInsert[1][29], ['建议睡觉时关灯。']);
   assert.equal(trainingDayInsert[1].length, 11);
   assert.equal(JSON.parse(ingestBatchInsert[1][9]).sleep.records[0].totalSleepMinutes, 411);
-  assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal|sleep)/i.test(sql)), false);
+  const sleepCleanup = calls.find(([sql]) => /delete from core\.sleep/i.test(sql));
+  assert.ok(sleepCleanup);
+  assert.match(sleepCleanup[0], /coalesce\(existing\.bedtime, ''\) = coalesce\(incoming\.bedtime, ''\)/i);
+  assert.deepEqual(sleepCleanup[1][0], ['2026-06-03']);
+  assert.deepEqual(sleepCleanup[1][1], ['夜间睡眠']);
+  assert.deepEqual(sleepCleanup[1][2], ['23:26']);
+  assert.deepEqual(sleepCleanup[1][3], ['06:19']);
+  assert.equal(calls.some(([sql]) => /delete from core\.(measurement|activity|meal)(?!\w)/i.test(sql)), false);
 });
 
 test('persistNormalizedBatch merges an existing core day using only schema-defined columns', async () => {
@@ -1901,6 +1991,91 @@ test('backfillCoreSleepFromIngestBatchesClient repairs stored sleep batches miss
   assert.ok(sleepInsert);
   assert.deepEqual(sleepInsert[1][8], [411]);
   assert.deepEqual(sleepInsert[1][10], [145]);
+});
+
+test('backfillCoreSleepFromIngestBatchesClient replays latest ingest sleep batches for existing core sleep rows', async () => {
+  const calls = [];
+  const fakeClient = {
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from ingest\.telegram_batch b/i.test(sql)) {
+        if (/not exists[\s\S]*from core\.sleep/i.test(sql)) {
+          return { rows: [] };
+        }
+        return {
+          rows: [
+            {
+              batch_id: 'old-wrong-sleep',
+              batch_payload_json: {
+                status: 'ready',
+                archivedDate: '2026-06-29',
+                sleep: {
+                  records: [{
+                    sleepType: '夜间睡眠',
+                    bedtime: '23:48',
+                    wakeTime: '06:34',
+                    nightSleepMinutes: 267,
+                    totalSleepMinutes: 267,
+                  }],
+                },
+              },
+            },
+            {
+              batch_id: 'new-correct-sleep',
+              batch_payload_json: {
+                status: 'ready',
+                archivedDate: '2026-06-29',
+                sleep: {
+                  records: [{
+                    sleepType: '夜间睡眠',
+                    bedtime: '23:48',
+                    wakeTime: '06:34',
+                    nightSleepMinutes: 387,
+                    totalSleepMinutes: 387,
+                  }],
+                },
+              },
+            },
+          ],
+        };
+      }
+      if (/from archive\.training_sleep\s+a/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.training_day/i.test(sql)) {
+        return {
+          rows: [{
+            archived_date: '2026-06-29',
+            total_activities: 0,
+            total_duration_seconds: 0,
+            training_calories: 0,
+            workout_duration_minutes: null,
+            active_hours: null,
+            cycling_distance_km: 0,
+            intake_calories: null,
+            nutrition_details_json: [],
+          }],
+        };
+      }
+      if (/from core\.measurement/i.test(sql) || /from core\.activity/i.test(sql) || /from core\.meal/i.test(sql) || /from core\.sleep/i.test(sql)) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+  };
+
+  const result = await backfillCoreSleepFromIngestBatchesClient(fakeClient, {
+    processedAt: new Date('2026-06-30T00:30:00.000Z'),
+  });
+  const sleepInserts = calls.filter(([sql]) => /insert into core\.sleep/i.test(sql));
+
+  assert.equal(result.status, 'stored');
+  assert.equal(result.batchesBackfilled, 2);
+  assert.deepEqual(result.daysBackfilled, ['2026-06-29']);
+  assert.equal(calls.some(([sql]) => /from ingest\.telegram_batch b[\s\S]*not exists[\s\S]*from core\.sleep/i.test(sql)), false);
+  assert.equal(sleepInserts.length, 2);
+  assert.deepEqual(sleepInserts.at(-1)[1][7], [387]);
+  assert.deepEqual(sleepInserts.at(-1)[1][8], [387]);
 });
 
 test('backfillCoreSleepFromIngestBatchesClient creates core day from archive-only sleep rows', async () => {
@@ -2556,17 +2731,27 @@ test('persistNormalizedBatch rolls back the transaction when a core write fails'
   };
 
   await assert.rejects(
-    persistNormalizedBatch({
-      batch: normalizedBatch,
-      env: {
-        TRAINING_DB_ENABLED: 'true',
-        TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-      },
-      createClient() {
-        return fakeClient;
-      },
-      processedAt: new Date('2026-05-13T00:00:00.000Z'),
-    }),
+    async () => {
+      try {
+        await persistNormalizedBatch({
+          batch: normalizedBatch,
+          env: {
+            TRAINING_DB_ENABLED: 'true',
+            TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+          },
+          createClient() {
+            return fakeClient;
+          },
+          processedAt: new Date('2026-05-13T00:00:00.000Z'),
+        });
+      } catch (error) {
+        assert.equal(error.persistenceResult.status, 'failed');
+        assert.equal(error.persistenceResult.rollbackStatus, 'succeeded');
+        assert.match(error.persistenceResult.transactionId, /^dbtx_[a-f0-9]{16}$/);
+        assert.doesNotMatch(JSON.stringify(error.persistenceResult), /postgresql:\/\/|training_writer|secret|insert into|core write failed/i);
+        throw error;
+      }
+    },
     /core write failed/,
   );
 
@@ -2671,6 +2856,11 @@ test('persistNormalizedBatch returns unchanged from atomic batch upsert when pay
 
   assert.equal(result.status, 'unchanged');
   assert.equal(result.batchId, normalizedBatch.batchId);
+  assert.equal(result.reason, 'payload_hash_unchanged');
+  assert.match(result.transactionId, /^dbtx_[a-f0-9]{16}$/);
+  assert.equal(result.persistenceResult.status, 'unchanged');
+  assert.equal(result.persistenceResult.reason, 'payload_hash_unchanged');
+  assert.equal(result.persistenceResult.rollbackStatus, 'not_needed');
   const statements = calls.map(([sql]) => sql);
   const beginIndex = statements.indexOf('BEGIN');
   const batchUpsertIndex = calls.findIndex(([sql]) => /insert into ingest\.telegram_batch/i.test(sql));
@@ -3021,12 +3211,13 @@ test('persistNormalizedBatch reports missing thought edit targets without insert
     processedAt: new Date('2026-06-15T09:15:00.000Z'),
   });
 
-  assert.deepEqual(result, {
-    status: 'not_found',
-    batchId: 'thought-edit-999',
-    messageId: 501,
-    archivedDate: null,
-  });
+  assert.equal(result.status, 'not_found');
+  assert.equal(result.batchId, 'thought-edit-999');
+  assert.equal(result.messageId, 501);
+  assert.equal(result.archivedDate, null);
+  assert.match(result.transactionId, /^dbtx_[a-f0-9]{16}$/);
+  assert.equal(result.persistenceResult.status, 'not_found');
+  assert.equal(result.persistenceResult.batchId, 'thought-edit-999');
   assert.equal(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)), true);
   assert.equal(calls.some(([sql]) => /insert into core\.thought/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => sql === 'COMMIT'), true);
