@@ -13,8 +13,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增 `/monitor/` 健身监控总览页：基于现有 PostgreSQL snapshot 生成 `monitorView.json`，汇总展示体重、体脂率、睡眠评分、热量平衡、近 30 天跨域趋势、连续性和预警信息，并在导航中新增“监控”入口。
+- 新增 `docs/02_系统核心逻辑/训练监控逻辑.md` 维护文档：覆盖监控页从快照到前端 Chart.js 渲染的端到端链路、视图模型结构（指标卡片、趋势图、连续性与预警）、配置参数、空数据降级和维护要点，并补全 `查询展示逻辑.md` 页面模块表与核心逻辑目录阅读顺序索引。
+
 ### Changed
 
+- 扩展 `/monitor/` 健身监控总览页：在原有体重、体脂、睡眠、热量、趋势和预警基础上，新增身体成分、恢复监控、训练结构、饮食维护、数据完整性与 7/30 天汇总模块；趋势图从 4 张扩展为 6 张，补充身体成分趋势、恢复监控趋势和骑行里程序列，并重写监控页专用 UI 样式，使桌面与移动端监控信息更完整、排版更协调。
 - 重构当前 docs 目录为 `01_系统配置`、`02_系统核心逻辑`、`03_历史重构记录`、`04_问题与排查`、`05_日常规则` 五类入口：重写 dev/main 环境配置文档，在开头直接列出 GitHub Settings 与 Cloudflare 必填参数；新增 dev/main 分支合并数据隔离规则和后续规划落地后的当前文档同步规则，明确 `dev` 与 `main` 运行数据互相独立、历史规划不能替代当前系统文档。
 - 重构并校准 docs 长期文档入口：将当前系统事实收敛到 `docs/01_系统配置/`、`docs/02_系统核心逻辑/`、`docs/04_问题与排查/` 和 `docs/05_日常规则/`，删除旧 `docs/归档/` 与临时 superpowers spec，保留 `docs/03_历史重构记录/` 作为非当前事实资料；同步修正 main/dev 配置、Cloudflare Worker secrets、Durable Object 绑定名、图片日期归档和随想命令合同。
 - 完成 action 日志排查优化文档第三轮审计：通过 GitHub API 拉取实际运行日志（Sync #112/#117、Deploy #350/#233、Markdown Backup #20、CI Tests #285、Refresh Webhook #130）与 `main`/`dev` 两分支源码交叉验证，发现前两轮文档以 dev 工作树为"当前源码"导致生产 main 分支的 dispatch payload 泄漏被误判为"不成立问题"。新增 `07_第三轮审计_实际日志复核.md`，并修订 01-06 全部文档：dispatch payload 泄漏回退为 P0 安全阻塞项（实测 main 仍写 `SYNC_DISPATCH_PAYLOAD` 原文到 `$GITHUB_ENV`，dev 修复未合并）；Markdown snapshot 泄漏范围从"仅 backup"扩大到两个 deploy workflow（实测 Deploy #350 含 399 处、#233 含 223 处健康字段）；测试 fixture 噪声归属从 CI 修正为 deploy（site-build `run_tests:'true'`）；补全飞书 `oc_` chat_id 在 sync stdout 的脱敏规则；05 实施顺序前置 main 合并项；06 阻塞项从 1 个增至 2 个。
@@ -29,6 +35,8 @@
 
 ### Fixed
 
+- 修复监控页趋势图图例排版不协调的问题：图表副标题改用专用 class，避免标题区 `span` 样式污染图例色点和标签；图例改为紧凑胶囊标签并支持移动端自然换行。
+- 修复 Telegram 随想 `/移动 id 模块` 移动带图随想时图片引用丢失的问题：DB-only 移动/编辑现在会保留 `photoPaths: null` 的“不改原图片”语义，不再误转为空数组清空 `core.thought.image_refs_json`；同步补充移动带图随想和落库参数回归测试。
 - 修复华为运动健康睡眠详情图在 AI 识别时误把阶段图/趋势小卡片推算值当作睡眠总时长的问题：睡眠 prompt 现在明确以 `夜间睡眠 X小时Y分钟` 文字行为权威来源，单独缺少 `总睡眠` 标签时只写 `nightSleepMinutes` 并由程序侧回退展示；同步 bump recognition prompt version 以避开旧识别缓存，并更新 Telegram 睡眠截图回归用例。
 - 修复睡眠图片重发后旧错误时长仍污染 dev 页面的问题：`core.sleep` 现在按归档日期、睡眠类型、入睡时间和醒来时间 canonicalize，同一段睡眠跨 Telegram/飞书或分钟数修正时会替换旧行；sleep backfill 会重放已有 ingest 睡眠批次修复旧数据，Pages 构建也改为先执行安全数据库修复再导出 Markdown。
 - 修复 Telegram 睡眠截图归档日期被多减一天的问题：当 AI 已根据睡眠时间轴识别出入睡日期，但 `bedtime` / `wakeTime` 只包含时分时，程序不再把该日期当作醒来日期再次前移，避免睡眠数据写入前一天、导致目标日页面显示为空。

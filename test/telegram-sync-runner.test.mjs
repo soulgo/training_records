@@ -4076,7 +4076,7 @@ telegram_chat_id: 42
   assert.equal(result.batchResults[0].persistedThoughtModule, 'misc');
   assert.equal(persistedBatches[0].kind, 'thought_edit');
   assert.equal(persistedBatches[0].thoughtEdit.storage.markdownPath, null);
-  assert.deepEqual(persistedBatches[0].thoughtEdit.storage.photoPaths, []);
+  assert.equal(persistedBatches[0].thoughtEdit.storage.photoPaths, null);
   assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, null);
   assert.equal(persistedBatches[0].thoughtEdit.tags, undefined);
   assert.match(persistedBatches[0].thoughtEdit.body, /今天骑行 40 公里，动作更顺/);
@@ -4815,6 +4815,64 @@ telegram_chat_id: 42
   assert.match(postContent, /thought_module: misc/);
   assert.match(postContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
   assert.match(postContent, /应该回到锻炼随想的正文/);
+});
+
+test('runTelegramSync keeps existing thought image refs when moving a database-only thought', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-move-image-refs-'));
+  const postsDir = path.join(tempRoot, 'source', '_posts');
+  await mkdir(postsDir, { recursive: true });
+  await writeFile(
+    path.join(postsDir, '2026-06-22-telegram-thought-570.md'),
+    `---
+date: 2026-06-22 06:39:00
+tags:
+  - 杂七杂八
+  - 随想
+  - Telegram
+thought_module: misc
+telegram_message_id: 570
+telegram_chat_id: 42
+photos:
+  - /images/thoughts/2026/06/2026-06-22-telegram-thought-570-1.jpg
+---
+
+如果希望有所成就，就要勇敢踏上征程。
+`,
+    'utf8',
+  );
+
+  const persistedBatches = [];
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 813,
+          date: Math.floor(new Date('2026-06-30T06:22:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/移动 570 身体反馈',
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.equal(result.batchResults[0].kind, 'thought_move');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_move_database_only');
+  assert.equal(persistedBatches[0].thoughtMove.thoughtModule, 'body_feedback');
+  assert.equal(persistedBatches[0].thoughtMove.storage.photoPaths, null);
 });
 
 test('runTelegramSync treats /随想 id module as a move instead of creating a new thought', async () => {

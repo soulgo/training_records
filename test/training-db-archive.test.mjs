@@ -475,9 +475,11 @@ test('generateTrainingData keeps main outputs when archive sync fails', async ()
   });
 
   const outputPath = path.join(tempRoot, 'source', '_data', 'training.json');
+  const monitorViewPath = path.join(tempRoot, 'source', '_data', 'monitorView.json');
   const debugOutputPath = path.join(tempRoot, '训练数据解析.md');
 
   assert.ok(JSON.parse(await readFile(outputPath, 'utf8')));
+  assert.ok(JSON.parse(await readFile(monitorViewPath, 'utf8')));
   assert.match(await readFile(debugOutputPath, 'utf8'), /训练数据解析排查/);
   assert.equal(loggedFailures.length, 1);
   assert.match(stderrChunks.join(''), /database unavailable/);
@@ -522,10 +524,12 @@ test('generateTrainingData skips archive sync when build archive write is disabl
 
   assert.ok(JSON.parse(await readFile(path.join(tempRoot, 'source', '_data', 'training.json'), 'utf8')));
   assert.ok(JSON.parse(await readFile(path.join(tempRoot, 'source', '_data', 'dashboardView.json'), 'utf8')));
+  assert.ok(JSON.parse(await readFile(path.join(tempRoot, 'source', '_data', 'monitorView.json'), 'utf8')));
   assert.match(await readFile(path.join(tempRoot, '训练数据解析.md'), 'utf8'), /训练数据解析排查/);
   assert.deepEqual(archiveCalls, []);
   assert.equal(loggedFailures.length, 0);
   assert.match(stdoutChunks.join(''), /Generated source\/_data\/training\.json/);
+  assert.match(stdoutChunks.join(''), /Generated source\/_data\/monitorView\.json/);
   assert.match(stderrChunks.join(''), /\[training-db-archive\] skipped by TRAINING_BUILD_ARCHIVE_WRITE=false/);
 });
 

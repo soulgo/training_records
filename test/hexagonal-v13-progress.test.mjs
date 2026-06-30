@@ -7,6 +7,7 @@ import {
   BodyMetricGenerator,
   DashboardGenerator,
   HexoGeneratorAdapter,
+  MonitorGenerator,
   TrainingDayGenerator,
 } from '../src/adapters/hexo/index.mjs';
 import { verifyTelegramWebhookSecret } from '../src/adapters/telegram/index.mjs';
@@ -61,6 +62,7 @@ test('HexoGeneratorAdapter coordinates split generators into JSON payloads', asy
       new TrainingDayGenerator(),
       new BodyMetricGenerator(),
       new DashboardGenerator({ buildDashboardViewModel: (input) => ({ latestDate: input.latest.daily.date }) }),
+      new MonitorGenerator({ buildMonitorViewModel: (input) => ({ monitorDate: input.latest.daily.date }) }),
     ],
     writeJson: async (relativePath, payload) => {
       writes.set(relativePath, payload);
@@ -73,10 +75,12 @@ test('HexoGeneratorAdapter coordinates split generators into JSON payloads', asy
     'training.json',
     'body-metrics.json',
     'dashboardView.json',
+    'monitorView.json',
   ]);
   assert.equal(writes.get('training.json').daily[0].date, '2026-06-03');
   assert.equal(writes.get('body-metrics.json').measurements[0].weightKg, 70.5);
   assert.deepEqual(writes.get('dashboardView.json'), { latestDate: '2026-06-03' });
+  assert.deepEqual(writes.get('monitorView.json'), { monitorDate: '2026-06-03' });
 });
 
 test('verifyTelegramWebhookSecret rejects missing or wrong Telegram secret header', () => {

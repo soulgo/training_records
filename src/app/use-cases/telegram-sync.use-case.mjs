@@ -728,7 +728,7 @@ function hasSleepBatchPayload(batch) {
 function attachThoughtStorageMetadata(batch, writeResult, activeRootDir) {
   const storage = {
     markdownPath: toRepoRelativePath(writeResult.postPath, activeRootDir),
-    photoPaths: writeResult.photoPaths ?? [],
+    photoPaths: writeResult.photoPaths === undefined ? [] : writeResult.photoPaths,
     deletedPhotoPaths: (writeResult.deletedPhotoPaths ?? [])
       .map((photoPath) => toPublicThoughtImagePath(photoPath, activeRootDir))
       .filter(Boolean),

@@ -15,6 +15,7 @@ const execFileAsync = promisify(execFile);
 test('derived data path helper protects generated training and Telegram backup paths', () => {
   assert.equal(isDerivedDataPath('训练记录.md'), true);
   assert.equal(isDerivedDataPath('source/_data/training.json'), true);
+  assert.equal(isDerivedDataPath('source/_data/monitorView.json'), true);
   assert.equal(isDerivedDataPath('source/_posts/2026-05-14-telegram-thought-501.md'), true);
   assert.equal(isDerivedDataPath('source/_posts/2026-06-16-feishu-thought-338182848231024.md'), true);
   assert.equal(isDerivedDataPath('source/images/thoughts/2026/05/image.jpg'), true);

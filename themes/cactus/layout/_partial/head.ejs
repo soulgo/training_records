@@ -56,6 +56,8 @@
     <%- css('css/style') %>
     <% if (page.layout === 'dashboard') { %>
       <%- css('css/training-dashboard') %>
+    <% } else if (page.layout === 'monitor') { %>
+      <%- css('css/training-monitor') %>
     <% } else if (page.layout === 'thoughts') { %>
       <%- css('css/thoughts') %>
     <% } %>

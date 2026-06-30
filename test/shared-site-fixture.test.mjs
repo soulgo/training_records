@@ -12,24 +12,29 @@ const rootDir = path.resolve(__dirname, '..');
 test('withSharedSiteFixture restores generated source data files after site tests', () => {
   const trainingDataPath = path.join(rootDir, 'source', '_data', 'training.json');
   const dashboardViewPath = path.join(rootDir, 'source', '_data', 'dashboardView.json');
+  const monitorViewPath = path.join(rootDir, 'source', '_data', 'monitorView.json');
   const bodyMetricsPath = path.join(rootDir, 'source', '_data', 'body-metrics.json');
   let originalTrainingData;
   let originalDashboardView;
+  let originalMonitorView;
   let originalBodyMetrics;
 
   withSharedSiteFixture(() => {
     originalTrainingData = readOptionalFile(trainingDataPath);
     originalDashboardView = readOptionalFile(dashboardViewPath);
+    originalMonitorView = readOptionalFile(monitorViewPath);
     originalBodyMetrics = readOptionalFile(bodyMetricsPath);
     mkdirSync(path.dirname(trainingDataPath), { recursive: true });
     writeFileSync(trainingDataPath, '{"dirty":true}\n', 'utf8');
     writeFileSync(dashboardViewPath, '{"dirty":true}\n', 'utf8');
+    writeFileSync(monitorViewPath, '{"dirty":true}\n', 'utf8');
     writeFileSync(bodyMetricsPath, '{"dirty":true}\n', 'utf8');
   });
 
   withSharedSiteFixture(() => {
     assert.equal(readOptionalFile(trainingDataPath), originalTrainingData);
     assert.equal(readOptionalFile(dashboardViewPath), originalDashboardView);
+    assert.equal(readOptionalFile(monitorViewPath), originalMonitorView);
     assert.equal(readOptionalFile(bodyMetricsPath), originalBodyMetrics);
   });
 });
