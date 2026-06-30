@@ -17,6 +17,7 @@
 
 - 新增 `/monitor/` 健身监控总览页：基于现有 PostgreSQL snapshot 生成 `monitorView.json`，汇总展示体重、体脂率、睡眠评分、热量平衡、近 30 天跨域趋势、连续性和预警信息，并在导航中新增“监控”入口。
 - 新增 `docs/02_系统核心逻辑/训练监控逻辑.md` 维护文档：覆盖监控页从快照到前端 Chart.js 渲染的端到端链路、视图模型结构（指标卡片、趋势图、连续性与预警）、配置参数、空数据降级和维护要点，并补全 `查询展示逻辑.md` 页面模块表与核心逻辑目录阅读顺序索引。
+- 新增显式数据库 migration 边界：`sql/training_records/migrations/` 承接历史运行时 schema preflight DDL，`maintenance:migrate --dry-run/--confirm` 支持列出 migration、读取 `maintenance.schema_migration` 历史、校验 checksum，并要求确认模式显式配置 `TRAINING_DB_MIGRATION_URL`。
 
 ### Changed
 
@@ -27,11 +28,15 @@
 - 落地 action 日志排查优化高收益项：新增统一 `[action-log]` JSON logger 与 `tools/action-sync-summary.mjs`，`sync.yml` / `sync-dev.yml` 共用 Telegram/飞书 summary formatter，summary 补齐 traceId、queueTaskId、AI provider/model/promptVersion/token、DB transaction/rowCounts/slowQueries、deploy duration 等排障字段，并删除重复 inline Node summary。
 - 按后续规划落地文档同步规则完成 action 日志排查优化归档：将已实现规划从 `docs/03_历史重构记录/后续规划_未实现/` 移入 `docs/03_历史重构记录/重构历史/action日志排查优化/`，并把当前日志链路、summary 字段、失败补偿、排查步骤和脱敏规则写回 `docs/02_系统核心逻辑/Action日志与失败补偿.md` 与 `docs/04_问题与排查/Action日志.md`。
 - `export:markdown` 默认 stdout 改为 compact summary，完整导出 payload 仅允许本地显式 `--debug-json` 查看。
+- 下线业务路径默认运行时 DDL：`persistNormalizedBatch()` 与 `export:markdown` 默认不再执行 schema preflight，只有显式开启 `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED=true` 时才保留过渡期 preflight。
+- 拆分数据库读取配置：快照读取、Markdown 导出、`maintenance:inspect`、单批次审计、pending summary、AI monitoring 和 `check:data-consistency` 优先使用 `TRAINING_DB_READONLY_URL`，未配置时再回退 `TRAINING_DB_URL`；main/dev workflow 同步注入只读连接串 Secret。
 
 ### Security
 
 - 修复 `sync.yml` / `sync-dev.yml` 在 `workflow_dispatch` 队列任务中把完整 Telegram/飞书 `dispatch_payload` 注入 GitHub Actions step env 和 `$GITHUB_ENV` 的问题，避免 `chat_id`、用户名、消息正文、图片 `file_id` 等 webhook payload 内容出现在 Action 日志；同步和失败通知改为通过 runner 临时事件文件读取队列 payload。
 - 同步 summary 与 action logger 默认 hash 飞书 `oc_`、chat id、file/image key、COS bucket/pathPrefix 等敏感字段；GitHub Actions 中禁止 `--debug-json`，避免 snapshot/健康明细进入 Action 日志。
+- 收敛 PostgreSQL 角色权限：初始化脚本拆分 `training_migrator`、`training_app`、`training_maintenance` 和 `training_readonly`，schema owner、default privileges 与 migration history 由迁移账号管理，日常业务账号不再持有 DDL 或 `maintenance.schema_migration` 权限。
+- `maintenance:inspect` 新增只读权限审计摘要，输出当前 DB 用户、superuser/migrator-like 标记、各 schema `CREATE` 权限和危险原因，同时继续避免 DB URL、SQL 参数和 Secret 进入日志。
 
 ### Fixed
 

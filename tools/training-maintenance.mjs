@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,13 +9,14 @@ import { exportDerivedTrainingMarkdown as exportDerivedTrainingMarkdownDefault }
 import { syncTrainingCore as syncTrainingCoreDefault } from './sync-training-core.mjs';
 import {
   readPendingRecognitionSummary as readPendingBatchesDefault,
-  resolveTrainingCoreConfig,
+  resolveTrainingMigrationConfig,
+  resolveTrainingReadonlyConfig,
 } from './training-db-core.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..');
 const { Client } = pg;
-const migrationPlan = ['sync committed archive, ingest repairs, and thoughts into core tables'];
+const migrationDir = path.join('sql', 'training_records', 'migrations');
 const pendingDatabaseThresholds = {
   p2OldestAgeMinutes: 30,
   p1OldestAgeMinutes: 24 * 60,
@@ -74,7 +76,7 @@ export async function runTrainingMaintenance(options = {}) {
       env,
       stderr,
       flags,
-      syncTrainingCore,
+      createClient: options.createClient,
     });
   } else {
     payload = {
@@ -101,6 +103,7 @@ async function inspectMaintenanceState({ rootDir, env, readPendingBatches, readB
     now,
   });
   const aiMonitoring = await readAiMonitoringSummary({ env, createClient, now });
+  const permissionAudit = await readDatabasePermissionAudit({ env, createClient });
   const batchAudit = batchId
     ? await readBatchAuditSummary({ env, batchId, readBatchAudit, createClient })
     : null;
@@ -137,6 +140,7 @@ async function inspectMaintenanceState({ rootDir, env, readPendingBatches, readB
     database: {
       enabled: normalizeBooleanFlag(env.TRAINING_DB_ENABLED),
       hasUrl: Boolean(String(env.TRAINING_DB_URL ?? '').trim()),
+      permissionAudit,
     },
   };
   if (batchAudit) {
@@ -177,7 +181,7 @@ async function readPendingDatabaseSummary({ env, readPendingBatches, createClien
 }
 
 async function readAiMonitoringSummary({ env, createClient, now }) {
-  const config = resolveTrainingCoreConfig(env);
+  const config = resolveTrainingReadonlyConfig(env);
   if (!config.enabled || !config.url) {
     return emptyAiMonitoringSummary({ status: 'ok' });
   }
@@ -238,6 +242,90 @@ async function readAiMonitoringSummary({ env, createClient, now }) {
   } finally {
     await client.end();
   }
+}
+
+async function readDatabasePermissionAudit({ env, createClient }) {
+  const config = resolveTrainingReadonlyConfig(env);
+  if (!config.enabled) {
+    return { status: 'skipped', reason: 'disabled' };
+  }
+  if (!config.url) {
+    return { status: 'skipped', reason: 'missing_url' };
+  }
+
+  const client = createMaintenanceClient(config, createClient);
+  try {
+    await client.connect();
+    const result = await client.query(`
+      select
+        current_user::text as current_user,
+        session_user::text as session_user,
+        coalesce((
+          select role.rolsuper
+          from pg_roles role
+          where role.rolname = current_user
+        ), false) as is_superuser,
+        case
+          when to_regnamespace('core') is null then false
+          else has_schema_privilege(current_user, 'core', 'CREATE')
+        end as can_create_core,
+        case
+          when to_regnamespace('ingest') is null then false
+          else has_schema_privilege(current_user, 'ingest', 'CREATE')
+        end as can_create_ingest,
+        case
+          when to_regnamespace('archive') is null then false
+          else has_schema_privilege(current_user, 'archive', 'CREATE')
+        end as can_create_archive,
+        case
+          when to_regnamespace('public') is null then false
+          else has_schema_privilege(current_user, 'public', 'CREATE')
+        end as can_create_public
+    `);
+    return buildDatabasePermissionAudit(result.rows[0] ?? {});
+  } catch (error) {
+    return {
+      status: 'unavailable',
+      error: formatSafeErrorMessage(error),
+    };
+  } finally {
+    await client.end?.();
+  }
+}
+
+function buildDatabasePermissionAudit(row) {
+  const currentUser = normalizeNullableString(row.current_user);
+  const sessionUser = normalizeNullableString(row.session_user);
+  const isSuperuser = normalizeBooleanFlag(row.is_superuser);
+  const isMigratorLikeUser = /\bmigrator\b|_migrator\b|migrator_/iu.test(currentUser ?? '');
+  const schemaCreatePrivileges = {
+    archive: normalizeBooleanFlag(row.can_create_archive),
+    core: normalizeBooleanFlag(row.can_create_core),
+    ingest: normalizeBooleanFlag(row.can_create_ingest),
+    public: normalizeBooleanFlag(row.can_create_public),
+  };
+  const dangerousPrivilegeReasons = [];
+  if (isSuperuser) {
+    dangerousPrivilegeReasons.push('superuser');
+  }
+  if (isMigratorLikeUser) {
+    dangerousPrivilegeReasons.push('migrator_like_user');
+  }
+  for (const [schema, canCreate] of Object.entries(schemaCreatePrivileges)) {
+    if (canCreate) {
+      dangerousPrivilegeReasons.push(`schema_create:${schema}`);
+    }
+  }
+
+  return {
+    status: 'ok',
+    currentUser,
+    sessionUser,
+    isSuperuser,
+    isMigratorLikeUser,
+    schemaCreatePrivileges,
+    dangerousPrivilegeReasons,
+  };
 }
 
 function buildAiMonitoringSummary({ callLogRow, recognitionRow }) {
@@ -427,7 +515,7 @@ export async function readTrainingBatchAudit(options = {}) {
     });
   }
 
-  const config = resolveTrainingCoreConfig(options.env);
+  const config = resolveTrainingReadonlyConfig(options.env);
   if (!config.enabled || !config.url) {
     return emptyBatchAudit(batchId, {
       status: 'skipped',
@@ -716,18 +804,29 @@ async function runExportMaintenance({ rootDir, env, stderr, target, flags, expor
   return summary;
 }
 
-async function runMigrateMaintenance({ rootDir, env, stderr, flags, syncTrainingCore }) {
+async function runMigrateMaintenance({ rootDir, env, flags, createClient }) {
   const dryRun = flags.has('--dry-run');
   const confirmed = flags.has('--confirm');
+  const migrationPlan = await readMigrationPlan(rootDir);
 
   if (dryRun) {
+    const config = resolveTrainingMigrationConfig(env);
+    const migrationHistory = await readMigrationHistory({
+      config,
+      createClient,
+    });
+    const migrationState = buildMigrationPlanState(migrationPlan, migrationHistory.appliedRecords);
     return {
       status: 'planned',
       mode: 'migrate',
       readonly: true,
       dryRun: true,
       requiresConfirm: true,
-      plan: migrationPlan,
+      migrationHistory: {
+        ...migrationHistory.summary,
+        checksumMismatchCount: migrationState.checksumMismatches.length,
+      },
+      plan: migrationState.plan,
     };
   }
 
@@ -742,21 +841,261 @@ async function runMigrateMaintenance({ rootDir, env, stderr, flags, syncTraining
     };
   }
 
-  const result = await syncTrainingCore({
+  const config = resolveTrainingMigrationConfig(env);
+  if (!config.url) {
+    return {
+      status: 'blocked',
+      mode: 'migrate',
+      readonly: false,
+      confirmed: true,
+      requiresMigrationUrl: true,
+      plan: migrationPlan,
+      error: 'migrate --confirm requires TRAINING_DB_MIGRATION_URL',
+    };
+  }
+
+  const migrationResult = await applyMigrationPlan({
     rootDir,
-    env,
-    stderr,
-    stdout: { write() {} },
-    sourceChannel: 'maintenance_migrate',
+    migrationPlan,
+    config,
+    createClient,
   });
 
+  if (migrationResult.blocked) {
+    return {
+      status: 'blocked',
+      mode: 'migrate',
+      readonly: false,
+      confirmed: true,
+      migrationHistory: migrationResult.history,
+      plan: migrationResult.plan,
+      appliedMigrations: [],
+      skippedMigrations: migrationResult.skippedMigrations,
+      error: migrationResult.error,
+    };
+  }
+
   return {
-    status: result.status,
+    status: migrationResult.appliedMigrations.length > 0 ? 'applied' : 'unchanged',
     mode: 'migrate',
     readonly: false,
     confirmed: true,
-    plan: migrationPlan,
-    result,
+    migrationHistory: migrationResult.history,
+    plan: migrationResult.plan,
+    appliedMigrations: migrationResult.appliedMigrations,
+    skippedMigrations: migrationResult.skippedMigrations,
+  };
+}
+
+async function applyMigrationPlan({ rootDir, migrationPlan, config, createClient }) {
+  const createMigrationClient =
+    createClient ??
+    ((dbConfig) =>
+      new Client({
+        connectionString: dbConfig.url,
+        connectionTimeoutMillis: dbConfig.timeoutMs,
+        application_name: dbConfig.appName,
+      }));
+  const client = createMigrationClient(config);
+  const appliedMigrations = [];
+  const skippedMigrations = [];
+
+  try {
+    await client.connect();
+    await ensureMigrationHistoryTable(client);
+    const appliedRecords = await readAppliedMigrationRecords(client);
+    const migrationState = buildMigrationPlanState(migrationPlan, appliedRecords);
+    if (migrationState.checksumMismatches.length > 0) {
+      return {
+        blocked: true,
+        plan: migrationState.plan,
+        appliedMigrations,
+        skippedMigrations,
+        history: {
+          status: 'read',
+          appliedCount: migrationState.appliedIds.size,
+          checksumMismatchCount: migrationState.checksumMismatches.length,
+        },
+        error: 'applied migration checksum mismatch',
+      };
+    }
+
+    for (const migration of migrationState.plan) {
+      if (migration.status === 'applied') {
+        skippedMigrations.push({
+          id: migration.id,
+          file: migration.file,
+          status: 'applied',
+        });
+        continue;
+      }
+      const sql = await readFile(path.join(rootDir, migration.file), 'utf8');
+      await client.query(sql);
+      await recordAppliedMigration(client, migration, sql);
+      migration.status = 'applied';
+      migrationState.appliedIds.add(migration.id);
+      appliedMigrations.push({
+        id: migration.id,
+        file: migration.file,
+        status: 'applied',
+      });
+    }
+    return {
+      appliedIds: migrationState.appliedIds,
+      plan: migrationState.plan,
+      appliedMigrations,
+      skippedMigrations,
+      history: {
+        status: 'updated',
+        appliedCount: migrationState.appliedIds.size,
+        checksumMismatchCount: 0,
+      },
+    };
+  } finally {
+    await client.end?.();
+  }
+}
+
+async function readMigrationHistory({ config, createClient }) {
+  if (!config.url) {
+    return {
+      appliedRecords: new Map(),
+      summary: { status: 'not_configured' },
+    };
+  }
+
+  const createMigrationClient =
+    createClient ??
+    ((dbConfig) =>
+      new Client({
+        connectionString: dbConfig.url,
+        connectionTimeoutMillis: dbConfig.timeoutMs,
+        application_name: dbConfig.appName,
+      }));
+  const client = createMigrationClient(config);
+
+  try {
+    await client.connect();
+    const appliedRecords = await readAppliedMigrationRecords(client);
+    return {
+      appliedRecords,
+      summary: {
+        status: 'read',
+        appliedCount: appliedRecords.size,
+      },
+    };
+  } catch (error) {
+    return {
+      appliedRecords: new Map(),
+      summary: {
+        status: 'unavailable',
+        error: formatSafeErrorMessage(error),
+      },
+    };
+  } finally {
+    await client.end?.();
+  }
+}
+
+async function ensureMigrationHistoryTable(client) {
+  await client.query('create schema if not exists maintenance');
+  await client.query(`
+    create table if not exists maintenance.schema_migration (
+      migration_id text primary key,
+      file_path text not null,
+      description text null,
+      checksum_sha256 text not null,
+      status text not null default 'applied',
+      applied_at timestamptz not null default now()
+    )
+  `);
+}
+
+async function readAppliedMigrationRecords(client) {
+  const tableResult = await client.query("select to_regclass('maintenance.schema_migration') as table_name");
+  if (!tableResult.rows?.[0]?.table_name) {
+    return new Map();
+  }
+
+  const result = await client.query(`
+    select migration_id, checksum_sha256
+    from maintenance.schema_migration
+    where status = 'applied'
+    order by migration_id
+  `);
+  return new Map(
+    result.rows
+      .filter((row) => row.migration_id)
+      .map((row) => [
+        row.migration_id,
+        {
+          id: row.migration_id,
+          checksumSha256: row.checksum_sha256 ?? null,
+        },
+      ]),
+  );
+}
+
+async function recordAppliedMigration(client, migration, sql) {
+  await client.query(
+    `
+      insert into maintenance.schema_migration (
+        migration_id,
+        file_path,
+        description,
+        checksum_sha256,
+        status,
+        applied_at
+      )
+      values ($1, $2, $3, $4, 'applied', now())
+      on conflict (migration_id) do update set
+        file_path = excluded.file_path,
+        description = excluded.description,
+        checksum_sha256 = excluded.checksum_sha256,
+        status = excluded.status,
+        applied_at = excluded.applied_at
+    `,
+    [
+      migration.id,
+      migration.file,
+      migration.description,
+      createHash('sha256').update(sql, 'utf8').digest('hex'),
+    ],
+  );
+}
+
+function buildMigrationPlanState(migrationPlan, appliedRecords) {
+  const appliedIds = new Set();
+  const checksumMismatches = [];
+  const plan = migrationPlan.map((migration) => {
+    const appliedRecord = appliedRecords.get(migration.id);
+    if (!appliedRecord) {
+      return { ...migration, status: 'pending' };
+    }
+
+    if (appliedRecord.checksumSha256 !== migration.checksumSha256) {
+      const mismatch = {
+        id: migration.id,
+        file: migration.file,
+        expectedChecksumSha256: migration.checksumSha256,
+        appliedChecksumSha256: appliedRecord.checksumSha256,
+      };
+      checksumMismatches.push(mismatch);
+      return {
+        ...migration,
+        status: 'checksum_mismatch',
+        appliedChecksumSha256: appliedRecord.checksumSha256,
+      };
+    }
+
+    appliedIds.add(migration.id);
+    return { ...migration, status: 'applied' };
+  });
+
+  return {
+    appliedIds,
+    checksumMismatches,
+    plan,
   };
 }
 
@@ -792,6 +1131,11 @@ function normalizeBooleanFlag(value) {
   return ['1', 'true', 'yes', 'on'].includes(normalized);
 }
 
+function normalizeNullableString(value) {
+  const normalized = String(value ?? '').trim();
+  return normalized || null;
+}
+
 function resolvePhaseFlag(flags) {
   const values = [...flags];
   const equalsFlag = values.find((value) => value.startsWith('--phase='));
@@ -805,6 +1149,50 @@ function resolvePhaseFlag(flags) {
   }
 
   return 'safe';
+}
+
+async function readMigrationPlan(rootDir) {
+  const absoluteMigrationDir = path.join(rootDir, migrationDir);
+  let entries = [];
+  try {
+    entries = await readdir(absoluteMigrationDir, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+
+  const migrations = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !/\.sql$/u.test(entry.name)) {
+      continue;
+    }
+    const filePath = path.join(absoluteMigrationDir, entry.name);
+    const sql = await readFile(filePath, 'utf8');
+    migrations.push({
+      id: entry.name.replace(/\.sql$/u, ''),
+      file: path.join(migrationDir, entry.name),
+      description: parseMigrationDescription(sql),
+      checksumSha256: createHash('sha256').update(sql, 'utf8').digest('hex'),
+      status: 'pending',
+    });
+  }
+
+  return migrations.sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function parseMigrationDescription(sql) {
+  return String(sql ?? '').match(/^--\s*purpose:\s*(.+)$/imu)?.[1]?.trim() ?? null;
+}
+
+function formatErrorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function formatSafeErrorMessage(error) {
+  return formatErrorMessage(error)
+    .replace(/\bpostgres(?:ql)?:\/\/[^\s"'<>]+/giu, '[redacted-db-url]')
+    .replace(/\b(password|token|secret)=([^\s"'&]+)/giu, '$1=[redacted]');
 }
 
 function resolveValueFlag(values, flagName) {

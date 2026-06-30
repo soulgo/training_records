@@ -1,11 +1,11 @@
 import pg from 'pg';
 
-import { resolveTrainingCoreConfig } from './config.mjs';
+import { resolveTrainingReadonlyConfig } from './config.mjs';
 
 const { Client } = pg;
 
 export async function checkTrainingDataConsistency(options = {}) {
-  const config = resolveTrainingCoreConfig(options.env);
+  const config = resolveTrainingReadonlyConfig(options.env);
   if (!config.enabled || !config.url) {
     return {
       status: 'skipped',

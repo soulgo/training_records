@@ -19,7 +19,7 @@
 | Worker 名称 | `sync-dispatch-dev` | `feishu-sync-dispatch` |
 | GitHub dispatch type | `telegram_update_dev` / `feishu_update_dev` | `telegram_update` / `feishu_update` |
 | GitHub sync ref | `dev` | `main` |
-| 数据库连接 | `DEV_TRAINING_DB_URL` 映射为运行时 `TRAINING_DB_URL` | `TRAINING_DB_URL` |
+| 数据库连接 | `DEV_TRAINING_DB_URL` 映射为运行时 `TRAINING_DB_URL`；`DEV_TRAINING_DB_READONLY_URL` 映射为运行时 `TRAINING_DB_READONLY_URL`；迁移时手动映射 `DEV_TRAINING_DB_MIGRATION_URL` 为 `TRAINING_DB_MIGRATION_URL` | `TRAINING_DB_URL`；读取可选 `TRAINING_DB_READONLY_URL`；迁移显式使用 `TRAINING_DB_MIGRATION_URL` |
 | Telegram token | `DEV_TELEGRAM_BOT_TOKEN` 映射为运行时 `TELEGRAM_BOT_TOKEN` | `TELEGRAM_BOT_TOKEN` |
 | COS | 当前 dev workflow 注入 `DEV_COS_*` 并映射为运行时 `COS_*` | 当前 `main` 分支 `sync.yml` 未注入 `COS_*` |
 
@@ -33,7 +33,7 @@
 
 ## 修改配置注意事项
 
-- `TRAINING_DB_URL`、`DEV_TRAINING_DB_URL` 影响 PostgreSQL 写入、读取、快照、备份和站点构建。
+- `TRAINING_DB_URL`、`DEV_TRAINING_DB_URL` 影响 PostgreSQL 写入、读取、快照、备份和站点构建；`TRAINING_DB_READONLY_URL` / `DEV_TRAINING_DB_READONLY_URL` 配置后优先用于读取快照、导出、巡检、一致性检查和站点构建；`TRAINING_DB_MIGRATION_URL` / `DEV_TRAINING_DB_MIGRATION_URL` 只用于显式迁移。
 - `GITHUB_SYNC_WORKFLOW_FILE` 与 `GITHUB_SYNC_REF` 决定 Worker 触发哪条 Actions 链路，配错会把消息写到错误分支。
 - `TELEGRAM_SECRET_TOKEN` 和 `FEISHU_VERIFICATION_TOKEN` / `FEISHU_ENCRYPT_KEY` 是 webhook 入口校验配置，配错会导致 Worker 拒绝请求。
 - `COS_*` 只由同步 workflow 中的 Node 代码使用；Cloudflare Worker 不读取 COS Secret。

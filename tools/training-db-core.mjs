@@ -1,4 +1,8 @@
-export { resolveTrainingCoreConfig } from '../src/db/training/config.mjs';
+export {
+  resolveTrainingCoreConfig,
+  resolveTrainingMigrationConfig,
+  resolveTrainingReadonlyConfig,
+} from '../src/db/training/config.mjs';
 export {
   readCoreDay,
   readCoreDays,

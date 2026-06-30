@@ -57,7 +57,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
 
 async function runDatabaseSchemaPreflight(options = {}) {
   const config = resolveTrainingCoreConfig(options.env);
-  if (!config.enabled || !config.url) {
+  if (!config.enabled || !config.url || !config.schemaPreflightEnabled) {
     return;
   }
 

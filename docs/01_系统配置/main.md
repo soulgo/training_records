@@ -22,6 +22,8 @@ main 环境对应：
 | Secret 名称 | 是否必填 | 用途 |
 | --- | --- | --- |
 | `TRAINING_DB_URL` | 必填 | 生产 PostgreSQL 连接串，同步、构建、Markdown 备份都读这个库。 |
+| `TRAINING_DB_READONLY_URL` | 可选 | 生产只读 PostgreSQL 连接串；站点构建、数据库快照读取、Markdown 导出、巡检和一致性检查优先使用，未配置时回退 `TRAINING_DB_URL`。 |
+| `TRAINING_DB_MIGRATION_URL` | 手动迁移时必填 | 生产迁移 PostgreSQL 连接串；只用于本地或显式维护环境执行 `npm run maintenance:migrate -- --confirm`，不注入日常同步 workflow。 |
 | `AI_API_KEY` | 必填 | AI 服务鉴权。 |
 | `TELEGRAM_BOT_TOKEN` | 必填 | 生产 Telegram Bot token，用于拉取消息、下载图片、通知结果、刷新 webhook。 |
 | `TELEGRAM_SECRET_TOKEN` | 必填 | 生产 Telegram webhook secret。必须和 Cloudflare Worker Secret `TELEGRAM_SECRET_TOKEN` 的值一致。 |
@@ -42,6 +44,7 @@ main 环境对应：
 | `TRAINING_DB_ENABLED` | `true` | 必填 | 是否启用生产 PostgreSQL。 |
 | `TRAINING_DB_TIMEOUT_MS` | `5000` | 建议填 | 数据库连接超时。 |
 | `TRAINING_DB_APP_NAME` | `sync-main` | 建议填 | PostgreSQL `application_name`，便于在 DB 侧区分来源。 |
+| `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED` | `false` | 可选 | 过渡期 DDL preflight 开关；默认关闭，日常业务账号不应启用。 |
 | `TRAINING_SNAPSHOT_SOURCE` | `database` | 建议填 | 构建站点时从数据库还是 Markdown 生成快照。 |
 | `AI_PROVIDER` | `openai-compatible` | 建议填 | 当前代码支持 OpenAI-compatible provider。 |
 | `AI_BASE_URL` | `https://.../v1` | 必填 | Chat Completions base URL。 |
@@ -159,12 +162,15 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 | 参数 | 来源 | 说明 |
 | --- | --- | --- |
 | `TRAINING_DB_URL` | PostgreSQL 服务商 | 生产数据库连接串，放 GitHub Secrets。 |
+| `TRAINING_DB_READONLY_URL` | PostgreSQL 服务商 | 可选只读连接串，放 GitHub Secrets；读取快照、巡检和一致性检查优先使用。 |
+| `TRAINING_DB_MIGRATION_URL` | PostgreSQL 服务商 | 显式迁移连接串，放受控 Secret 或本地 `.env`；只在执行 `maintenance:migrate -- --confirm` 时注入。 |
 | `TRAINING_DB_ENABLED` | 自定义 | 生产建议为 `true`。 |
 | `TRAINING_DB_TIMEOUT_MS` | 自定义 | 连接超时，放 GitHub Variables。 |
 | `TRAINING_DB_APP_NAME` | 自定义 | DB 连接名，便于排查。 |
+| `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED` | 自定义 | 默认 `false`；只有显式迁移兜底时才临时打开。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 生产建议使用 `database`。 |
 
-数据库 schema 以 `sql/pgsql17.sql` 为准。
+数据库 schema 以 `sql/pgsql17.sql` 为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `TRAINING_DB_URL` 默认路径。
 
 ### 3.5 COS 图片存储
 

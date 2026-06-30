@@ -435,6 +435,35 @@ test('readTrainingSnapshotFromDatabase can limit daily rows by date window', asy
   assert.ok(queries.some((sql) => /from core\.sleep/i.test(sql)));
 });
 
+test('readTrainingSnapshotFromDatabase prefers readonly database url when configured', async () => {
+  const observedUrls = [];
+  const client = {
+    async connect() {},
+    async end() {},
+    async query() {
+      return { rows: [] };
+    },
+  };
+
+  await readTrainingSnapshotFromDatabase({
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_app:secret@example.com:5432/training_records',
+      TRAINING_DB_READONLY_URL: 'postgresql://training_readonly:secret@example.com:5432/training_records',
+    },
+    createClient(config) {
+      observedUrls.push(config.url);
+      return client;
+    },
+    now: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  assert.ok(observedUrls.length > 0);
+  assert.deepEqual([...new Set(observedUrls)], [
+    'postgresql://training_readonly:secret@example.com:5432/training_records',
+  ]);
+});
+
 test('readTrainingSnapshotFromDatabaseClient includes core sleep rows in sleep summaries', async () => {
   const queries = [];
   const client = {
@@ -597,8 +626,8 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
 
   assert.equal(result.status, 'stored');
   assert.equal(calls[0][0], 'connect');
-  assert.ok(calls.some(([sql]) => /alter table core\.sleep/i.test(sql)), 'ensureCoreSchema should run before BEGIN');
-  assert.equal(calls[2][0], 'BEGIN');
+  assert.equal(calls.some(([sql]) => /alter table core\.sleep/i.test(sql)), false);
+  assert.equal(calls[1][0], 'BEGIN');
   assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_message/i.test(sql)));
   const recognitionCall = calls.find(([sql]) => /insert into ingest\.telegram_recognition/i.test(sql));
@@ -610,6 +639,46 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.ok(calls.some(([sql]) => /insert into core\.activity/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into core\.meal/i.test(sql)));
   assert.equal(calls.at(-2)[0], 'COMMIT');
+  assert.equal(calls.at(-1)[0], 'end');
+});
+
+test('persistNormalizedBatch runs schema preflight only when explicitly enabled', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() {
+      calls.push(['connect']);
+    },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/insert into ingest\.telegram_batch/i.test(sql)) {
+        return { rows: [], rowCount: 0 };
+      }
+      return { rows: [] };
+    },
+    async end() {
+      calls.push(['end']);
+    },
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: normalizedBatch,
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+      TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED: 'true',
+    },
+    createClient() {
+      return fakeClient;
+    },
+    ensureCoreSchema: async (client) => {
+      await client.query('alter table core.sleep add column if not exists total_sleep_minutes integer null');
+    },
+    processedAt: new Date('2026-05-13T00:00:00.000Z'),
+  });
+
+  assert.equal(result.status, 'unchanged');
+  assert.ok(calls.some(([sql]) => /alter table core\.sleep/i.test(sql)));
+  assert.equal(calls[2][0], 'BEGIN');
   assert.equal(calls.at(-1)[0], 'end');
 });
 

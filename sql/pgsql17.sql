@@ -1,16 +1,34 @@
-- 建议先使用超级用户或具备建库/建角色权限的管理员账号执行
+-- 建议先使用超级用户或具备建库/建角色权限的管理员账号执行
 
 -- 登录：psql -U postgres -d postgres -p15432
--- 1. 创建业务写入用户
-create role training_writer
+-- 1. 创建数据库角色
+create role training_migrator
 login
 password '请替换为强密码';
 
-comment on role training_writer is '训练解析归档写入专用用户，仅用于训练记录解析结果旁路写库';
+comment on role training_migrator is '训练记录 schema owner 与显式迁移账号，仅用于 DDL 和受控 backfill';
+
+create role training_app
+login
+password '请替换为强密码';
+
+comment on role training_app is '训练记录日常同步业务账号，仅允许必要 DML，不执行 DDL';
+
+create role training_maintenance
+login
+password '请替换为强密码';
+
+comment on role training_maintenance is '训练记录显式维护账号，用于 sync:db 和受控恢复 DML，不执行 DDL';
+
+create role training_readonly
+login
+password '请替换为强密码';
+
+comment on role training_readonly is '训练记录只读账号，用于站点构建、导出和巡检读取';
 
 -- 2. 创建数据库
 create database training_records
-owner training_writer
+owner training_migrator
 encoding 'UTF8'
 template template0;
 
@@ -19,8 +37,27 @@ comment on database training_records is '训练记录系统归档数据库，用
 -- 3. 连接到目标数据库后继续执行
 -- \c training_records
 
--- 4. 创建 schema
-create schema if not exists archive authorization training_writer;
+-- 4. 创建维护 schema
+create schema if not exists maintenance authorization training_migrator;
+
+comment on schema maintenance is '训练记录数据库维护元数据 schema';
+
+create table if not exists maintenance.schema_migration (
+  migration_id text primary key,
+  file_path text not null,
+  description text null,
+  checksum_sha256 text not null,
+  status text not null default 'applied',
+  applied_at timestamptz not null default now()
+);
+
+comment on table maintenance.schema_migration is '显式数据库 migration 执行历史，仅由迁移账号写入';
+
+grant usage on schema maintenance to training_maintenance, training_readonly;
+grant select on maintenance.schema_migration to training_maintenance, training_readonly;
+
+-- 5. 创建 schema
+create schema if not exists archive authorization training_migrator;
 
 comment on schema archive is '训练记录解析归档专用 schema';
 
@@ -352,19 +389,10 @@ on archive.training_meal (archived_date);
 
 comment on index archive.idx_training_meal_archived_date is '按归档日期查询饮食明细的索引';
 
--- 15. 赋权
-grant usage on schema archive to training_writer;
-grant select, insert, update, delete on all tables in schema archive to training_writer;
-grant usage, select on all sequences in schema archive to training_writer;
-
-alter default privileges in schema archive
-grant select, insert, update, delete on tables to training_writer;
-
-alter default privileges in schema archive
-grant usage, select on sequences to training_writer;
+-- 15. archive 权限在 core/ingest 建完后统一授予
 
 -- 16. 创建 ingest schema
-create schema if not exists ingest authorization training_writer;
+create schema if not exists ingest authorization training_migrator;
 
 comment on schema ingest is 'Telegram 等外部输入的原始接入与识别留痕';
 
@@ -487,7 +515,7 @@ on ingest.telegram_pending_batch (status, next_retry_at);
 create index if not exists idx_ingest_telegram_pending_batch_updated_at
 on ingest.telegram_pending_batch (updated_at desc);
 -- 17. 创建 core schema
-create schema if not exists core authorization training_writer;
+create schema if not exists core authorization training_migrator;
 
 comment on schema core is '训练记录系统业务主数据层';
 
@@ -679,13 +707,41 @@ on core.thought (telegram_message_id);
 create unique index if not exists ux_core_thought_identity
 on core.thought(source_channel, source_chat_id, source_message_id);
 
-grant usage on schema ingest to training_writer;
-grant usage on schema core to training_writer;
-grant select, insert, update, delete on all tables in schema ingest to training_writer;
-grant select, insert, update, delete on all tables in schema core to training_writer;
+grant usage on schema core, ingest, archive to training_app, training_maintenance, training_readonly;
 
-alter default privileges in schema ingest
-grant select, insert, update, delete on tables to training_writer;
+grant select on all tables in schema core, ingest, archive to training_readonly;
 
-alter default privileges in schema core
-grant select, insert, update, delete on tables to training_writer;
+grant select, insert, update on all tables in schema ingest to training_app;
+grant select, insert, update on all tables in schema core to training_app;
+grant delete on core.measurement, core.activity, core.meal, core.sleep to training_app;
+grant select, insert, update on archive.training_parse_snapshot, archive.training_sleep to training_app;
+grant usage, select on all sequences in schema ingest to training_app;
+
+grant select, insert, update, delete on all tables in schema ingest to training_maintenance;
+grant select, insert, update, delete on all tables in schema core to training_maintenance;
+grant select, insert, update on all tables in schema archive to training_maintenance;
+grant usage, select on all sequences in schema ingest, archive to training_maintenance;
+
+alter default privileges for role training_migrator in schema ingest
+grant select, insert, update on tables to training_app;
+
+alter default privileges for role training_migrator in schema core
+grant select, insert, update on tables to training_app;
+
+alter default privileges for role training_migrator in schema ingest
+grant select, insert, update, delete on tables to training_maintenance;
+
+alter default privileges for role training_migrator in schema core
+grant select, insert, update, delete on tables to training_maintenance;
+
+alter default privileges for role training_migrator in schema archive
+grant select, insert, update on tables to training_maintenance;
+
+alter default privileges for role training_migrator in schema core, ingest, archive
+grant select on tables to training_readonly;
+
+alter default privileges for role training_migrator in schema ingest
+grant usage, select on sequences to training_app, training_maintenance;
+
+alter default privileges for role training_migrator in schema archive
+grant usage, select on sequences to training_maintenance;

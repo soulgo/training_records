@@ -919,6 +919,32 @@ test('canonical SQL schemas define ingest ai call log for AI audit', async () =>
   }
 });
 
+test('pgsql init schema defines least-privilege database roles', async () => {
+  const sql = await readFile(path.resolve(process.cwd(), 'sql/pgsql17.sql'), 'utf8');
+
+  for (const role of ['training_migrator', 'training_app', 'training_maintenance', 'training_readonly']) {
+    assert.match(sql, new RegExp(`create role\\s+${role}\\b`, 'i'), `pgsql17.sql should define ${role}`);
+  }
+
+  assert.match(sql, /create database training_records\s+owner training_migrator/i);
+  assert.match(sql, /create schema if not exists maintenance authorization training_migrator/i);
+  assert.match(sql, /create table if not exists maintenance\.schema_migration/i);
+  assert.match(sql, /create schema if not exists archive authorization training_migrator/i);
+  assert.match(sql, /create schema if not exists ingest authorization training_migrator/i);
+  assert.match(sql, /create schema if not exists core authorization training_migrator/i);
+
+  assert.match(sql, /grant usage on schema core,\s*ingest,\s*archive to training_app,\s*training_maintenance,\s*training_readonly/i);
+  assert.match(sql, /grant select on all tables in schema core,\s*ingest,\s*archive to training_readonly/i);
+  assert.match(sql, /grant select,\s*insert,\s*update on all tables in schema ingest to training_app/i);
+  assert.match(sql, /grant select,\s*insert,\s*update on all tables in schema core to training_app/i);
+  assert.match(sql, /grant delete on core\.measurement,\s*core\.activity,\s*core\.meal,\s*core\.sleep to training_app/i);
+  assert.match(sql, /grant select,\s*insert,\s*update on archive\.training_parse_snapshot,\s*archive\.training_sleep to training_app/i);
+  assert.match(sql, /grant select on maintenance\.schema_migration to training_maintenance,\s*training_readonly/i);
+  assert.doesNotMatch(sql, /grant .*maintenance\.schema_migration.*training_app/i);
+  assert.doesNotMatch(sql, /grant select,\s*insert,\s*update,\s*delete on all tables in schema archive to training_app/i);
+  assert.doesNotMatch(sql, /grant select,\s*insert,\s*update,\s*delete on all tables in schema (?:ingest|core) to training_app/i);
+});
+
 test('database rollback SQL preserves legacy ingest and core data tables', async () => {
   const relativePath = 'sql/training_records/rollback_core_code_optimization_01.sql';
   const sql = await readFile(path.resolve(process.cwd(), relativePath), 'utf8');

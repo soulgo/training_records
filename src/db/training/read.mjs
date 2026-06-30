@@ -1,7 +1,7 @@
 import pg from 'pg';
 
 import { buildTrainingSnapshotFromDaily } from '../../domain/training/training-domain.mjs';
-import { resolveTrainingCoreConfig } from './config.mjs';
+import { resolveTrainingCoreConfig, resolveTrainingReadonlyConfig } from './config.mjs';
 import {
   readArchiveTrainingSnapshotFromDatabaseClient,
   readArchiveTrainingSnapshotFromDatabaseWithClients,
@@ -13,7 +13,7 @@ import { getLastProcessedTelegramUpdateId as getLastUpdateIdFromAdapter } from '
 const { Client } = pg;
 
 export async function readTrainingSnapshotFromDatabase(options = {}) {
-  const config = resolveTrainingCoreConfig(options.env);
+  const config = resolveTrainingReadonlyConfig(options.env);
   if (!config.enabled || !config.url) {
     return buildTrainingSnapshotFromDaily([], options.now?.toISOString?.() ?? new Date().toISOString());
   }
@@ -37,7 +37,7 @@ export async function readTrainingSnapshotFromDatabase(options = {}) {
 }
 
 export async function readArchiveTrainingSnapshotFromDatabase(options = {}) {
-  const config = resolveTrainingCoreConfig(options.env);
+  const config = resolveTrainingReadonlyConfig(options.env);
   if (!config.enabled || !config.url) {
     return buildTrainingSnapshotFromDaily([], options.now?.toISOString?.() ?? new Date().toISOString());
   }
