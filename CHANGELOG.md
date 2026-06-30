@@ -20,6 +20,7 @@
 
 ### Changed
 
+- 扩展 `/monitor/` 健身监控总览页：在原有体重、体脂、睡眠、热量、趋势和预警基础上，新增身体成分、恢复监控、训练结构、饮食维护、数据完整性与 7/30 天汇总模块；趋势图从 4 张扩展为 6 张，补充身体成分趋势、恢复监控趋势和骑行里程序列，并重写监控页专用 UI 样式，使桌面与移动端监控信息更完整、排版更协调。
 - 重构当前 docs 目录为 `01_系统配置`、`02_系统核心逻辑`、`03_历史重构记录`、`04_问题与排查`、`05_日常规则` 五类入口：重写 dev/main 环境配置文档，在开头直接列出 GitHub Settings 与 Cloudflare 必填参数；新增 dev/main 分支合并数据隔离规则和后续规划落地后的当前文档同步规则，明确 `dev` 与 `main` 运行数据互相独立、历史规划不能替代当前系统文档。
 - 重构并校准 docs 长期文档入口：将当前系统事实收敛到 `docs/01_系统配置/`、`docs/02_系统核心逻辑/`、`docs/04_问题与排查/` 和 `docs/05_日常规则/`，删除旧 `docs/归档/` 与临时 superpowers spec，保留 `docs/03_历史重构记录/` 作为非当前事实资料；同步修正 main/dev 配置、Cloudflare Worker secrets、Durable Object 绑定名、图片日期归档和随想命令合同。
 - 完成 action 日志排查优化文档第三轮审计：通过 GitHub API 拉取实际运行日志（Sync #112/#117、Deploy #350/#233、Markdown Backup #20、CI Tests #285、Refresh Webhook #130）与 `main`/`dev` 两分支源码交叉验证，发现前两轮文档以 dev 工作树为"当前源码"导致生产 main 分支的 dispatch payload 泄漏被误判为"不成立问题"。新增 `07_第三轮审计_实际日志复核.md`，并修订 01-06 全部文档：dispatch payload 泄漏回退为 P0 安全阻塞项（实测 main 仍写 `SYNC_DISPATCH_PAYLOAD` 原文到 `$GITHUB_ENV`，dev 修复未合并）；Markdown snapshot 泄漏范围从"仅 backup"扩大到两个 deploy workflow（实测 Deploy #350 含 399 处、#233 含 223 处健康字段）；测试 fixture 噪声归属从 CI 修正为 deploy（site-build `run_tests:'true'`）；补全飞书 `oc_` chat_id 在 sync stdout 的脱敏规则；05 实施顺序前置 main 合并项；06 阻塞项从 1 个增至 2 个。

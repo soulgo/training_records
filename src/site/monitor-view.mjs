@@ -38,6 +38,12 @@ export function buildMonitorViewModel(snapshot, options = {}) {
       trendCards: buildTrendCards(),
       continuityStats: [],
       continuityText: '暂无连续性数据',
+      bodyCompositionStats: [],
+      recoveryStats: [],
+      trainingStructure: buildEmptyTrainingStructure(),
+      nutritionStats: [],
+      rollingStats: [],
+      dataQuality: buildEmptyDataQuality(),
       alerts: ['暂无可展示的监控数据'],
       chartPayload: {
         windowDays: settings.chartWindowDays,
@@ -47,10 +53,14 @@ export function buildMonitorViewModel(snapshot, options = {}) {
   }
 
   const continuityStats = buildContinuityStats(daily, resolvedSettings);
+  const dataQuality = buildDataQuality(daily, latestDay);
   const alerts = buildAlerts({
+    latestMeasurement,
     latestSleep,
+    latestWorkout,
     latestNutrition,
     settings: resolvedSettings,
+    dataQuality,
   });
 
   return {
@@ -70,6 +80,12 @@ export function buildMonitorViewModel(snapshot, options = {}) {
     trendCards: buildTrendCards(),
     continuityStats,
     continuityText: continuityStats.map((item) => `${item.label} ${item.value}`).join(' · ') || '暂无连续性数据',
+    bodyCompositionStats: buildBodyCompositionStats(latestMeasurement, previousMeasurement),
+    recoveryStats: buildRecoveryStats(latestSleep, previousSleep),
+    trainingStructure: buildTrainingStructure(daily, latestWorkout),
+    nutritionStats: buildNutritionStats(latestNutrition, resolvedSettings),
+    rollingStats: buildRollingStats(daily),
+    dataQuality,
     alerts,
     chartPayload: {
       windowDays: settings.chartWindowDays,
@@ -156,9 +172,19 @@ function buildTrendCards() {
       subtitle: '体脂秤核心指标',
     },
     {
+      chartId: 'monitor-composition-chart',
+      title: '身体成分趋势',
+      subtitle: '骨骼肌、基础代谢与内脏脂肪',
+    },
+    {
       chartId: 'monitor-sleep-chart',
       title: '睡眠时长 & 评分',
       subtitle: '恢复质量趋势',
+    },
+    {
+      chartId: 'monitor-recovery-chart',
+      title: '恢复监控',
+      subtitle: '深睡、REM、HRV 与血氧',
     },
     {
       chartId: 'monitor-workout-chart',
@@ -175,13 +201,22 @@ function buildMonitorCharts({ dashboard, daily, chartStartDate }) {
     trainingCalories: filterChartPoints(charts.trainingCalories, chartStartDate),
     weightKg: filterChartPoints(charts.weightKg, chartStartDate),
     bodyFatPct: filterChartPoints(charts.bodyFatPct, chartStartDate),
+    skeletalMuscleKg: buildMeasurementChart(charts.skeletalMuscleKg, daily, chartStartDate, (measurement) => measurement?.skeletalMuscleKg),
+    basalMetabolism: buildMeasurementChart(charts.basalMetabolism, daily, chartStartDate, (measurement) => measurement?.basalMetabolismKcal),
+    visceralFatLevel: buildMeasurementChart(charts.visceralFatLevel, daily, chartStartDate, (measurement) => measurement?.visceralFatLevel),
     sleepTotalMinutes: buildDailyChart(daily, chartStartDate, (day) =>
       day.sleepSummary?.totalSleepMinutes ?? day.sleepSummary?.nightSleepMinutes),
     sleepScore: buildDailyChart(daily, chartStartDate, (day) => day.sleepSummary?.sleepScore),
+    deepSleepMinutes: buildDailyChart(daily, chartStartDate, (day) => day.sleepSummary?.deepSleepMinutes),
+    remSleepMinutes: buildDailyChart(daily, chartStartDate, (day) => day.sleepSummary?.remSleepMinutes),
+    hrvMs: buildDailyChart(daily, chartStartDate, (day) => day.sleepSummary?.hrvMs),
+    averageSpo2Pct: buildDailyChart(daily, chartStartDate, (day) => day.sleepSummary?.averageSpo2Pct),
     workoutDurationMinutes: buildDailyChart(daily, chartStartDate, (day) =>
       day.workoutSummary?.workoutDurationMinutes ?? minutesFromSeconds(day.workoutSummary?.totalDurationSeconds)),
     averageHeartRateBpm: buildDailyChart(daily, chartStartDate, (day) =>
       day.workoutSummary?.averageHeartRateBpm ?? calculateAverageHeartRate(day.activities)),
+    cyclingDistanceKm: buildDailyChart(daily, chartStartDate, (day) => day.workoutSummary?.cyclingDistanceKm),
+    activeHours: buildDailyChart(daily, chartStartDate, (day) => day.workoutSummary?.activeHours),
   };
 }
 
@@ -198,7 +233,114 @@ function buildContinuityStats(daily, settings) {
   ];
 }
 
-function buildAlerts({ latestSleep, latestNutrition, settings }) {
+function buildBodyCompositionStats(latestMeasurement, previousMeasurement) {
+  return [
+    buildMetricStat('bmi', 'BMI', formatNumber(latestMeasurement?.bmi, 1), formatSignedDelta(latestMeasurement?.bmi, previousMeasurement?.bmi, { label: '较上次', unit: '', digits: 1 })),
+    buildMetricStat('skeletalMuscle', '骨骼肌量', `${formatNumber(latestMeasurement?.skeletalMuscleKg, 1)} kg`, formatSignedDelta(latestMeasurement?.skeletalMuscleKg, previousMeasurement?.skeletalMuscleKg, { label: '较上次', unit: ' kg', digits: 1 })),
+    buildMetricStat('basalMetabolism', '基础代谢', `${formatNumber(latestMeasurement?.basalMetabolismKcal, 0)} kcal`, formatSignedDelta(latestMeasurement?.basalMetabolismKcal, previousMeasurement?.basalMetabolismKcal, { label: '较上次', unit: ' kcal', digits: 0 })),
+    buildMetricStat('visceralFat', '内脏脂肪等级', formatNumber(latestMeasurement?.visceralFatLevel, 1), formatSignedDelta(latestMeasurement?.visceralFatLevel, previousMeasurement?.visceralFatLevel, { label: '较上次', unit: '', digits: 1 })),
+    buildMetricStat('bodyWater', '水分率', `${formatNumber(latestMeasurement?.bodyWaterPct, 1)}%`, formatSignedDelta(latestMeasurement?.bodyWaterPct, previousMeasurement?.bodyWaterPct, { label: '较上次', unit: '%', digits: 1 })),
+    buildMetricStat('protein', '蛋白质率', `${formatNumber(latestMeasurement?.proteinPct, 1)}%`, formatSignedDelta(latestMeasurement?.proteinPct, previousMeasurement?.proteinPct, { label: '较上次', unit: '%', digits: 1 })),
+  ];
+}
+
+function buildRecoveryStats(latestSleep, previousSleep) {
+  return [
+    buildMetricStat('deepSleep', '深睡', `${formatNumber(latestSleep?.deepSleepMinutes, 0)} 分`, buildRatioHint(latestSleep?.deepSleepMinutes, latestSleep?.totalSleepMinutes ?? latestSleep?.nightSleepMinutes)),
+    buildMetricStat('remSleep', 'REM', `${formatNumber(latestSleep?.remSleepMinutes, 0)} 分`, buildRatioHint(latestSleep?.remSleepMinutes, latestSleep?.totalSleepMinutes ?? latestSleep?.nightSleepMinutes)),
+    buildMetricStat('awake', '清醒', `${formatNumber(latestSleep?.awakeMinutes, 0)} 分`, formatSignedDelta(latestSleep?.awakeMinutes, previousSleep?.awakeMinutes, { label: '较昨日', unit: ' 分', digits: 0 })),
+    buildMetricStat('hrv', 'HRV', `${formatNumber(latestSleep?.hrvMs, 0)} ms`, formatSignedDelta(latestSleep?.hrvMs, previousSleep?.hrvMs, { label: '较昨日', unit: ' ms', digits: 0 })),
+    buildMetricStat('spo2', '平均血氧', `${formatNumber(latestSleep?.averageSpo2Pct, 0)}%`, formatSignedDelta(latestSleep?.averageSpo2Pct, previousSleep?.averageSpo2Pct, { label: '较昨日', unit: '%', digits: 0 })),
+    buildMetricStat('respiratory', '呼吸率', `${formatNumber(latestSleep?.averageRespiratoryRate, 0)} 次/分`, formatSignedDelta(latestSleep?.averageRespiratoryRate, previousSleep?.averageRespiratoryRate, { label: '较昨日', unit: '', digits: 0 })),
+  ];
+}
+
+function buildTrainingStructure(daily, latestWorkout) {
+  const recentDays = lastDays(daily, 30);
+  const typeTotals = new Map();
+  for (const day of recentDays) {
+    for (const [type, count] of Object.entries(day.workoutSummary?.countsByType || {})) {
+      typeTotals.set(type, (typeTotals.get(type) ?? 0) + Number(count || 0));
+    }
+  }
+
+  const typeBreakdown = [...typeTotals.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+
+  return {
+    stats: [
+      buildMetricStat('activities', '今日活动', `${formatNumber(latestWorkout?.totalActivities, 0)} 次`, '训练记录活动数'),
+      buildMetricStat('duration', '锻炼时长', `${formatNumber(latestWorkout?.workoutDurationMinutes ?? minutesFromSeconds(latestWorkout?.totalDurationSeconds), 0)} 分`, '当日训练负荷'),
+      buildMetricStat('cycling', '骑行里程', `${formatNumber(latestWorkout?.cyclingDistanceKm, 1)} km`, '有氧通勤/骑行'),
+      buildMetricStat('activeHours', '活动小时数', `${formatNumber(latestWorkout?.activeHours, 0)} 小时`, '日常活动覆盖'),
+    ],
+    typeBreakdown,
+  };
+}
+
+function buildNutritionStats(latestNutrition, settings) {
+  const intakeCalories = latestNutrition?.totalCalories;
+  const mealCount = latestNutrition?.meals?.length ?? 0;
+  const recommendedMax = settings.calorieRecommendedMax;
+  const calorieOverage = calculateCalorieOverage(intakeCalories, recommendedMax);
+
+  return [
+    buildMetricStat('intake', '总摄入', `${formatNumber(intakeCalories, 0)} kcal`, `${formatNumber(mealCount, 0)} 餐记录`),
+    buildMetricStat('recommendedMax', '建议上限', `${formatNumber(recommendedMax, 0)} kcal`, buildCalorieSecondary(calorieOverage)),
+    buildMetricStat('largestMeal', '最高单餐', `${formatNumber(maxMealCalories(latestNutrition?.meals), 0)} kcal`, latestNutrition?.meals?.find((meal) => meal?.calories === maxMealCalories(latestNutrition?.meals))?.name || '暂无餐次'),
+  ];
+}
+
+function buildRollingStats(daily) {
+  const recent7 = lastDays(daily, 7);
+  const recent30 = lastDays(daily, 30);
+  const averageSleepMinutes = average(recent7.map((day) =>
+    day.sleepSummary?.totalSleepMinutes ?? day.sleepSummary?.nightSleepMinutes));
+  return [
+    buildMetricStat('weight7d', '7日平均体重', `${formatNumber(average(recent7.map((day) => day.measurement?.weightKg)), 1)} kg`, '短期体重中枢'),
+    buildMetricStat('sleep7d', '7日平均睡眠', `${formatNumber(isFiniteNumber(averageSleepMinutes) ? averageSleepMinutes / 60 : null, 1)} h`, '恢复基础'),
+    buildMetricStat('intake7d', '7日平均摄入', `${formatNumber(average(recent7.map((day) => day.nutrition?.totalCalories)), 0)} kcal`, '饮食维护'),
+    buildMetricStat('training30d', '30日训练消耗', `${formatNumber(sum(recent30.map((day) => day.workoutSummary?.trainingCalories)), 0)} kcal`, '训练总量'),
+  ];
+}
+
+function buildDataQuality(daily, latestDay) {
+  const recent = lastDays(daily, 7);
+  const checks = [
+    { id: 'measurement', label: '体脂', present: Boolean(latestDay?.measurement) },
+    { id: 'nutrition', label: '饮食', present: isFiniteNumber(latestDay?.nutrition?.totalCalories) },
+    { id: 'sleep', label: '睡眠', present: hasSleepData(latestDay) },
+    { id: 'workout', label: '训练', present: Number(latestDay?.workoutSummary?.trainingCalories ?? 0) > 0 },
+  ];
+  const completenessPct = checks.length
+    ? Math.round((checks.filter((check) => check.present).length / checks.length) * 100)
+    : 0;
+  const recentCompletenessPct = recent.length
+    ? Math.round((recent.reduce((total, day) => total + calculateDayCompleteness(day), 0) / recent.length) * 100)
+    : 0;
+
+  return {
+    completenessPct,
+    recentCompletenessPct,
+    missingItems: checks.filter((check) => !check.present).map((check) => check.label),
+    stats: [
+      buildMetricStat('todayCompleteness', '今日完整率', `${completenessPct}%`, '体脂/饮食/睡眠/训练'),
+      buildMetricStat('recentCompleteness', '7日完整率', `${recentCompletenessPct}%`, `${formatNumber(recent.length, 0)} 天窗口`),
+      buildMetricStat('latestDate', '最新归档', latestDay?.date || '—', '数据维护锚点'),
+    ],
+  };
+}
+
+function buildEmptyTrainingStructure() {
+  return { stats: [], typeBreakdown: [] };
+}
+
+function buildEmptyDataQuality() {
+  return { completenessPct: 0, recentCompletenessPct: 0, missingItems: [], stats: [] };
+}
+
+function buildAlerts({ latestMeasurement, latestSleep, latestWorkout, latestNutrition, settings, dataQuality }) {
   const alerts = [];
   const sleepMinutes = latestSleep?.totalSleepMinutes ?? latestSleep?.nightSleepMinutes;
   if (Number(sleepMinutes ?? 0) > 0 && sleepMinutes < 360) {
@@ -210,7 +352,28 @@ function buildAlerts({ latestSleep, latestNutrition, settings }) {
     alerts.push(`今日摄入已超建议上限 ${formatNumber(calorieOverage, 0)} kcal`);
   }
 
+  if (!latestMeasurement) {
+    alerts.push('今日缺少体脂测量数据');
+  }
+
+  if (Number(latestWorkout?.trainingCalories ?? 0) <= 0) {
+    alerts.push('今日暂无训练消耗记录');
+  }
+
+  if (dataQuality?.missingItems?.length) {
+    alerts.push(`今日数据缺失：${dataQuality.missingItems.join('、')}`);
+  }
+
   return alerts.length ? alerts : ['当前无明显异常提示'];
+}
+
+function buildMetricStat(id, label, value, hint = '') {
+  return {
+    id,
+    label,
+    value: value === null || value === undefined || value === 'null' ? '—' : value,
+    hint,
+  };
 }
 
 function normalizeDailyEntries(daily) {
@@ -425,6 +588,21 @@ function buildCalorieSecondary(calorieOverage) {
   return `低于建议上限 ${formatNumber(Math.abs(calorieOverage), 0)} kcal`;
 }
 
+function buildMeasurementChart(points, daily, startDate, pickValue) {
+  const filteredPoints = filterChartPoints(points, startDate);
+  if (filteredPoints.length) {
+    return filteredPoints;
+  }
+  return buildDailyChart(daily, startDate, (day) => pickValue(day.measurement));
+}
+
+function buildRatioHint(partMinutes, totalMinutes) {
+  if (!isFiniteNumber(partMinutes) || !isFiniteNumber(totalMinutes) || Number(totalMinutes) <= 0) {
+    return '暂无占比';
+  }
+  return `占比 ${formatNumber((Number(partMinutes) / Number(totalMinutes)) * 100, 1)}%`;
+}
+
 function formatSignedDelta(current, previous, { label, unit, digits }) {
   if (!isFiniteNumber(current) || !isFiniteNumber(previous)) {
     return '暂无对比';
@@ -469,6 +647,44 @@ function calculateAverageHeartRate(activities) {
     return null;
   }
   return Math.round(values.reduce((total, value) => total + Number(value), 0) / values.length);
+}
+
+function maxMealCalories(meals) {
+  const values = (meals || []).map((meal) => meal?.calories).filter(isFiniteNumber).map(Number);
+  return values.length ? Math.max(...values) : null;
+}
+
+function lastDays(daily, count) {
+  return [...(daily || [])].slice(-count);
+}
+
+function sum(values) {
+  const numericValues = values.filter(isFiniteNumber).map(Number);
+  return numericValues.reduce((total, value) => total + value, 0);
+}
+
+function average(values) {
+  const numericValues = values.filter(isFiniteNumber).map(Number);
+  if (!numericValues.length) {
+    return null;
+  }
+  return sum(numericValues) / numericValues.length;
+}
+
+function hasSleepData(day) {
+  return isFiniteNumber(day?.sleepSummary?.totalSleepMinutes) ||
+    isFiniteNumber(day?.sleepSummary?.nightSleepMinutes) ||
+    isFiniteNumber(day?.sleepSummary?.sleepScore);
+}
+
+function calculateDayCompleteness(day) {
+  const checks = [
+    Boolean(day?.measurement),
+    isFiniteNumber(day?.nutrition?.totalCalories),
+    hasSleepData(day),
+    Number(day?.workoutSummary?.trainingCalories ?? 0) > 0,
+  ];
+  return checks.filter(Boolean).length / checks.length;
 }
 
 function minutesFromSeconds(seconds) {

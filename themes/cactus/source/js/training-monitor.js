@@ -187,6 +187,63 @@
     options: makeOptions(),
   });
 
+  const compositionLabels = getUnionLabels([
+    charts.skeletalMuscleKg,
+    charts.basalMetabolism,
+    charts.visceralFatLevel,
+  ]);
+  createChart('monitor-composition-chart', {
+    type: 'line',
+    data: {
+      labels: compositionLabels,
+      datasets: [{
+        label: '骨骼肌 kg',
+        data: alignValues(charts.skeletalMuscleKg, compositionLabels),
+        borderColor: '#0891b2',
+        backgroundColor: 'rgba(8, 145, 178, 0.12)',
+        tension: 0.3,
+        fill: false,
+        pointRadius: 2.5,
+      }, {
+        label: '基础代谢 kcal',
+        data: alignValues(charts.basalMetabolism, compositionLabels),
+        yAxisID: 'metabolism',
+        borderColor: '#ea580c',
+        backgroundColor: 'rgba(234, 88, 12, 0.12)',
+        tension: 0.3,
+        fill: false,
+        pointRadius: 2.5,
+      }, {
+        label: '内脏脂肪',
+        data: alignValues(charts.visceralFatLevel, compositionLabels),
+        yAxisID: 'visceral',
+        borderColor: '#9333ea',
+        backgroundColor: 'rgba(147, 51, 234, 0.12)',
+        tension: 0.3,
+        fill: false,
+        pointRadius: 2.5,
+      }],
+    },
+    options: makeOptions({
+      extraScales: {
+        metabolism: {
+          position: 'right',
+          grid: {
+            drawOnChartArea: false,
+          },
+          ticks: {
+            color: '#64748b',
+            precision: 0,
+          },
+        },
+        visceral: {
+          display: false,
+          position: 'right',
+        },
+      },
+    }),
+  });
+
   const sleepLabels = getUnionLabels([charts.sleepTotalMinutes, charts.sleepScore]);
   createChart('monitor-sleep-chart', {
     type: 'bar',
@@ -228,7 +285,71 @@
     }),
   });
 
-  const workoutLabels = getUnionLabels([charts.workoutDurationMinutes, charts.averageHeartRateBpm]);
+  const recoveryLabels = getUnionLabels([
+    charts.deepSleepMinutes,
+    charts.remSleepMinutes,
+    charts.hrvMs,
+    charts.averageSpo2Pct,
+  ]);
+  createChart('monitor-recovery-chart', {
+    type: 'bar',
+    data: {
+      labels: recoveryLabels,
+      datasets: [{
+        label: '深睡分钟',
+        data: alignValues(charts.deepSleepMinutes, recoveryLabels),
+        backgroundColor: 'rgba(37, 99, 235, 0.72)',
+        borderRadius: 4,
+        maxBarThickness: 14,
+      }, {
+        label: 'REM 分钟',
+        data: alignValues(charts.remSleepMinutes, recoveryLabels),
+        backgroundColor: 'rgba(14, 165, 233, 0.62)',
+        borderRadius: 4,
+        maxBarThickness: 14,
+      }, {
+        type: 'line',
+        label: 'HRV ms',
+        data: alignValues(charts.hrvMs, recoveryLabels),
+        yAxisID: 'recovery',
+        borderColor: '#16a34a',
+        backgroundColor: 'rgba(22, 163, 74, 0.12)',
+        tension: 0.3,
+        fill: false,
+        pointRadius: 2.5,
+      }, {
+        type: 'line',
+        label: '血氧 %',
+        data: alignValues(charts.averageSpo2Pct, recoveryLabels),
+        yAxisID: 'recovery',
+        borderColor: '#dc2626',
+        backgroundColor: 'rgba(220, 38, 38, 0.12)',
+        tension: 0.3,
+        fill: false,
+        pointRadius: 2.5,
+      }],
+    },
+    options: makeOptions({
+      extraScales: {
+        recovery: {
+          position: 'right',
+          grid: {
+            drawOnChartArea: false,
+          },
+          ticks: {
+            color: '#64748b',
+            precision: 0,
+          },
+        },
+      },
+    }),
+  });
+
+  const workoutLabels = getUnionLabels([
+    charts.workoutDurationMinutes,
+    charts.averageHeartRateBpm,
+    charts.cyclingDistanceKm,
+  ]);
   createChart('monitor-workout-chart', {
     type: 'bar',
     data: {
@@ -239,6 +360,16 @@
         backgroundColor: 'rgba(22, 163, 74, 0.72)',
         borderRadius: 4,
         maxBarThickness: 14,
+      }, {
+        type: 'line',
+        label: '骑行 km',
+        data: alignValues(charts.cyclingDistanceKm, workoutLabels),
+        yAxisID: 'distance',
+        borderColor: '#0891b2',
+        backgroundColor: 'rgba(8, 145, 178, 0.12)',
+        tension: 0.3,
+        fill: false,
+        pointRadius: 2.5,
       }, {
         type: 'line',
         label: '平均心率',
@@ -262,6 +393,10 @@
             color: '#64748b',
             precision: 0,
           },
+        },
+        distance: {
+          display: false,
+          position: 'right',
         },
       },
     }),

@@ -36,19 +36,48 @@ test('monitor view model summarizes cross-domain progress, trends, continuity, a
   assert.equal(monitorView.summaryCards[2].value, '81 分');
   assert.equal(monitorView.summaryCards[3].secondary, '摄入超建议 180 kcal');
 
-  assert.equal(monitorView.trendCards.length, 4);
+  assert.equal(monitorView.trendCards.length, 6);
   assert.deepEqual(
     monitorView.trendCards.map((card) => card.chartId),
-    ['monitor-calorie-chart', 'monitor-body-chart', 'monitor-sleep-chart', 'monitor-workout-chart'],
+    [
+      'monitor-calorie-chart',
+      'monitor-body-chart',
+      'monitor-composition-chart',
+      'monitor-sleep-chart',
+      'monitor-recovery-chart',
+      'monitor-workout-chart',
+    ],
   );
   assert.equal(monitorView.chartPayload.windowDays, 30);
   assert.equal(monitorView.chartPayload.charts.weightKg.length, 30);
   assert.equal(monitorView.chartPayload.charts.sleepTotalMinutes.at(-1).value, 312);
   assert.equal(monitorView.chartPayload.charts.sleepScore.at(-1).value, 81);
   assert.equal(monitorView.chartPayload.charts.workoutDurationMinutes.at(-1).value, 54);
+  assert.equal(monitorView.chartPayload.charts.skeletalMuscleKg.at(-1).value, 30.7);
+  assert.equal(monitorView.chartPayload.charts.visceralFatLevel.at(-1).value, 8);
+  assert.equal(monitorView.chartPayload.charts.deepSleepMinutes.at(-1).value, 78);
+  assert.equal(monitorView.chartPayload.charts.hrvMs.at(-1).value, 42);
+  assert.equal(monitorView.chartPayload.charts.cyclingDistanceKm.at(-1).value, 12.5);
 
   assert.match(monitorView.continuityText, /连续锻炼 12 天/);
   assert.match(monitorView.continuityText, /睡眠达标连续 5 天/);
+  assert.deepEqual(
+    monitorView.bodyCompositionStats.map((item) => item.label),
+    ['BMI', '骨骼肌量', '基础代谢', '内脏脂肪等级', '水分率', '蛋白质率'],
+  );
+  assert.deepEqual(
+    monitorView.recoveryStats.map((item) => item.label),
+    ['深睡', 'REM', '清醒', 'HRV', '平均血氧', '呼吸率'],
+  );
+  const cyclingBreakdown = monitorView.trainingStructure.typeBreakdown.find((item) => item.label === '骑行');
+  assert.equal(cyclingBreakdown?.value, 6);
+  assert.ok(monitorView.rollingStats.some((item) => item.id === 'training30d' && item.value === '9600 kcal'));
+  assert.equal(monitorView.dataQuality.completenessPct, 100);
+  assert.equal(monitorView.dataQuality.missingItems.length, 0);
+  assert.ok(
+    monitorView.nutritionStats.some((item) => item.label === '建议上限' && item.value === '1700 kcal'),
+    'expected nutrition recommendation summary',
+  );
   assert.ok(
     monitorView.alerts.some((alert) => alert.includes('昨日睡眠 5.2h 偏少')),
     'expected low-sleep alert',
@@ -103,6 +132,12 @@ test('monitor page renders at /monitor with the generated view model and chart p
       assert.equal(cardMatches.length, 4);
       assert.match(monitorPage, /<canvas id="monitor-calorie-chart"><\/canvas>/);
       assert.match(monitorPage, /<canvas id="monitor-body-chart"><\/canvas>/);
+      assert.match(monitorPage, /<canvas id="monitor-recovery-chart"><\/canvas>/);
+      assert.match(monitorPage, /身体成分/);
+      assert.match(monitorPage, /恢复监控/);
+      assert.match(monitorPage, /训练结构/);
+      assert.match(monitorPage, /饮食维护/);
+      assert.match(monitorPage, /数据完整性/);
       assert.match(monitorPage, /class="monitor-chart-card__subtitle"/);
       assert.doesNotMatch(monitorStyles, /\.monitor-chart-card__heading span\b/);
       assert.match(monitorPage, /连续锻炼 12 天/);
@@ -113,6 +148,8 @@ test('monitor page renders at /monitor with the generated view model and chart p
       assert.equal(payload.windowDays, 30);
       assert.equal(payload.charts.weightKg.length, 30);
       assert.equal(payload.charts.sleepScore.at(-1).value, 81);
+      assert.equal(payload.charts.deepSleepMinutes.at(-1).value, 78);
+      assert.equal(payload.charts.cyclingDistanceKm.at(-1).value, 12.5);
     } finally {
       restoreOptionalFile(trainingDataPath, originalTrainingData);
       restoreOptionalFile(dashboardViewPath, originalDashboardView);
@@ -151,6 +188,7 @@ function buildMonitorSnapshot({ startDate, days }) {
     const totalSleepMinutes = index < 30 ? 360 : 430;
     const sleepScore = index < 30 ? 72 : 84;
     const totalCalories = 1500;
+    const cyclingDistanceKm = index < 24 ? 0 : 12.5;
 
     daily.push({
       date,
@@ -158,29 +196,40 @@ function buildMonitorSnapshot({ startDate, days }) {
       measurements: [measurement],
       activities: [{
         time: '08:00',
-        type: '力量训练',
+        type: index % 2 === 0 ? '骑行' : '力量训练',
         durationSeconds: 3240,
         calories: trainingCalories,
         heartRate: 128,
+        distanceKm: cyclingDistanceKm,
       }],
       workoutSummary: {
         totalActivities: trainingCalories > 0 ? 1 : 0,
         trainingCalories,
         workoutDurationMinutes: 54,
         totalDurationSeconds: 3240,
-        cyclingDistanceKm: 0,
-        countsByType: trainingCalories > 0 ? { 力量训练: 1 } : {},
+        activeHours: trainingCalories > 0 ? 9 : null,
+        cyclingDistanceKm,
+        countsByType: trainingCalories > 0
+          ? (index % 2 === 0 ? { 骑行: 1 } : { 力量训练: 1 })
+          : {},
       },
       nutrition: {
         totalCalories,
-        meals: [{ name: '晚餐', calories: totalCalories }],
+        meals: [{ name: '晚餐', calories: totalCalories, recommendedMin: 1200, recommendedMax: 1700 }],
       },
       sleep: [],
       sleepSummary: {
         totalSleepMinutes,
         nightSleepMinutes: totalSleepMinutes,
+        deepSleepMinutes: 90,
+        lightSleepMinutes: 250,
+        remSleepMinutes: 70,
+        awakeMinutes: 20,
         sleepScore,
         averageHeartRateBpm: 62,
+        hrvMs: 45,
+        averageSpo2Pct: 97,
+        averageRespiratoryRate: 15,
       },
     });
 
@@ -199,7 +248,13 @@ function buildMonitorSnapshot({ startDate, days }) {
   latestDay.nutrition.meals[0].calories = 1880;
   latestDay.sleepSummary.totalSleepMinutes = 312;
   latestDay.sleepSummary.nightSleepMinutes = 312;
+  latestDay.sleepSummary.deepSleepMinutes = 78;
+  latestDay.sleepSummary.remSleepMinutes = 62;
+  latestDay.sleepSummary.awakeMinutes = 28;
   latestDay.sleepSummary.sleepScore = 81;
+  latestDay.sleepSummary.hrvMs = 42;
+  latestDay.sleepSummary.averageSpo2Pct = 96;
+  latestDay.sleepSummary.averageRespiratoryRate = 16;
   previousDay.measurement.weightKg = 68.7;
   previousDay.measurement.bodyFatPct = 18.5;
   previousDay.sleepSummary.sleepScore = 78;

@@ -5,6 +5,12 @@ const trendCards = monitorView.trendCards || [];
 const chartPayload = monitorView.chartPayload || { windowDays: 30, charts: {} };
 const continuityStats = monitorView.continuityStats || [];
 const alerts = monitorView.alerts || [];
+const bodyCompositionStats = monitorView.bodyCompositionStats || [];
+const recoveryStats = monitorView.recoveryStats || [];
+const trainingStructure = monitorView.trainingStructure || { stats: [], typeBreakdown: [] };
+const nutritionStats = monitorView.nutritionStats || [];
+const rollingStats = monitorView.rollingStats || [];
+const dataQuality = monitorView.dataQuality || { stats: [], missingItems: [], completenessPct: 0 };
 %>
 
 <section class="monitor-page">
@@ -42,6 +48,16 @@ const alerts = monitorView.alerts || [];
       <% }); %>
     </section>
 
+    <section class="monitor-snapshot-grid" aria-label="周期汇总">
+      <% rollingStats.forEach((stat) => { %>
+        <article class="monitor-mini-card">
+          <span><%= stat.label %></span>
+          <strong><%= stat.value %></strong>
+          <small><%= stat.hint %></small>
+        </article>
+      <% }); %>
+    </section>
+
     <section class="monitor-trends">
       <div class="monitor-section-heading">
         <span class="monitor-eyebrow">30 DAYS</span>
@@ -63,7 +79,100 @@ const alerts = monitorView.alerts || [];
       </div>
     </section>
 
-    <section class="monitor-insights">
+    <section class="monitor-detail-grid" aria-label="监控明细">
+      <article class="monitor-panel monitor-panel--wide">
+        <div class="monitor-section-heading">
+          <span class="monitor-eyebrow">BODY</span>
+          <h2>身体成分</h2>
+        </div>
+        <div class="monitor-metric-grid">
+          <% bodyCompositionStats.forEach((stat) => { %>
+            <div class="monitor-stat">
+              <span><%= stat.label %></span>
+              <strong><%= stat.value %></strong>
+              <small><%= stat.hint %></small>
+            </div>
+          <% }); %>
+        </div>
+      </article>
+
+      <article class="monitor-panel monitor-panel--wide">
+        <div class="monitor-section-heading">
+          <span class="monitor-eyebrow">RECOVERY</span>
+          <h2>恢复监控</h2>
+        </div>
+        <div class="monitor-metric-grid">
+          <% recoveryStats.forEach((stat) => { %>
+            <div class="monitor-stat">
+              <span><%= stat.label %></span>
+              <strong><%= stat.value %></strong>
+              <small><%= stat.hint %></small>
+            </div>
+          <% }); %>
+        </div>
+      </article>
+
+      <article class="monitor-panel">
+        <div class="monitor-section-heading">
+          <span class="monitor-eyebrow">TRAINING</span>
+          <h2>训练结构</h2>
+        </div>
+        <div class="monitor-metric-grid monitor-metric-grid--compact">
+          <% (trainingStructure.stats || []).forEach((stat) => { %>
+            <div class="monitor-stat">
+              <span><%= stat.label %></span>
+              <strong><%= stat.value %></strong>
+              <small><%= stat.hint %></small>
+            </div>
+          <% }); %>
+        </div>
+        <div class="monitor-breakdown" aria-label="近30天活动类型分布">
+          <% (trainingStructure.typeBreakdown || []).forEach((item) => { %>
+            <div class="monitor-breakdown__row">
+              <span><%= item.label %></span>
+              <div aria-hidden="true"><span style="width:<%= Math.max(6, Math.min(100, item.value * 8)) %>%"></span></div>
+              <strong><%= item.value %></strong>
+            </div>
+          <% }); %>
+        </div>
+      </article>
+
+      <article class="monitor-panel">
+        <div class="monitor-section-heading">
+          <span class="monitor-eyebrow">NUTRITION</span>
+          <h2>饮食维护</h2>
+        </div>
+        <div class="monitor-metric-grid monitor-metric-grid--compact">
+          <% nutritionStats.forEach((stat) => { %>
+            <div class="monitor-stat">
+              <span><%= stat.label %></span>
+              <strong><%= stat.value %></strong>
+              <small><%= stat.hint %></small>
+            </div>
+          <% }); %>
+        </div>
+      </article>
+
+      <article class="monitor-panel">
+        <div class="monitor-section-heading">
+          <span class="monitor-eyebrow">DATA</span>
+          <h2>数据完整性</h2>
+        </div>
+        <div class="monitor-quality-meter" aria-label="今日数据完整率 <%= dataQuality.completenessPct || 0 %>%">
+          <span style="width:<%= Math.max(0, Math.min(100, dataQuality.completenessPct || 0)) %>%"></span>
+        </div>
+        <div class="monitor-metric-grid monitor-metric-grid--compact">
+          <% (dataQuality.stats || []).forEach((stat) => { %>
+            <div class="monitor-stat">
+              <span><%= stat.label %></span>
+              <strong><%= stat.value %></strong>
+              <small><%= stat.hint %></small>
+            </div>
+          <% }); %>
+        </div>
+        <p><%= (dataQuality.missingItems || []).length ? `缺失：${dataQuality.missingItems.join('、')}` : '今日关键数据已补齐' %></p>
+      </article>
+
       <article class="monitor-panel">
         <div class="monitor-section-heading">
           <span class="monitor-eyebrow">STREAK</span>
