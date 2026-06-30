@@ -29,6 +29,7 @@
 ### Fixed
 
 - 修复华为运动健康睡眠详情图在 AI 识别时误把阶段图/趋势小卡片推算值当作睡眠总时长的问题：睡眠 prompt 现在明确以 `夜间睡眠 X小时Y分钟` 文字行为权威来源，单独缺少 `总睡眠` 标签时只写 `nightSleepMinutes` 并由程序侧回退展示；同步 bump recognition prompt version 以避开旧识别缓存，并更新 Telegram 睡眠截图回归用例。
+- 修复睡眠图片重发后旧错误时长仍污染 dev 页面的问题：`core.sleep` 现在按归档日期、睡眠类型、入睡时间和醒来时间 canonicalize，同一段睡眠跨 Telegram/飞书或分钟数修正时会替换旧行；sleep backfill 会重放已有 ingest 睡眠批次修复旧数据，Pages 构建也改为先执行安全数据库修复再导出 Markdown。
 - 修复 Telegram 睡眠截图归档日期被多减一天的问题：当 AI 已根据睡眠时间轴识别出入睡日期，但 `bedtime` / `wakeTime` 只包含时分时，程序不再把该日期当作醒来日期再次前移，避免睡眠数据写入前一天、导致目标日页面显示为空。
 - 修复 docs 体系重构后 CI 文档契约测试仍读取 `docs/系统核心.md`、`docs/系统配置.md` 和缺失的 `docs/README.md` 导致 `test:fast` 失败的问题；新增当前 `docs/README.md`，同步根 README 链接、维护/排障文档和相关测试到新的分层 docs 入口。
 - 修复日志泄露修复引入的 Telegram/飞书队列回归：`workflow_dispatch` 不能通过 `$GITHUB_ENV` 覆盖受保护的 `GITHUB_EVENT_PATH`，导致同步 step 读回原始 workflow 事件、实际消费 0 条 webhook update；现在 workflow 通过 `SYNC_DISPATCH_EVENT_PATH` 传递 runner 临时事件文件路径，保留 payload 不落日志的同时恢复 Telegram 图片随想处理、结果通知和页面部署触发。

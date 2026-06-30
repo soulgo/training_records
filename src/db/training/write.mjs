@@ -485,11 +485,6 @@ export async function backfillCoreSleepFromIngestBatchesClient(client, options =
     where b.status = 'ready'
       and b.archived_date is not null
       and b.batch_payload_json->'sleep' is not null
-      and not exists (
-        select 1
-        from core.sleep s
-        where s.archived_date = b.archived_date
-      )
     order by b.processed_at asc, b.batch_id asc
   `);
   const archiveCandidateResult = await client.query(`

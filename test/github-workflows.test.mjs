@@ -42,8 +42,8 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
   assert.match(action, /echo "TRAINING_SNAPSHOT_SOURCE=markdown" >> "\$GITHUB_ENV"/);
   assert.match(action, /echo "TRAINING_SNAPSHOT_STRICT_DATABASE=false" >> "\$GITHUB_ENV"/);
   assert.ok(
-    action.indexOf('- name: Sync safe database repairs') > action.indexOf('- name: Export database markdown for Hexo posts'),
-    'safe database repairs should run after fresh database markdown export to avoid overwriting correct values with stale file data',
+    action.indexOf('- name: Sync safe database repairs') < action.indexOf('- name: Export database markdown for Hexo posts'),
+    'safe database repairs should run before fresh database markdown export so the site uses repaired core data',
   );
   assert.ok(
     action.indexOf('- name: Run tests') > action.indexOf('- name: Export database markdown for Hexo posts'),

@@ -106,6 +106,11 @@ runs:
           echo "sync_db_reason=data_changes" >> "$GITHUB_OUTPUT"
         fi
 
+    - name: Sync safe database repairs
+      if: ${{ inputs.run_backfill == 'true' && (inputs.sync_db_mode == 'always' || steps.sync_db_changes.outputs.sync_db_needed == 'true') }}
+      shell: bash
+      run: npm run sync:db
+
     - name: Export database markdown for Hexo posts
       shell: bash
       env:
@@ -121,11 +126,6 @@ runs:
         npm run export:markdown
         echo "TRAINING_SNAPSHOT_SOURCE=markdown" >> "$GITHUB_ENV"
         echo "TRAINING_SNAPSHOT_STRICT_DATABASE=false" >> "$GITHUB_ENV"
-
-    - name: Sync safe database repairs
-      if: ${{ inputs.run_backfill == 'true' && (inputs.sync_db_mode == 'always' || steps.sync_db_changes.outputs.sync_db_needed == 'true') }}
-      shell: bash
-      run: npm run sync:db
 
     - name: Run tests
       if: ${{ inputs.run_tests == 'true' }}
