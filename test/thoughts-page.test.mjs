@@ -96,7 +96,7 @@ test('thought module pages split thought posts by thought_module', () => {
       writeFileSync(
         workoutPostPath,
         `---
-date: 2026-05-14 10:30:00
+date: 2026-07-14 10:30:00
 tags:
   - 训练
   - 随想
@@ -112,7 +112,7 @@ telegram_chat_id: 42
       writeFileSync(
         miscPostPath,
         `---
-date: 2026-05-15 10:30:00
+date: 2026-07-15 10:30:00
 tags:
   - 杂七杂八
   - 随想
@@ -129,7 +129,7 @@ telegram_chat_id: 42
       writeFileSync(
         bodyFeedbackPostPath,
         `---
-date: 2026-05-16 10:30:00
+date: 2026-07-16 10:30:00
 tags:
   - 身体反馈
   - 随想

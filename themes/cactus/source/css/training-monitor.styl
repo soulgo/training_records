@@ -1,0 +1,326 @@
+.monitor-page
+  margin-top 1.1rem
+  display flex
+  flex-direction column
+  gap 1rem
+  color #162131
+
+.monitor-page h1,
+.monitor-page h2,
+.monitor-page p
+  margin 0
+
+.monitor-header
+  display flex
+  align-items flex-end
+  justify-content space-between
+  gap 1rem
+  padding-bottom 0.65rem
+  border-bottom 1px solid #d9e2ec
+
+.monitor-header h1
+  margin-top 0.25rem
+  color #102033
+  font-size 1.55rem
+  line-height 1.2
+
+.monitor-eyebrow
+  display block
+  color #2563eb
+  font-size 0.74rem
+  font-weight 800
+  line-height 1
+
+.monitor-header__meta
+  display flex
+  flex-wrap wrap
+  justify-content flex-end
+  gap 0.45rem
+  color #627084
+  font-size 0.86rem
+
+.monitor-header__meta span
+  display inline-flex
+  align-items center
+  gap 0.35rem
+  min-height 2rem
+  padding 0.35rem 0.6rem
+  border 1px solid #d9e2ec
+  border-radius 999px
+  background #ffffff
+
+.monitor-header__meta strong
+  color #162131
+
+.monitor-progress-grid
+  display grid
+  grid-template-columns repeat(4, minmax(0, 1fr))
+  gap 0.75rem
+
+.monitor-progress-card
+  display flex
+  flex-direction column
+  justify-content space-between
+  min-width 0
+  min-height 8.6rem
+  padding 0.9rem
+  border 1px solid #d9e2ec
+  border-radius 8px
+  background #ffffff
+  box-shadow 0 10px 26px rgba(15, 23, 42, 0.06)
+  overflow hidden
+
+.monitor-progress-card__top,
+.monitor-progress-card__bottom
+  display flex
+  align-items flex-start
+  justify-content space-between
+  gap 0.6rem
+  min-width 0
+
+.monitor-progress-card__top span,
+.monitor-progress-card__bottom span
+  color #607086
+  font-size 0.82rem
+  line-height 1.35
+
+.monitor-progress-card__top strong
+  color #111827
+  font-size 1.25rem
+  line-height 1.2
+  text-align right
+
+.monitor-progress-card__bottom strong
+  color #334155
+  font-size 0.82rem
+  line-height 1.35
+  text-align right
+
+.monitor-progress-card__top strong,
+.monitor-progress-card__bottom strong,
+.monitor-progress-card__top span,
+.monitor-progress-card__bottom span
+  min-width 0
+  overflow-wrap anywhere
+
+.monitor-progress-card__bar
+  height 0.55rem
+  margin 0.9rem 0
+  overflow hidden
+  border-radius 999px
+  background #e5eaf0
+
+.monitor-progress-card__bar span
+  display block
+  height 100%
+  border-radius inherit
+  background #2563eb
+
+.monitor-progress-card--teal .monitor-progress-card__bar span
+  background #0f766e
+
+.monitor-progress-card--amber .monitor-progress-card__bar span
+  background #d97706
+
+.monitor-progress-card--blue .monitor-progress-card__bar span
+  background #2563eb
+
+.monitor-progress-card--rose .monitor-progress-card__bar span
+  background #e11d48
+
+.monitor-progress-card--green .monitor-progress-card__bar span
+  background #16a34a
+
+.monitor-section-heading
+  display flex
+  flex-direction column
+  gap 0.3rem
+  margin-bottom 0.65rem
+
+.monitor-section-heading h2
+  color #102033
+  font-size 1.08rem
+  line-height 1.25
+
+.monitor-trend-grid
+  display grid
+  grid-template-columns repeat(2, minmax(0, 1fr))
+  gap 0.8rem
+
+.monitor-chart-card,
+.monitor-panel
+  min-width 0
+  border 1px solid #d9e2ec
+  border-radius 8px
+  background #ffffff
+  box-shadow 0 10px 26px rgba(15, 23, 42, 0.06)
+
+.monitor-chart-card
+  position relative
+  min-height 20.5rem
+  padding 0.9rem
+
+.monitor-chart-card__heading
+  display flex
+  align-items flex-start
+  justify-content space-between
+  gap 1rem
+  min-height 3rem
+  margin-bottom 0.6rem
+
+.monitor-chart-card__heading h2
+  margin 0
+  color #102033
+  font-size 0.98rem
+  line-height 1.25
+
+.monitor-chart-card__heading span
+  display block
+  margin-top 0.18rem
+  color #64748b
+  font-size 0.78rem
+  line-height 1.35
+
+.monitor-chart-card canvas
+  width 100% !important
+  height 15.5rem !important
+
+.monitor-chart-legend
+  display flex
+  flex-direction column
+  align-items flex-end
+  gap 0.32rem
+  min-width 7rem
+  color #475569
+  font-size 0.72rem
+  line-height 1.2
+
+.monitor-chart-legend__item
+  display inline-flex
+  align-items center
+  justify-content flex-end
+  gap 0.32rem
+  max-width 10rem
+
+.monitor-chart-legend__swatch
+  width 0.55rem
+  height 0.55rem
+  flex 0 0 auto
+  border-radius 999px
+  background var(--legend-color, currentColor)
+
+.monitor-chart-legend__label
+  min-width 0
+  overflow hidden
+  text-overflow ellipsis
+  white-space nowrap
+
+.monitor-insights
+  display grid
+  grid-template-columns minmax(0, 1fr) minmax(0, 1fr)
+  gap 0.8rem
+
+.monitor-panel
+  padding 0.9rem
+
+.monitor-stats
+  display grid
+  grid-template-columns repeat(2, minmax(0, 1fr))
+  gap 0.65rem
+  margin-bottom 0.65rem
+
+.monitor-stat
+  min-height 4.2rem
+  padding 0.75rem
+  border 1px solid #e2e8f0
+  border-radius 8px
+  background #f8fafc
+
+.monitor-stat span
+  display block
+  color #64748b
+  font-size 0.8rem
+  line-height 1.35
+
+.monitor-stat strong
+  display block
+  margin-top 0.28rem
+  color #0f172a
+  font-size 1.15rem
+  line-height 1.2
+
+.monitor-panel p
+  color #475569
+  font-size 0.9rem
+  line-height 1.6
+
+.monitor-panel ul
+  display flex
+  flex-direction column
+  gap 0.5rem
+  margin 0
+  padding 0
+  list-style none
+
+.monitor-panel li
+  position relative
+  padding 0.62rem 0.75rem 0.62rem 2rem
+  border 1px solid #fee2e2
+  border-radius 8px
+  background #fff7f7
+  color #7f1d1d
+  font-size 0.9rem
+  line-height 1.45
+
+.monitor-panel li:before
+  content "!"
+  position absolute
+  left 0.75rem
+  top 0.62rem
+  display inline-flex
+  align-items center
+  justify-content center
+  width 0.9rem
+  height 0.9rem
+  border-radius 999px
+  background #ef4444
+  color #ffffff
+  font-size 0.68rem
+  font-weight 800
+  line-height 1
+
+.monitor-empty
+  padding 1rem
+  border 1px solid #d9e2ec
+  border-radius 8px
+  background #ffffff
+  color #64748b
+
+@media (max-width: 960px)
+  .monitor-progress-grid
+    grid-template-columns repeat(2, minmax(0, 1fr))
+
+  .monitor-trend-grid,
+  .monitor-insights
+    grid-template-columns 1fr
+
+@media (max-width: 640px)
+  .monitor-header
+    align-items stretch
+    flex-direction column
+
+  .monitor-header__meta
+    justify-content flex-start
+
+  .monitor-progress-grid
+    grid-template-columns 1fr
+
+  .monitor-chart-card__heading
+    flex-direction column
+
+  .monitor-chart-legend
+    align-items flex-start
+    min-width 0
+
+  .monitor-stats
+    grid-template-columns 1fr

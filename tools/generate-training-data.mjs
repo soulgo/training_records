@@ -14,6 +14,7 @@ import {
   BodyMetricGenerator,
   DashboardGenerator,
   HexoGeneratorAdapter,
+  MonitorGenerator,
   TrainingDayGenerator,
 } from '../src/adapters/hexo/index.mjs';
 
@@ -36,6 +37,7 @@ export async function generateTrainingData(options = {}) {
   const outputDir = path.join(rootDir, 'source', '_data');
   const outputPath = path.join(outputDir, 'training.json');
   const dashboardViewPath = path.join(outputDir, 'dashboardView.json');
+  const monitorViewPath = path.join(outputDir, 'monitorView.json');
   const debugOutputPath = path.join(rootDir, '训练数据解析.md');
   const snapshotSource = resolveSnapshotSource(argv, env);
   const trainingDbConfig = resolveTrainingCoreConfig(env);
@@ -75,6 +77,7 @@ export async function generateTrainingData(options = {}) {
       new TrainingDayGenerator(),
       new BodyMetricGenerator(),
       new DashboardGenerator(),
+      new MonitorGenerator(),
     ],
     writeJson: async (relativePath, payload) => {
       await writeFile(path.join(outputDir, relativePath), `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
@@ -85,6 +88,7 @@ export async function generateTrainingData(options = {}) {
 
   stdout.write(`Generated ${toPosixRelativePath(rootDir, outputPath)}\n`);
   stdout.write(`Generated ${toPosixRelativePath(rootDir, dashboardViewPath)}\n`);
+  stdout.write(`Generated ${toPosixRelativePath(rootDir, monitorViewPath)}\n`);
   stdout.write(`Generated ${toPosixRelativePath(rootDir, debugOutputPath)}\n`);
 
   const runtimeContext = resolveTrainingArchiveRuntimeContext({ env, argv });
@@ -102,6 +106,7 @@ export async function generateTrainingData(options = {}) {
       recordPath,
       outputPath,
       dashboardViewPath,
+      monitorViewPath,
       debugOutputPath,
       parsed,
     };
@@ -135,6 +140,7 @@ export async function generateTrainingData(options = {}) {
     recordPath,
     outputPath,
     dashboardViewPath,
+    monitorViewPath,
     debugOutputPath,
     parsed,
   };

@@ -1,0 +1,100 @@
+<%
+const monitorView = site.data.monitorView || {};
+const summaryCards = monitorView.summaryCards || [];
+const trendCards = monitorView.trendCards || [];
+const chartPayload = monitorView.chartPayload || { windowDays: 30, charts: {} };
+const continuityStats = monitorView.continuityStats || [];
+const alerts = monitorView.alerts || [];
+%>
+
+<section class="monitor-page">
+  <% if (!summaryCards.length) { %>
+    <div class="monitor-empty">
+      <p>还没有可展示的监控数据。</p>
+    </div>
+  <% } else { %>
+    <header class="monitor-header">
+      <div>
+        <span class="monitor-eyebrow">MONITOR</span>
+        <h1><%= monitorView.title || '健身监控总览' %></h1>
+      </div>
+      <div class="monitor-header__meta">
+        <span>最新数据 <strong><%= monitorView.latestDataDate || '—' %></strong></span>
+        <span>更新 <strong><%= monitorView.updatedTime || '—' %></strong></span>
+      </div>
+    </header>
+
+    <section class="monitor-progress-grid" aria-label="核心监控指标">
+      <% summaryCards.forEach((card) => { %>
+        <article class="monitor-progress-card monitor-progress-card--<%= card.tone || 'default' %>">
+          <div class="monitor-progress-card__top">
+            <span><%= card.title %></span>
+            <strong><%= card.value %></strong>
+          </div>
+          <div class="monitor-progress-card__bar" aria-hidden="true">
+            <span style="width:<%= Math.max(0, Math.min(100, card.progressPct || 0)) %>%"></span>
+          </div>
+          <div class="monitor-progress-card__bottom">
+            <span><%= card.progressLabel %></span>
+            <strong><%= card.secondary %></strong>
+          </div>
+        </article>
+      <% }); %>
+    </section>
+
+    <section class="monitor-trends">
+      <div class="monitor-section-heading">
+        <span class="monitor-eyebrow">30 DAYS</span>
+        <h2>综合趋势</h2>
+      </div>
+      <div class="monitor-trend-grid">
+        <% trendCards.forEach((chart) => { %>
+          <article class="monitor-chart-card">
+            <div class="monitor-chart-card__heading">
+              <div>
+                <h2><%= chart.title %></h2>
+                <span><%= chart.subtitle %></span>
+              </div>
+              <div class="monitor-chart-legend" data-monitor-legend-for="<%= chart.chartId %>"></div>
+            </div>
+            <canvas id="<%= chart.chartId %>"></canvas>
+          </article>
+        <% }); %>
+      </div>
+    </section>
+
+    <section class="monitor-insights">
+      <article class="monitor-panel">
+        <div class="monitor-section-heading">
+          <span class="monitor-eyebrow">STREAK</span>
+          <h2>连续性</h2>
+        </div>
+        <div class="monitor-stats">
+          <% continuityStats.forEach((stat) => { %>
+            <div class="monitor-stat">
+              <span><%= stat.label %></span>
+              <strong><%= stat.value %></strong>
+            </div>
+          <% }); %>
+        </div>
+        <p><%= monitorView.continuityText || '暂无连续性数据' %></p>
+      </article>
+
+      <article class="monitor-panel monitor-panel--alerts">
+        <div class="monitor-section-heading">
+          <span class="monitor-eyebrow">ALERTS</span>
+          <h2>预警</h2>
+        </div>
+        <ul>
+          <% alerts.forEach((alert) => { %>
+            <li><%= alert %></li>
+          <% }); %>
+        </ul>
+      </article>
+    </section>
+
+    <script id="training-monitor-data" type="application/json"><%- JSON.stringify(chartPayload) %></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" integrity="sha384-JUh163oCRItcbPme8pYnROHQMC6fNKTBWtRG3I3I0erJkzNgL7uxKlNwcrcFKeqF" crossorigin="anonymous" defer></script>
+    <script defer src="<%- url_for('/js/training-monitor.js') %>"></script>
+  <% } %>
+</section>

@@ -34,6 +34,7 @@ theme_config:
   projects_url: /
   nav:
     records: /
+    monitor: /monitor/
     thoughts: /thoughts/
     misc: /misc/
     body_feedback: /body-feedback/
