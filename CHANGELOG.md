@@ -34,6 +34,7 @@
 
 ### Fixed
 
+- 修复监控页趋势图图例排版不协调的问题：图表副标题改用专用 class，避免标题区 `span` 样式污染图例色点和标签；图例改为紧凑胶囊标签并支持移动端自然换行。
 - 修复 Telegram 随想 `/移动 id 模块` 移动带图随想时图片引用丢失的问题：DB-only 移动/编辑现在会保留 `photoPaths: null` 的“不改原图片”语义，不再误转为空数组清空 `core.thought.image_refs_json`；同步补充移动带图随想和落库参数回归测试。
 - 修复华为运动健康睡眠详情图在 AI 识别时误把阶段图/趋势小卡片推算值当作睡眠总时长的问题：睡眠 prompt 现在明确以 `夜间睡眠 X小时Y分钟` 文字行为权威来源，单独缺少 `总睡眠` 标签时只写 `nightSleepMinutes` 并由程序侧回退展示；同步 bump recognition prompt version 以避开旧识别缓存，并更新 Telegram 睡眠截图回归用例。
 - 修复睡眠图片重发后旧错误时长仍污染 dev 页面的问题：`core.sleep` 现在按归档日期、睡眠类型、入睡时间和醒来时间 canonicalize，同一段睡眠跨 Telegram/飞书或分钟数修正时会替换旧行；sleep backfill 会重放已有 ingest 睡眠批次修复旧数据，Pages 构建也改为先执行安全数据库修复再导出 Markdown。

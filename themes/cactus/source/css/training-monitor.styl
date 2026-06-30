@@ -174,7 +174,7 @@
   font-size 0.98rem
   line-height 1.25
 
-.monitor-chart-card__heading span
+.monitor-chart-card__subtitle
   display block
   margin-top 0.18rem
   color #64748b
@@ -187,10 +187,11 @@
 
 .monitor-chart-legend
   display flex
-  flex-direction column
-  align-items flex-end
-  gap 0.32rem
-  min-width 7rem
+  flex-wrap wrap
+  justify-content flex-end
+  gap 0.34rem 0.42rem
+  min-width 9rem
+  max-width 14rem
   color #475569
   font-size 0.72rem
   line-height 1.2
@@ -199,8 +200,13 @@
   display inline-flex
   align-items center
   justify-content flex-end
-  gap 0.32rem
-  max-width 10rem
+  gap 0.28rem
+  min-height 1.35rem
+  max-width 100%
+  padding 0.12rem 0.42rem
+  border 1px solid #e2e8f0
+  border-radius 999px
+  background #f8fafc
 
 .monitor-chart-legend__swatch
   width 0.55rem
@@ -320,7 +326,9 @@
 
   .monitor-chart-legend
     align-items flex-start
+    justify-content flex-start
     min-width 0
+    max-width 100%
 
   .monitor-stats
     grid-template-columns 1fr

@@ -88,6 +88,10 @@ test('monitor page renders at /monitor with the generated view model and chart p
       });
 
       const monitorPage = readFileSync(path.join(rootDir, 'public', 'monitor', 'index.html'), 'utf8');
+      const monitorStyles = readFileSync(
+        path.join(rootDir, 'themes', 'cactus', 'source', 'css', 'training-monitor.styl'),
+        'utf8',
+      );
       const cardMatches = monitorPage.match(/<article class="monitor-progress-card/g) ?? [];
       const payloadMatch = monitorPage.match(
         /<script id="training-monitor-data" type="application\/json">([\s\S]*?)<\/script>/,
@@ -99,6 +103,8 @@ test('monitor page renders at /monitor with the generated view model and chart p
       assert.equal(cardMatches.length, 4);
       assert.match(monitorPage, /<canvas id="monitor-calorie-chart"><\/canvas>/);
       assert.match(monitorPage, /<canvas id="monitor-body-chart"><\/canvas>/);
+      assert.match(monitorPage, /class="monitor-chart-card__subtitle"/);
+      assert.doesNotMatch(monitorStyles, /\.monitor-chart-card__heading span\b/);
       assert.match(monitorPage, /连续锻炼 12 天/);
       assert.match(monitorPage, /昨日睡眠 5.2h 偏少/);
       assert.ok(payloadMatch, 'expected embedded monitor payload');
