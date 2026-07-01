@@ -1,0 +1,32 @@
+{
+  "sampleId": "workout-activity-summary",
+  "imageType": "workout",
+  "schemaValid": true,
+  "expected": {
+    "imageType": "workout",
+    "records": {
+      "dailyWorkoutSummary": {
+        "activityCaloriesKcal": 520,
+        "workoutDurationMinutes": 64,
+        "activeHours": 8
+      }
+    }
+  },
+  "actual": {
+    "imageType": "workout",
+    "warnings": [],
+    "records": {
+      "dailyWorkoutSummary": {
+        "activityCaloriesKcal": 520,
+        "workoutDurationMinutes": 64,
+        "activeHours": 8
+      }
+    }
+  },
+  "fields": [
+    { "path": "imageType" },
+    { "path": "records.dailyWorkoutSummary.activityCaloriesKcal", "tolerance": 1 },
+    { "path": "records.dailyWorkoutSummary.workoutDurationMinutes", "tolerance": 1 },
+    { "path": "records.dailyWorkoutSummary.activeHours", "tolerance": 0.1 }
+  ]
+}

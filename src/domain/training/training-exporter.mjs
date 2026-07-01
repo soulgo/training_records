@@ -1,4 +1,4 @@
-import { appendMetric } from '../../../tools/lib/markdown-render.mjs';
+import { appendMetric } from '../../shared/markdown-render.mjs';
 
 export function exportTrainingMarkdown(snapshot) {
   const lines = ['# 训练记录', ''];

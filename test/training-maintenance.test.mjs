@@ -1091,8 +1091,8 @@ test('current maintenance docs and scripts document inspect sync and migrate com
   assert.match(maintenanceGuide, /aiMonitoringTotalCostUsd/);
   assert.match(maintenanceGuide, /recoveryTargetDays/);
   assert.match(maintenanceGuide, /node tools\/telegram-sync-fallback\.mjs inspect/);
-  assert.match(maintenanceGuide, /TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING=true npm run sync:telegram/);
-  assert.match(maintenanceGuide, /telegram-sync-pending\.ndjson\.backup-<UTC timestamp>/);
+  assert.match(maintenanceGuide, /旧 NDJSON pending 已从同步主链路下线/);
+  assert.doesNotMatch(maintenanceGuide, /TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING/);
 });
 
 test('maintenance guide includes onboarding exercise prompts for production handoff', async () => {

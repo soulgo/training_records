@@ -1,5 +1,5 @@
 export const RECOGNITION_SCHEMA_NAME = 'telegram_training_image';
-export const RECOGNITION_SCHEMA_VERSION = 'v2';
+export const RECOGNITION_SCHEMA_VERSION = 'v3';
 
 export function buildRecognitionSchema() {
   return {
@@ -31,7 +31,7 @@ export function buildRecognitionSchema() {
       records: {
         type: 'object',
         additionalProperties: false,
-        required: ['measurement', 'activities', 'meals', 'totalCalories', 'details', 'dailyWorkoutSummary'],
+        required: ['measurement', 'activities', 'meals', 'totalCalories', 'details', 'dailyWorkoutSummary', 'sleep'],
         properties: {
           measurement: {
             type: ['object', 'null'],

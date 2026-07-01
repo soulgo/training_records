@@ -63,6 +63,45 @@ export function buildTelegramSyncReport(result) {
   return normalized;
 }
 
+export function buildSafeSyncReport(result) {
+  const report = buildTelegramSyncReport(result);
+  return {
+    changed: report.changed,
+    updatesFetched: report.updatesFetched,
+    lastProcessedUpdateId: report.lastProcessedUpdateId,
+    readyBatches: report.readyBatches,
+    ...(report.timingsMs ? { timingsMs: report.timingsMs } : {}),
+    batches: (report.batches ?? []).map((batch) => ({
+      kind: batch.kind,
+      batchId: batch.batchId,
+      status: batch.status,
+      archivedDate: batch.archivedDate ?? null,
+      persistenceStatus: batch.persistenceStatus ?? null,
+      failureCategory: batch.failureCategory ?? null,
+      failureReason: batch.failureReason ?? null,
+      sourceImageCount: batch.sourceImageCount ?? 0,
+      recognizedImageCount: batch.recognizedImageCount ?? 0,
+      failedImageCount: batch.failedImageCount ?? 0,
+      warnings: Array.isArray(batch.warnings) ? batch.warnings : [],
+      ai: batch.ai ?? null,
+      ...(batch.persistenceResult
+        ? { persistenceResult: buildSafePersistenceReport(batch.persistenceResult) }
+        : {}),
+    })),
+  };
+}
+
+function buildSafePersistenceReport(persistenceResult) {
+  return {
+    status: persistenceResult.status ?? null,
+    rowCounts: persistenceResult.rowCounts ?? {},
+    durationMs: normalizeNullableNonNegativeInteger(persistenceResult.durationMs),
+    pendingStatus: persistenceResult.pendingStatus ?? null,
+    rollbackStatus: persistenceResult.rollbackStatus ?? null,
+    slowQueryCount: Array.isArray(persistenceResult.slowQueries) ? persistenceResult.slowQueries.length : 0,
+  };
+}
+
 function normalizeSyncReportBatch(batch) {
   const taskAudit = buildSyncTaskAuditFields(batch);
   const failureCategory = normalizeBatchFailureCategory(batch);

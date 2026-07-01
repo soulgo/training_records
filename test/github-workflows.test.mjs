@@ -439,7 +439,7 @@ test('main sync workflow notifies after sync and waits for site deploy completio
   assert.match(workflow, /TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_MODEL \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_API_KEY \}\}/);
-  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
@@ -509,7 +509,7 @@ test('telegram-sync workflows keep database-only detection without blocking on p
     assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
     assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
     assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_API_KEY \}\}/);
-    assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \}\}/);
+    assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \}\}/);
     assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
     assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
     assert.match(workflow, /db_content_changed=true/);
@@ -548,37 +548,39 @@ test('telegram-sync workflows keep dev and main environment sources isolated', a
 
   assert.equal(mainSyncEnv.FEISHU_APP_ID, '${{ secrets.FEISHU_APP_ID }}');
   assert.equal(mainSyncEnv.FEISHU_APP_SECRET, '${{ secrets.FEISHU_APP_SECRET }}');
-  assert.equal(mainSyncEnv.FEISHU_ALLOWED_CHAT_IDS, '${{ vars.FEISHU_ALLOWED_CHAT_IDS }}');
+  assert.equal(mainSyncEnv.FEISHU_ALLOWED_CHAT_IDS, '${{ secrets.FEISHU_ALLOWED_CHAT_IDS }}');
   assert.equal(devSyncEnv.FEISHU_APP_ID, '${{ secrets.DEV_FEISHU_APP_ID || secrets.FEISHU_APP_ID }}');
   assert.equal(devSyncEnv.FEISHU_APP_SECRET, '${{ secrets.DEV_FEISHU_APP_SECRET || secrets.FEISHU_APP_SECRET }}');
-  assert.equal(devSyncEnv.FEISHU_ALLOWED_CHAT_IDS, '${{ vars.DEV_FEISHU_ALLOWED_CHAT_IDS || vars.FEISHU_ALLOWED_CHAT_IDS }}');
+  assert.equal(devSyncEnv.FEISHU_ALLOWED_CHAT_IDS, '${{ secrets.DEV_FEISHU_ALLOWED_CHAT_IDS || secrets.FEISHU_ALLOWED_CHAT_IDS }}');
 
   assert.equal(mainSyncEnv.COS_ENABLED, '${{ vars.COS_ENABLED }}');
   assert.equal(mainSyncEnv.COS_PROVIDER, "${{ vars.COS_PROVIDER || 'tencent_cos' }}");
   assert.equal(mainSyncEnv.COS_SECRET_ID, '${{ secrets.COS_SECRET_ID }}');
   assert.equal(mainSyncEnv.COS_SECRET_KEY, '${{ secrets.COS_SECRET_KEY }}');
-  assert.equal(mainSyncEnv.COS_BUCKET, '${{ vars.COS_BUCKET }}');
+  assert.equal(mainSyncEnv.COS_BUCKET, '${{ secrets.COS_BUCKET }}');
   assert.equal(mainSyncEnv.COS_REGION, '${{ vars.COS_REGION }}');
-  assert.equal(mainSyncEnv.COS_DOMAIN, '${{ vars.COS_DOMAIN }}');
-  assert.equal(mainSyncEnv.COS_PATH_PREFIX, '${{ vars.COS_PATH_PREFIX }}');
+  assert.equal(mainSyncEnv.COS_DOMAIN, '${{ secrets.COS_DOMAIN }}');
+  assert.equal(mainSyncEnv.COS_PATH_PREFIX, '${{ secrets.COS_PATH_PREFIX }}');
   assert.equal(mainSyncEnv.SYNC_FAILURE_SUMMARY_PATH, '${{ runner.temp }}/sync-failure-summary.txt');
 
   assert.equal(devSyncEnv.COS_ENABLED, '${{ vars.DEV_COS_ENABLED }}');
   assert.equal(devSyncEnv.COS_PROVIDER, "${{ vars.DEV_COS_PROVIDER || 'tencent_cos' }}");
   assert.equal(devSyncEnv.COS_SECRET_ID, '${{ secrets.DEV_COS_SECRET_ID }}');
   assert.equal(devSyncEnv.COS_SECRET_KEY, '${{ secrets.DEV_COS_SECRET_KEY }}');
-  assert.equal(devSyncEnv.COS_BUCKET, '${{ vars.DEV_COS_BUCKET }}');
+  assert.equal(devSyncEnv.COS_BUCKET, '${{ secrets.DEV_COS_BUCKET }}');
   assert.equal(devSyncEnv.COS_REGION, '${{ vars.DEV_COS_REGION }}');
-  assert.equal(devSyncEnv.COS_DOMAIN, '${{ vars.DEV_COS_DOMAIN }}');
-  assert.equal(devSyncEnv.COS_PATH_PREFIX, '${{ vars.DEV_COS_PATH_PREFIX }}');
+  assert.equal(devSyncEnv.COS_DOMAIN, '${{ secrets.DEV_COS_DOMAIN }}');
+  assert.equal(devSyncEnv.COS_PATH_PREFIX, '${{ secrets.DEV_COS_PATH_PREFIX }}');
+  assert.equal(devSyncEnv.MAIN_COS_BUCKET_FOR_CHECK, '${{ secrets.COS_BUCKET }}');
+  assert.equal(devSyncEnv.MAIN_COS_DOMAIN_FOR_CHECK, '${{ secrets.COS_DOMAIN }}');
   assert.equal(devSyncEnv.SYNC_FAILURE_SUMMARY_PATH, '${{ runner.temp }}/sync-failure-summary.txt');
   assert.notEqual(devSyncEnv.COS_SECRET_ID, mainSyncEnv.COS_SECRET_ID);
   assert.notEqual(devSyncEnv.COS_BUCKET, mainSyncEnv.COS_BUCKET);
 
   // dev workflow 必须在启用 COS 时校验 dev bucket/domain 与 main 不同，防止污染生产图片
   const devSyncRun = getWorkflowStep(dev, 'sync', 'Sync updates').run;
-  assert.match(devSyncRun, /COS_BUCKET.*=.*\$\{\{ vars\.COS_BUCKET \}\}/);
-  assert.match(devSyncRun, /COS_DOMAIN.*=.*\$\{\{ vars\.COS_DOMAIN \}\}/);
+  assert.match(devSyncRun, /MAIN_COS_BUCKET_FOR_CHECK/);
+  assert.match(devSyncRun, /MAIN_COS_DOMAIN_FOR_CHECK/);
   assert.match(devSyncRun, /dev COS bucket must differ from main COS bucket/);
   assert.match(devSyncRun, /dev COS domain must differ from main COS domain/);
 
@@ -594,13 +596,11 @@ test('telegram-sync workflows keep dev and main environment sources isolated', a
   for (const envName of [
     'AI_API_KEY',
     'AI_PROVIDER',
-    'AI_BASE_URL',
     'AI_MODEL',
     'AI_TIMEOUT_MS',
     'AI_CONCURRENCY',
     'TELEGRAM_RECOGNITION_MODEL',
     'TELEGRAM_RECOGNITION_FALLBACK_API_KEY',
-    'TELEGRAM_RECOGNITION_FALLBACK_BASE_URL',
     'TELEGRAM_RECOGNITION_FALLBACK_MODEL',
     'TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS',
     'TELEGRAM_RECOGNITION_CACHE_ENABLED',
@@ -1175,7 +1175,7 @@ test('main sync workflow handles production dispatches and writes main branch', 
   assert.match(workflow, /TRAINING_DB_READONLY_URL:\s*\$\{\{\s*secrets\.TRAINING_DB_READONLY_URL\s*\}\}/);
   assert.match(workflow, /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.TELEGRAM_BOT_TOKEN\s*\}\}/);
   assert.match(workflow, /FEISHU_APP_ID:\s*\$\{\{\s*secrets\.FEISHU_APP_ID\s*\}\}/);
-  assert.match(workflow, /FEISHU_ALLOWED_CHAT_IDS:\s*\$\{\{\s*vars\.FEISHU_ALLOWED_CHAT_IDS\s*\}\}/);
+  assert.match(workflow, /FEISHU_ALLOWED_CHAT_IDS:\s*\$\{\{\s*secrets\.FEISHU_ALLOWED_CHAT_IDS\s*\}\}/);
   assert.match(workflow, /export TRAINING_DB_APP_NAME=sync-main-feishu/);
   assert.match(workflow, /echo "commit_message=chore: sync Telegram updates"/);
   assert.match(workflow, /echo "commit_message=chore: sync Feishu updates"/);
@@ -1206,7 +1206,7 @@ test('telegram-sync dev workflow only handles dev dispatches and writes dev bran
   assert.match(workflow, /TRAINING_DB_READONLY_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_READONLY_URL\s*\}\}/);
   assert.match(workflow, /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.DEV_TELEGRAM_BOT_TOKEN\s*\}\}/);
   assert.match(workflow, /FEISHU_APP_ID:\s*\$\{\{\s*secrets\.DEV_FEISHU_APP_ID \|\| secrets\.FEISHU_APP_ID\s*\}\}/);
-  assert.match(workflow, /FEISHU_ALLOWED_CHAT_IDS:\s*\$\{\{\s*vars\.DEV_FEISHU_ALLOWED_CHAT_IDS \|\| vars\.FEISHU_ALLOWED_CHAT_IDS\s*\}\}/);
+  assert.match(workflow, /FEISHU_ALLOWED_CHAT_IDS:\s*\$\{\{\s*secrets\.DEV_FEISHU_ALLOWED_CHAT_IDS \|\| secrets\.FEISHU_ALLOWED_CHAT_IDS\s*\}\}/);
   assert.match(workflow, /export TRAINING_DB_APP_NAME=sync-dev-feishu/);
   assert.match(workflow, /echo "commit_message=chore\(dev\): sync Telegram updates"/);
   assert.match(workflow, /echo "commit_message=chore\(dev\): sync Feishu updates"/);
@@ -1230,7 +1230,7 @@ test('telegram-sync dev workflow waits for the dev deploy workflow', async () =>
   assert.match(workflow, /TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_MODEL \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_API_KEY \}\}/);
-  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);

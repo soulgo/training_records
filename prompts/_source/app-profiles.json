@@ -2,7 +2,7 @@
   "_description": "Adaptive app-profile memory for Telegram image recognition. Keep entries short: aliases, page cues, field aliases, units, and time priorities only.",
   "metadata": {
     "version": "2026-06-13",
-    "schemaVersion": "v2"
+    "schemaVersion": "v3"
   },
   "title": "App Profile 记忆",
   "rules": [

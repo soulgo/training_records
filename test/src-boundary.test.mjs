@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -104,4 +105,39 @@ test('first-party runtime files avoid deprecated Node URL and punycode APIs', ()
   }
 
   assert.deepEqual(violations, []);
+});
+
+test('src modules do not import implementation code back from tools', () => {
+  const files = [];
+
+  function visit(currentPath) {
+    const currentStat = statSync(currentPath);
+    if (currentStat.isDirectory()) {
+      for (const dirent of readdirSync(currentPath, { withFileTypes: true })) {
+        visit(path.join(currentPath, dirent.name));
+      }
+      return;
+    }
+    if (currentStat.isFile() && path.extname(currentPath) === '.mjs') {
+      files.push(currentPath);
+    }
+  }
+
+  visit(path.join(REPO_ROOT, 'src'));
+
+  const violations = files
+    .map((filePath) => {
+      const text = readFileSync(filePath, 'utf8');
+      const relativePath = path.relative(REPO_ROOT, filePath);
+      return /\.\.\/\.\.\/\.\.\/tools|\.\.\/\.\.\/\.\.\/\.\.\/tools/.test(text) ? relativePath : null;
+    })
+    .filter(Boolean);
+
+  assert.deepEqual(violations, []);
+});
+
+test('sync:feishu package entrypoint uses the src use case directly', async () => {
+  const packageJson = JSON.parse(await readFile(path.join(REPO_ROOT, 'package.json'), 'utf8'));
+
+  assert.equal(packageJson.scripts['sync:feishu'], 'node src/app/use-cases/feishu-sync.use-case.mjs');
 });

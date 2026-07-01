@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer';
 import { recognizeTelegramImageMessage } from '../../../ai/recognition-service.mjs';
 import { analyzeTelegramBatch, mapWithConcurrency } from '../../../adapters/telegram/sync-batch.adapter.mjs';
 import { resolveTelegramFileUrl } from '../../../adapters/telegram/index.mjs';
-import { getRecognitionPromptMetadata, stripPromptMetadataHeader } from '../../../../tools/prompt-generator.mjs';
+import { getRecognitionPromptMetadata, stripPromptMetadataHeader } from '../../../core/ai/prompt-generator.mjs';
 import { createAiProvider } from '../../../ai/provider.mjs';
 import { shouldQueueRecognitionFailure } from '../../../db/training/pending-recognition.mjs';
 import {

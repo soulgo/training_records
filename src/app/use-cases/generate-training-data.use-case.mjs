@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { generateTrainingData } from '../../../tools/generate-training-data.mjs';
+import { generateTrainingData } from './generate-training-data.impl.mjs';
 
 export async function runGenerateTrainingDataUseCase(options = {}) {
   return generateTrainingData(options);

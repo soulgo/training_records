@@ -15,12 +15,15 @@
 
 ### Added
 
+- 新增图片识别脱敏 fixture 评测集与 `npm run eval:recognition`，覆盖 measurement、workout、nutrition、sleep 四类样本，输出 schema 失败数、静默异常入库数、语义 warning 和字段准确率，作为后续识别 prompt/schema 调整的回归基线。
 - 新增 `/monitor/` 健身监控总览页：基于现有 PostgreSQL snapshot 生成 `monitorView.json`，汇总展示体重、体脂率、睡眠评分、热量平衡、近 30 天跨域趋势、连续性和预警信息，并在导航中新增“监控”入口。
 - 新增 `docs/02_系统核心逻辑/训练监控逻辑.md` 维护文档：覆盖监控页从快照到前端 Chart.js 渲染的端到端链路、视图模型结构（指标卡片、趋势图、连续性与预警）、配置参数、空数据降级和维护要点，并补全 `查询展示逻辑.md` 页面模块表与核心逻辑目录阅读顺序索引。
 - 新增显式数据库 migration 边界：`sql/training_records/migrations/` 承接历史运行时 schema preflight DDL，`maintenance:migrate --dry-run/--confirm` 支持列出 migration、读取 `maintenance.schema_migration` 历史、校验 checksum，并要求确认模式显式配置 `TRAINING_DB_MIGRATION_URL`。
 
 ### Changed
 
+- 图片识别 schema 升级到 v3：`records.sleep` 成为必填字段，睡眠和非睡眠图片都必须显式输出 sleep 对象或 `null` 字段；prompt metadata 与 App Profile 记忆源同步升级，并增加 measurement/sleep 字段级语义 warning，避免明显异常值静默入库。
+- 收敛应用层入口边界：`src` 内部不再反向依赖 `tools` 兼容入口，训练分析、prompt 生成、随想 artifact、Markdown 渲染、快照 fallback 和训练数据生成逻辑迁移到 `src` canonical 模块，`tools` 仅保留薄 CLI/兼容包装；`sync:feishu` 统一指向 `src/app/use-cases/feishu-sync.use-case.mjs`。
 - 扩展 `/monitor/` 健身监控总览页：在原有体重、体脂、睡眠、热量、趋势和预警基础上，新增身体成分、恢复监控、训练结构、饮食维护、数据完整性与 7/30 天汇总模块；趋势图从 4 张扩展为 6 张，补充身体成分趋势、恢复监控趋势和骑行里程序列，并重写监控页专用 UI 样式，使桌面与移动端监控信息更完整、排版更协调。
 - 重构当前 docs 目录为 `01_系统配置`、`02_系统核心逻辑`、`03_历史重构记录`、`04_问题与排查`、`05_日常规则` 五类入口：重写 dev/main 环境配置文档，在开头直接列出 GitHub Settings 与 Cloudflare 必填参数；新增 dev/main 分支合并数据隔离规则和后续规划落地后的当前文档同步规则，明确 `dev` 与 `main` 运行数据互相独立、历史规划不能替代当前系统文档。
 - 重构并校准 docs 长期文档入口：将当前系统事实收敛到 `docs/01_系统配置/`、`docs/02_系统核心逻辑/`、`docs/04_问题与排查/` 和 `docs/05_日常规则/`，删除旧 `docs/归档/` 与临时 superpowers spec，保留 `docs/03_历史重构记录/` 作为非当前事实资料；同步修正 main/dev 配置、Cloudflare Worker secrets、Durable Object 绑定名、图片日期归档和随想命令合同。
@@ -32,8 +35,13 @@
 - 拆分数据库读取配置：快照读取、Markdown 导出、`maintenance:inspect`、单批次审计、pending summary、AI monitoring 和 `check:data-consistency` 优先使用 `TRAINING_DB_READONLY_URL`，未配置时再回退 `TRAINING_DB_URL`；main/dev workflow 同步注入只读连接串 Secret。
 - 优化 Telegram/飞书 webhook 同步后的 Pages 刷新耗时：`sync.yml` / `sync-dev.yml` 自动触发部署时传入 `sync_db_mode=never` 与 `run_tests=false`，跳过已由同步链路完成后的维护型全量 DB 修复和部署前测试；手动部署与 push 部署仍默认保留 `sync_db_mode=auto` 和 `run_tests=true` 完整校验。
 
+### Removed
+
+- 下线旧 `TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING` 同步重放开关，pending 失败恢复统一以数据库队列为准，避免 NDJSON 文件和数据库状态形成双来源。
+
 ### Security
 
+- Telegram/飞书同步命令行 stdout 改为只输出脱敏 safe report；完整同步结果仍写入 result file 供 summary/通知使用。同步 workflow 中 AI base URL、fallback base URL、chat id、COS bucket/domain/path prefix 等配置改为从 secrets 注入，并保留最小必要 workflow 权限说明。
 - 修复 `sync.yml` / `sync-dev.yml` 在 `workflow_dispatch` 队列任务中把完整 Telegram/飞书 `dispatch_payload` 注入 GitHub Actions step env 和 `$GITHUB_ENV` 的问题，避免 `chat_id`、用户名、消息正文、图片 `file_id` 等 webhook payload 内容出现在 Action 日志；同步和失败通知改为通过 runner 临时事件文件读取队列 payload。
 - 同步 summary 与 action logger 默认 hash 飞书 `oc_`、chat id、file/image key、COS bucket/pathPrefix 等敏感字段；GitHub Actions 中禁止 `--debug-json`，避免 snapshot/健康明细进入 Action 日志。
 - 收敛 PostgreSQL 角色权限：初始化脚本拆分 `training_migrator`、`training_app`、`training_maintenance` 和 `training_readonly`，schema owner、default privileges 与 migration history 由迁移账号管理，日常业务账号不再持有 DDL 或 `maintenance.schema_migration` 权限。
@@ -41,6 +49,7 @@
 
 ### Fixed
 
+- 修复图片同步后 `sleepBackfill` 对全部历史 ingest/archive 做全量扫描的问题：同步链路只把本次新入库或 pending replay 中实际含 sleep 的归档日期传给 backfill，非睡眠图片默认不触发 sleep backfill，睡眠图片只修复目标日期。
 - 修复监控页趋势图图例排版不协调的问题：图表副标题改用专用 class，避免标题区 `span` 样式污染图例色点和标签；图例改为紧凑胶囊标签并支持移动端自然换行。
 - 修复 Telegram 随想 `/移动 id 模块` 移动带图随想时图片引用丢失的问题：DB-only 移动/编辑现在会保留 `photoPaths: null` 的“不改原图片”语义，不再误转为空数组清空 `core.thought.image_refs_json`；同步补充移动带图随想和落库参数回归测试。
 - 修复华为运动健康睡眠详情图在 AI 识别时误把阶段图/趋势小卡片推算值当作睡眠总时长的问题：睡眠 prompt 现在明确以 `夜间睡眠 X小时Y分钟` 文字行为权威来源，单独缺少 `总睡眠` 标签时只写 `nightSleepMinutes` 并由程序侧回退展示；同步 bump recognition prompt version 以避开旧识别缓存，并更新 Telegram 睡眠截图回归用例。

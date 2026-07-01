@@ -11,12 +11,13 @@ import {
 } from '../../adapters/feishu/index.mjs';
 import {
   buildTelegramSyncReport,
+  buildSafeSyncReport,
   createRecognitionAiProvider,
   runTelegramSync,
 } from './telegram-sync.use-case.mjs';
 import {
   writeStartedRecognitionAiCallLog as writeStartedRecognitionAiCallLogToDatabase,
-} from '../../../tools/training-db-core.mjs';
+} from '../../db/training/pending-recognition.mjs';
 import { recognizeBatch } from './telegram-sync/image-processing.mjs';
 import {
   notifyTelegramSyncResultFromFile,
@@ -28,7 +29,7 @@ const rootDir = path.resolve(__dirname, '..', '..', '..');
 
 export async function main() {
   const result = await runFeishuSync();
-  process.stdout.write(JSON.stringify(buildFeishuSyncReport(result), null, 2));
+  process.stdout.write(JSON.stringify(buildSafeSyncReport(result), null, 2));
   process.stdout.write('\n');
 }
 

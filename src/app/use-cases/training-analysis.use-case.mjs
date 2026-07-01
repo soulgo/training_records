@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { generateTrainingAnalysisReply } from '../../../tools/training-analysis.mjs';
+import { generateTrainingAnalysisReply } from './training-analysis.impl.mjs';
 
 export async function runTrainingAnalysisUseCase(options = {}) {
   return generateTrainingAnalysisReply(options);

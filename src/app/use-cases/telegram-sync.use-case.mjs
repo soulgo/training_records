@@ -5,37 +5,40 @@ import { createAiProvider, isAiSchedulerEnabled } from '../../ai/provider.mjs';
 import { groupTelegramUpdates } from '../../adapters/telegram/sync-batch.adapter.mjs';
 import {
   appendPendingRecognitionBatch as appendPendingRecognitionBatchToDatabase,
-  backfillCoreSleepFromIngestBatches as backfillCoreSleepFromIngestBatchesToDatabase,
-  getLastProcessedTelegramUpdateId,
   markPendingRecognitionResolved as markPendingRecognitionResolvedInDatabase,
-  persistNormalizedBatch as persistNormalizedBatchToDatabase,
   readPendingRecognitionBatches as readPendingRecognitionBatchesFromDatabase,
   writeStartedRecognitionAiCallLog as writeStartedRecognitionAiCallLogToDatabase,
-} from '../../../tools/training-db-core.mjs';
+} from '../../db/training/pending-recognition.mjs';
+import { getLastProcessedTelegramUpdateId } from '../../db/training/read.mjs';
+import {
+  backfillCoreSleepFromIngestBatches as backfillCoreSleepFromIngestBatchesToDatabase,
+  persistNormalizedBatch as persistNormalizedBatchToDatabase,
+} from '../../adapters/postgres/training-write.facade.mjs';
 import {
   generateTrainingAnalysisResult,
   splitTelegramMessage,
-} from '../../../tools/training-analysis.mjs';
+} from './training-analysis.impl.mjs';
 import {
   fetchTelegramUpdates,
   resolveDispatchTelegramUpdates,
   sendTelegramMessage,
   fetchTelegramFile,
-} from '../../../tools/telegram-transport.mjs';
+} from '../../adapters/telegram/index.mjs';
 import {
   createImageStorage,
   writeThoughtImageArtifacts,
   readExistingThoughtMessageKeys,
-} from '../../../tools/telegram-thoughts.mjs';
+} from './telegram-sync/thought-artifacts.mjs';
 import {
   getThoughtModuleTags,
   isThoughtBatchKind,
   normalizeThoughtModule,
   normalizeThoughtModuleOrNull,
-} from '../../../tools/lib/thought-modules.mjs';
+} from '../../core/thought-modules.mjs';
 import { TELEGRAM_HELP_TEXT } from '../../telegram/help.mjs';
 import {
   buildTelegramSyncReport,
+  buildSafeSyncReport,
   classifyFailureCategory,
   isTrainingDataBatchKind,
   maybePersistTelegramSyncResult,
@@ -47,11 +50,6 @@ import {
   shouldNotifyTelegramSyncResult,
   shouldPersistTelegramArtifacts,
 } from './telegram-sync/status.mjs';
-import {
-  appendPendingFallbackBatch,
-  readPendingFallbackBatches,
-  writePendingFallbackBatches,
-} from './telegram-sync/fallback.mjs';
 import {
   buildImageProcessingBatch,
   loadRecognitionSystemPrompt,
@@ -65,6 +63,7 @@ import {
 import { buildPersistenceSummary } from './telegram-sync/persistence-summary.mjs';
 
 export {
+  buildSafeSyncReport,
   buildTelegramSyncReport,
   createImageStorage,
   loadRecognitionSystemPrompt,
@@ -79,7 +78,7 @@ const MAX_THOUGHT_MARKDOWN_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
 export async function main() {
   const result = await runTelegramSync();
-  process.stdout.write(JSON.stringify(buildTelegramSyncReport(result), null, 2));
+  process.stdout.write(JSON.stringify(buildSafeSyncReport(result), null, 2));
   process.stdout.write('\n');
 }
 
@@ -101,8 +100,6 @@ export async function runMessageSync(options = {}) {
   const activeRootDir = options.rootDir ?? rootDir;
   const recordPath = path.join(activeRootDir, '训练记录.md');
   const thoughtsDir = path.join(activeRootDir, 'source', '_posts');
-  const runtimeDir = path.join(activeRootDir, 'runtime');
-  const pendingQueuePath = path.join(runtimeDir, 'telegram-sync-pending.ndjson');
   const now = options.now ?? new Date();
   const imageStorage = options.imageStorage ?? createImageStorage({
     env: rawEnv,
@@ -250,49 +247,9 @@ export async function runMessageSync(options = {}) {
       allowFallback: Boolean(dispatchUpdates) || env.githubEventName === 'repository_dispatch',
     }),
   );
-  const shouldReplayLegacyNdjsonPending = shouldReplayLegacyPendingQueue(rawEnv, options);
-  const pendingBatches = await measureSyncStage(timings, 'readPendingFallback', () =>
-    shouldReplayLegacyNdjsonPending
-      ? readPendingFallbackBatches(pendingQueuePath)
-      : [],
-  );
   let replayStoredAny = false;
   let storedSleepAny = false;
-
-  await measureSyncStage(timings, 'replayFallbackPersist', async () => {
-    for (const pending of pendingBatches) {
-      try {
-        const replayResult = await persistBatch({
-          batch: pending.batch,
-          processedAt: now,
-          sourceChannel: pending.batch?.sourceChannel ?? sourceChannel,
-          env: options.env ?? process.env,
-        });
-        if (replayResult.status === 'stored' || replayResult.status === 'unchanged') {
-          replayStoredAny = replayStoredAny || replayResult.status === 'stored';
-          storedSleepAny =
-            storedSleepAny ||
-            (isTrainingDataBatchKind(pending.batch?.kind) &&
-              replayResult.status === 'stored' &&
-              hasSleepBatchPayload(pending.batch));
-          pending.replayed = true;
-        }
-      } catch {
-        pending.replayed = false;
-      }
-    }
-  });
-
-  await measureSyncStage(timings, 'writePendingFallback', async () => {
-    if (!shouldReplayLegacyNdjsonPending || pendingBatches.length === 0) {
-      return;
-    }
-    await writePendingFallbackBatches(
-      pendingQueuePath,
-      pendingBatches.filter((pending) => !pending.replayed),
-      { backupBeforeWrite: true, now },
-    );
-  });
+  const storedSleepArchivedDates = new Set();
 
   const updates = await measureSyncStage(timings, 'fetchUpdates', () =>
     dispatchUpdates ??
@@ -333,6 +290,11 @@ export async function runMessageSync(options = {}) {
   storedSleepAny ||= replayRecognitionResults.batchResults.some((batch) =>
     batch.persistenceStatus === 'stored' && hasSleepBatchPayload(batch)
   );
+  for (const batch of replayRecognitionResults.batchResults) {
+    if (batch.persistenceStatus === 'stored' && hasSleepBatchPayload(batch)) {
+      addArchivedDate(storedSleepArchivedDates, batch.archivedDate);
+    }
+  }
   batchResults.push(...replayRecognitionResults.batchResults);
 
   for (const batch of grouped) {
@@ -456,6 +418,9 @@ export async function runMessageSync(options = {}) {
         hasSleepBatchPayload(persistedBatch);
       changed ||= persistedBatch.status === 'ready' && persistResult.status === 'stored';
       storedSleepAny ||= storedSleepImageBatch;
+      if (storedSleepImageBatch) {
+        addArchivedDate(storedSleepArchivedDates, persistResult.archivedDate ?? persistedBatch.archivedDate);
+      }
       const persistenceResult = buildPersistenceSummary(persistResult);
       batchResults.push({
         ...persistedBatch,
@@ -521,6 +486,7 @@ export async function runMessageSync(options = {}) {
         backfillCoreSleep({
           processedAt: now,
           sourceChannel: options.sleepBackfillSourceChannel ?? 'telegram_sync',
+          targetArchivedDates: [...storedSleepArchivedDates].sort(),
         }),
       );
     } catch (error) {
@@ -621,15 +587,6 @@ function withPendingStatus(summary, pendingStatus) {
   };
 }
 
-function shouldReplayLegacyPendingQueue(rawEnv, options = {}) {
-  if (options.replayLegacyNdjsonPending !== undefined) {
-    return Boolean(options.replayLegacyNdjsonPending);
-  }
-  return ['1', 'true', 'yes', 'on'].includes(
-    String(rawEnv.TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING ?? '').trim().toLowerCase(),
-  );
-}
-
 export function createRecognitionAiProvider(rawEnv, defaultProvider) {
   const schedulerEnabled = isAiSchedulerEnabled(rawEnv);
   const recognitionModel = String(
@@ -693,6 +650,18 @@ function shouldRunSleepBackfill({ rawEnv, storedSleepAny }) {
     return false;
   }
   return storedSleepAny;
+}
+
+function addArchivedDate(target, value) {
+  const normalized = normalizeArchivedDate(value);
+  if (normalized) {
+    target.add(normalized);
+  }
+}
+
+function normalizeArchivedDate(value) {
+  const text = String(value ?? '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 }
 
 function hasSleepBatchPayload(batch) {
