@@ -49,6 +49,7 @@
 
 ### Fixed
 
+- 修复 Telegram 纯随想 `/移动` 等数据库内操作在 Actions 缺少 AI Provider 配置时提前失败的问题：AI Provider 改为仅在图片识别或 `/analysis` 实际需要时懒加载，纯随想同步不再强依赖 `AI_BASE_URL`。
 - 修复图片同步后 `sleepBackfill` 对全部历史 ingest/archive 做全量扫描的问题：同步链路只把本次新入库或 pending replay 中实际含 sleep 的归档日期传给 backfill，非睡眠图片默认不触发 sleep backfill，睡眠图片只修复目标日期。
 - 修复监控页趋势图图例排版不协调的问题：图表副标题改用专用 class，避免标题区 `span` 样式污染图例色点和标签；图例改为紧凑胶囊标签并支持移动端自然换行。
 - 修复 Telegram 随想 `/移动 id 模块` 移动带图随想时图片引用丢失的问题：DB-only 移动/编辑现在会保留 `photoPaths: null` 的“不改原图片”语义，不再误转为空数组清空 `core.thought.image_refs_json`；同步补充移动带图随想和落库参数回归测试。

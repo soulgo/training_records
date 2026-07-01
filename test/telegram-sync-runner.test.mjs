@@ -4842,6 +4842,44 @@ telegram_chat_id: 42
   assert.match(postContent, /应该回到锻炼随想的正文/);
 });
 
+test('runTelegramSync does not require AI provider config for pure thought move batches', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-move-no-ai-'));
+  const persistedBatches = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv({ AI_BASE_URL: '' }),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 814,
+          date: Math.floor(new Date('2026-07-01T09:10:55Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/移动 374 身体反馈',
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.equal(result.batchResults[0].kind, 'thought_move');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_move_database_only');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches[0].thoughtMove.targetMessageId, 374);
+  assert.equal(persistedBatches[0].thoughtMove.thoughtModule, 'body_feedback');
+});
+
 test('runTelegramSync keeps existing thought image refs when moving a database-only thought', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-move-image-refs-'));
   const postsDir = path.join(tempRoot, 'source', '_posts');

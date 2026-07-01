@@ -106,9 +106,12 @@ export async function runMessageSync(options = {}) {
     rootDir: activeRootDir,
     createCosClient: options.createCosClient,
   });
-  const aiProvider = options.aiProvider ?? createAiProvider(rawEnv);
-  const recognitionAiProvider =
-    options.recognitionAiProvider ?? createRecognitionAiProvider(rawEnv, aiProvider);
+  const getAiProvider = createLazyAiProvider(rawEnv, options.aiProvider);
+  const getRecognitionAiProvider = createLazyRecognitionAiProvider(
+    rawEnv,
+    options.recognitionAiProvider,
+    getAiProvider,
+  );
   const readLastProcessedUpdateId =
     options.getLastProcessedUpdateId ??
     (() => getLastProcessedTelegramUpdateId({ env: options.env ?? process.env }));
@@ -148,7 +151,7 @@ export async function runMessageSync(options = {}) {
   const recognizeBatchRunner =
     options.recognizeBatch ??
     ((batch) => recognizeBatch(batch, env, {
-      aiProvider: recognitionAiProvider,
+      aiProvider: getRecognitionAiProvider(),
       rawEnv,
       fetchTelegramFileById: fetchTelegramImageFileById,
       writeStartedRecognitionAiCallLog,
@@ -207,7 +210,7 @@ export async function runMessageSync(options = {}) {
         rootDir: activeRootDir,
         env: rawEnv,
         now,
-        aiProvider,
+        aiProvider: getAiProvider(),
         snapshot: options.snapshot,
         buildTrainingSnapshot: options.buildTrainingSnapshot,
         createClient: options.createClient,
@@ -613,6 +616,22 @@ export function createRecognitionAiProvider(rawEnv, defaultProvider) {
   };
 }
 
+function createLazyAiProvider(rawEnv, configuredProvider) {
+  let provider = configuredProvider ?? null;
+  return () => {
+    provider ??= createAiProvider(rawEnv);
+    return provider;
+  };
+}
+
+function createLazyRecognitionAiProvider(rawEnv, configuredProvider, getDefaultProvider) {
+  let provider = configuredProvider ?? null;
+  return () => {
+    provider ??= createRecognitionAiProvider(rawEnv, getDefaultProvider());
+    return provider;
+  };
+}
+
 function createRecognitionFallbackAiProvider(rawEnv) {
   const apiKey = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_API_KEY ?? '').trim();
   const baseUrl = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL ?? '').trim();
@@ -819,9 +838,9 @@ function loadRequiredEnv(env = process.env, options = {}) {
   const botToken = adapter.botTokenEnvName
     ? env[adapter.botTokenEnvName]
     : env.TELEGRAM_BOT_TOKEN ?? adapter.channel;
-  const apiKey = env.AI_API_KEY;
-  const baseUrl = env.AI_BASE_URL;
-  const model = env.AI_MODEL;
+  const apiKey = env.AI_API_KEY ?? '';
+  const baseUrl = env.AI_BASE_URL ?? '';
+  const model = env.AI_MODEL ?? '';
   const allowedChatIdsRaw = adapter.allowedChatIdsEnvName
     ? env[adapter.allowedChatIdsEnvName]
     : env.TELEGRAM_ALLOWED_CHAT_IDS;
@@ -833,9 +852,6 @@ function loadRequiredEnv(env = process.env, options = {}) {
   });
 
   const required = [
-    ['AI_API_KEY', apiKey],
-    ['AI_BASE_URL', baseUrl],
-    ['AI_MODEL', model],
     ['TRAINING_DB_ENABLED', dbEnabled],
     ['TRAINING_DB_URL', dbUrl],
   ];
@@ -859,7 +875,7 @@ function loadRequiredEnv(env = process.env, options = {}) {
   return {
     botToken,
     apiKey,
-    baseUrl: baseUrl.replace(/\/+$/, ''),
+    baseUrl: String(baseUrl).replace(/\/+$/, ''),
     model,
     syncTransport:
       String(syncTransportValue ?? 'poll').toLowerCase() === 'webhook'
