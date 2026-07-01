@@ -158,9 +158,11 @@ jobs:
           CLOUDFLARE_PAGES_BASE_URL: ${{ vars.CLOUDFLARE_PAGES_BASE_URL }}
         run: |
           base_url="${CLOUDFLARE_PAGES_BASE_URL:-https://soulgo.chat}"
+          base_url="${base_url%/}"
           normalized_path="/${TARGET_THOUGHT_PATH#/}"
           normalized_path="${normalized_path%/}/"
           target_url="${base_url}${normalized_path}"
+          generated_page_file="public${normalized_path}index.html"
           page_file="$(mktemp)"
           module_paths=("/thoughts/" "/misc/" "/body-feedback/")
           expected="${TARGET_THOUGHT_EXPECTATION:-present}"
@@ -169,6 +171,63 @@ jobs:
           fi
           verification_attempts=12
           verification_delay_seconds=10
+
+          if [ ! -f "$generated_page_file" ]; then
+            echo "::error title=Generated thought page verification failed::Generated module page ${generated_page_file} is missing."
+            {
+              echo "## Thought page verification"
+              echo ""
+              echo "- Generated result: missing page"
+              echo "- Expected: ${expected}"
+              echo "- Thought id: ${TARGET_THOUGHT_ID}"
+              echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
+              echo "- Path: ${generated_page_file}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          generated_found=false
+          if grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$generated_page_file" >/dev/null; then
+            generated_found=true
+          fi
+
+          if ! { [ "$expected" = "present" ] && [ "$generated_found" = "true" ]; } &&
+             ! { [ "$expected" = "absent" ] && [ "$generated_found" = "false" ]; }; then
+            echo "::error title=Generated thought page verification failed::Generated ${generated_page_file} expected ${expected} for thought #${TARGET_THOUGHT_ID}, found=${generated_found}."
+            {
+              echo "## Thought page verification"
+              echo ""
+              echo "- Generated result: ${generated_found}"
+              echo "- Expected: ${expected}"
+              echo "- Thought id: ${TARGET_THOUGHT_ID}"
+              echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
+              echo "- Path: ${generated_page_file}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          for module_path in "${module_paths[@]}"; do
+            module_file="public${module_path}index.html"
+            if [ ! -f "$module_file" ]; then
+              echo "::error title=Generated thought page verification failed::Generated module page ${module_file} is missing."
+              exit 1
+            fi
+
+            module_found=false
+            if grep -F "data-thought-id=\"${TARGET_THOUGHT_ID}\"" "$module_file" >/dev/null; then
+              module_found=true
+            fi
+
+            if [ "$expected" = "present" ] && [ "$module_path" != "$normalized_path" ] && [ "$module_found" = "true" ]; then
+              echo "::error title=Generated thought page verification failed::Unexpected thought #${TARGET_THOUGHT_ID} in generated ${module_file}; expected it only in ${generated_page_file}."
+              exit 1
+            fi
+
+            if [ "$expected" = "absent" ] && [ "$module_found" = "true" ]; then
+              echo "::error title=Generated thought page verification failed::Unexpected thought #${TARGET_THOUGHT_ID} in generated ${module_file}; expected it absent from all thought module pages."
+              exit 1
+            fi
+          done
 
           found=false
           fetch_succeeded=false
@@ -194,36 +253,15 @@ jobs:
           done
 
           if [ "$fetch_succeeded" = "false" ]; then
-            echo "::error title=Thought page verification failed::Could not fetch ${target_url} after deploy."
-            {
-              echo "## Thought page verification"
-              echo ""
-              echo "- Result: fetch failed"
-              echo "- Expected: ${expected}"
-              echo "- Thought id: ${TARGET_THOUGHT_ID}"
-              echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
-              echo "- URL: ${target_url}"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
-
-          if { [ "$expected" = "present" ] && [ "$found" = "true" ]; } ||
-             { [ "$expected" = "absent" ] && [ "$found" = "false" ]; }; then
+            echo "::warning title=Live thought page verification stale::Generated artifact is correct, but ${target_url} could not be fetched after deploy."
+          elif { [ "$expected" = "present" ] && [ "$found" = "true" ]; } ||
+               { [ "$expected" = "absent" ] && [ "$found" = "false" ]; }; then
             for module_path in "${module_paths[@]}"; do
               module_url="${base_url}${module_path}"
               module_file="$(mktemp)"
               if ! curl -fsSL --retry 6 --retry-delay 10 --retry-all-errors -H "Cache-Control: no-cache" "$module_url" -o "$module_file"; then
-                echo "::error title=Thought page verification failed::Could not fetch ${module_url} after deploy."
-                {
-                  echo "## Thought page verification"
-                  echo ""
-                  echo "- Result: fetch failed"
-                  echo "- Expected: ${expected}"
-                  echo "- Thought id: ${TARGET_THOUGHT_ID}"
-                  echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
-                  echo "- URL: ${module_url}"
-                } >> "$GITHUB_STEP_SUMMARY"
-                exit 1
+                echo "::warning title=Live thought page verification stale::Generated artifact is correct, but ${module_url} could not be fetched after deploy."
+                continue
               fi
 
               module_found=false
@@ -232,54 +270,26 @@ jobs:
               fi
 
               if [ "$expected" = "present" ] && [ "$module_path" != "$normalized_path" ] && [ "$module_found" = "true" ]; then
-                echo "::error title=Thought page verification failed::Unexpected thought #${TARGET_THOUGHT_ID} on ${module_url}; expected it only on ${target_url}."
-                {
-                  echo "## Thought page verification"
-                  echo ""
-                  echo "- Result: duplicate"
-                  echo "- Expected: present only on ${target_url}"
-                  echo "- Thought id: ${TARGET_THOUGHT_ID}"
-                  echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
-                  echo "- Unexpected URL: ${module_url}"
-                } >> "$GITHUB_STEP_SUMMARY"
-                exit 1
+                echo "::warning title=Live thought page verification stale::Generated artifact is correct, but live ${module_url} still contains thought #${TARGET_THOUGHT_ID}; expected it only on ${target_url}."
               fi
 
               if [ "$expected" = "absent" ] && [ "$module_found" = "true" ]; then
-                echo "::error title=Thought page verification failed::Unexpected thought #${TARGET_THOUGHT_ID} on ${module_url}; expected it absent from all thought module pages."
-                {
-                  echo "## Thought page verification"
-                  echo ""
-                  echo "- Result: duplicate"
-                  echo "- Expected: absent from all thought module pages"
-                  echo "- Thought id: ${TARGET_THOUGHT_ID}"
-                  echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
-                  echo "- Unexpected URL: ${module_url}"
-                } >> "$GITHUB_STEP_SUMMARY"
-                exit 1
+                echo "::warning title=Live thought page verification stale::Generated artifact is correct, but live ${module_url} still contains thought #${TARGET_THOUGHT_ID}; expected it absent from all thought module pages."
               fi
             done
-
-            {
-              echo "## Thought page verification"
-              echo ""
-              echo "- Result: ${found}"
-              echo "- Expected: ${expected}"
-              echo "- Thought id: ${TARGET_THOUGHT_ID}"
-              echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
-              echo "- URL: ${target_url}"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+          else
+            echo "::warning title=Live thought page verification stale::Generated artifact is correct, but live ${target_url} expected ${expected} for thought #${TARGET_THOUGHT_ID}, found=${found}."
           fi
 
-          echo "::error title=Thought page verification failed::Thought #${TARGET_THOUGHT_ID} expected ${expected} on ${target_url}, found=${found}."
           {
             echo "## Thought page verification"
             echo ""
-            echo "- Result: ${found}"
+            echo "- Generated result: ${generated_found}"
+            echo "- Live result: ${found}"
+            echo "- Live fetch succeeded: ${fetch_succeeded}"
             echo "- Expected: ${expected}"
             echo "- Thought id: ${TARGET_THOUGHT_ID}"
             echo "- Module: ${TARGET_THOUGHT_MODULE:-unknown}"
+            echo "- Generated path: ${generated_page_file}"
             echo "- URL: ${target_url}"
           } >> "$GITHUB_STEP_SUMMARY"
-          exit 1

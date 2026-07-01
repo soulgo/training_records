@@ -137,6 +137,9 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.match(workflow, /TARGET_THOUGHT_ID:\s*\$\{\{\s*inputs\.target_thought_id\s*\}\}/);
   assert.match(workflow, /TARGET_THOUGHT_EXPECTATION:\s*\$\{\{\s*inputs\.target_thought_expectation\s*\}\}/);
   assert.match(workflow, /CLOUDFLARE_PAGES_BASE_URL:\s*\$\{\{\s*vars\.CLOUDFLARE_PAGES_BASE_URL\s*\}\}/);
+  assert.match(workflow, /generated_page_file="public\$\{normalized_path\}index\.html"/);
+  assert.match(workflow, /Generated thought page verification failed/);
+  assert.match(workflow, /Live thought page verification stale/);
   assert.match(workflow, /expected="\$\{TARGET_THOUGHT_EXPECTATION:-present\}"/);
   assert.match(workflow, /\[\s*"\$expected"\s*!=\s*"absent"\s*\]/);
   assert.match(workflow, /curl -fsSL --retry 6 --retry-delay 10/);
@@ -150,7 +153,8 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   assert.doesNotMatch(workflow, /grep -F "#\$\{TARGET_THOUGHT_ID\}"/);
   assert.match(workflow, /module_paths=\("\/thoughts\/" "\/misc\/" "\/body-feedback\/"\)/);
   assert.match(workflow, /Unexpected thought #\$\{TARGET_THOUGHT_ID\}/);
-  assert.match(workflow, /::error title=Thought page verification failed::/);
+  assert.match(workflow, /::error title=Generated thought page verification failed::/);
+  assert.doesNotMatch(workflow, /::error title=Thought page verification failed::/);
   assert.match(workflow, /GITHUB_STEP_SUMMARY/);
   assert.ok(
     workflow.indexOf('- name: Purge Cloudflare cache') > workflow.indexOf('- name: Build and deploy site'),

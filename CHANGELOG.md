@@ -49,6 +49,7 @@
 
 ### Fixed
 
+- 修复 main 飞书随想入库成功后仍收到“GitHub Action 执行失败：站点部署/页面刷新”的假失败回执：`deploy-pages.yml` 现在先强校验本次生成的 `public/<module>/index.html` 产物，确认目标随想是否出现在正确模块；生产域名 `soulgo.chat` 因 GitHub Pages / Cloudflare 传播延迟短暂读到旧 HTML 时只记 warning，不再把已成功入库和已生成产物的同步 run 标红。
 - 修复 Telegram 纯随想 `/移动` 等数据库内操作在 Actions 缺少 AI Provider 配置时提前失败的问题：AI Provider 改为仅在图片识别或 `/analysis` 实际需要时懒加载，纯随想同步不再强依赖 `AI_BASE_URL`。
 - 修复图片同步后 `sleepBackfill` 对全部历史 ingest/archive 做全量扫描的问题：同步链路只把本次新入库或 pending replay 中实际含 sleep 的归档日期传给 backfill，非睡眠图片默认不触发 sleep backfill，睡眠图片只修复目标日期。
 - 修复监控页趋势图图例排版不协调的问题：图表副标题改用专用 class，避免标题区 `span` 样式污染图例色点和标签；图例改为紧凑胶囊标签并支持移动端自然换行。
