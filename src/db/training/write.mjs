@@ -480,6 +480,19 @@ export async function importTrainingMarkdownToDatabase(options) {
 
 export async function backfillCoreSleepFromIngestBatchesClient(client, options = {}) {
   const processedAt = options.processedAt ?? new Date();
+  const hasTargetArchivedDates = Object.hasOwn(options, 'targetArchivedDates');
+  const targetArchivedDates = normalizeTargetArchivedDates(options.targetArchivedDates);
+  if (hasTargetArchivedDates && targetArchivedDates.length === 0) {
+    return {
+      status: 'unchanged',
+      batchesBackfilled: 0,
+      daysBackfilled: [],
+    };
+  }
+  const targetDateFilter = targetArchivedDates.length > 0 ? '      and b.archived_date = any($1::date[])\n' : '';
+  const targetArchiveDateFilter = targetArchivedDates.length > 0 ? '      and a.archived_date = any($1::date[])\n' : '';
+  const targetDateParams = targetArchivedDates.length > 0 ? [targetArchivedDates] : undefined;
+
   const ingestCandidateResult = await client.query(`
     select
       b.batch_id,
@@ -488,8 +501,9 @@ export async function backfillCoreSleepFromIngestBatchesClient(client, options =
     where b.status = 'ready'
       and b.archived_date is not null
       and b.batch_payload_json->'sleep' is not null
+${targetDateFilter}
     order by b.processed_at asc, b.batch_id asc
-  `);
+  `, targetDateParams);
   const archiveCandidateResult = await client.query(`
     select
       a.archived_date,
@@ -559,9 +573,10 @@ export async function backfillCoreSleepFromIngestBatchesClient(client, options =
       from core.sleep s
       where s.archived_date = a.archived_date
     )
+${targetArchiveDateFilter}
     group by a.archived_date
     order by a.archived_date asc
-  `);
+  `, targetDateParams);
   const candidates = [
     ...ingestCandidateResult.rows.map((row) => ({
       batchId: row.batch_id,
@@ -621,6 +636,13 @@ export async function backfillCoreSleepFromIngestBatchesClient(client, options =
     batchesBackfilled: candidates.length,
     daysBackfilled: [...daysBackfilled].sort(),
   };
+}
+
+function normalizeTargetArchivedDates(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  return [...new Set(values.map((value) => normalizeDateKey(value)).filter(isValidDateKey))].sort();
 }
 
 export async function backfillCoreFromLatestArchiveSnapshotClient(client, options = {}) {

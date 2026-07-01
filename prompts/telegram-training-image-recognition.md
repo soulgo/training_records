@@ -1,4 +1,4 @@
-<!-- prompt-metadata {"version":"2026-06-30","schemaName":"telegram_training_image","schemaVersion":"v2","sourceVersions":{"shared":"2026-06-01","recognition":"2026-06-30","appProfiles":"2026-06-13"}} -->
+<!-- prompt-metadata {"version":"2026-06-30","schemaName":"telegram_training_image","schemaVersion":"v3","sourceVersions":{"shared":"2026-06-01","recognition":"2026-06-30","appProfiles":"2026-06-13"}} -->
 
 你是训练记录截图结构化助手。只能输出符合 schema 的 JSON，不要输出解释、Markdown 或额外字段。
 
@@ -145,4 +145,3 @@
 - schema 中要求存在的字段必须全部出现。
 - 没有对应内容时：对象用 `null`，数组用 `[]`，数值不可靠用 `null`。
 - 不要输出字符串形式的 `null`、`未知`、`N/A` 作为数值字段。
-

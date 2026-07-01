@@ -26,7 +26,8 @@
     "sync:telegram": "node src/app/use-cases/telegram-sync.use-case.mjs",
     "telegram:sync": "npm run sync:telegram",
     "telegram:webhook": "node tools/telegram-webhook.mjs",
-    "sync:feishu": "node tools/feishu-sync.mjs",
+    "sync:feishu": "node src/app/use-cases/feishu-sync.use-case.mjs",
+    "eval:recognition": "node tools/eval-recognition.mjs",
     "feishu:sync": "npm run sync:feishu"
   },
   "dependencies": {

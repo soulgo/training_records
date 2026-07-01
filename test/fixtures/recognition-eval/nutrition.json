@@ -1,0 +1,36 @@
+{
+  "sampleId": "nutrition-dinner-summary",
+  "imageType": "nutrition",
+  "schemaValid": true,
+  "expected": {
+    "imageType": "nutrition",
+    "records": {
+      "meals": {
+        "0": {
+          "name": "晚餐",
+          "calories": 868
+        }
+      },
+      "totalCalories": 868
+    }
+  },
+  "actual": {
+    "imageType": "nutrition",
+    "warnings": [],
+    "records": {
+      "meals": {
+        "0": {
+          "name": "晚餐",
+          "calories": 868
+        }
+      },
+      "totalCalories": 868
+    }
+  },
+  "fields": [
+    { "path": "imageType" },
+    { "path": "records.meals.0.name" },
+    { "path": "records.meals.0.calories", "tolerance": 1 },
+    { "path": "records.totalCalories", "tolerance": 1 }
+  ]
+}

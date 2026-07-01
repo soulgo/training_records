@@ -16,6 +16,7 @@ import {
   RECOGNITION_SCHEMA_NAME,
   RECOGNITION_SCHEMA_VERSION,
 } from '../../core/ai/telegram-recognition-schema.mjs';
+import { applyRecognitionSemanticWarnings } from '../../core/ai/recognition-semantic-validator.mjs';
 
 const { Client } = pg;
 const RECOGNITION_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
@@ -511,7 +512,7 @@ function parseRecognitionContent(content, { schemaName, schemaVersion }) {
     allowAdditionalProperties: true,
   });
 
-  return normalized;
+  return applyRecognitionSemanticWarnings(normalized);
 }
 
 function parseAiJsonContentToValue(content, { schemaName, schemaVersion }) {

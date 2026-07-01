@@ -2062,6 +2062,34 @@ test('backfillCoreSleepFromIngestBatchesClient repairs stored sleep batches miss
   assert.deepEqual(sleepInsert[1][10], [145]);
 });
 
+test('backfillCoreSleepFromIngestBatchesClient limits ingest and archive candidates to target dates', async () => {
+  const calls = [];
+  const fakeClient = {
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from ingest\.telegram_batch b/i.test(sql)) {
+        assert.match(sql, /b\.archived_date = any\(\$1::date\[\]\)/);
+        assert.deepEqual(params, [['2026-06-04']]);
+        return { rows: [] };
+      }
+      if (/from archive\.training_sleep\s+a/i.test(sql)) {
+        assert.match(sql, /a\.archived_date = any\(\$1::date\[\]\)/);
+        assert.deepEqual(params, [['2026-06-04']]);
+        return { rows: [] };
+      }
+      return { rows: [] };
+    },
+  };
+
+  const result = await backfillCoreSleepFromIngestBatchesClient(fakeClient, {
+    processedAt: new Date('2026-06-04T09:00:00.000Z'),
+    targetArchivedDates: ['2026-06-04', 'bad-date', '2026-06-04'],
+  });
+
+  assert.equal(result.status, 'unchanged');
+  assert.equal(calls.filter(([sql]) => /from ingest\.telegram_batch b|from archive\.training_sleep\s+a/i.test(sql)).length, 2);
+});
+
 test('backfillCoreSleepFromIngestBatchesClient replays latest ingest sleep batches for existing core sleep rows', async () => {
   const calls = [];
   const fakeClient = {

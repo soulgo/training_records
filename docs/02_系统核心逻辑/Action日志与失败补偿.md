@@ -106,7 +106,7 @@ pending 队列巡检重点看 `pendingDatabaseOldestAgeMinutes`、`pendingDataba
 
 配置 `TRAINING_DB_READONLY_URL` 后，`maintenance:inspect` 的 pending summary、AI monitoring、单批次审计和 DB 权限巡检优先使用只读连接；未配置时才回退 `TRAINING_DB_URL`。
 
-旧 NDJSON pending 只在兼容恢复时使用。需要先运行 `node tools/telegram-sync-fallback.mjs inspect`，确认后才允许 `TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING=true npm run sync:telegram`。重放前备份文件名使用 `telegram-sync-pending.ndjson.backup-<UTC timestamp>`。
+旧 NDJSON pending 已从同步主链路下线。需要先运行 `node tools/telegram-sync-fallback.mjs inspect` 确认历史文件为空或仅作归档，不再通过 `sync:telegram` 重放；恢复统一走数据库 pending 队列。
 
 Markdown backup workflow 的告警值包括 `changed_without_commit` 和 `workflow_failed_before_alert_evaluation`。出现 `changed_without_commit` 时先确认是否应由 `npm run export:markdown` 在目标分支提交，不能手工改派生备份来绕过数据库事实源。
 

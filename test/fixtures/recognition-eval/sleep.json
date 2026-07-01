@@ -1,0 +1,35 @@
+{
+  "sampleId": "sleep-apple-health-core-fields",
+  "imageType": "sleep",
+  "schemaValid": true,
+  "expected": {
+    "imageType": "sleep",
+    "records": {
+      "sleep": {
+        "totalSleepMinutes": 438,
+        "nightSleepMinutes": 438,
+        "deepSleepMinutes": 96,
+        "remSleepMinutes": 82
+      }
+    }
+  },
+  "actual": {
+    "imageType": "sleep",
+    "warnings": [],
+    "records": {
+      "sleep": {
+        "totalSleepMinutes": 438,
+        "nightSleepMinutes": 438,
+        "deepSleepMinutes": 96,
+        "remSleepMinutes": 82
+      }
+    }
+  },
+  "fields": [
+    { "path": "imageType" },
+    { "path": "records.sleep.totalSleepMinutes", "tolerance": 5 },
+    { "path": "records.sleep.nightSleepMinutes", "tolerance": 5 },
+    { "path": "records.sleep.deepSleepMinutes", "tolerance": 5 },
+    { "path": "records.sleep.remSleepMinutes", "tolerance": 5 }
+  ]
+}

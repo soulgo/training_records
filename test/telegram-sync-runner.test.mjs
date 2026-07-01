@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  buildSafeSyncReport,
   buildTelegramSyncReport,
   createImageStorage,
   createRecognitionAiProvider,
@@ -68,6 +69,68 @@ test('telegram sync entrypoint ignores empty repository dispatch payloads in web
   const report = JSON.parse(stdout);
   assert.equal(report.changed, false);
   assert.equal(report.updatesFetched, 0);
+});
+
+test('safe sync report excludes source ids, chat ids, raw messages, and SQL details', () => {
+  const safeReport = buildSafeSyncReport({
+    changed: true,
+    updatesFetched: 1,
+    lastProcessedUpdateId: 902,
+    readyBatches: 1,
+    timingsMs: { total: 12, persist: 3 },
+    batchResults: [
+      {
+        kind: 'image',
+        batchId: 'batch-sensitive',
+        taskId: 'telegram:6314355239:902',
+        sourceId: 'feishu:chat:oc_sensitive',
+        chatIds: ['6314355239', 'oc_sensitive'],
+        messages: [{ caption: 'private caption', photo: [{ file_id: 'file-sensitive' }] }],
+        status: 'ready',
+        archivedDate: '2026-06-01',
+        persistenceStatus: 'stored',
+        persistenceResult: {
+          status: 'stored',
+          rowCounts: { ingestBatch: 1 },
+          sql: 'insert into core.meal values ($1)',
+        },
+      },
+    ],
+  });
+  const serialized = JSON.stringify(safeReport);
+
+  assert.deepEqual(safeReport, {
+    changed: true,
+    updatesFetched: 1,
+    lastProcessedUpdateId: 902,
+    readyBatches: 1,
+    timingsMs: { total: 12, persist: 3 },
+    batches: [
+      {
+        kind: 'image',
+        batchId: 'batch-sensitive',
+        status: 'ready',
+        archivedDate: '2026-06-01',
+        persistenceStatus: 'stored',
+        failureCategory: null,
+        failureReason: null,
+        sourceImageCount: 0,
+        recognizedImageCount: 0,
+        failedImageCount: 0,
+        warnings: [],
+        ai: null,
+        persistenceResult: {
+          status: 'stored',
+          rowCounts: { ingestBatch: 1 },
+          durationMs: null,
+          pendingStatus: null,
+          rollbackStatus: null,
+          slowQueryCount: 0,
+        },
+      },
+    ],
+  });
+  assert.doesNotMatch(serialized, /6314355239|oc_sensitive|sourceId|chatIds|private caption|file-sensitive|insert into/i);
 });
 
 test('telegram sync entrypoint consumes queued workflow dispatch payloads in webhook mode', async () => {
@@ -718,7 +781,6 @@ test('runTelegramSync persists ready image batches to the database without writi
     rootDir: tempRoot,
     env: {
       ...telegramSyncEnv(),
-      TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING: 'true',
     },
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
@@ -819,7 +881,6 @@ test('runTelegramSync leaves existing markdown untouched after storing an image 
     rootDir: tempRoot,
     env: {
       ...telegramSyncEnv(),
-      TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING: 'true',
     },
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
@@ -1066,6 +1127,7 @@ test('runTelegramSync runs sleep backfill for a fresh stored sleep image by defa
   assert.equal(result.changed, true);
   assert.equal(backfillCalls.length, 1);
   assert.equal(backfillCalls[0].sourceChannel, 'telegram_sync');
+  assert.deepEqual(backfillCalls[0].targetArchivedDates, ['2026-05-29']);
   assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), true);
 });
 
@@ -1174,6 +1236,7 @@ test('runTelegramSync can explicitly run sleep backfill for a fresh stored image
   assert.equal(result.changed, true);
   assert.equal(backfillCalls.length, 1);
   assert.equal(backfillCalls[0].sourceChannel, 'telegram_sync');
+  assert.deepEqual(backfillCalls[0].targetArchivedDates, ['2026-05-29']);
   assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), true);
 });
 
@@ -1244,6 +1307,7 @@ test('runTelegramSync runs sleep backfill when pending recognition replay stores
   assert.equal(result.changed, true);
   assert.equal(backfillCalls.length, 1);
   assert.equal(backfillCalls[0].sourceChannel, 'telegram_sync');
+  assert.deepEqual(backfillCalls[0].targetArchivedDates, ['2026-05-29']);
   assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), true);
 });
 
@@ -2327,7 +2391,7 @@ test('runTelegramSync skips runtime NDJSON pending by default after DB-only pend
   );
 });
 
-test('runTelegramSync can explicitly replay legacy runtime NDJSON pending batches', async () => {
+test('runTelegramSync no longer replays runtime NDJSON pending batches from the sync path', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-replay-legacy-'));
   const runtimeDir = path.join(tempRoot, 'runtime');
   const originalPendingContent = `${JSON.stringify({
@@ -2363,74 +2427,36 @@ test('runTelegramSync can explicitly replay legacy runtime NDJSON pending batche
   );
 
   const persistedBatchIds = [];
-  const backfillCalls = [];
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
     now: new Date('2026-05-14T08:09:10.011Z'),
-    env: {
-      ...telegramSyncEnv(),
-      TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING: 'true',
-    },
+    env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
     persistNormalizedBatch: async ({ batch }) => {
       persistedBatchIds.push(batch.batchId);
       return { status: 'stored', archivedDate: batch.archivedDate };
     },
-    buildTrainingSnapshot: async () => ({
-      generatedAt: '2026-05-13T00:00:00.000Z',
-      latest: {
-        measurement: null,
-        daily: { date: '2026-05-08' },
-      },
-      daily: [
-        {
-          date: '2026-05-08',
-          measurement: null,
-          measurements: [],
-          activities: [],
-          workoutSummary: {
-            totalActivities: 0,
-            totalDurationSeconds: 0,
-            trainingCalories: 0,
-            workoutDurationMinutes: null,
-            activeHours: null,
-            cyclingDistanceKm: 0,
-            countsByType: {},
-          },
-          nutrition: {
-            meals: [{ name: '晚餐', calories: 800, recommendedMin: 300, recommendedMax: 700 }],
-            totalCalories: 800,
-            details: ['旧待同步晚餐 800 千卡'],
-          },
-        },
-      ],
-      charts: emptyTrainingCharts(),
-    }),
-    exportTrainingMarkdown: () => '### 2026-05-08\n',
-    backfillCoreSleepFromIngestBatches: async (input) => {
-      backfillCalls.push(input);
-      return { status: 'synced' };
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for removed NDJSON sync replay');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for removed NDJSON sync replay');
     },
   });
 
-  assert.equal(result.changed, true);
-  assert.deepEqual(persistedBatchIds, ['pending-batch']);
-  assert.equal(backfillCalls.length, 0);
+  assert.equal(result.changed, false);
+  assert.deepEqual(persistedBatchIds, []);
   assert.equal(
     await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    '',
+    originalPendingContent,
   );
   const runtimeFiles = await readdir(runtimeDir);
   const backupFiles = runtimeFiles.filter((file) =>
     file.startsWith('telegram-sync-pending.ndjson.backup-')
   );
-  assert.deepEqual(backupFiles, ['telegram-sync-pending.ndjson.backup-20260514T080910011Z']);
-  assert.equal(
-    await readFile(path.join(runtimeDir, backupFiles[0]), 'utf8'),
-    originalPendingContent,
-  );
+  assert.deepEqual(backupFiles, []);
 });
 
 test('runTelegramSync reads database pending queues before new updates without auto-consuming runtime NDJSON', async () => {
@@ -2953,7 +2979,6 @@ test('runTelegramSync stores a /thought telegram message in core without writing
     rootDir: tempRoot,
     env: {
       ...telegramSyncEnv(),
-      TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING: 'true',
     },
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
@@ -4817,6 +4842,44 @@ telegram_chat_id: 42
   assert.match(postContent, /应该回到锻炼随想的正文/);
 });
 
+test('runTelegramSync does not require AI provider config for pure thought move batches', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-move-no-ai-'));
+  const persistedBatches = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv({ AI_BASE_URL: '' }),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 814,
+          date: Math.floor(new Date('2026-07-01T09:10:55Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/移动 374 身体反馈',
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: batch.archivedDate };
+    },
+    buildTrainingSnapshot: async () => {
+      throw new Error('buildTrainingSnapshot should not run for thought-only sync');
+    },
+    exportTrainingMarkdown: () => {
+      throw new Error('exportTrainingMarkdown should not run for thought-only sync');
+    },
+  });
+
+  assert.equal(result.batchResults[0].kind, 'thought_move');
+  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_move_database_only');
+  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(persistedBatches[0].thoughtMove.targetMessageId, 374);
+  assert.equal(persistedBatches[0].thoughtMove.thoughtModule, 'body_feedback');
+});
+
 test('runTelegramSync keeps existing thought image refs when moving a database-only thought', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-move-image-refs-'));
   const postsDir = path.join(tempRoot, 'source', '_posts');
@@ -4986,64 +5049,57 @@ test('runTelegramSync keeps thought posts when database persistence fails and qu
 
 test('runTelegramSync replays pending thought batches without rewriting training markdown', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-thought-replay-'));
-  const runtimeDir = path.join(tempRoot, 'runtime');
   const originalMarkdown = '# 训练记录\n\n### 2026-05-08\n\n';
+  const pendingBatch = {
+    kind: 'thought',
+    batchId: 'thought-801',
+    status: 'ready',
+    archivedDate: null,
+    warnings: [],
+    issues: [],
+    confidence: 1,
+    thought: {
+      body: '恢复节奏更稳了',
+      tags: ['训练', '随想', 'Telegram'],
+      telegramMessageId: 801,
+      telegramChatId: 42,
+      messageDateUnix: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+    },
+    updateIds: [899],
+    recognitions: [],
+    messages: [
+      {
+        kind: 'message',
+        updateId: 899,
+        messageId: 801,
+        mediaGroupId: null,
+        caption: '',
+        text: '/thought 恢复节奏更稳了',
+        chatId: 42,
+        dateUnix: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+        photos: [],
+      },
+    ],
+  };
 
-  await import('node:fs/promises').then(({ mkdir, writeFile }) =>
-    Promise.all([
-      mkdir(runtimeDir, { recursive: true }),
-      writeFile(path.join(tempRoot, '训练记录.md'), originalMarkdown, 'utf8'),
-    ]).then(() =>
-      writeFile(
-        path.join(runtimeDir, 'telegram-sync-pending.ndjson'),
-        `${JSON.stringify({
-          batch: {
-            kind: 'thought',
-            batchId: 'thought-801',
-            status: 'ready',
-            archivedDate: null,
-            warnings: [],
-            issues: [],
-            confidence: 1,
-            thought: {
-              body: '恢复节奏更稳了',
-              tags: ['训练', '随想', 'Telegram'],
-              telegramMessageId: 801,
-              telegramChatId: 42,
-              messageDateUnix: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
-            },
-            updateIds: [899],
-            recognitions: [],
-            messages: [
-              {
-                kind: 'message',
-                updateId: 899,
-                messageId: 801,
-                mediaGroupId: null,
-                caption: '',
-                text: '/thought 恢复节奏更稳了',
-                chatId: 42,
-                dateUnix: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
-                photos: [],
-              },
-            ],
-          },
-          failedAt: '2026-05-13T00:00:00.000Z',
-        })}\n`,
-        'utf8',
-      ),
-    ),
-  );
+  await writeFile(path.join(tempRoot, '训练记录.md'), originalMarkdown, 'utf8');
 
   const persistedBatchIds = [];
   const result = await runTelegramSync({
     rootDir: tempRoot,
     env: {
       ...telegramSyncEnv(),
-      TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING: 'true',
     },
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
+    readPendingRecognitionBatches: async () => [
+      {
+        failureCategory: 'database',
+        batch: pendingBatch,
+      },
+    ],
+    markPendingRecognitionResolved: async ({ batchId }) => ({ status: 'resolved', batchId }),
+    appendPendingRecognitionBatch: async () => ({ status: 'queued' }),
     persistNormalizedBatch: async ({ batch }) => {
       persistedBatchIds.push(batch.batchId);
       return { status: 'stored', archivedDate: batch.archivedDate };
@@ -5059,10 +5115,6 @@ test('runTelegramSync replays pending thought batches without rewriting training
   assert.equal(result.changed, true);
   assert.deepEqual(persistedBatchIds, ['thought-801']);
   assert.equal(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), originalMarkdown);
-  assert.equal(
-    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    '',
-  );
 });
 
 test('runTelegramSync replies to /analysis without image recognition or file writes', async () => {
@@ -7398,7 +7450,7 @@ test('runTelegramSync queues image batches when primary and fallback AI provider
   assert.match(queued[0].batch.recognitionErrors[0].promptVersion, /^\d{4}-\d{2}-\d{2}$/);
   assert.match(
     queued[0].batch.recognitionErrors[0].aiIdempotencyKey,
-    new RegExp(`^recognition:telegram_training_image:v2:${queued[0].batch.recognitionErrors[0].promptVersion}:gpt-primary:`),
+    new RegExp(`^recognition:telegram_training_image:v3:${queued[0].batch.recognitionErrors[0].promptVersion}:gpt-primary:`),
   );
   assert.match(queued[0].error, /fallback provider timed out/);
   assert.equal(queued[0].nextRetryAt.toISOString(), now.toISOString());

@@ -3,7 +3,7 @@ import {
   normalizeActivityTime,
   splitDateSections,
 } from '../../domain/training/training-domain.mjs';
-import { appendMetric } from '../../../tools/lib/markdown-render.mjs';
+import { appendMetric } from '../../shared/markdown-render.mjs';
 
 const TELEGRAM_SECTION_TAG = '<!-- telegram-sync-section -->';
 
