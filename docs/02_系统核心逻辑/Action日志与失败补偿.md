@@ -8,8 +8,10 @@ Action 日志现在由 workflow、同步结果文件、统一 summary 脚本和�
 - `tools/lib/action-logger.mjs` 生成 `[action-log]` 单行 JSON。事件字段会统一归一化，敏感 key 默认 hash 或丢弃。
 - `tools/action-sync-summary.mjs` 是 Telegram / 飞书 sync summary 的统一入口。`sync.yml` 与 `sync-dev.yml` 都调用它写入 `GITHUB_STEP_SUMMARY`。
 - `traceId` 由 `queueTaskId` 派生，格式为 `tr_<sha256前16位>`；workflow 没有队列任务时使用 `GITHUB_RUN_ID` 作为兜底 seed。
+- Telegram / 飞书 sync CLI stdout 默认只输出 safe report；完整 report 只写入 `TELEGRAM_SYNC_RESULT_PATH` / `FEISHU_SYNC_RESULT_PATH`，供 summary 和 notify step 读取。
 - `npm run export:markdown` 默认只输出 compact summary；完整导出 payload 只允许本地显式 `--debug-json`，GitHub Actions 中会拒绝该参数。
 - DB 写入结果会带 `persistenceResult`，其中只保留安全字段：`transactionId`、`sourceChannel`、`rowCounts`、`durationMs`、`slowQueries`、`pendingStatus`、`rollbackStatus` 等。
+- `sleepBackfill` 的同步链路回填只针对本轮写入的睡眠归档日期；全量回填只能走显式维护入口。
 - Deploy 等待阶段会周期性输出 `[action-log]`，并在 step summary 中记录 deploy 状态、耗时和 URL。
 
 ## GitHub Actions summary
@@ -60,6 +62,7 @@ Action 日志现在由 workflow、同步结果文件、统一 summary 脚本和�
 | COS 信息 | `bucket`、`pathPrefix`、`object key` 默认 hash 或不输出完整值。 |
 | Prompt / 用户文本 / SQL | `prompt`、`caption`、`text`、`body`、`sql`、`params` 在 action logger 中丢弃。 |
 | Markdown 导出 | stdout 默认只输出 `status`、`mode`、`target`、`outputPath`、daily/thought 计数和 `durationMs`。 |
+| 同步 CLI stdout | 默认只输出 safe report；完整 sync report 只写 result file，不直接 tee 到 Action log。 |
 | Secret | 不允许输出 API Key、DB URL、token、password。 |
 
 ## 失败补偿
