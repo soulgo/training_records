@@ -34,6 +34,17 @@ test('all GitHub workflows report action status with minimal run id payload', as
   }
 });
 
+test('dev push workflows can report action status directly to the dev database when no report URL is configured', async () => {
+  for (const fileName of ['ci-tests.yml', 'deploy-cloudflare-pages-dev.yml']) {
+    const workflow = await readRepoFile(`.github/workflows/${fileName}`);
+    const reportStep = workflow.slice(workflow.indexOf('- name: Report Action Status'));
+    assert.match(reportStep, /GITHUB_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/, `${fileName} should pass github.token to the local reporter`);
+    assert.match(reportStep, /TRAINING_DB_URL:\s*\$\{\{\s*github\.ref_name == 'dev' && secrets\.DEV_TRAINING_DB_URL \|\| secrets\.TRAINING_DB_URL\s*\}\}/, `${fileName} should pass the branch-scoped database URL to the local reporter`);
+    assert.match(reportStep, /GitHub Action monitor report URL is not configured; using local database reporter when possible\./, `${fileName} should not skip when the URL variable is absent`);
+    assert.match(reportStep, /node tools\/report-github-action-status\.mjs/, `${fileName} should invoke the local database reporter`);
+  }
+});
+
 test('shared site build action centralizes Hexo build cache and deploy steps', async () => {
   const action = await readWorkflow('.github/actions/site-build/action.yml');
 

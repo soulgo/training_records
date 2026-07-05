@@ -7,9 +7,20 @@ export class PostgresGitHubActionMonitorRepository {
   }
 
   async upsertActionRunSnapshot(snapshot) {
+    try {
+      await this.upsertActionRunSnapshotWithSchema(snapshot, { useMonitorEnvironmentColumn: true });
+    } catch (error) {
+      if (!isMissingMonitorEnvironmentColumnError(error)) {
+        throw error;
+      }
+      await this.upsertActionRunSnapshotWithSchema(snapshot, { useMonitorEnvironmentColumn: false });
+    }
+  }
+
+  async upsertActionRunSnapshotWithSchema(snapshot, { useMonitorEnvironmentColumn }) {
     await this.client.query('begin');
     try {
-      await this.upsertRun(snapshot.run);
+      await this.upsertRun(snapshot.run, { useMonitorEnvironmentColumn });
       for (const job of snapshot.jobs ?? []) {
         await this.upsertJob(job);
       }
@@ -18,7 +29,7 @@ export class PostgresGitHubActionMonitorRepository {
       }
       await this.client.query('delete from monitor.github_action_failures where run_id = $1', [snapshot.run.runId]);
       for (const failure of snapshot.failures ?? []) {
-        await this.upsertFailure(failure);
+        await this.upsertFailure(failure, { useMonitorEnvironmentColumn });
       }
       await this.client.query('commit');
     } catch (error) {
@@ -49,85 +60,37 @@ export class PostgresGitHubActionMonitorRepository {
     return (result.rows ?? []).map(mapRecentActionRunRow);
   }
 
-  async upsertRun(run) {
-    await this.client.query(
-      `
-        insert into monitor.github_action_runs (
-          run_id,
-          repository_full_name,
-          monitor_environment,
-          workflow_id,
-          workflow_name,
-          workflow_path,
-          run_number,
-          run_attempt,
-          event,
-          branch,
-          commit_sha,
-          head_commit_message,
-          actor_login,
-          status,
-          conclusion,
-          start_time,
-          end_time,
-          duration,
-          html_url,
-          error_summary,
-          raw_payload_json,
-          updated_at
-        )
-        values (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-          $11, $12, $13, $14, $15, $16, $17, $18, $19,
-          $20, $21::jsonb, now()
-        )
-        on conflict (run_id) do update set
-          repository_full_name = excluded.repository_full_name,
-          monitor_environment = excluded.monitor_environment,
-          workflow_id = excluded.workflow_id,
-          workflow_name = excluded.workflow_name,
-          workflow_path = excluded.workflow_path,
-          run_number = excluded.run_number,
-          run_attempt = excluded.run_attempt,
-          event = excluded.event,
-          branch = excluded.branch,
-          commit_sha = excluded.commit_sha,
-          head_commit_message = excluded.head_commit_message,
-          actor_login = excluded.actor_login,
-          status = excluded.status,
-          conclusion = excluded.conclusion,
-          start_time = excluded.start_time,
-          end_time = excluded.end_time,
-          duration = excluded.duration,
-          html_url = excluded.html_url,
-          error_summary = excluded.error_summary,
-          raw_payload_json = excluded.raw_payload_json,
-          updated_at = excluded.updated_at
-      `,
-      [
-        run.runId,
-        run.repositoryFullName,
-        run.monitorEnvironment,
-        run.workflowId,
-        run.workflowName,
-        run.workflowPath,
-        run.runNumber,
-        run.runAttempt,
-        run.event,
-        run.branch,
-        run.commitSha,
-        run.headCommitMessage,
-        run.actorLogin,
-        run.status,
-        run.conclusion,
-        run.startTime,
-        run.endTime,
-        run.duration,
-        run.htmlUrl,
-        run.errorSummary,
-        JSON.stringify(run.rawPayload ?? {}),
-      ],
-    );
+  async upsertRun(run, { useMonitorEnvironmentColumn } = { useMonitorEnvironmentColumn: true }) {
+    const columns = [
+      { name: 'run_id', value: run.runId },
+      { name: 'repository_full_name', value: run.repositoryFullName },
+      ...(useMonitorEnvironmentColumn ? [{ name: 'monitor_environment', value: run.monitorEnvironment }] : []),
+      { name: 'workflow_id', value: run.workflowId },
+      { name: 'workflow_name', value: run.workflowName },
+      { name: 'workflow_path', value: run.workflowPath },
+      { name: 'run_number', value: run.runNumber },
+      { name: 'run_attempt', value: run.runAttempt },
+      { name: 'event', value: run.event },
+      { name: 'branch', value: run.branch },
+      { name: 'commit_sha', value: run.commitSha },
+      { name: 'head_commit_message', value: run.headCommitMessage },
+      { name: 'actor_login', value: run.actorLogin },
+      { name: 'status', value: run.status },
+      { name: 'conclusion', value: run.conclusion },
+      { name: 'start_time', value: run.startTime },
+      { name: 'end_time', value: run.endTime },
+      { name: 'duration', value: run.duration },
+      { name: 'html_url', value: run.htmlUrl },
+      { name: 'error_summary', value: run.errorSummary },
+      { name: 'raw_payload_json', value: JSON.stringify(run.rawPayload ?? {}), cast: 'jsonb' },
+    ];
+    const { sql, params } = buildUpsertSql({
+      table: 'monitor.github_action_runs',
+      conflictTarget: 'run_id',
+      columns,
+    });
+
+    await this.client.query(sql, params);
   }
 
   async upsertJob(job) {
@@ -226,54 +189,28 @@ export class PostgresGitHubActionMonitorRepository {
     );
   }
 
-  async upsertFailure(failure) {
-    await this.client.query(
-      `
-        insert into monitor.github_action_failures (
-          failure_key,
-          run_id,
-          job_id,
-          step_number,
-          failure_level,
-          monitor_environment,
-          workflow_name,
-          job_name,
-          step_name,
-          conclusion,
-          error_summary,
-          context_json,
-          updated_at
-        )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, now())
-        on conflict (failure_key) do update set
-          run_id = excluded.run_id,
-          job_id = excluded.job_id,
-          step_number = excluded.step_number,
-          failure_level = excluded.failure_level,
-          monitor_environment = excluded.monitor_environment,
-          workflow_name = excluded.workflow_name,
-          job_name = excluded.job_name,
-          step_name = excluded.step_name,
-          conclusion = excluded.conclusion,
-          error_summary = excluded.error_summary,
-          context_json = excluded.context_json,
-          updated_at = excluded.updated_at
-      `,
-      [
-        failure.failureKey,
-        failure.runId,
-        failure.jobId,
-        failure.stepNumber,
-        failure.failureLevel,
-        failure.monitorEnvironment,
-        failure.workflowName,
-        failure.jobName,
-        failure.stepName,
-        failure.conclusion,
-        failure.errorSummary,
-        JSON.stringify(failure.context ?? {}),
-      ],
-    );
+  async upsertFailure(failure, { useMonitorEnvironmentColumn } = { useMonitorEnvironmentColumn: true }) {
+    const columns = [
+      { name: 'failure_key', value: failure.failureKey },
+      { name: 'run_id', value: failure.runId },
+      { name: 'job_id', value: failure.jobId },
+      { name: 'step_number', value: failure.stepNumber },
+      { name: 'failure_level', value: failure.failureLevel },
+      ...(useMonitorEnvironmentColumn ? [{ name: 'monitor_environment', value: failure.monitorEnvironment }] : []),
+      { name: 'workflow_name', value: failure.workflowName },
+      { name: 'job_name', value: failure.jobName },
+      { name: 'step_name', value: failure.stepName },
+      { name: 'conclusion', value: failure.conclusion },
+      { name: 'error_summary', value: failure.errorSummary },
+      { name: 'context_json', value: JSON.stringify(failure.context ?? {}), cast: 'jsonb' },
+    ];
+    const { sql, params } = buildUpsertSql({
+      table: 'monitor.github_action_failures',
+      conflictTarget: 'failure_key',
+      columns,
+    });
+
+    await this.client.query(sql, params);
   }
 }
 
@@ -302,6 +239,26 @@ function mapRecentActionRunRow(row) {
     jobCount: normalizeInteger(row.job_count) ?? 0,
     stepCount: normalizeInteger(row.step_count) ?? 0,
     failureCount: normalizeInteger(row.failure_count) ?? 0,
+  };
+}
+
+function buildUpsertSql({ table, conflictTarget, columns }) {
+  const insertColumns = [...columns.map((column) => column.name), 'updated_at'];
+  const values = columns.map((column, index) => {
+    const placeholder = `$${index + 1}`;
+    return column.cast ? `${placeholder}::${column.cast}` : placeholder;
+  });
+  const updateColumns = insertColumns.filter((column) => column !== conflictTarget);
+  return {
+    sql: `
+        insert into ${table} (
+          ${insertColumns.join(',\n          ')}
+        )
+        values (${[...values, 'now()'].join(', ')})
+        on conflict (${conflictTarget}) do update set
+          ${updateColumns.map((column) => `${column} = excluded.${column}`).join(',\n          ')}
+      `,
+    params: columns.map((column) => column.value),
   };
 }
 

@@ -309,6 +309,58 @@ test('postgres github action monitor repository upserts run snapshot in one tran
   assert.ok(queries.some((query) => /insert into monitor\.github_action_failures/i.test(query.sql)));
 });
 
+test('postgres github action monitor repository retries snapshot writes without monitor environment column', async () => {
+  const queries = [];
+  let transactionAttempt = 0;
+  const client = {
+    async query(sql, params = []) {
+      queries.push({ sql, params, transactionAttempt });
+      if (sql === 'begin') {
+        transactionAttempt += 1;
+      }
+      if (transactionAttempt === 1 && /insert into monitor\.github_action_runs/i.test(sql)) {
+        const error = new Error('column "monitor_environment" of relation "github_action_runs" does not exist');
+        error.code = '42703';
+        throw error;
+      }
+      return { rowCount: 1, rows: [] };
+    },
+  };
+  const repository = new PostgresGitHubActionMonitorRepository(client);
+
+  await repository.upsertActionRunSnapshot({
+    run: {
+      runId: 123456789,
+      repositoryFullName: 'soulgo/training_records',
+      monitorEnvironment: 'dev',
+      workflowName: 'CI Tests',
+      branch: 'dev',
+      status: 'completed',
+      conclusion: 'success',
+      rawPayload: { id: 123456789 },
+    },
+    failures: [{
+      failureKey: 'github-action:123456789:run',
+      runId: 123456789,
+      failureLevel: 'run',
+      monitorEnvironment: 'dev',
+      workflowName: 'CI Tests',
+      conclusion: 'failure',
+      errorSummary: 'CI Tests: failure',
+      context: { htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/123456789' },
+    }],
+  });
+
+  assert.deepEqual(
+    queries.filter((query) => ['begin', 'rollback', 'commit'].includes(query.sql)).map((query) => query.sql),
+    ['begin', 'rollback', 'begin', 'commit'],
+  );
+  const legacyQueries = queries.slice(queries.findLastIndex((query) => query.sql === 'begin') + 1);
+  assert.ok(legacyQueries.some((query) => /insert into monitor\.github_action_runs/i.test(query.sql)));
+  assert.ok(legacyQueries.some((query) => /insert into monitor\.github_action_failures/i.test(query.sql)));
+  assert.ok(legacyQueries.every((query) => !/monitor_environment/i.test(query.sql)));
+});
+
 test('postgres github action monitor repository lists recent runs with job step and failure counts', async () => {
   const queries = [];
   const client = {

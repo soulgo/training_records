@@ -21,6 +21,7 @@
 
 - 修复 dev 首页在 Action 监控数据暂为空时整个 Action 监控模块被隐藏的问题；现在即使暂未读到 run 记录，也会显示模块标题、环境和空状态，避免误判功能未上线。
 - 修复 dev Action 监控读取旧版 PostgreSQL 表结构时因缺少 `monitor_environment` 列生成空视图的问题；读取最近 run 失败时会自动回退到按 `branch=dev` 查询，并继续展示 job、step 与失败计数。
+- 修复 dev Actions 未配置 `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` 时监控库没有新数据的问题；CI 与 dev Pages workflow 会在 URL 缺失时使用本地 runner 脚本直接写入 dev PostgreSQL，并兼容旧版监控表缺少 `monitor_environment` 列的写入路径。
 
 ## [1.3.2] - 2026-07-05
 
