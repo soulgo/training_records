@@ -27,6 +27,50 @@ export class PostgresGitHubActionMonitorRepository {
     }
   }
 
+  async listRecentActionRuns(options = {}) {
+    const monitorEnvironment = normalizeNullableText(options.monitorEnvironment);
+    const limit = normalizeLimit(options.limit, 12);
+    const result = await this.client.query(
+      `
+        select
+          r.run_id,
+          r.repository_full_name,
+          r.monitor_environment,
+          r.workflow_id,
+          r.workflow_name,
+          r.workflow_path,
+          r.run_number,
+          r.run_attempt,
+          r.event,
+          r.branch,
+          r.commit_sha,
+          r.head_commit_message,
+          r.actor_login,
+          r.status,
+          r.conclusion,
+          r.start_time,
+          r.end_time,
+          r.duration,
+          r.html_url,
+          r.error_summary,
+          count(distinct j.job_id)::integer as job_count,
+          count(distinct s.step_id)::integer as step_count,
+          count(distinct f.failure_key)::integer as failure_count
+        from monitor.github_action_runs r
+        left join monitor.github_action_jobs j on j.run_id = r.run_id
+        left join monitor.github_action_steps s on s.run_id = r.run_id
+        left join monitor.github_action_failures f on f.run_id = r.run_id
+        where ($1::text is null or r.monitor_environment = $1)
+        group by r.run_id
+        order by coalesce(r.start_time, r.created_at) desc, r.run_id desc
+        limit $2
+      `,
+      [monitorEnvironment, limit],
+    );
+
+    return (result.rows ?? []).map(mapRecentActionRunRow);
+  }
+
   async upsertRun(run) {
     await this.client.query(
       `
@@ -253,4 +297,61 @@ export class PostgresGitHubActionMonitorRepository {
       ],
     );
   }
+}
+
+function mapRecentActionRunRow(row) {
+  return {
+    runId: normalizeInteger(row.run_id),
+    repositoryFullName: row.repository_full_name,
+    monitorEnvironment: row.monitor_environment,
+    workflowId: normalizeInteger(row.workflow_id),
+    workflowName: row.workflow_name,
+    workflowPath: row.workflow_path,
+    runNumber: normalizeInteger(row.run_number),
+    runAttempt: normalizeInteger(row.run_attempt),
+    event: row.event,
+    branch: row.branch,
+    commitSha: row.commit_sha,
+    headCommitMessage: row.head_commit_message,
+    actorLogin: row.actor_login,
+    status: row.status,
+    conclusion: row.conclusion,
+    startTime: normalizeTime(row.start_time),
+    endTime: normalizeTime(row.end_time),
+    duration: normalizeInteger(row.duration),
+    htmlUrl: row.html_url,
+    errorSummary: row.error_summary,
+    jobCount: normalizeInteger(row.job_count) ?? 0,
+    stepCount: normalizeInteger(row.step_count) ?? 0,
+    failureCount: normalizeInteger(row.failure_count) ?? 0,
+  };
+}
+
+function normalizeNullableText(value) {
+  const normalized = String(value ?? '').trim();
+  return normalized || null;
+}
+
+function normalizeLimit(value, fallback) {
+  const numberValue = Number(value);
+  if (!Number.isSafeInteger(numberValue) || numberValue < 1) {
+    return fallback;
+  }
+  return Math.min(numberValue, 50);
+}
+
+function normalizeInteger(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const numberValue = Number(value);
+  return Number.isSafeInteger(numberValue) ? numberValue : null;
+}
+
+function normalizeTime(value) {
+  if (!value) {
+    return null;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }

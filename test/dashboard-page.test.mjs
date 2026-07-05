@@ -15,6 +15,7 @@ const require = createRequire(import.meta.url);
 const { readLatestChangelogVersion } = require('../tools/changelog-version.cjs');
 const trainingDataPath = path.join(rootDir, 'source', '_data', 'training.json');
 const dashboardViewPath = path.join(rootDir, 'source', '_data', 'dashboardView.json');
+const actionMonitorViewPath = path.join(rootDir, 'source', '_data', 'actionMonitorView.json');
 
 test('dashboard renders comparison pills for the latest metrics without relying on fixed values', () => {
   const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
@@ -251,6 +252,67 @@ test('homepage places workout duration and trained days directly after training 
   );
   assert.doesNotMatch(metricGridMatch[1], /锻炼时长/);
   assert.doesNotMatch(metricGridMatch[1], /已训练天数/);
+});
+
+test('homepage renders the Action monitor module from generated action monitor data', { concurrency: false }, () => {
+  const homepage = withSharedSiteFixture(() => {
+    const originalTrainingData = readOptionalFile(trainingDataPath);
+    const originalDashboardView = readOptionalFile(dashboardViewPath);
+    const originalActionMonitorView = readOptionalFile(actionMonitorViewPath);
+
+    try {
+      ensureDataDir();
+      writeFileSync(trainingDataPath, JSON.stringify(buildHomepageDashboard(), null, 2));
+      writeFileSync(
+        dashboardViewPath,
+        JSON.stringify(buildDashboardViewModel(buildHomepageDashboard()), null, 2),
+      );
+      writeFileSync(actionMonitorViewPath, JSON.stringify({
+        title: 'Action 监控',
+        environment: 'dev',
+        updatedTime: '14:30',
+        summaryCards: [
+          { label: '最近运行', value: '3 次', hint: '近 24 小时' },
+          { label: '成功率', value: '100%', hint: '近 20 次' },
+        ],
+        runs: [
+          {
+            runId: 1003,
+            title: 'chore: release 1.3.2 action monitor',
+            workflowName: 'Deploy Cloudflare Pages (Dev)',
+            runNumber: 280,
+            branch: 'dev',
+            actorLogin: 'soulgo',
+            commitShortSha: '18ba338',
+            statusLabel: '成功',
+            tone: 'success',
+            timeLabel: '6 minutes ago',
+            durationLabel: '5m 42s',
+            htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/1003',
+            failureCount: 0,
+          },
+        ],
+      }, null, 2));
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      return readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+    } finally {
+      restoreOptionalFile(trainingDataPath, originalTrainingData);
+      restoreOptionalFile(dashboardViewPath, originalDashboardView);
+      restoreOptionalFile(actionMonitorViewPath, originalActionMonitorView);
+    }
+  });
+
+  assert.match(homepage, /<section class="action-monitor"/);
+  assert.match(homepage, /Action 监控/);
+  assert.match(homepage, /Deploy Cloudflare Pages \(Dev\) #280/);
+  assert.match(homepage, /chore: release 1\.3\.2 action monitor/);
+  assert.match(homepage, /18ba338/);
+  assert.match(homepage, /soulgo/);
+  assert.match(homepage, /dev/);
+  assert.match(homepage, /5m 42s/);
 });
 
 function buildSyntheticDashboard({ startDate, days }) {

@@ -12,6 +12,7 @@ const generatedSourceDataPaths = [
   path.join(rootDir, 'source', '_data', 'training.json'),
   path.join(rootDir, 'source', '_data', 'dashboardView.json'),
   path.join(rootDir, 'source', '_data', 'monitorView.json'),
+  path.join(rootDir, 'source', '_data', 'actionMonitorView.json'),
   path.join(rootDir, 'source', '_data', 'body-metrics.json'),
 ];
 

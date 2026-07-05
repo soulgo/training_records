@@ -13,6 +13,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- dev 首页新增 Action 监控模块：`build:data` 会从 PostgreSQL `monitor.github_action_runs/jobs/steps/failures` 生成 `actionMonitorView.json`，页面展示最近 GitHub Actions 的状态、workflow、run 编号、commit、触发人、分支、耗时和失败摘要；本地无监控数据库时自动降级为空视图。
+
 ## [1.3.2] - 2026-07-05
 
 ### Added

@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { createGitHubActionReportHttpHandler } from '../src/app/use-cases/github-action-report-http.mjs';
 import { reportGitHubActionRun } from '../src/app/use-cases/github-action-monitor.use-case.mjs';
 import { PostgresGitHubActionMonitorRepository } from '../src/adapters/postgres/github-action-monitor-repository.pg.mjs';
+import { buildActionMonitorViewModel } from '../src/site/action-monitor-view.mjs';
 
 test('github action monitor fetches run jobs steps and stores failure summary idempotently', async () => {
   const calls = [];
@@ -306,6 +307,106 @@ test('postgres github action monitor repository upserts run snapshot in one tran
   assert.ok(queries.some((query) => /insert into monitor\.github_action_steps/i.test(query.sql)));
   assert.ok(queries.some((query) => /delete from monitor\.github_action_failures/i.test(query.sql)));
   assert.ok(queries.some((query) => /insert into monitor\.github_action_failures/i.test(query.sql)));
+});
+
+test('postgres github action monitor repository lists recent runs with job step and failure counts', async () => {
+  const queries = [];
+  const client = {
+    async query(sql, params = []) {
+      queries.push({ sql, params });
+      return {
+        rows: [{
+          run_id: '1003',
+          workflow_name: 'Deploy Cloudflare Pages (Dev)',
+          run_number: 280,
+          branch: 'dev',
+          conclusion: 'success',
+          job_count: '1',
+          step_count: '7',
+          failure_count: '0',
+        }],
+      };
+    },
+  };
+  const repository = new PostgresGitHubActionMonitorRepository(client);
+
+  const rows = await repository.listRecentActionRuns({
+    monitorEnvironment: 'dev',
+    limit: 12,
+  });
+
+  assert.equal(rows[0].runId, 1003);
+  assert.equal(rows[0].workflowName, 'Deploy Cloudflare Pages (Dev)');
+  assert.equal(rows[0].jobCount, 1);
+  assert.equal(rows[0].stepCount, 7);
+  assert.equal(rows[0].failureCount, 0);
+  assert.match(queries[0].sql, /from monitor\.github_action_runs/i);
+  assert.match(queries[0].sql, /left join monitor\.github_action_jobs/i);
+  assert.match(queries[0].sql, /left join monitor\.github_action_steps/i);
+  assert.match(queries[0].sql, /left join monitor\.github_action_failures/i);
+  assert.deepEqual(queries[0].params, ['dev', 12]);
+});
+
+test('action monitor view model formats recent dev runs for the dashboard module', () => {
+  const view = buildActionMonitorViewModel([
+    {
+      runId: 1003,
+      monitorEnvironment: 'dev',
+      workflowName: 'Deploy Cloudflare Pages (Dev)',
+      runNumber: 280,
+      branch: 'dev',
+      commitSha: '18ba338e6ad31f2',
+      headCommitMessage: 'chore: release 1.3.2 action monitor\n\nbody should stay out of card title',
+      actorLogin: 'soulgo',
+      status: 'completed',
+      conclusion: 'success',
+      startTime: '2026-07-05T06:24:18.000Z',
+      endTime: '2026-07-05T06:30:00.000Z',
+      duration: 342,
+      htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/1003',
+      errorSummary: '',
+      jobCount: 1,
+      stepCount: 7,
+      failureCount: 0,
+    },
+    {
+      runId: 1002,
+      monitorEnvironment: 'dev',
+      workflowName: 'CI Tests',
+      runNumber: 321,
+      branch: 'dev',
+      commitSha: '18ba338e6ad31f2',
+      headCommitMessage: 'chore: release 1.3.2 action monitor',
+      actorLogin: 'soulgo',
+      status: 'completed',
+      conclusion: 'failure',
+      startTime: '2026-07-05T06:29:32.000Z',
+      endTime: '2026-07-05T06:30:00.000Z',
+      duration: 28,
+      htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/1002',
+      errorSummary: 'test / Run tests: failure',
+      jobCount: 1,
+      stepCount: 7,
+      failureCount: 1,
+    },
+  ], {
+    now: new Date('2026-07-05T06:30:30.000Z'),
+    environment: 'dev',
+  });
+
+  assert.equal(view.title, 'Action 监控');
+  assert.equal(view.environment, 'dev');
+  assert.equal(view.runs.length, 2);
+  assert.equal(view.runs[0].title, 'chore: release 1.3.2 action monitor');
+  assert.equal(view.runs[0].commitShortSha, '18ba338');
+  assert.equal(view.runs[0].statusLabel, '成功');
+  assert.equal(view.runs[0].tone, 'success');
+  assert.equal(view.runs[0].timeLabel, '6 minutes ago');
+  assert.equal(view.runs[0].durationLabel, '5m 42s');
+  assert.equal(view.runs[1].statusLabel, '失败');
+  assert.equal(view.runs[1].errorSummary, 'test / Run tests: failure');
+  assert.ok(view.summaryCards.some((card) => card.label === '成功率' && card.value === '50%'));
+  assert.ok(view.summaryCards.some((card) => card.label === '失败' && card.value === '1 次'));
 });
 
 test('github action monitor SQL documents dev and main environment separation', async () => {

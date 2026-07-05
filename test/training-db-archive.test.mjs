@@ -639,6 +639,52 @@ test('generateTrainingData can write outputs from the shared snapshot builder', 
   assert.equal(output.latest.measurement.weightKg, 71.8);
 });
 
+test('generateTrainingData writes the Action monitor view for the dev page', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-build-action-monitor-'));
+  const recordPath = path.join(tempRoot, '训练记录.md');
+  const stdoutChunks = [];
+
+  await writeFile(recordPath, sampleMarkdown, 'utf8');
+
+  await generateTrainingData({
+    rootDir: tempRoot,
+    env: {
+      GITHUB_REF_NAME: 'dev',
+      TRAINING_BUILD_ARCHIVE_WRITE: 'false',
+    },
+    stdout: {
+      write(chunk) {
+        stdoutChunks.push(String(chunk));
+      },
+    },
+    stderr: { write() {} },
+    buildSnapshot: async () => sampleParsed,
+    loadActionMonitorView: async ({ env }) => ({
+      title: 'Action 监控',
+      environment: env.GITHUB_REF_NAME,
+      runs: [{
+        runId: 1003,
+        title: 'chore: release 1.3.2 action monitor',
+        workflowName: 'Deploy Cloudflare Pages (Dev)',
+        runNumber: 280,
+        branch: 'dev',
+        actorLogin: 'soulgo',
+        commitShortSha: '18ba338',
+        statusLabel: '成功',
+        durationLabel: '5m 42s',
+      }],
+    }),
+  });
+
+  const actionMonitorView = JSON.parse(
+    await readFile(path.join(tempRoot, 'source', '_data', 'actionMonitorView.json'), 'utf8'),
+  );
+
+  assert.equal(actionMonitorView.environment, 'dev');
+  assert.equal(actionMonitorView.runs[0].workflowName, 'Deploy Cloudflare Pages (Dev)');
+  assert.match(stdoutChunks.join(''), /Generated source\/_data\/actionMonitorView\.json/);
+});
+
 test('renderTrainingDebugMarkdown includes sleep health metrics for troubleshooting', () => {
   const markdown = renderTrainingDebugMarkdown({
     ...sampleParsed,
