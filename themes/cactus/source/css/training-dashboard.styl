@@ -19,6 +19,7 @@
 .dashboard-page .metric-card,
 .dashboard-page .chart-card,
 .dashboard-page .action-monitor__summary-card,
+.dashboard-page .action-monitor__empty,
 .dashboard-page .action-run,
 .dashboard-page .day-card
   box-shadow 0 18px 48px rgba(30, 64, 175, 0.09)
@@ -29,6 +30,7 @@
 .dashboard-page .metric-card,
 .dashboard-page .chart-card,
 .dashboard-page .action-monitor__summary-card,
+.dashboard-page .action-monitor__empty,
 .dashboard-page .action-run,
 .dashboard-page .day-card
   background rgba(255, 255, 255, 0.88)
@@ -122,6 +124,7 @@
 .metric-card,
 .chart-card,
 .action-monitor__summary-card,
+.action-monitor__empty,
 .action-run,
 .day-card
   border-radius 20px
@@ -514,6 +517,25 @@ undefined
   display flex
   flex-direction column
   gap 0.65rem
+
+.action-monitor__empty
+  display flex
+  flex-direction column
+  gap 0.35rem
+  min-height 5.4rem
+  padding 1rem
+  border-radius 16px
+  background linear-gradient(180deg, #ffffff 0%, #f7fbff 100%)
+  color #64748b
+
+.action-monitor__empty strong
+  color #153b5d
+  font-size 1rem
+  line-height 1.25
+
+.action-monitor__empty span
+  font-size 0.86rem
+  line-height 1.55
 
 .action-run
   display grid

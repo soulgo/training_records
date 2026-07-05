@@ -86,31 +86,31 @@ function formatDailyRange(pageIndex, pageSize, total) {
       </section>
     </section>
 
-    <% if (actionMonitorRuns.length) { %>
-      <section class="action-monitor" aria-label="GitHub Action 监控">
-        <div class="dashboard-section__header action-monitor__header">
-          <div>
-            <span class="dashboard-section__eyebrow">ACTION MONITOR</span>
-            <h2><%= actionMonitorView.title || 'Action 监控' %></h2>
-          </div>
-          <div class="action-monitor__meta">
-            <span><%= actionMonitorView.environment || 'dev' %></span>
-            <span>更新 <strong><%= actionMonitorView.updatedTime || '—' %></strong></span>
-          </div>
+    <section class="action-monitor" aria-label="GitHub Action 监控">
+      <div class="dashboard-section__header action-monitor__header">
+        <div>
+          <span class="dashboard-section__eyebrow">ACTION MONITOR</span>
+          <h2><%= actionMonitorView.title || 'Action 监控' %></h2>
         </div>
+        <div class="action-monitor__meta">
+          <span><%= actionMonitorView.environment || 'dev' %></span>
+          <span>更新 <strong><%= actionMonitorView.updatedTime || '—' %></strong></span>
+        </div>
+      </div>
 
-        <% if (actionMonitorSummaryCards.length) { %>
-          <div class="action-monitor__summary" aria-label="Action 监控摘要">
-            <% actionMonitorSummaryCards.forEach((card) => { %>
-              <div class="action-monitor__summary-card">
-                <span><%= card.label %></span>
-                <strong><%= card.value %></strong>
-                <small><%= card.hint %></small>
-              </div>
-            <% }); %>
-          </div>
-        <% } %>
+      <% if (actionMonitorSummaryCards.length) { %>
+        <div class="action-monitor__summary" aria-label="Action 监控摘要">
+          <% actionMonitorSummaryCards.forEach((card) => { %>
+            <div class="action-monitor__summary-card">
+              <span><%= card.label %></span>
+              <strong><%= card.value %></strong>
+              <small><%= card.hint %></small>
+            </div>
+          <% }); %>
+        </div>
+      <% } %>
 
+      <% if (actionMonitorRuns.length) { %>
         <div class="action-monitor__runs">
           <% actionMonitorRuns.forEach((run) => { %>
             <a
@@ -143,8 +143,13 @@ function formatDailyRange(pageIndex, pageSize, total) {
             </a>
           <% }); %>
         </div>
-      </section>
-    <% } %>
+      <% } else { %>
+        <div class="action-monitor__empty">
+          <strong>暂无 Action 监控数据</strong>
+          <span>Action 上报成功后，这里会显示最近运行状态、workflow、commit、分支和耗时。</span>
+        </div>
+      <% } %>
+    </section>
 
     <section class="metric-grid">
       <div class="dashboard-section__header">

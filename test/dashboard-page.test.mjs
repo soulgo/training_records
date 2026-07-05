@@ -315,6 +315,42 @@ test('homepage renders the Action monitor module from generated action monitor d
   assert.match(homepage, /5m 42s/);
 });
 
+test('homepage keeps the Action monitor module visible when no Action rows were generated', { concurrency: false }, () => {
+  const homepage = withSharedSiteFixture(() => {
+    const originalTrainingData = readOptionalFile(trainingDataPath);
+    const originalDashboardView = readOptionalFile(dashboardViewPath);
+    const originalActionMonitorView = readOptionalFile(actionMonitorViewPath);
+
+    try {
+      const snapshot = buildHomepageDashboard();
+      ensureDataDir();
+      writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
+      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
+      writeFileSync(actionMonitorViewPath, JSON.stringify({
+        title: 'Action 监控',
+        environment: 'dev',
+        updatedTime: '14:30',
+        summaryCards: [],
+        runs: [],
+      }, null, 2));
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      return readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+    } finally {
+      restoreOptionalFile(trainingDataPath, originalTrainingData);
+      restoreOptionalFile(dashboardViewPath, originalDashboardView);
+      restoreOptionalFile(actionMonitorViewPath, originalActionMonitorView);
+    }
+  });
+
+  assert.match(homepage, /<section class="action-monitor"/);
+  assert.match(homepage, /Action 监控/);
+  assert.match(homepage, /dev/);
+  assert.match(homepage, /暂无 Action 监控数据/);
+});
+
 function buildSyntheticDashboard({ startDate, days }) {
   const daily = [];
   const charts = {
