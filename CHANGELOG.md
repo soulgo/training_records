@@ -13,8 +13,13 @@
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-07-05
+
 ### Added
 
+- 新增 GitHub Actions 全量运行监控能力：提供 `POST /api/github/actions/report` 接收 `run_id`，通过 GitHub API 拉取 run、jobs、steps，生成失败摘要并幂等写入 PostgreSQL；新增 `monitor.github_action_runs/jobs/steps/failures` SQL 设计与中文注释，支持成功率、失败率、耗时、commit/branch/workflow 关联和后续 AI 失败归因。
+- GitHub Actions workflow 全面接入 `Report Action Status`：使用 `if: always()` 和最小 payload，只传 `github.run_id`；dev/main 分支分别优先使用 `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` / `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN`，非 dev/main 分支跳过上报。
+- Action 监控服务新增 dev/main 分支隔离保护：监控实例可通过 `GITHUB_ACTION_MONITOR_ALLOWED_BRANCH` 限定只写入 dev 或 main，分支不匹配时返回 `skipped=true` 且不拉取 jobs、不写数据库；SQL 同步增加 `monitor_environment` 字段，并说明 dev/main 数据库分别手动建表和配置。
 - 新增图片识别脱敏 fixture 评测集与 `npm run eval:recognition`，覆盖 measurement、workout、nutrition、sleep 四类样本，输出 schema 失败数、静默异常入库数、语义 warning 和字段准确率，作为后续识别 prompt/schema 调整的回归基线。
 - 新增 `/monitor/` 健身监控总览页：基于现有 PostgreSQL snapshot 生成 `monitorView.json`，汇总展示体重、体脂率、睡眠评分、热量平衡、近 30 天跨域趋势、连续性和预警信息，并在导航中新增“监控”入口。
 - 新增 `docs/02_系统核心逻辑/训练监控逻辑.md` 维护文档：覆盖监控页从快照到前端 Chart.js 渲染的端到端链路、视图模型结构（指标卡片、趋势图、连续性与预警）、配置参数、空数据降级和维护要点，并补全 `查询展示逻辑.md` 页面模块表与核心逻辑目录阅读顺序索引。
@@ -22,6 +27,7 @@
 
 ### Changed
 
+- 同步项目包版本号到 `1.3.2`。
 - 图片识别 schema 升级到 v3：`records.sleep` 成为必填字段，睡眠和非睡眠图片都必须显式输出 sleep 对象或 `null` 字段；prompt metadata 与 App Profile 记忆源同步升级，并增加 measurement/sleep 字段级语义 warning，避免明显异常值静默入库。
 - 收敛应用层入口边界：`src` 内部不再反向依赖 `tools` 兼容入口，训练分析、prompt 生成、随想 artifact、Markdown 渲染、快照 fallback 和训练数据生成逻辑迁移到 `src` canonical 模块，`tools` 仅保留薄 CLI/兼容包装；`sync:feishu` 统一指向 `src/app/use-cases/feishu-sync.use-case.mjs`。
 - 扩展 `/monitor/` 健身监控总览页：在原有体重、体脂、睡眠、热量、趋势和预警基础上，新增身体成分、恢复监控、训练结构、饮食维护、数据完整性与 7/30 天汇总模块；趋势图从 4 张扩展为 6 张，补充身体成分趋势、恢复监控趋势和骑行里程序列，并重写监控页专用 UI 样式，使桌面与移动端监控信息更完整、排版更协调。

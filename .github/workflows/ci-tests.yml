@@ -86,6 +86,31 @@ jobs:
       - name: Run tests
         run: npm run test:fast
 
+      - name: Report Action Status
+        if: always()
+        continue-on-error: true
+        env:
+          GITHUB_ACTION_MONITOR_REPORT_URL: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL }}
+          GITHUB_ACTION_MONITOR_REPORT_URL_DEV: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL_DEV }}
+          GITHUB_ACTION_MONITOR_REPORT_URL_MAIN: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL_MAIN }}
+        run: |
+          report_url="${GITHUB_ACTION_MONITOR_REPORT_URL:-}"
+          if [ "${GITHUB_REF_NAME}" = "dev" ] && [ -n "${GITHUB_ACTION_MONITOR_REPORT_URL_DEV:-}" ]; then
+            report_url="${GITHUB_ACTION_MONITOR_REPORT_URL_DEV}"
+          elif [ "${GITHUB_REF_NAME}" = "main" ] && [ -n "${GITHUB_ACTION_MONITOR_REPORT_URL_MAIN:-}" ]; then
+            report_url="${GITHUB_ACTION_MONITOR_REPORT_URL_MAIN}"
+          elif [ "${GITHUB_REF_NAME}" != "dev" ] && [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "Branch ${GITHUB_REF_NAME} is not monitored by the Action monitor; skipping."
+            exit 0
+          fi
+          if [ -z "${report_url:-}" ]; then
+            echo "GitHub Action monitor report URL is not configured; skipping."
+            exit 0
+          fi
+          curl -fsS -X POST "${report_url%/}/api/github/actions/report" \
+            -H "Content-Type: application/json" \
+            -d "{\"run_id\":\"${{ github.run_id }}\"}"
+
   full-test:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -104,3 +129,28 @@ jobs:
 
       - name: Run full tests
         run: npm test
+
+      - name: Report Action Status
+        if: always()
+        continue-on-error: true
+        env:
+          GITHUB_ACTION_MONITOR_REPORT_URL: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL }}
+          GITHUB_ACTION_MONITOR_REPORT_URL_DEV: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL_DEV }}
+          GITHUB_ACTION_MONITOR_REPORT_URL_MAIN: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL_MAIN }}
+        run: |
+          report_url="${GITHUB_ACTION_MONITOR_REPORT_URL:-}"
+          if [ "${GITHUB_REF_NAME}" = "dev" ] && [ -n "${GITHUB_ACTION_MONITOR_REPORT_URL_DEV:-}" ]; then
+            report_url="${GITHUB_ACTION_MONITOR_REPORT_URL_DEV}"
+          elif [ "${GITHUB_REF_NAME}" = "main" ] && [ -n "${GITHUB_ACTION_MONITOR_REPORT_URL_MAIN:-}" ]; then
+            report_url="${GITHUB_ACTION_MONITOR_REPORT_URL_MAIN}"
+          elif [ "${GITHUB_REF_NAME}" != "dev" ] && [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "Branch ${GITHUB_REF_NAME} is not monitored by the Action monitor; skipping."
+            exit 0
+          fi
+          if [ -z "${report_url:-}" ]; then
+            echo "GitHub Action monitor report URL is not configured; skipping."
+            exit 0
+          fi
+          curl -fsS -X POST "${report_url%/}/api/github/actions/report" \
+            -H "Content-Type: application/json" \
+            -d "{\"run_id\":\"${{ github.run_id }}\"}"

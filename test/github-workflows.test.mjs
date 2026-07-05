@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { constants } from 'node:fs';
-import { access, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { load as parseYaml } from 'js-yaml';
@@ -10,6 +10,29 @@ import { load as parseYaml } from 'js-yaml';
 const rootDir = new URL('../', import.meta.url);
 
 const readRepoFile = (relativePath) => readFile(new URL(relativePath, rootDir), 'utf8');
+
+test('all GitHub workflows report action status with minimal run id payload', async () => {
+  const workflowDir = new URL('.github/workflows/', rootDir);
+  const workflowFiles = (await readdir(workflowDir))
+    .filter((fileName) => fileName.endsWith('.yml') || fileName.endsWith('.yaml'))
+    .sort();
+
+  assert.ok(workflowFiles.length > 0);
+  for (const fileName of workflowFiles) {
+    const workflow = await readFile(new URL(fileName, workflowDir), 'utf8');
+    const reportStep = workflow.slice(workflow.indexOf('- name: Report Action Status'));
+    assert.match(workflow, /- name:\s*Report Action Status/, `${fileName} should report action status`);
+    assert.match(reportStep, /if:\s*always\(\)/, `${fileName} report step should run with if: always()`);
+    assert.match(reportStep, /continue-on-error:\s*true/, `${fileName} report step should not fail the workflow`);
+    assert.match(reportStep, /GITHUB_ACTION_MONITOR_REPORT_URL/, `${fileName} should use the shared report URL variable`);
+    assert.match(reportStep, /GITHUB_ACTION_MONITOR_REPORT_URL_DEV/, `${fileName} should support a dev monitor URL`);
+    assert.match(reportStep, /GITHUB_ACTION_MONITOR_REPORT_URL_MAIN/, `${fileName} should support a main monitor URL`);
+    assert.match(reportStep, /GITHUB_REF_NAME/, `${fileName} should choose monitor endpoint by branch`);
+    assert.match(reportStep, /not monitored by the Action monitor/, `${fileName} should skip non dev\/main branches`);
+    assert.match(reportStep, /\\"run_id\\":\s*\\"\$\{\{\s*github\.run_id\s*\}\}\\"/, `${fileName} should only send github.run_id`);
+    assert.doesNotMatch(reportStep, /github\.event_path|GITHUB_EVENT_PATH/, `${fileName} should not upload event payload to the monitor`);
+  }
+});
 
 test('shared site build action centralizes Hexo build cache and deploy steps', async () => {
   const action = await readWorkflow('.github/actions/site-build/action.yml');

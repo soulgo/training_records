@@ -1,6 +1,6 @@
 {
   "name": "training-records-dashboard",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "private": true,
   "description": "Hexo dashboard for Markdown-based training records",
   "scripts": {
@@ -28,7 +28,8 @@
     "telegram:webhook": "node tools/telegram-webhook.mjs",
     "sync:feishu": "node src/app/use-cases/feishu-sync.use-case.mjs",
     "eval:recognition": "node tools/eval-recognition.mjs",
-    "feishu:sync": "npm run sync:feishu"
+    "feishu:sync": "npm run sync:feishu",
+    "github-action-monitor:server": "node tools/github-action-monitor-server.mjs"
   },
   "dependencies": {
     "cos-nodejs-sdk-v5": "^2.15.4",
