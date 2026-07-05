@@ -234,7 +234,7 @@ function resolveActionMonitorReadConfig(env) {
       'github-action-monitor-view',
     ]),
     timeoutMs: parsePositiveInteger(env.GITHUB_ACTION_MONITOR_DB_TIMEOUT_MS, 5000),
-    limit: parsePositiveInteger(env.GITHUB_ACTION_MONITOR_VIEW_LIMIT, 12),
+    limit: parsePositiveInteger(env.GITHUB_ACTION_MONITOR_VIEW_LIMIT, 50),
   };
 }
 

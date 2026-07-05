@@ -1,4 +1,7 @@
-const DEFAULT_LIMIT = 12;
+const DEFAULT_LIMIT = 50;
+const DEFAULT_HISTORY_PAGE_SIZE = 6;
+const RECENT_WINDOW_DAYS = 2;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const SUCCESS_CONCLUSIONS = new Set(['success']);
 const FAILURE_CONCLUSIONS = new Set(['failure', 'cancelled', 'timed_out', 'action_required', 'startup_failure']);
 
@@ -6,10 +9,18 @@ export function buildActionMonitorViewModel(rows = [], options = {}) {
   const now = normalizeDate(options.now) ?? new Date();
   const environment = normalizeText(options.environment) ?? 'dev';
   const limit = normalizePositiveInteger(options.limit) ?? DEFAULT_LIMIT;
+  const recentWindowDays = normalizePositiveInteger(options.recentWindowDays) ?? RECENT_WINDOW_DAYS;
+  const historyPageSize = normalizePositiveInteger(options.historyPageSize) ?? DEFAULT_HISTORY_PAGE_SIZE;
+  const recentCutoffTime = now.getTime() - recentWindowDays * ONE_DAY_MS;
   const normalizedRuns = (Array.isArray(rows) ? rows : [])
     .map((row) => normalizeRun(row, { now }))
     .filter(Boolean)
     .slice(0, limit);
+  const recentRuns = normalizedRuns.filter((run) => getRunTime(run)?.getTime() >= recentCutoffTime);
+  const historyRuns = normalizedRuns.filter((run) => {
+    const runTime = getRunTime(run);
+    return !runTime || runTime.getTime() < recentCutoffTime;
+  });
 
   return {
     title: 'Action 监控',
@@ -17,7 +28,15 @@ export function buildActionMonitorViewModel(rows = [], options = {}) {
     generatedAt: now.toISOString(),
     updatedTime: formatUpdatedTime(now),
     summaryCards: buildSummaryCards(normalizedRuns),
-    runs: normalizedRuns,
+    recentWindowLabel: `最近 ${recentWindowDays} 天`,
+    historyTitle: '更早 Action',
+    historyPageSize,
+    historyTotal: historyRuns.length,
+    historyStatus: formatHistoryRange(0, historyPageSize, historyRuns.length),
+    recentRuns,
+    historyRuns,
+    runs: recentRuns,
+    allRuns: normalizedRuns,
   };
 }
 
@@ -97,6 +116,20 @@ function buildSummaryCards(runs) {
       hint: durations.length ? `统计 ${durations.length} 次完成 run` : '暂无耗时',
     },
   ];
+}
+
+function getRunTime(run) {
+  return normalizeDate(run.startTime ?? run.endTime);
+}
+
+function formatHistoryRange(pageIndex, pageSize, total) {
+  if (!total) {
+    return '0 / 共 0 次';
+  }
+
+  const start = pageIndex * pageSize + 1;
+  const end = Math.min(start + pageSize - 1, total);
+  return `${start}-${end} / 共 ${total} 次`;
 }
 
 function formatStatusLabel({ status, conclusion }) {

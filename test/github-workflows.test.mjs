@@ -34,13 +34,20 @@ test('all GitHub workflows report action status with minimal run id payload', as
   }
 });
 
-test('dev push workflows can report action status directly to the dev database when no report URL is configured', async () => {
-  for (const fileName of ['ci-tests.yml', 'deploy-cloudflare-pages-dev.yml']) {
+test('GitHub workflows report action status directly to branch-scoped PostgreSQL when configured', async () => {
+  const workflowDir = new URL('.github/workflows/', rootDir);
+  const workflowFiles = (await readdir(workflowDir))
+    .filter((fileName) => fileName.endsWith('.yml') || fileName.endsWith('.yaml'))
+    .sort();
+
+  for (const fileName of workflowFiles) {
     const workflow = await readRepoFile(`.github/workflows/${fileName}`);
     const reportStep = workflow.slice(workflow.indexOf('- name: Report Action Status'));
     assert.match(reportStep, /GITHUB_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/, `${fileName} should pass github.token to the local reporter`);
-    assert.match(reportStep, /TRAINING_DB_URL:\s*\$\{\{\s*github\.ref_name == 'dev' && secrets\.DEV_TRAINING_DB_URL \|\| secrets\.TRAINING_DB_URL\s*\}\}/, `${fileName} should pass the branch-scoped database URL to the local reporter`);
-    assert.match(reportStep, /GitHub Action monitor report URL is not configured; using local database reporter when possible\./, `${fileName} should not skip when the URL variable is absent`);
+    assert.match(reportStep, /TRAINING_DB_URL:\s*\$\{\{\s*github\.ref_name == 'dev' && secrets\.DEV_TRAINING_DB_URL \|\| github\.ref_name == 'main' && secrets\.TRAINING_DB_URL \|\| ''\s*\}\}/, `${fileName} should pass the branch-scoped database URL to the local reporter`);
+    assert.match(reportStep, /TRAINING_DB_APP_NAME:\s*\$\{\{\s*github\.ref_name == 'dev' && vars\.DEV_TRAINING_DB_APP_NAME \|\| github\.ref_name == 'main' && vars\.TRAINING_DB_APP_NAME \|\| ''\s*\}\}/, `${fileName} should pass the branch-scoped database app name to the local reporter`);
+    assert.match(reportStep, /if \[ -n "\$\{TRAINING_DB_URL:-\}" \]; then/, `${fileName} should prefer direct PostgreSQL reporting when configured`);
+    assert.match(reportStep, /Using local PostgreSQL Action monitor reporter\./, `${fileName} should explain direct PostgreSQL reporting`);
     assert.match(reportStep, /node tools\/report-github-action-status\.mjs/, `${fileName} should invoke the local database reporter`);
   }
 });

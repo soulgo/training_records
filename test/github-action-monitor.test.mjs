@@ -503,6 +503,40 @@ test('action monitor view model formats recent dev runs for the dashboard module
   assert.ok(view.summaryCards.some((card) => card.label === '失败' && card.value === '1 次'));
 });
 
+test('action monitor view model separates recent two-day runs from paginated history', () => {
+  const view = buildActionMonitorViewModel([
+    buildActionRunRow({
+      runId: 2003,
+      workflowName: 'Deploy Cloudflare Pages (Dev)',
+      runNumber: 330,
+      startTime: '2026-07-06T01:00:00.000Z',
+    }),
+    buildActionRunRow({
+      runId: 2002,
+      workflowName: 'CI Tests',
+      runNumber: 329,
+      startTime: '2026-07-04T12:00:00.000Z',
+    }),
+    buildActionRunRow({
+      runId: 2001,
+      workflowName: 'Markdown Backup',
+      runNumber: 17,
+      startTime: '2026-07-03T23:59:59.000Z',
+    }),
+  ], {
+    now: new Date('2026-07-06T00:00:00.000Z'),
+    environment: 'dev',
+  });
+
+  assert.equal(view.recentWindowLabel, '最近 2 天');
+  assert.deepEqual(view.recentRuns.map((run) => run.runId), [2003, 2002]);
+  assert.deepEqual(view.historyRuns.map((run) => run.runId), [2001]);
+  assert.equal(view.historyPageSize, 6);
+  assert.equal(view.historyTotal, 1);
+  assert.equal(view.historyStatus, '1-1 / 共 1 次');
+  assert.deepEqual(view.runs.map((run) => run.runId), [2003, 2002]);
+});
+
 test('github action monitor SQL documents dev and main environment separation', async () => {
   const sql = await readFile(new URL('../docs/03_历史重构记录/后续规划_未实现/action 日志监控/03_github_action_monitor.sql', import.meta.url), 'utf8');
 
@@ -519,4 +553,27 @@ function jsonResponse(payload, status = 200) {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+function buildActionRunRow(overrides = {}) {
+  return {
+    runId: overrides.runId ?? 2000,
+    monitorEnvironment: 'dev',
+    workflowName: overrides.workflowName ?? 'CI Tests',
+    runNumber: overrides.runNumber ?? 300,
+    branch: 'dev',
+    commitSha: '18ba338e6ad31f2',
+    headCommitMessage: overrides.headCommitMessage ?? `chore: run ${overrides.runId ?? 2000}`,
+    actorLogin: 'soulgo',
+    status: 'completed',
+    conclusion: overrides.conclusion ?? 'success',
+    startTime: overrides.startTime,
+    endTime: overrides.endTime ?? overrides.startTime,
+    duration: overrides.duration ?? 60,
+    htmlUrl: `https://github.com/soulgo/training_records/actions/runs/${overrides.runId ?? 2000}`,
+    errorSummary: overrides.errorSummary ?? '',
+    jobCount: 1,
+    stepCount: 6,
+    failureCount: overrides.failureCount ?? 0,
+  };
 }

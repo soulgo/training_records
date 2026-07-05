@@ -351,6 +351,105 @@ test('homepage keeps the Action monitor module visible when no Action rows were 
   assert.match(homepage, /暂无 Action 监控数据/);
 });
 
+test('homepage renders recent two-day Action runs and paginates older Action history', { concurrency: false }, () => {
+  const homepage = withSharedSiteFixture(() => {
+    const originalTrainingData = readOptionalFile(trainingDataPath);
+    const originalDashboardView = readOptionalFile(dashboardViewPath);
+    const originalActionMonitorView = readOptionalFile(actionMonitorViewPath);
+
+    try {
+      const snapshot = buildHomepageDashboard();
+      ensureDataDir();
+      writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
+      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
+      writeFileSync(actionMonitorViewPath, JSON.stringify({
+        title: 'Action 监控',
+        environment: 'dev',
+        updatedTime: '09:20',
+        recentWindowLabel: '最近 2 天',
+        summaryCards: [],
+        recentRuns: [{
+          runId: 2003,
+          title: 'fix: report dev action runs',
+          workflowName: 'CI Tests',
+          runNumber: 325,
+          branch: 'dev',
+          actorLogin: 'soulgo',
+          statusLabel: '成功',
+          tone: 'success',
+          timeLabel: '1 hour ago',
+          durationLabel: '35s',
+          htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/2003',
+        }],
+        historyTitle: '更早 Action',
+        historyPageSize: 2,
+        historyTotal: 3,
+        historyStatus: '1-2 / 共 3 次',
+        historyRuns: [
+          {
+            runId: 2002,
+            title: 'chore: earlier deploy',
+            workflowName: 'Deploy Cloudflare Pages (Dev)',
+            runNumber: 324,
+            branch: 'dev',
+            actorLogin: 'soulgo',
+            statusLabel: '成功',
+            tone: 'success',
+            timeLabel: '3 days ago',
+            durationLabel: '1m',
+            htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/2002',
+          },
+          {
+            runId: 2001,
+            title: 'chore: older ci',
+            workflowName: 'CI Tests',
+            runNumber: 323,
+            branch: 'dev',
+            actorLogin: 'soulgo',
+            statusLabel: '失败',
+            tone: 'failure',
+            timeLabel: '4 days ago',
+            durationLabel: '45s',
+            htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/2001',
+          },
+          {
+            runId: 2000,
+            title: 'chore: oldest backup',
+            workflowName: 'Markdown Backup',
+            runNumber: 20,
+            branch: 'dev',
+            actorLogin: 'github-actions[bot]',
+            statusLabel: '成功',
+            tone: 'success',
+            timeLabel: '5 days ago',
+            durationLabel: '2m',
+            htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/2000',
+          },
+        ],
+      }, null, 2));
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      return readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+    } finally {
+      restoreOptionalFile(trainingDataPath, originalTrainingData);
+      restoreOptionalFile(dashboardViewPath, originalDashboardView);
+      restoreOptionalFile(actionMonitorViewPath, originalActionMonitorView);
+    }
+  });
+
+  assert.match(homepage, /最近 2 天/);
+  assert.match(homepage, /fix: report dev action runs/);
+  assert.match(homepage, /更早 Action/);
+  assert.match(homepage, /data-action-history-grid/);
+  assert.match(homepage, /data-action-history-nav="next"/);
+  assert.match(homepage, /id="action-history-data"/);
+  assert.match(homepage, /data-page-size="2"/);
+  assert.match(homepage, /chore: earlier deploy/);
+  assert.match(homepage, /chore: oldest backup/);
+});
+
 function buildSyntheticDashboard({ startDate, days }) {
   const daily = [];
   const charts = {

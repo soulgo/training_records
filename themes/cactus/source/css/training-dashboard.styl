@@ -513,10 +513,64 @@ undefined
   font-size 0.78rem
   line-height 1.35
 
+.action-monitor__subheader,
+.action-monitor__history-heading
+  display flex
+  align-items center
+  justify-content space-between
+  gap 1rem
+  margin 0.35rem 0 0.75rem
+
+.action-monitor__subheader h3,
+.action-monitor__history-heading h3
+  margin 0
+  color #153b5d
+  font-size 1rem
+  line-height 1.25
+
+.action-monitor__subheader span
+  display block
+  margin-top 0.25rem
+  color #64748b
+  font-size 0.82rem
+
 .action-monitor__runs
   display flex
   flex-direction column
   gap 0.65rem
+
+.action-monitor__runs--history
+  margin-top 0.65rem
+
+.action-monitor__history
+  margin-top 1rem
+  padding-top 0.9rem
+  border-top 1px solid #e2edf7
+
+.action-monitor__history-controls
+  display flex
+  align-items center
+  justify-content flex-end
+  flex-wrap wrap
+  gap 0.5rem
+  color #64748b
+  font-size 0.82rem
+
+.action-monitor__history-nav
+  min-width 4.25rem
+  min-height 2rem
+  padding 0.35rem 0.75rem
+  border 1px solid #d6e3f0
+  border-radius 8px
+  background #ffffff
+  color #153b5d
+  font-size 0.82rem
+  font-weight 800
+  cursor pointer
+
+.action-monitor__history-nav:disabled
+  cursor not-allowed
+  opacity 0.45
 
 .action-monitor__empty
   display flex
@@ -536,6 +590,10 @@ undefined
 .action-monitor__empty span
   font-size 0.86rem
   line-height 1.55
+
+.action-monitor__empty--compact
+  min-height auto
+  margin-bottom 0.75rem
 
 .action-run
   display grid
@@ -928,11 +986,14 @@ undefined
 
   .chart-heading,
   .action-monitor__header,
+  .action-monitor__subheader,
+  .action-monitor__history-heading,
   .daily-section__heading
     align-items flex-start
     flex-direction column
 
-  .action-monitor__meta
+  .action-monitor__meta,
+  .action-monitor__history-controls
     justify-content flex-start
 
   .action-run
