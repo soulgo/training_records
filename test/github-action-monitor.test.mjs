@@ -347,6 +347,48 @@ test('postgres github action monitor repository lists recent runs with job step 
   assert.deepEqual(queries[0].params, ['dev', 12]);
 });
 
+test('postgres github action monitor repository falls back to branch scope when monitor environment column is missing', async () => {
+  const queries = [];
+  const client = {
+    async query(sql, params = []) {
+      queries.push({ sql, params });
+      if (queries.length === 1) {
+        const error = new Error('column r.monitor_environment does not exist');
+        error.code = '42703';
+        throw error;
+      }
+      return {
+        rows: [{
+          run_id: '1004',
+          monitor_environment: params[0],
+          workflow_name: 'Deploy Cloudflare Pages (Dev)',
+          run_number: 281,
+          branch: 'dev',
+          conclusion: 'success',
+          job_count: '1',
+          step_count: '8',
+          failure_count: '0',
+        }],
+      };
+    },
+  };
+  const repository = new PostgresGitHubActionMonitorRepository(client);
+
+  const rows = await repository.listRecentActionRuns({
+    monitorEnvironment: 'dev',
+    limit: 12,
+  });
+
+  assert.equal(rows[0].runId, 1004);
+  assert.equal(rows[0].monitorEnvironment, 'dev');
+  assert.equal(rows[0].branch, 'dev');
+  assert.equal(rows[0].stepCount, 8);
+  assert.match(queries[0].sql, /r\.monitor_environment/);
+  assert.doesNotMatch(queries[1].sql, /r\.monitor_environment/);
+  assert.match(queries[1].sql, /r\.branch = \$1/);
+  assert.deepEqual(queries[1].params, ['dev', 12]);
+});
+
 test('action monitor view model formats recent dev runs for the dashboard module', () => {
   const view = buildActionMonitorViewModel([
     {

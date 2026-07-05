@@ -30,43 +30,21 @@ export class PostgresGitHubActionMonitorRepository {
   async listRecentActionRuns(options = {}) {
     const monitorEnvironment = normalizeNullableText(options.monitorEnvironment);
     const limit = normalizeLimit(options.limit, 12);
-    const result = await this.client.query(
-      `
-        select
-          r.run_id,
-          r.repository_full_name,
-          r.monitor_environment,
-          r.workflow_id,
-          r.workflow_name,
-          r.workflow_path,
-          r.run_number,
-          r.run_attempt,
-          r.event,
-          r.branch,
-          r.commit_sha,
-          r.head_commit_message,
-          r.actor_login,
-          r.status,
-          r.conclusion,
-          r.start_time,
-          r.end_time,
-          r.duration,
-          r.html_url,
-          r.error_summary,
-          count(distinct j.job_id)::integer as job_count,
-          count(distinct s.step_id)::integer as step_count,
-          count(distinct f.failure_key)::integer as failure_count
-        from monitor.github_action_runs r
-        left join monitor.github_action_jobs j on j.run_id = r.run_id
-        left join monitor.github_action_steps s on s.run_id = r.run_id
-        left join monitor.github_action_failures f on f.run_id = r.run_id
-        where ($1::text is null or r.monitor_environment = $1)
-        group by r.run_id
-        order by coalesce(r.start_time, r.created_at) desc, r.run_id desc
-        limit $2
-      `,
-      [monitorEnvironment, limit],
-    );
+    let result;
+    try {
+      result = await this.client.query(
+        buildRecentActionRunsQuery({ useMonitorEnvironmentColumn: true }),
+        [monitorEnvironment, limit],
+      );
+    } catch (error) {
+      if (!isMissingMonitorEnvironmentColumnError(error)) {
+        throw error;
+      }
+      result = await this.client.query(
+        buildRecentActionRunsQuery({ useMonitorEnvironmentColumn: false }),
+        [monitorEnvironment, limit],
+      );
+    }
 
     return (result.rows ?? []).map(mapRecentActionRunRow);
   }
@@ -325,6 +303,54 @@ function mapRecentActionRunRow(row) {
     stepCount: normalizeInteger(row.step_count) ?? 0,
     failureCount: normalizeInteger(row.failure_count) ?? 0,
   };
+}
+
+function buildRecentActionRunsQuery({ useMonitorEnvironmentColumn }) {
+  const monitorEnvironmentSelect = useMonitorEnvironmentColumn
+    ? 'r.monitor_environment'
+    : '$1::text as monitor_environment';
+  const environmentScope = useMonitorEnvironmentColumn
+    ? 'r.monitor_environment = $1'
+    : 'r.branch = $1';
+
+  return `
+        select
+          r.run_id,
+          r.repository_full_name,
+          ${monitorEnvironmentSelect},
+          r.workflow_id,
+          r.workflow_name,
+          r.workflow_path,
+          r.run_number,
+          r.run_attempt,
+          r.event,
+          r.branch,
+          r.commit_sha,
+          r.head_commit_message,
+          r.actor_login,
+          r.status,
+          r.conclusion,
+          r.start_time,
+          r.end_time,
+          r.duration,
+          r.html_url,
+          r.error_summary,
+          count(distinct j.job_id)::integer as job_count,
+          count(distinct s.step_id)::integer as step_count,
+          count(distinct f.failure_key)::integer as failure_count
+        from monitor.github_action_runs r
+        left join monitor.github_action_jobs j on j.run_id = r.run_id
+        left join monitor.github_action_steps s on s.run_id = r.run_id
+        left join monitor.github_action_failures f on f.run_id = r.run_id
+        where ($1::text is null or ${environmentScope})
+        group by r.run_id
+        order by coalesce(r.start_time, r.created_at) desc, r.run_id desc
+        limit $2
+      `;
+}
+
+function isMissingMonitorEnvironmentColumnError(error) {
+  return error?.code === '42703' && /monitor_environment/i.test(String(error.message ?? ''));
 }
 
 function normalizeNullableText(value) {
