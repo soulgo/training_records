@@ -1,0 +1,159 @@
+<%
+const actionMonitorView = site.data.actionMonitorView || {};
+const actionMonitorRuns = actionMonitorView.runs || [];
+const actionMonitorRecentRuns = actionMonitorView.recentRuns || actionMonitorRuns;
+const actionMonitorHistoryRuns = actionMonitorView.historyRuns || [];
+const actionMonitorHistoryPageSize = actionMonitorView.historyPageSize || 6;
+const actionMonitorHistoryJson = JSON.stringify(actionMonitorHistoryRuns);
+const actionMonitorSummaryCards = actionMonitorView.summaryCards || [];
+
+function formatActionRange(pageIndex, pageSize, total) {
+  if (!total) {
+    return '0 / 共 0 次';
+  }
+
+  const start = pageIndex * pageSize + 1;
+  const end = Math.min(start + pageSize - 1, total);
+
+  return `${start}-${end} / 共 ${total} 次`;
+}
+%>
+
+<section class="action-monitor-page">
+  <section class="action-monitor" aria-label="GitHub Action 监控">
+    <div class="action-monitor__header">
+      <div>
+        <span class="action-monitor__eyebrow">ACTION MONITOR</span>
+        <h1><%= actionMonitorView.title || 'action 监控' %></h1>
+      </div>
+      <div class="action-monitor__meta">
+        <span><%= actionMonitorView.environment || 'dev' %></span>
+        <span>更新 <strong><%= actionMonitorView.updatedTime || '—' %></strong></span>
+      </div>
+    </div>
+
+    <% if (actionMonitorSummaryCards.length) { %>
+      <div class="action-monitor__summary" aria-label="Action 监控摘要">
+        <% actionMonitorSummaryCards.forEach((card) => { %>
+          <div class="action-monitor__summary-card">
+            <span><%= card.label %></span>
+            <strong><%= card.value %></strong>
+            <small><%= card.hint %></small>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+
+    <% if (actionMonitorRecentRuns.length || actionMonitorHistoryRuns.length) { %>
+      <div class="action-monitor__subheader">
+        <div>
+          <h2><%= actionMonitorView.recentWindowLabel || '最近 2 天' %></h2>
+          <span>dev/main 各自读取对应分支的 PostgreSQL Action 日志</span>
+        </div>
+      </div>
+
+      <% if (actionMonitorRecentRuns.length) { %>
+        <div class="action-monitor__runs">
+          <% actionMonitorRecentRuns.forEach((run) => { %>
+            <a
+              class="action-run action-run--<%= run.tone || 'neutral' %>"
+              href="<%= run.htmlUrl || '#' %>"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span class="action-run__status" aria-label="<%= run.statusLabel || '未知' %>"></span>
+              <div class="action-run__main">
+                <h3><%= run.title %></h3>
+                <p>
+                  <span><%= run.workflowName %><% if (run.runNumber) { %> #<%= run.runNumber %><% } %></span>
+                  <% if (run.commitShortSha) { %>
+                    <span>Commit <strong><%= run.commitShortSha %></strong></span>
+                  <% } %>
+                  <% if (run.actorLogin) { %>
+                    <span>pushed by <strong><%= run.actorLogin %></strong></span>
+                  <% } %>
+                </p>
+                <% if (run.errorSummary) { %>
+                  <small class="action-run__error"><%= run.errorSummary %></small>
+                <% } %>
+              </div>
+              <span class="action-run__branch"><%= run.branch || actionMonitorView.environment || 'dev' %></span>
+              <div class="action-run__metrics">
+                <span><%= run.timeLabel || '—' %></span>
+                <span><%= run.durationLabel || '—' %></span>
+              </div>
+            </a>
+          <% }); %>
+        </div>
+      <% } else { %>
+        <div class="action-monitor__empty action-monitor__empty--compact">
+          <strong>最近 2 天暂无 Action 运行</strong>
+          <span>更早的 Action 记录保留在下面的历史分页里。</span>
+        </div>
+      <% } %>
+
+      <% if (actionMonitorHistoryRuns.length) { %>
+        <div class="action-monitor__history">
+          <div class="action-monitor__history-heading">
+            <div>
+              <span class="action-monitor__eyebrow">ACTION HISTORY</span>
+              <h2><%= actionMonitorView.historyTitle || '更早 Action' %></h2>
+            </div>
+            <div class="action-monitor__history-controls">
+              <span data-action-history-status><%= actionMonitorView.historyStatus || formatActionRange(0, actionMonitorHistoryPageSize, actionMonitorHistoryRuns.length) %></span>
+              <button type="button" class="action-monitor__history-nav" data-action-history-nav="prev" disabled>较新</button>
+              <button
+                type="button"
+                class="action-monitor__history-nav"
+                data-action-history-nav="next"
+                <%= actionMonitorHistoryRuns.length > actionMonitorHistoryPageSize ? '' : 'disabled' %>
+              >较早</button>
+            </div>
+          </div>
+          <div class="action-monitor__runs action-monitor__runs--history" data-action-history-grid>
+            <% actionMonitorHistoryRuns.slice(0, actionMonitorHistoryPageSize).forEach((run) => { %>
+              <a
+                class="action-run action-run--<%= run.tone || 'neutral' %>"
+                href="<%= run.htmlUrl || '#' %>"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span class="action-run__status" aria-label="<%= run.statusLabel || '未知' %>"></span>
+                <div class="action-run__main">
+                  <h3><%= run.title %></h3>
+                  <p>
+                    <span><%= run.workflowName %><% if (run.runNumber) { %> #<%= run.runNumber %><% } %></span>
+                    <% if (run.commitShortSha) { %>
+                      <span>Commit <strong><%= run.commitShortSha %></strong></span>
+                    <% } %>
+                    <% if (run.actorLogin) { %>
+                      <span>pushed by <strong><%= run.actorLogin %></strong></span>
+                    <% } %>
+                  </p>
+                  <% if (run.errorSummary) { %>
+                    <small class="action-run__error"><%= run.errorSummary %></small>
+                  <% } %>
+                </div>
+                <span class="action-run__branch"><%= run.branch || actionMonitorView.environment || 'dev' %></span>
+                <div class="action-run__metrics">
+                  <span><%= run.timeLabel || '—' %></span>
+                  <span><%= run.durationLabel || '—' %></span>
+                </div>
+              </a>
+            <% }); %>
+          </div>
+        </div>
+      <% } %>
+    <% } else { %>
+      <div class="action-monitor__empty">
+        <strong>暂无 Action 监控数据</strong>
+        <span>Action 上报成功后，这里会显示最近运行状态、workflow、commit、分支和耗时。</span>
+      </div>
+    <% } %>
+  </section>
+
+  <% if (actionMonitorHistoryRuns.length) { %>
+    <script id="action-history-data" type="application/json" data-page-size="<%= actionMonitorHistoryPageSize %>"><%- actionMonitorHistoryJson %></script>
+    <script defer src="<%- url_for('/js/action-monitor.js') %>"></script>
+  <% } %>
+</section>

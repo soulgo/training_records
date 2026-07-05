@@ -507,7 +507,7 @@ test('postgres github action monitor repository falls back to branch scope when 
   assert.deepEqual(queries[1].params, ['dev', 12]);
 });
 
-test('action monitor view model formats recent dev runs for the dashboard module', () => {
+test('action monitor view model formats recent dev runs for the standalone module', () => {
   const view = buildActionMonitorViewModel([
     {
       runId: 1003,
@@ -554,7 +554,7 @@ test('action monitor view model formats recent dev runs for the dashboard module
     environment: 'dev',
   });
 
-  assert.equal(view.title, 'Action 监控');
+  assert.equal(view.title, 'action 监控');
   assert.equal(view.environment, 'dev');
   assert.equal(view.runs.length, 2);
   assert.equal(view.runs[0].title, 'chore: release 1.3.2 action monitor');

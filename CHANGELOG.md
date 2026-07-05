@@ -15,12 +15,16 @@
 
 ### Added
 
-- dev 首页新增 Action 监控模块：`build:data` 会从 PostgreSQL `monitor.github_action_runs/jobs/steps/failures` 生成 `actionMonitorView.json`，页面展示最近 GitHub Actions 的状态、workflow、run 编号、commit、触发人、分支、耗时和失败摘要；本地无监控数据库时自动降级为空视图。
-- Action 监控首页模块新增“最近 2 天 / 更早 Action”分区：最近 2 天运行直接展示，更早记录进入分页列表，避免历史 run 把当前状态挤出首页。
+- dev 新增独立 `/action-monitor/` 的 `action 监控` 模块：`build:data` 会从 PostgreSQL `monitor.github_action_runs/jobs/steps/failures` 生成 `actionMonitorView.json`，页面展示最近 GitHub Actions 的状态、workflow、run 编号、commit、触发人、分支、耗时和失败摘要；本地无监控数据库时自动降级为空视图。
+- `action 监控` 独立模块新增“最近 2 天 / 更早 Action”分区：最近 2 天运行直接展示，更早记录进入分页列表，避免历史 run 把当前状态挤出当前状态区。
+
+### Changed
+
+- 将 dev 页面里的 Action 日志监控从首页拆出为独立页面模块 `/action-monitor/`，新增导航入口、独立 layout、样式与历史分页脚本，首页不再嵌入该监控模块。
 
 ### Fixed
 
-- 修复 dev 首页在 Action 监控数据暂为空时整个 Action 监控模块被隐藏的问题；现在即使暂未读到 run 记录，也会显示模块标题、环境和空状态，避免误判功能未上线。
+- 修复 `action 监控` 数据暂为空时整个模块被隐藏的问题；现在即使暂未读到 run 记录，也会显示模块标题、环境和空状态，避免误判功能未上线。
 - 修复 dev Action 监控读取旧版 PostgreSQL 表结构时因缺少 `monitor_environment` 列生成空视图的问题；读取最近 run 失败时会自动回退到按 `branch=dev` 查询，并继续展示 job、step 与失败计数。
 - 修复 dev/main Actions 依赖外部 report URL 才能写入监控库的问题；所有 workflow 的 `Report Action Status` 会优先按当前分支选择 `DEV_TRAINING_DB_URL` / `TRAINING_DB_URL` 和对应 app name，使用本地 runner 脚本直接写入对应 PostgreSQL，URL 仅作为兜底路径，并兼容旧版监控表缺少 `monitor_environment` 列的写入路径。
 - 修复当前 workflow 在最终 `Report Action Status` 步骤中上报时 GitHub API 仍返回 `in_progress`，导致页面把已成功执行的 Action 显示为“运行中”、成功率为 0% 的问题；本地 reporter 现在会使用 `${{ job.status }}` 补齐当前 run 的最终结论。

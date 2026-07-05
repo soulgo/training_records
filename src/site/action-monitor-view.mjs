@@ -23,7 +23,7 @@ export function buildActionMonitorViewModel(rows = [], options = {}) {
   });
 
   return {
-    title: 'Action 监控',
+    title: 'action 监控',
     environment,
     generatedAt: now.toISOString(),
     updatedTime: formatUpdatedTime(now),

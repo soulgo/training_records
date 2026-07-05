@@ -639,7 +639,7 @@ test('generateTrainingData can write outputs from the shared snapshot builder', 
   assert.equal(output.latest.measurement.weightKg, 71.8);
 });
 
-test('generateTrainingData writes the Action monitor view for the dev page', async () => {
+test('generateTrainingData writes the action monitor view for the dev page', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'training-build-action-monitor-'));
   const recordPath = path.join(tempRoot, '训练记录.md');
   const stdoutChunks = [];
@@ -660,7 +660,7 @@ test('generateTrainingData writes the Action monitor view for the dev page', asy
     stderr: { write() {} },
     buildSnapshot: async () => sampleParsed,
     loadActionMonitorView: async ({ env }) => ({
-      title: 'Action 监控',
+      title: 'action 监控',
       environment: env.GITHUB_REF_NAME,
       runs: [{
         runId: 1003,

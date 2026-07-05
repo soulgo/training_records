@@ -15,6 +15,7 @@ direction: ltr
 # languages/*.yml
 nav:
   home: /
+  action_monitor: /action-monitor/
   about: /about/
   articles: /archives/
   projects: http://github.com/probberechts

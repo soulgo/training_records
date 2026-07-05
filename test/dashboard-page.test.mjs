@@ -254,8 +254,8 @@ test('homepage places workout duration and trained days directly after training 
   assert.doesNotMatch(metricGridMatch[1], /已训练天数/);
 });
 
-test('homepage renders the Action monitor module from generated action monitor data', { concurrency: false }, () => {
-  const homepage = withSharedSiteFixture(() => {
+test('action monitor page renders the module from generated action monitor data', { concurrency: false }, () => {
+  const { homepage, actionMonitorPage } = withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
     const originalDashboardView = readOptionalFile(dashboardViewPath);
     const originalActionMonitorView = readOptionalFile(actionMonitorViewPath);
@@ -268,7 +268,7 @@ test('homepage renders the Action monitor module from generated action monitor d
         JSON.stringify(buildDashboardViewModel(buildHomepageDashboard()), null, 2),
       );
       writeFileSync(actionMonitorViewPath, JSON.stringify({
-        title: 'Action 监控',
+        title: 'action 监控',
         environment: 'dev',
         updatedTime: '14:30',
         summaryCards: [
@@ -297,7 +297,10 @@ test('homepage renders the Action monitor module from generated action monitor d
         cwd: rootDir,
         stdio: 'pipe',
       });
-      return readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+      return {
+        homepage: readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8'),
+        actionMonitorPage: readFileSync(path.join(rootDir, 'public', 'action-monitor', 'index.html'), 'utf8'),
+      };
     } finally {
       restoreOptionalFile(trainingDataPath, originalTrainingData);
       restoreOptionalFile(dashboardViewPath, originalDashboardView);
@@ -305,18 +308,20 @@ test('homepage renders the Action monitor module from generated action monitor d
     }
   });
 
-  assert.match(homepage, /<section class="action-monitor"/);
-  assert.match(homepage, /Action 监控/);
-  assert.match(homepage, /Deploy Cloudflare Pages \(Dev\) #280/);
-  assert.match(homepage, /chore: release 1\.3\.2 action monitor/);
-  assert.match(homepage, /18ba338/);
-  assert.match(homepage, /soulgo/);
-  assert.match(homepage, /dev/);
-  assert.match(homepage, /5m 42s/);
+  assert.doesNotMatch(homepage, /<section class="action-monitor"/);
+  assert.match(actionMonitorPage, /<section class="action-monitor-page"/);
+  assert.match(actionMonitorPage, /<section class="action-monitor"/);
+  assert.match(actionMonitorPage, /action 监控/);
+  assert.match(actionMonitorPage, /Deploy Cloudflare Pages \(Dev\) #280/);
+  assert.match(actionMonitorPage, /chore: release 1\.3\.2 action monitor/);
+  assert.match(actionMonitorPage, /18ba338/);
+  assert.match(actionMonitorPage, /soulgo/);
+  assert.match(actionMonitorPage, /dev/);
+  assert.match(actionMonitorPage, /5m 42s/);
 });
 
-test('homepage keeps the Action monitor module visible when no Action rows were generated', { concurrency: false }, () => {
-  const homepage = withSharedSiteFixture(() => {
+test('action monitor page keeps the module visible when no Action rows were generated', { concurrency: false }, () => {
+  const actionMonitorPage = withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
     const originalDashboardView = readOptionalFile(dashboardViewPath);
     const originalActionMonitorView = readOptionalFile(actionMonitorViewPath);
@@ -327,7 +332,7 @@ test('homepage keeps the Action monitor module visible when no Action rows were 
       writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
       writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
       writeFileSync(actionMonitorViewPath, JSON.stringify({
-        title: 'Action 监控',
+        title: 'action 监控',
         environment: 'dev',
         updatedTime: '14:30',
         summaryCards: [],
@@ -337,7 +342,7 @@ test('homepage keeps the Action monitor module visible when no Action rows were 
         cwd: rootDir,
         stdio: 'pipe',
       });
-      return readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+      return readFileSync(path.join(rootDir, 'public', 'action-monitor', 'index.html'), 'utf8');
     } finally {
       restoreOptionalFile(trainingDataPath, originalTrainingData);
       restoreOptionalFile(dashboardViewPath, originalDashboardView);
@@ -345,14 +350,14 @@ test('homepage keeps the Action monitor module visible when no Action rows were 
     }
   });
 
-  assert.match(homepage, /<section class="action-monitor"/);
-  assert.match(homepage, /Action 监控/);
-  assert.match(homepage, /dev/);
-  assert.match(homepage, /暂无 Action 监控数据/);
+  assert.match(actionMonitorPage, /<section class="action-monitor"/);
+  assert.match(actionMonitorPage, /action 监控/);
+  assert.match(actionMonitorPage, /dev/);
+  assert.match(actionMonitorPage, /暂无 Action 监控数据/);
 });
 
-test('homepage renders recent two-day Action runs and paginates older Action history', { concurrency: false }, () => {
-  const homepage = withSharedSiteFixture(() => {
+test('action monitor page renders recent two-day runs and paginates older Action history', { concurrency: false }, () => {
+  const actionMonitorPage = withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
     const originalDashboardView = readOptionalFile(dashboardViewPath);
     const originalActionMonitorView = readOptionalFile(actionMonitorViewPath);
@@ -363,7 +368,7 @@ test('homepage renders recent two-day Action runs and paginates older Action his
       writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
       writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
       writeFileSync(actionMonitorViewPath, JSON.stringify({
-        title: 'Action 监控',
+        title: 'action 监控',
         environment: 'dev',
         updatedTime: '09:20',
         recentWindowLabel: '最近 2 天',
@@ -431,7 +436,7 @@ test('homepage renders recent two-day Action runs and paginates older Action his
         cwd: rootDir,
         stdio: 'pipe',
       });
-      return readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8');
+      return readFileSync(path.join(rootDir, 'public', 'action-monitor', 'index.html'), 'utf8');
     } finally {
       restoreOptionalFile(trainingDataPath, originalTrainingData);
       restoreOptionalFile(dashboardViewPath, originalDashboardView);
@@ -439,15 +444,15 @@ test('homepage renders recent two-day Action runs and paginates older Action his
     }
   });
 
-  assert.match(homepage, /最近 2 天/);
-  assert.match(homepage, /fix: report dev action runs/);
-  assert.match(homepage, /更早 Action/);
-  assert.match(homepage, /data-action-history-grid/);
-  assert.match(homepage, /data-action-history-nav="next"/);
-  assert.match(homepage, /id="action-history-data"/);
-  assert.match(homepage, /data-page-size="2"/);
-  assert.match(homepage, /chore: earlier deploy/);
-  assert.match(homepage, /chore: oldest backup/);
+  assert.match(actionMonitorPage, /最近 2 天/);
+  assert.match(actionMonitorPage, /fix: report dev action runs/);
+  assert.match(actionMonitorPage, /更早 Action/);
+  assert.match(actionMonitorPage, /data-action-history-grid/);
+  assert.match(actionMonitorPage, /data-action-history-nav="next"/);
+  assert.match(actionMonitorPage, /id="action-history-data"/);
+  assert.match(actionMonitorPage, /data-page-size="2"/);
+  assert.match(actionMonitorPage, /chore: earlier deploy/);
+  assert.match(actionMonitorPage, /chore: oldest backup/);
 });
 
 function buildSyntheticDashboard({ startDate, days }) {
