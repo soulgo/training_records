@@ -151,6 +151,7 @@ jobs:
           GITHUB_ACTION_MONITOR_REPORT_URL_DEV: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL_DEV }}
           GITHUB_ACTION_MONITOR_REPORT_URL_MAIN: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL_MAIN }}
           GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_ACTION_MONITOR_JOB_STATUS: ${{ job.status }}
           TRAINING_DB_URL: ${{ github.ref_name == 'dev' && secrets.DEV_TRAINING_DB_URL || github.ref_name == 'main' && secrets.TRAINING_DB_URL || '' }}
           TRAINING_DB_APP_NAME: ${{ github.ref_name == 'dev' && vars.DEV_TRAINING_DB_APP_NAME || github.ref_name == 'main' && vars.TRAINING_DB_APP_NAME || '' }}
         run: |

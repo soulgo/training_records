@@ -23,6 +23,7 @@
 - 修复 dev 首页在 Action 监控数据暂为空时整个 Action 监控模块被隐藏的问题；现在即使暂未读到 run 记录，也会显示模块标题、环境和空状态，避免误判功能未上线。
 - 修复 dev Action 监控读取旧版 PostgreSQL 表结构时因缺少 `monitor_environment` 列生成空视图的问题；读取最近 run 失败时会自动回退到按 `branch=dev` 查询，并继续展示 job、step 与失败计数。
 - 修复 dev/main Actions 依赖外部 report URL 才能写入监控库的问题；所有 workflow 的 `Report Action Status` 会优先按当前分支选择 `DEV_TRAINING_DB_URL` / `TRAINING_DB_URL` 和对应 app name，使用本地 runner 脚本直接写入对应 PostgreSQL，URL 仅作为兜底路径，并兼容旧版监控表缺少 `monitor_environment` 列的写入路径。
+- 修复当前 workflow 在最终 `Report Action Status` 步骤中上报时 GitHub API 仍返回 `in_progress`，导致页面把已成功执行的 Action 显示为“运行中”、成功率为 0% 的问题；本地 reporter 现在会使用 `${{ job.status }}` 补齐当前 run 的最终结论。
 
 ## [1.3.2] - 2026-07-05
 

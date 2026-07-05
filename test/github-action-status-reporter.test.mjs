@@ -13,6 +13,7 @@ test('local github action status reporter delegates current dev run to the monit
       GITHUB_REPOSITORY: 'soulgo/training_records',
       GITHUB_REF_NAME: 'dev',
       GITHUB_TOKEN: 'github-token',
+      GITHUB_ACTION_MONITOR_JOB_STATUS: 'success',
       TRAINING_DB_URL: 'postgres://dev-db',
       TRAINING_DB_APP_NAME: 'training-records-dev',
     },
@@ -38,6 +39,7 @@ test('local github action status reporter delegates current dev run to the monit
   assert.equal(calls[0].token, 'github-token');
   assert.deepEqual(calls[0].allowedBranches, ['dev']);
   assert.equal(calls[0].monitorEnvironment, 'dev');
+  assert.equal(calls[0].currentRunConclusion, 'success');
   assert.equal(calls[0].repository.client.config.connectionString, 'postgres://dev-db');
   assert.equal(calls[0].repository.client.config.application_name, 'training-records-dev');
   assert.ok(logs.some((line) => line.includes('reported run 123456789')));

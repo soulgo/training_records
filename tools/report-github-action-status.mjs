@@ -65,6 +65,8 @@ export async function reportGitHubActionStatus(options = {}) {
       token,
       allowedBranches,
       monitorEnvironment,
+      currentRunConclusion: normalizeGitHubJobStatus(env.GITHUB_ACTION_MONITOR_JOB_STATUS),
+      reportedAt: new Date(),
       repository,
       fetchImpl: options.fetchImpl ?? fetch,
       logger: options.logger ?? console,
@@ -129,6 +131,14 @@ function splitCsv(value) {
 
 function isMonitoredBranch(branch) {
   return branch === 'dev' || branch === 'main';
+}
+
+function normalizeGitHubJobStatus(value) {
+  const normalized = firstNonEmpty([value]).toLowerCase();
+  if (['success', 'failure', 'cancelled', 'skipped'].includes(normalized)) {
+    return normalized;
+  }
+  return '';
 }
 
 function parsePositiveInteger(value, fallback) {

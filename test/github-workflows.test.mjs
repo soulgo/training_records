@@ -44,6 +44,7 @@ test('GitHub workflows report action status directly to branch-scoped PostgreSQL
     const workflow = await readRepoFile(`.github/workflows/${fileName}`);
     const reportStep = workflow.slice(workflow.indexOf('- name: Report Action Status'));
     assert.match(reportStep, /GITHUB_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/, `${fileName} should pass github.token to the local reporter`);
+    assert.match(reportStep, /GITHUB_ACTION_MONITOR_JOB_STATUS:\s*\$\{\{\s*job\.status\s*\}\}/, `${fileName} should pass the final job status to the local reporter`);
     assert.match(reportStep, /TRAINING_DB_URL:\s*\$\{\{\s*github\.ref_name == 'dev' && secrets\.DEV_TRAINING_DB_URL \|\| github\.ref_name == 'main' && secrets\.TRAINING_DB_URL \|\| ''\s*\}\}/, `${fileName} should pass the branch-scoped database URL to the local reporter`);
     assert.match(reportStep, /TRAINING_DB_APP_NAME:\s*\$\{\{\s*github\.ref_name == 'dev' && vars\.DEV_TRAINING_DB_APP_NAME \|\| github\.ref_name == 'main' && vars\.TRAINING_DB_APP_NAME \|\| ''\s*\}\}/, `${fileName} should pass the branch-scoped database app name to the local reporter`);
     assert.match(reportStep, /if \[ -n "\$\{TRAINING_DB_URL:-\}" \]; then/, `${fileName} should prefer direct PostgreSQL reporting when configured`);

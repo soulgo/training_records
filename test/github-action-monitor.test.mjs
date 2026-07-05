@@ -160,6 +160,72 @@ test('github action monitor skips runs outside the configured branch scope befor
   assert.equal(calls.length, 1);
 });
 
+test('github action monitor finalizes an in-progress current run from the reporter job status', async () => {
+  const snapshots = [];
+  const fetchImpl = async (url) => {
+    if (String(url).endsWith('/repos/soulgo/training_records/actions/runs/123456789')) {
+      return jsonResponse({
+        id: 123456789,
+        name: 'CI Tests',
+        workflow_id: 98,
+        path: '.github/workflows/ci-tests.yml',
+        run_number: 327,
+        run_attempt: 1,
+        event: 'push',
+        head_branch: 'dev',
+        head_sha: '9d5faf7',
+        head_commit: { message: 'fix: wire action monitor to branch database' },
+        actor: { login: 'soulgo' },
+        status: 'in_progress',
+        conclusion: null,
+        created_at: '2026-07-05T22:39:02Z',
+        run_started_at: '2026-07-05T22:39:08Z',
+        updated_at: '2026-07-05T22:39:20Z',
+        html_url: 'https://github.com/soulgo/training_records/actions/runs/123456789',
+      });
+    }
+    if (String(url).includes('/repos/soulgo/training_records/actions/runs/123456789/jobs')) {
+      return jsonResponse({
+        total_count: 1,
+        jobs: [{
+          id: 777,
+          run_id: 123456789,
+          name: 'test',
+          status: 'in_progress',
+          conclusion: null,
+          started_at: '2026-07-05T22:39:08Z',
+          completed_at: null,
+          html_url: 'https://github.com/soulgo/training_records/actions/runs/123456789/job/777',
+          steps: [],
+        }],
+      });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
+
+  const result = await reportGitHubActionRun({
+    runId: '123456789',
+    owner: 'soulgo',
+    repo: 'training_records',
+    token: 'github-token',
+    monitorEnvironment: 'dev',
+    currentRunConclusion: 'success',
+    reportedAt: new Date('2026-07-05T22:39:26Z'),
+    fetchImpl,
+    repository: {
+      async upsertActionRunSnapshot(snapshot) {
+        snapshots.push(snapshot);
+      },
+    },
+  });
+
+  assert.equal(result.conclusion, 'success');
+  assert.equal(snapshots[0].run.status, 'completed');
+  assert.equal(snapshots[0].run.conclusion, 'success');
+  assert.equal(snapshots[0].run.endTime, '2026-07-05T22:39:26.000Z');
+  assert.equal(snapshots[0].run.duration, 18);
+});
+
 test('github action report HTTP handler validates POST body and delegates run_id', async () => {
   const reported = [];
   const handler = createGitHubActionReportHttpHandler({

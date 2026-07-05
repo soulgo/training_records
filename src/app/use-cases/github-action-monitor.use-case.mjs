@@ -1,5 +1,6 @@
 const DEFAULT_GITHUB_API_BASE_URL = 'https://api.github.com';
 const FAILURE_CONCLUSIONS = new Set(['failure', 'cancelled', 'timed_out', 'action_required', 'startup_failure']);
+const NON_FAILURE_CONCLUSIONS = new Set(['success', 'skipped', 'neutral']);
 
 export class GitHubActionMonitorError extends Error {
   constructor(code, message, options = {}) {
@@ -67,7 +68,14 @@ export async function reportGitHubActionRun(options = {}) {
     fetchImpl,
     logger,
   });
-  const snapshot = buildActionRunSnapshot({ run, jobs, repositoryFullName, monitorEnvironment });
+  const snapshot = buildActionRunSnapshot({
+    run,
+    jobs,
+    repositoryFullName,
+    monitorEnvironment,
+    currentRunConclusion: options.currentRunConclusion,
+    reportedAt: options.reportedAt,
+  });
 
   await repository.upsertActionRunSnapshot(snapshot);
   logInfo(logger, 'github_action_report.db_written', {
@@ -88,8 +96,18 @@ export async function reportGitHubActionRun(options = {}) {
   };
 }
 
-export function buildActionRunSnapshot({ run, jobs, repositoryFullName, monitorEnvironment }) {
-  const normalizedRun = normalizeRun(run, repositoryFullName, monitorEnvironment);
+export function buildActionRunSnapshot({
+  run,
+  jobs,
+  repositoryFullName,
+  monitorEnvironment,
+  currentRunConclusion,
+  reportedAt,
+}) {
+  const normalizedRun = normalizeRun(run, repositoryFullName, monitorEnvironment, {
+    currentRunConclusion: chooseEffectiveCurrentRunConclusion(run, jobs, currentRunConclusion),
+    reportedAt,
+  });
   const normalizedJobs = [];
   const normalizedSteps = [];
   const failures = [];
@@ -221,10 +239,22 @@ async function getGitHubJson({ url, token, fetchImpl, logger, event, runId, page
   return response.json();
 }
 
-function normalizeRun(run, repositoryFullName, monitorEnvironment) {
+function normalizeRun(run, repositoryFullName, monitorEnvironment, options = {}) {
   const runId = normalizeRunId(run?.id);
   const startTime = parseIsoTime(run.run_started_at ?? run.created_at);
-  const endTime = run.status === 'completed' ? parseIsoTime(run.updated_at) : null;
+  const apiStatus = normalizeText(run.status) ?? 'unknown';
+  const apiConclusion = normalizeText(run.conclusion);
+  const currentRunConclusion = normalizeGitHubConclusion(options.currentRunConclusion);
+  const shouldFinalizeCurrentRun = apiStatus !== 'completed' && !apiConclusion && Boolean(currentRunConclusion);
+  const status = shouldFinalizeCurrentRun ? 'completed' : apiStatus;
+  const conclusion = apiConclusion ?? currentRunConclusion;
+  const endTime = status === 'completed'
+    ? (
+        shouldFinalizeCurrentRun
+          ? parseIsoTime(options.reportedAt) ?? parseIsoTime(run.updated_at)
+          : parseIsoTime(run.updated_at)
+      )
+    : null;
   return {
     runId,
     repositoryFullName,
@@ -239,8 +269,8 @@ function normalizeRun(run, repositoryFullName, monitorEnvironment) {
     commitSha: normalizeText(run.head_sha),
     headCommitMessage: normalizeText(run.head_commit?.message),
     actorLogin: normalizeText(run.actor?.login),
-    status: normalizeText(run.status) ?? 'unknown',
-    conclusion: normalizeText(run.conclusion),
+    status,
+    conclusion,
     startTime,
     endTime,
     duration: calculateDurationSeconds(startTime, endTime),
@@ -248,6 +278,14 @@ function normalizeRun(run, repositoryFullName, monitorEnvironment) {
     errorSummary: '',
     rawPayload: run,
   };
+}
+
+function chooseEffectiveCurrentRunConclusion(run, jobs, currentRunConclusion) {
+  if (normalizeText(run?.conclusion)) {
+    return null;
+  }
+  const failedJob = (jobs ?? []).find((job) => isFailureConclusion(job?.conclusion));
+  return failedJob?.conclusion ?? currentRunConclusion;
 }
 
 function normalizeJob(job, runId) {
@@ -357,6 +395,14 @@ function isAllowedBranch(branch, allowedBranches) {
 function normalizeText(value) {
   const normalized = String(value ?? '').trim();
   return normalized || null;
+}
+
+function normalizeGitHubConclusion(value) {
+  const normalized = normalizeText(value)?.toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  return FAILURE_CONCLUSIONS.has(normalized) || NON_FAILURE_CONCLUSIONS.has(normalized) ? normalized : null;
 }
 
 function normalizeNullableInteger(value) {
