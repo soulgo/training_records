@@ -24,6 +24,7 @@
 
 ### Fixed
 
+- 修复 `action 监控` 独立页面已生成但 dev 站点导航不显示入口的问题；根 `_config.yml` 的 `theme_config.nav` 现在显式加入 `/action-monitor/`，避免只修改主题默认配置却被站点配置覆盖。
 - 修复 `action 监控` 数据暂为空时整个模块被隐藏的问题；现在即使暂未读到 run 记录，也会显示模块标题、环境和空状态，避免误判功能未上线。
 - 修复 dev Action 监控读取旧版 PostgreSQL 表结构时因缺少 `monitor_environment` 列生成空视图的问题；读取最近 run 失败时会自动回退到按 `branch=dev` 查询，并继续展示 job、step 与失败计数。
 - 修复 dev/main Actions 依赖外部 report URL 才能写入监控库的问题；所有 workflow 的 `Report Action Status` 会优先按当前分支选择 `DEV_TRAINING_DB_URL` / `TRAINING_DB_URL` 和对应 app name，使用本地 runner 脚本直接写入对应 PostgreSQL，URL 仅作为兜底路径，并兼容旧版监控表缺少 `monitor_environment` 列的写入路径。

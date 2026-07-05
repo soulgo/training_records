@@ -207,6 +207,7 @@ test('homepage keeps the introduction at the bottom and uses a smaller header na
   assert.match(homepage, /<div class="dashboard-note">/);
   assert.match(homepage, /这里展示的是基于仓库中/);
   assert.match(homepage, /<div id="nav">[\s\S]*<a href="\/">训练记录<\/a>/);
+  assert.match(homepage, /<div id="nav">[\s\S]*<a href="\/action-monitor\/">action 监控<\/a>/);
 });
 
 test('homepage uses root-relative asset and navigation paths for custom domain deployment', { concurrency: false }, () => {
