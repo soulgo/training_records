@@ -20,6 +20,7 @@
 
 ### Changed
 
+- 按后续规划落地文档同步规则完成 action 日志监控规划归档：将已实现规划从 `docs/03_历史重构记录/后续规划_未实现/action 日志监控/` 移入 `docs/03_历史重构记录/重构历史/action日志监控/`，并把当前 `Report Action Status`、本地 PostgreSQL reporter、HTTP 上报兜底、`monitor.*` 表、`/action-monitor/` 页面和排查方式写回 `01_系统配置`、`02_系统核心逻辑`、`04_问题与排查` 及相关 README。
 - 将 dev 页面里的 Action 日志监控从首页拆出为独立页面模块 `/action-monitor/`，新增导航入口、独立 layout、样式与历史分页脚本，首页不再嵌入该监控模块。
 - `action 监控` 数据读取默认不再限制为最近一段时间或固定 50 条；`GITHUB_ACTION_MONITOR_VIEW_LIMIT` 仅在显式配置时作为最大读取数量。
 

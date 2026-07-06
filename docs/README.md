@@ -17,12 +17,14 @@
 1. 先读 [系统总览](02_系统核心逻辑/系统总览.md)，理解 Telegram/飞书 -> Worker -> Queue -> Action -> AI -> DB -> Pages 的消息链路。
 2. 配置或排查环境时读 [系统配置](01_系统配置/README.md)、[dev 配置](01_系统配置/dev.md) 和 [main 配置](01_系统配置/main.md)。
 3. 排查同步结果时读 [Action 日志与失败补偿](02_系统核心逻辑/Action日志与失败补偿.md) 和 [Action 日志排查](04_问题与排查/Action日志.md)。
-4. 做日常维护命令时使用 `npm run maintenance:inspect`、`npm run sync:db`、`npm run import:markdown`、`npm run export:markdown`、`npm run reconcile:markdown`、`npm run backfill:core` 和 `npm run backfill:thoughts`。
+4. 查看 GitHub Actions 长期运行记录时打开站点 `/action-monitor/`，实现和排查入口见 [Action 日志与失败补偿](02_系统核心逻辑/Action日志与失败补偿.md)。
+5. 做日常维护命令时使用 `npm run maintenance:inspect`、`npm run sync:db`、`npm run import:markdown`、`npm run export:markdown`、`npm run reconcile:markdown`、`npm run backfill:core` 和 `npm run backfill:thoughts`。
 
 ## 当前事实规则
 
 - PostgreSQL `core.*` 是训练、饮食、体脂、睡眠、随想和展示读取的业务事实源。
 - `ingest.*` 保存消息批次、识别结果、AI 调用日志和 pending 队列。
+- `monitor.*` 保存 GitHub Actions run/job/step/failure 监控事实，驱动 `/action-monitor/`。
 - `archive.*` 保存历史 Markdown 解析和归档。
 - Markdown 是数据库派生备份，不是图片同步的主写入路径。
 - 历史目录中的旧入口、旧配置和旧核心文档只能用于追溯，不得作为当前维护入口。

@@ -11,7 +11,7 @@
 | `Telegram.md` | Telegram webhook、授权、下载、通知问题。 |
 | `飞书.md` | 飞书事件校验、图片下载、回执问题。 |
 | `AI.md` | AI provider、schema、fallback、缓存问题。 |
-| `Action日志.md` | GitHub Actions summary、失败步骤、业务未完成问题。 |
+| `Action日志.md` | GitHub Actions summary、失败步骤、业务未完成、`/action-monitor/` 和 `monitor.*` 问题。 |
 | `部署.md` | Worker、Pages、GitHub Pages、Cloudflare 缓存问题。 |
 | `资源.md` | CPU、内存、并发、下载大小和超时问题。 |
 

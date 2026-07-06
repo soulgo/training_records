@@ -743,7 +743,7 @@ test('action monitor view model keeps all branch runs in one fifteen-item pagina
 });
 
 test('github action monitor SQL documents dev and main environment separation', async () => {
-  const sql = await readFile(new URL('../docs/03_历史重构记录/后续规划_未实现/action 日志监控/03_github_action_monitor.sql', import.meta.url), 'utf8');
+  const sql = await readFile(new URL('../docs/03_历史重构记录/重构历史/action日志监控/03_github_action_monitor.sql', import.meta.url), 'utf8');
 
   assert.match(sql, /monitor_environment text NOT NULL/);
   assert.match(sql, /COMMENT ON COLUMN monitor\.github_action_runs\.monitor_environment IS '监控环境：dev 或 main'/);
