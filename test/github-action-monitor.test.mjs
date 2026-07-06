@@ -270,6 +270,19 @@ test('github action monitor merges GitHub API runs with database rows without lo
   assert.equal(rows[1].failureCount, 1);
 });
 
+test('github action monitor merge keeps every row when no list limit is configured', async () => {
+  const { mergeActionMonitorRows } = await import('../src/app/use-cases/github-action-monitor.use-case.mjs');
+  const databaseRows = Array.from({ length: 51 }, (_, index) => buildActionRunRow({
+    runId: 3050 - index,
+    startTime: new Date(Date.UTC(2026, 6, 6 - index, 1, 0, 0)).toISOString(),
+  }));
+
+  const rows = mergeActionMonitorRows({ databaseRows });
+
+  assert.equal(rows.length, 51);
+  assert.deepEqual(rows.map((row) => row.runId), databaseRows.map((row) => row.runId));
+});
+
 test('github action monitor finalizes an in-progress current run from the reporter job status', async () => {
   const snapshots = [];
   const fetchImpl = async (url) => {
@@ -575,6 +588,36 @@ test('postgres github action monitor repository lists recent runs with job step 
   assert.deepEqual(queries[0].params, ['dev', 12]);
 });
 
+test('postgres github action monitor repository lists all branch runs when no limit is configured', async () => {
+  const queries = [];
+  const client = {
+    async query(sql, params = []) {
+      queries.push({ sql, params });
+      return {
+        rows: [{
+          run_id: '1005',
+          workflow_name: 'CI Tests',
+          run_number: 282,
+          branch: 'dev',
+          conclusion: 'success',
+          job_count: '1',
+          step_count: '6',
+          failure_count: '0',
+        }],
+      };
+    },
+  };
+  const repository = new PostgresGitHubActionMonitorRepository(client);
+
+  const rows = await repository.listRecentActionRuns({
+    monitorEnvironment: 'dev',
+  });
+
+  assert.equal(rows[0].runId, 1005);
+  assert.doesNotMatch(queries[0].sql, /limit\s+\$2/i);
+  assert.deepEqual(queries[0].params, ['dev']);
+});
+
 test('postgres github action monitor repository falls back to branch scope when monitor environment column is missing', async () => {
   const queries = [];
   const client = {
@@ -679,38 +722,24 @@ test('action monitor view model formats recent dev runs for the standalone modul
   assert.ok(view.summaryCards.some((card) => card.label === '失败' && card.value === '1 次'));
 });
 
-test('action monitor view model separates recent two-day runs from paginated history', () => {
-  const view = buildActionMonitorViewModel([
-    buildActionRunRow({
-      runId: 2003,
-      workflowName: 'Deploy Cloudflare Pages (Dev)',
-      runNumber: 330,
-      startTime: '2026-07-06T01:00:00.000Z',
-    }),
-    buildActionRunRow({
-      runId: 2002,
-      workflowName: 'CI Tests',
-      runNumber: 329,
-      startTime: '2026-07-04T12:00:00.000Z',
-    }),
-    buildActionRunRow({
-      runId: 2001,
-      workflowName: 'Markdown Backup',
-      runNumber: 17,
-      startTime: '2026-07-03T23:59:59.000Z',
-    }),
-  ], {
+test('action monitor view model keeps all branch runs in one fifteen-item paginated log', () => {
+  const rows = Array.from({ length: 51 }, (_, index) => buildActionRunRow({
+    runId: 2050 - index,
+    workflowName: index % 2 === 0 ? 'Deploy Cloudflare Pages (Dev)' : 'CI Tests',
+    runNumber: 330 - index,
+    startTime: new Date(Date.UTC(2026, 6, 6 - index, 1, 0, 0)).toISOString(),
+  }));
+  const view = buildActionMonitorViewModel(rows, {
     now: new Date('2026-07-06T00:00:00.000Z'),
     environment: 'dev',
   });
 
-  assert.equal(view.recentWindowLabel, '最近 2 天');
-  assert.deepEqual(view.recentRuns.map((run) => run.runId), [2003, 2002]);
-  assert.deepEqual(view.historyRuns.map((run) => run.runId), [2001]);
-  assert.equal(view.historyPageSize, 6);
-  assert.equal(view.historyTotal, 1);
-  assert.equal(view.historyStatus, '1-1 / 共 1 次');
-  assert.deepEqual(view.runs.map((run) => run.runId), [2003, 2002]);
+  assert.equal(view.recentWindowLabel, '全部 Action 日志');
+  assert.deepEqual(view.historyRuns.map((run) => run.runId), rows.map((row) => row.runId));
+  assert.equal(view.historyPageSize, 15);
+  assert.equal(view.historyTotal, 51);
+  assert.equal(view.historyStatus, '1-15 / 共 51 次');
+  assert.deepEqual(view.runs.map((run) => run.runId), rows.slice(0, 15).map((row) => row.runId));
 });
 
 test('github action monitor SQL documents dev and main environment separation', async () => {

@@ -1,42 +1,33 @@
-const DEFAULT_LIMIT = 50;
-const DEFAULT_HISTORY_PAGE_SIZE = 6;
-const RECENT_WINDOW_DAYS = 2;
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_HISTORY_PAGE_SIZE = 15;
 const SUCCESS_CONCLUSIONS = new Set(['success']);
 const FAILURE_CONCLUSIONS = new Set(['failure', 'cancelled', 'timed_out', 'action_required', 'startup_failure']);
 
 export function buildActionMonitorViewModel(rows = [], options = {}) {
   const now = normalizeDate(options.now) ?? new Date();
   const environment = normalizeText(options.environment) ?? 'dev';
-  const limit = normalizePositiveInteger(options.limit) ?? DEFAULT_LIMIT;
-  const recentWindowDays = normalizePositiveInteger(options.recentWindowDays) ?? RECENT_WINDOW_DAYS;
+  const limit = normalizePositiveInteger(options.limit);
   const historyPageSize = normalizePositiveInteger(options.historyPageSize) ?? DEFAULT_HISTORY_PAGE_SIZE;
-  const recentCutoffTime = now.getTime() - recentWindowDays * ONE_DAY_MS;
   const normalizedRuns = (Array.isArray(rows) ? rows : [])
     .map((row) => normalizeRun(row, { now }))
-    .filter(Boolean)
-    .slice(0, limit);
-  const recentRuns = normalizedRuns.filter((run) => getRunTime(run)?.getTime() >= recentCutoffTime);
-  const historyRuns = normalizedRuns.filter((run) => {
-    const runTime = getRunTime(run);
-    return !runTime || runTime.getTime() < recentCutoffTime;
-  });
+    .filter(Boolean);
+  const actionRuns = limit ? normalizedRuns.slice(0, limit) : normalizedRuns;
+  const visibleRuns = actionRuns.slice(0, historyPageSize);
 
   return {
     title: 'action 监控',
     environment,
     generatedAt: now.toISOString(),
     updatedTime: formatUpdatedTime(now),
-    summaryCards: buildSummaryCards(normalizedRuns),
-    recentWindowLabel: `最近 ${recentWindowDays} 天`,
-    historyTitle: '更早 Action',
+    summaryCards: buildSummaryCards(actionRuns),
+    recentWindowLabel: '全部 Action 日志',
+    historyTitle: 'Action 日志',
     historyPageSize,
-    historyTotal: historyRuns.length,
-    historyStatus: formatHistoryRange(0, historyPageSize, historyRuns.length),
-    recentRuns,
-    historyRuns,
-    runs: recentRuns,
-    allRuns: normalizedRuns,
+    historyTotal: actionRuns.length,
+    historyStatus: formatHistoryRange(0, historyPageSize, actionRuns.length),
+    recentRuns: visibleRuns,
+    historyRuns: actionRuns,
+    runs: visibleRuns,
+    allRuns: actionRuns,
   };
 }
 
@@ -116,10 +107,6 @@ function buildSummaryCards(runs) {
       hint: durations.length ? `统计 ${durations.length} 次完成 run` : '暂无耗时',
     },
   ];
-}
-
-function getRunTime(run) {
-  return normalizeDate(run.startTime ?? run.endTime);
 }
 
 function formatHistoryRange(pageIndex, pageSize, total) {

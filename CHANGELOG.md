@@ -15,12 +15,13 @@
 
 ### Added
 
-- dev 新增独立 `/action-monitor/` 的 `action 监控` 模块：`build:data` 会从 PostgreSQL `monitor.github_action_runs/jobs/steps/failures` 生成 `actionMonitorView.json`，页面展示最近 GitHub Actions 的状态、workflow、run 编号、commit、触发人、分支、耗时和失败摘要；本地无监控数据库时自动降级为空视图。
-- `action 监控` 独立模块新增“最近 2 天 / 更早 Action”分区：最近 2 天运行直接展示，更早记录进入分页列表，避免历史 run 把当前状态挤出当前状态区。
+- dev 新增独立 `/action-monitor/` 的 `action 监控` 模块：`build:data` 会从 PostgreSQL `monitor.github_action_runs/jobs/steps/failures` 生成 `actionMonitorView.json`，页面展示 GitHub Actions 的状态、workflow、run 编号、commit、触发人、分支、耗时和失败摘要；本地无监控数据库时自动降级为空视图。
+- `action 监控` 独立模块新增按 15 条分页的完整 Action 日志列表：dev/main 各自展示对应分支所有 PostgreSQL/GitHub Action run，不再按“最近 2 天 / 更早 Action”拆分。
 
 ### Changed
 
 - 将 dev 页面里的 Action 日志监控从首页拆出为独立页面模块 `/action-monitor/`，新增导航入口、独立 layout、样式与历史分页脚本，首页不再嵌入该监控模块。
+- `action 监控` 数据读取默认不再限制为最近一段时间或固定 50 条；`GITHUB_ACTION_MONITOR_VIEW_LIMIT` 仅在显式配置时作为最大读取数量。
 
 ### Fixed
 

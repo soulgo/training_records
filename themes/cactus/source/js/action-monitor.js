@@ -67,7 +67,7 @@
     actionHistoryOlderButton
   ) {
     const entries = JSON.parse(actionHistoryPayload.textContent || '[]');
-    const pageSize = Number(actionHistoryPayload.dataset.pageSize || '6');
+    const pageSize = Number(actionHistoryPayload.dataset.pageSize || '15');
     const maxPage = Math.max(Math.ceil(entries.length / pageSize) - 1, 0);
     let pageIndex = 0;
 

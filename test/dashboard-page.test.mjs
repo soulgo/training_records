@@ -357,7 +357,7 @@ test('action monitor page keeps the module visible when no Action rows were gene
   assert.match(actionMonitorPage, /暂无 Action 监控数据/);
 });
 
-test('action monitor page renders recent two-day runs and paginates older Action history', { concurrency: false }, () => {
+test('action monitor page renders all branch action logs with fifteen-item pagination', { concurrency: false }, () => {
   const actionMonitorPage = withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
     const originalDashboardView = readOptionalFile(dashboardViewPath);
@@ -372,66 +372,25 @@ test('action monitor page renders recent two-day runs and paginates older Action
         title: 'action 监控',
         environment: 'dev',
         updatedTime: '09:20',
-        recentWindowLabel: '最近 2 天',
+        recentWindowLabel: '全部 Action 日志',
         summaryCards: [],
-        recentRuns: [{
-          runId: 2003,
-          title: 'fix: report dev action runs',
-          workflowName: 'CI Tests',
-          runNumber: 325,
+        historyTitle: 'Action 日志',
+        historyPageSize: 15,
+        historyTotal: 16,
+        historyStatus: '1-15 / 共 16 次',
+        allRuns: Array.from({ length: 16 }, (_, index) => ({
+          runId: 2015 - index,
+          title: `action run ${2015 - index}`,
+          workflowName: index % 2 === 0 ? 'Deploy Cloudflare Pages (Dev)' : 'CI Tests',
+          runNumber: 325 - index,
           branch: 'dev',
           actorLogin: 'soulgo',
-          statusLabel: '成功',
-          tone: 'success',
-          timeLabel: '1 hour ago',
-          durationLabel: '35s',
-          htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/2003',
-        }],
-        historyTitle: '更早 Action',
-        historyPageSize: 2,
-        historyTotal: 3,
-        historyStatus: '1-2 / 共 3 次',
-        historyRuns: [
-          {
-            runId: 2002,
-            title: 'chore: earlier deploy',
-            workflowName: 'Deploy Cloudflare Pages (Dev)',
-            runNumber: 324,
-            branch: 'dev',
-            actorLogin: 'soulgo',
-            statusLabel: '成功',
-            tone: 'success',
-            timeLabel: '3 days ago',
-            durationLabel: '1m',
-            htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/2002',
-          },
-          {
-            runId: 2001,
-            title: 'chore: older ci',
-            workflowName: 'CI Tests',
-            runNumber: 323,
-            branch: 'dev',
-            actorLogin: 'soulgo',
-            statusLabel: '失败',
-            tone: 'failure',
-            timeLabel: '4 days ago',
-            durationLabel: '45s',
-            htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/2001',
-          },
-          {
-            runId: 2000,
-            title: 'chore: oldest backup',
-            workflowName: 'Markdown Backup',
-            runNumber: 20,
-            branch: 'dev',
-            actorLogin: 'github-actions[bot]',
-            statusLabel: '成功',
-            tone: 'success',
-            timeLabel: '5 days ago',
-            durationLabel: '2m',
-            htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/2000',
-          },
-        ],
+          statusLabel: index === 1 ? '失败' : '成功',
+          tone: index === 1 ? 'failure' : 'success',
+          timeLabel: `${index + 1} hours ago`,
+          durationLabel: '45s',
+          htmlUrl: `https://github.com/soulgo/training_records/actions/runs/${2015 - index}`,
+        })),
       }, null, 2));
       execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
         cwd: rootDir,
@@ -445,15 +404,19 @@ test('action monitor page renders recent two-day runs and paginates older Action
     }
   });
 
-  assert.match(actionMonitorPage, /最近 2 天/);
-  assert.match(actionMonitorPage, /fix: report dev action runs/);
-  assert.match(actionMonitorPage, /更早 Action/);
+  const renderedCards = actionMonitorPage.match(/class="action-run action-run--/g) ?? [];
+
+  assert.doesNotMatch(actionMonitorPage, /最近 2 天/);
+  assert.match(actionMonitorPage, /全部 Action 日志/);
+  assert.match(actionMonitorPage, /Action 日志/);
   assert.match(actionMonitorPage, /data-action-history-grid/);
   assert.match(actionMonitorPage, /data-action-history-nav="next"/);
   assert.match(actionMonitorPage, /id="action-history-data"/);
-  assert.match(actionMonitorPage, /data-page-size="2"/);
-  assert.match(actionMonitorPage, /chore: earlier deploy/);
-  assert.match(actionMonitorPage, /chore: oldest backup/);
+  assert.match(actionMonitorPage, /data-page-size="15"/);
+  assert.match(actionMonitorPage, /1-15 \/ 共 16 次/);
+  assert.equal(renderedCards.length, 15);
+  assert.match(actionMonitorPage, /action run 2015/);
+  assert.match(actionMonitorPage, /action run 2000/);
 });
 
 function buildSyntheticDashboard({ startDate, days }) {

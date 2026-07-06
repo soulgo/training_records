@@ -40,20 +40,21 @@ export class PostgresGitHubActionMonitorRepository {
 
   async listRecentActionRuns(options = {}) {
     const monitorEnvironment = normalizeNullableText(options.monitorEnvironment);
-    const limit = normalizeLimit(options.limit, 12);
+    const limit = normalizeLimit(options.limit);
+    const queryParams = limit ? [monitorEnvironment, limit] : [monitorEnvironment];
     let result;
     try {
       result = await this.client.query(
-        buildRecentActionRunsQuery({ useMonitorEnvironmentColumn: true }),
-        [monitorEnvironment, limit],
+        buildRecentActionRunsQuery({ useMonitorEnvironmentColumn: true, hasLimit: Boolean(limit) }),
+        queryParams,
       );
     } catch (error) {
       if (!isMissingMonitorEnvironmentColumnError(error)) {
         throw error;
       }
       result = await this.client.query(
-        buildRecentActionRunsQuery({ useMonitorEnvironmentColumn: false }),
-        [monitorEnvironment, limit],
+        buildRecentActionRunsQuery({ useMonitorEnvironmentColumn: false, hasLimit: Boolean(limit) }),
+        queryParams,
       );
     }
 
@@ -262,7 +263,7 @@ function buildUpsertSql({ table, conflictTarget, columns }) {
   };
 }
 
-function buildRecentActionRunsQuery({ useMonitorEnvironmentColumn }) {
+function buildRecentActionRunsQuery({ useMonitorEnvironmentColumn, hasLimit }) {
   const monitorEnvironmentSelect = useMonitorEnvironmentColumn
     ? 'r.monitor_environment'
     : '$1::text as monitor_environment';
@@ -302,7 +303,7 @@ function buildRecentActionRunsQuery({ useMonitorEnvironmentColumn }) {
         where ($1::text is null or ${environmentScope})
         group by r.run_id
         order by coalesce(r.start_time, r.created_at) desc, r.run_id desc
-        limit $2
+        ${hasLimit ? 'limit $2' : ''}
       `;
 }
 
@@ -315,12 +316,12 @@ function normalizeNullableText(value) {
   return normalized || null;
 }
 
-function normalizeLimit(value, fallback) {
+function normalizeLimit(value) {
   const numberValue = Number(value);
   if (!Number.isSafeInteger(numberValue) || numberValue < 1) {
-    return fallback;
+    return null;
   }
-  return Math.min(numberValue, 50);
+  return numberValue;
 }
 
 function normalizeInteger(value) {

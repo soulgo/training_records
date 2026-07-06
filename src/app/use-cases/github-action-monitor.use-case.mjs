@@ -101,31 +101,48 @@ export async function listGitHubActionRunsForMonitor(options = {}) {
   const repo = normalizeRequiredText(options.repo, 'repo');
   const token = normalizeRequiredText(options.token, 'token');
   const branch = normalizeText(options.branch);
-  const limit = normalizeListLimit(options.limit, 50);
+  const limit = normalizeListLimit(options.limit);
   const fetchImpl = options.fetchImpl ?? fetch;
   const logger = options.logger ?? console;
   const apiBaseUrl = String(options.apiBaseUrl ?? DEFAULT_GITHUB_API_BASE_URL).replace(/\/+$/u, '');
-  const query = new URLSearchParams();
-  if (branch) {
-    query.set('branch', branch);
-  }
-  query.set('per_page', String(limit));
-
-  const payload = await getGitHubJson({
-    url: `${apiBaseUrl}/repos/${owner}/${repo}/actions/runs?${query.toString()}`,
-    token,
-    fetchImpl,
-    logger,
-    event: 'github_action_monitor.fetch_recent_runs',
-  });
-
   const monitorEnvironment = normalizeText(options.monitorEnvironment) ?? branch ?? 'unspecified';
-  return (Array.isArray(payload.workflow_runs) ? payload.workflow_runs : [])
+  const workflowRuns = [];
+  const pageSize = limit ? Math.min(limit, 100) : 100;
+  let page = 1;
+
+  while (true) {
+    const query = new URLSearchParams();
+    if (branch) {
+      query.set('branch', branch);
+    }
+    query.set('per_page', String(pageSize));
+    if (!limit) {
+      query.set('page', String(page));
+    }
+
+    const payload = await getGitHubJson({
+      url: `${apiBaseUrl}/repos/${owner}/${repo}/actions/runs?${query.toString()}`,
+      token,
+      fetchImpl,
+      logger,
+      event: 'github_action_monitor.fetch_recent_runs',
+      page: limit ? undefined : page,
+    });
+    const pageRuns = Array.isArray(payload.workflow_runs) ? payload.workflow_runs : [];
+    workflowRuns.push(...pageRuns);
+
+    if (limit || pageRuns.length < pageSize) {
+      break;
+    }
+    page += 1;
+  }
+
+  return workflowRuns
     .map((run) => normalizeMonitorApiRun(run, `${owner}/${repo}`, monitorEnvironment))
     .filter(Boolean);
 }
 
-export function mergeActionMonitorRows({ databaseRows = [], githubRows = [], limit = 50 } = {}) {
+export function mergeActionMonitorRows({ databaseRows = [], githubRows = [], limit } = {}) {
   const rowsByRunId = new Map();
 
   for (const row of Array.isArray(databaseRows) ? databaseRows : []) {
@@ -144,9 +161,10 @@ export function mergeActionMonitorRows({ databaseRows = [], githubRows = [], lim
     rowsByRunId.set(runId, databaseRow ? mergeActionMonitorRow(databaseRow, githubRow) : githubRow);
   }
 
-  return [...rowsByRunId.values()]
-    .sort((left, right) => compareActionMonitorRowsByTime(right, left))
-    .slice(0, normalizeListLimit(limit, 50));
+  const rows = [...rowsByRunId.values()]
+    .sort((left, right) => compareActionMonitorRowsByTime(right, left));
+  const normalizedLimit = normalizeListLimit(limit);
+  return normalizedLimit ? rows.slice(0, normalizedLimit) : rows;
 }
 
 export function buildActionRunSnapshot({

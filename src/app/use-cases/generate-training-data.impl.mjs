@@ -279,7 +279,7 @@ function resolveActionMonitorReadConfig(env) {
       'github-action-monitor-view',
     ]),
     timeoutMs: parsePositiveInteger(env.GITHUB_ACTION_MONITOR_DB_TIMEOUT_MS, 5000),
-    limit: parsePositiveInteger(env.GITHUB_ACTION_MONITOR_VIEW_LIMIT, 50),
+    limit: parseOptionalPositiveInteger(env.GITHUB_ACTION_MONITOR_VIEW_LIMIT),
   };
 }
 
@@ -343,6 +343,11 @@ function isExplicitlyDisabledFlag(value) {
 function parsePositiveInteger(value, fallback) {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseOptionalPositiveInteger(value) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function toPosixRelativePath(rootDir, targetPath) {

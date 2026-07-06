@@ -705,7 +705,7 @@ test('generateTrainingData can fill action monitor runs from GitHub API when dat
     buildSnapshot: async () => sampleParsed,
     fetchImpl: async (url) => {
       fetchCalls.push(String(url));
-      if (String(url).endsWith('/repos/soulgo/training_records/actions/runs?branch=dev&per_page=50')) {
+      if (String(url).endsWith('/repos/soulgo/training_records/actions/runs?branch=dev&per_page=100&page=1')) {
         return jsonResponse({
           workflow_runs: [{
             id: 154,
@@ -737,9 +737,10 @@ test('generateTrainingData can fill action monitor runs from GitHub API when dat
   );
 
   assert.deepEqual(fetchCalls, [
-    'https://api.github.com/repos/soulgo/training_records/actions/runs?branch=dev&per_page=50',
+    'https://api.github.com/repos/soulgo/training_records/actions/runs?branch=dev&per_page=100&page=1',
   ]);
   assert.equal(actionMonitorView.environment, 'dev');
+  assert.equal(actionMonitorView.historyPageSize, 15);
   assert.equal(actionMonitorView.runs[0].runId, 154);
   assert.equal(actionMonitorView.runs[0].workflowName, 'Sync (Dev)');
   assert.equal(actionMonitorView.runs[0].title, 'Sync queue task telegram:296362148:telegram_update_dev:dc9a6...');
