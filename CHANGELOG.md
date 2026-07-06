@@ -27,6 +27,7 @@
 
 - 修复顶部导航在 dev 系统页面宽度接近截图场景时把“关于”挤到第二行的问题；桌面导航改为单行 flex 布局并收敛导航项间距，保证“训练记录 / action 监控 / 监控 / 锻炼随想 / 杂七杂八 / 身体反馈 / 关于”在同一行展示。
 - 修复 Telegram/飞书图片识别触发的 Sync queue task 已出现在 GitHub Actions 但未被 `/action-monitor/` 页面统计的问题；生成 `actionMonitorView.json` 时会在 PostgreSQL 监控表基础上通过 GitHub Actions API 拉取当前分支最近 runs 并合并，避免上报漏写、滞后或生成时序导致页面少统计，同时保留数据库里的 job、step 和失败摘要细节。
+- 修复站点构建阶段未把 `${{ github.token }}` 传给 `build:data`、部署 workflow 也缺少 `actions: read` 权限，导致 `/action-monitor/` 实际只能显示 PostgreSQL 已上报的 19 条 dev Action 日志，无法通过 GitHub Actions API 补全当前分支完整运行历史的问题。
 - 修复 `action 监控` 独立页面已生成但 dev 站点导航不显示入口的问题；根 `_config.yml` 的 `theme_config.nav` 现在显式加入 `/action-monitor/`，避免只修改主题默认配置却被站点配置覆盖。
 - 修复 `action 监控` 数据暂为空时整个模块被隐藏的问题；现在即使暂未读到 run 记录，也会显示模块标题、环境和空状态，避免误判功能未上线。
 - 修复 dev Action 监控读取旧版 PostgreSQL 表结构时因缺少 `monitor_environment` 列生成空视图的问题；读取最近 run 失败时会自动回退到按 `branch=dev` 查询，并继续展示 job、step 与失败计数。

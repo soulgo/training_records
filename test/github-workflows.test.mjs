@@ -107,6 +107,35 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
   assert.match(action, /actions\/deploy-pages@v4/);
 });
 
+test('shared site build action exposes GitHub API credentials for complete action monitor history', async () => {
+  const action = await readWorkflowConfig('.github/actions/site-build/action.yml');
+  const buildStep = action?.runs?.steps?.find((step) => step?.name === 'Build site data and static files');
+
+  assert.ok(buildStep, 'missing shared site build step');
+  assert.equal(buildStep.env?.GITHUB_ACTIONS, 'true');
+  assert.equal(
+    buildStep.env?.GITHUB_TOKEN,
+    '${{ github.token }}',
+    'site data generation needs github.token so action monitor can fetch all branch runs beyond stored database rows',
+  );
+});
+
+test('site deploy workflows allow reading GitHub Actions history during data generation', async () => {
+  for (const workflowPath of [
+    '.github/workflows/deploy-pages.yml',
+    '.github/workflows/deploy-cloudflare-pages-dev.yml',
+  ]) {
+    const workflow = await readWorkflowConfig(workflowPath);
+
+    assert.equal(workflow?.permissions?.contents, 'read', `${workflowPath} should keep read-only contents access`);
+    assert.equal(
+      workflow?.permissions?.actions,
+      'read',
+      `${workflowPath} should allow build data generation to list Actions runs for the action monitor page`,
+    );
+  }
+});
+
 test('deploy-pages workflow uses the shared site build action', async () => {
   const workflow = await readWorkflow('.github/workflows/deploy-pages.yml');
 
