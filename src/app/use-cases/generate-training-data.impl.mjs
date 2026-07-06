@@ -21,6 +21,10 @@ import {
   TrainingDayGenerator,
 } from '../../adapters/hexo/index.mjs';
 import { PostgresGitHubActionMonitorRepository } from '../../adapters/postgres/index.mjs';
+import {
+  listGitHubActionRunsForMonitor,
+  mergeActionMonitorRows,
+} from './github-action-monitor.use-case.mjs';
 import { buildActionMonitorViewModel } from '../../site/action-monitor-view.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -93,7 +97,15 @@ export async function generateTrainingData(options = {}) {
       await writeFile(path.join(outputDir, relativePath), `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
     },
   });
-  await hexoGenerator.generate({ snapshot: parsed, env, rootDir, now: runStartedAt, stderr });
+  await hexoGenerator.generate({
+    snapshot: parsed,
+    env,
+    rootDir,
+    now: runStartedAt,
+    stderr,
+    fetchImpl: options.fetchImpl,
+    logger: options.logger,
+  });
   await writeFile(debugOutputPath, renderTrainingDebugMarkdown(parsed), 'utf8');
 
   stdout.write(`Generated ${toPosixRelativePath(rootDir, outputPath)}\n`);
@@ -164,9 +176,42 @@ async function loadActionMonitorViewFromPostgres(options = {}) {
   const stderr = options.stderr ?? process.stderr;
   const now = options.now ?? new Date();
   const config = resolveActionMonitorReadConfig(env);
+  const githubConfig = resolveActionMonitorGitHubReadConfig(env, {
+    environment: config.environment,
+    limit: config.limit,
+  });
+
+  if (!config.enabled && !githubConfig.enabled) {
+    return buildActionMonitorViewModel([], {
+      environment: config.environment,
+      now,
+      limit: config.limit,
+    });
+  }
+
+  let databaseRows = [];
+  let githubRows = [];
+
+  if (githubConfig.enabled) {
+    try {
+      githubRows = await listGitHubActionRunsForMonitor({
+        owner: githubConfig.owner,
+        repo: githubConfig.repo,
+        token: githubConfig.token,
+        branch: githubConfig.branch,
+        monitorEnvironment: config.environment,
+        limit: config.limit,
+        fetchImpl: options.fetchImpl,
+        logger: options.logger,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      stderr.write(`[github-action-monitor-view] GitHub API fallback failed: ${message}\n`);
+    }
+  }
 
   if (!config.enabled) {
-    return buildActionMonitorViewModel([], {
+    return buildActionMonitorViewModel(githubRows, {
       environment: config.environment,
       now,
       limit: config.limit,
@@ -182,26 +227,26 @@ async function loadActionMonitorViewFromPostgres(options = {}) {
   try {
     await client.connect();
     const repository = new PostgresGitHubActionMonitorRepository(client);
-    const rows = await repository.listRecentActionRuns({
+    databaseRows = await repository.listRecentActionRuns({
       monitorEnvironment: config.environment,
-      limit: config.limit,
-    });
-    return buildActionMonitorViewModel(rows, {
-      environment: config.environment,
-      now,
       limit: config.limit,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    stderr.write(`[github-action-monitor-view] ${message}; writing empty view\n`);
-    return buildActionMonitorViewModel([], {
-      environment: config.environment,
-      now,
-      limit: config.limit,
-    });
+    stderr.write(`[github-action-monitor-view] ${message}; using GitHub API fallback rows\n`);
   } finally {
     await client.end().catch(() => {});
   }
+
+  return buildActionMonitorViewModel(mergeActionMonitorRows({
+    databaseRows,
+    githubRows,
+    limit: config.limit,
+  }), {
+    environment: config.environment,
+    now,
+    limit: config.limit,
+  });
 }
 
 function resolveActionMonitorReadConfig(env) {
@@ -238,6 +283,38 @@ function resolveActionMonitorReadConfig(env) {
   };
 }
 
+function resolveActionMonitorGitHubReadConfig(env, options = {}) {
+  if (isExplicitlyDisabledFlag(env.GITHUB_ACTION_MONITOR_GITHUB_API_ENABLED)) {
+    return { enabled: false };
+  }
+
+  const repositoryFullName = firstNonEmpty([
+    env.GITHUB_ACTION_MONITOR_REPOSITORY,
+    env.GITHUB_REPOSITORY,
+  ]);
+  const [owner, repo] = repositoryFullName.split('/');
+  const token = firstNonEmpty([
+    env.GITHUB_ACTION_MONITOR_GITHUB_TOKEN,
+    env.GITHUB_TOKEN,
+    env.GH_TOKEN,
+  ]);
+
+  return {
+    enabled: Boolean(owner && repo && token),
+    owner,
+    repo,
+    token,
+    branch: firstNonEmpty([
+      env.GITHUB_ACTION_MONITOR_BRANCH,
+      options.environment,
+      env.GITHUB_REF_NAME,
+      env.CF_PAGES_BRANCH,
+      env.BRANCH,
+    ]),
+    limit: options.limit,
+  };
+}
+
 function firstNonEmpty(values) {
   return values.map((value) => String(value ?? '').trim()).find(Boolean) || '';
 }
@@ -257,6 +334,10 @@ function shouldUseTrainingDbForActionMonitor(env) {
 
 function isEnabledFlag(value) {
   return String(value ?? '').trim().toLowerCase() === 'true';
+}
+
+function isExplicitlyDisabledFlag(value) {
+  return ['0', 'false', 'no', 'off'].includes(String(value ?? '').trim().toLowerCase());
 }
 
 function parsePositiveInteger(value, fallback) {

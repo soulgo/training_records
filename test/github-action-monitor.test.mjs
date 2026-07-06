@@ -160,6 +160,116 @@ test('github action monitor skips runs outside the configured branch scope befor
   assert.equal(calls.length, 1);
 });
 
+test('github action monitor lists recent branch runs from GitHub API for monitor view fallback', async () => {
+  const { listGitHubActionRunsForMonitor } = await import('../src/app/use-cases/github-action-monitor.use-case.mjs');
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).endsWith('/repos/soulgo/training_records/actions/runs?branch=dev&per_page=3')) {
+      return jsonResponse({
+        workflow_runs: [
+          {
+            id: 155,
+            name: 'Sync (Dev)',
+            workflow_id: 45,
+            path: '.github/workflows/sync-dev.yml',
+            run_number: 155,
+            run_attempt: 1,
+            event: 'workflow_dispatch',
+            head_branch: 'dev',
+            head_sha: '3b11dab123456789',
+            head_commit: { message: 'Sync queue task feishu:1783296617485:feishu_update_dev:3b11dab...' },
+            actor: { login: 'soulgo' },
+            status: 'completed',
+            conclusion: 'success',
+            created_at: '2026-07-06T00:12:00Z',
+            run_started_at: '2026-07-06T00:12:06Z',
+            updated_at: '2026-07-06T00:17:44Z',
+            html_url: 'https://github.com/soulgo/training_records/actions/runs/155',
+          },
+          {
+            id: 154,
+            name: 'Sync (Dev)',
+            workflow_id: 45,
+            path: '.github/workflows/sync-dev.yml',
+            run_number: 154,
+            run_attempt: 1,
+            event: 'workflow_dispatch',
+            head_branch: 'dev',
+            head_sha: 'dc9a6aa123456789',
+            head_commit: { message: 'Sync queue task telegram:296362148:telegram_update_dev:dc9a6...' },
+            actor: { login: 'soulgo' },
+            status: 'completed',
+            conclusion: 'success',
+            created_at: '2026-07-06T00:10:00Z',
+            run_started_at: '2026-07-06T00:10:05Z',
+            updated_at: '2026-07-06T00:12:17Z',
+            html_url: 'https://github.com/soulgo/training_records/actions/runs/154',
+          },
+        ],
+      });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
+
+  const rows = await listGitHubActionRunsForMonitor({
+    owner: 'soulgo',
+    repo: 'training_records',
+    token: 'github-token',
+    branch: 'dev',
+    limit: 3,
+    fetchImpl,
+  });
+
+  assert.deepEqual(rows.map((row) => row.runId), [155, 154]);
+  assert.equal(rows[0].workflowName, 'Sync (Dev)');
+  assert.equal(rows[0].monitorEnvironment, 'dev');
+  assert.equal(rows[0].branch, 'dev');
+  assert.equal(rows[0].headCommitMessage, 'Sync queue task feishu:1783296617485:feishu_update_dev:3b11dab...');
+  assert.equal(rows[0].duration, 338);
+  assert.equal(rows[1].commitSha, 'dc9a6aa123456789');
+  assert.match(calls[0].init.headers.authorization, /^Bearer /);
+});
+
+test('github action monitor merges GitHub API runs with database rows without losing stored details', async () => {
+  const { mergeActionMonitorRows } = await import('../src/app/use-cases/github-action-monitor.use-case.mjs');
+  const rows = mergeActionMonitorRows({
+    databaseRows: [
+      buildActionRunRow({
+        runId: 154,
+        workflowName: 'Sync (Dev)',
+        runNumber: 154,
+        headCommitMessage: 'old db title',
+        startTime: '2026-07-06T00:10:05.000Z',
+        errorSummary: 'sync / Persist data: failure',
+        failureCount: 1,
+      }),
+    ],
+    githubRows: [
+      buildActionRunRow({
+        runId: 155,
+        workflowName: 'Sync (Dev)',
+        runNumber: 155,
+        headCommitMessage: 'Sync queue task feishu:1783296617485:feishu_update_dev:3b11dab...',
+        startTime: '2026-07-06T00:12:06.000Z',
+      }),
+      buildActionRunRow({
+        runId: 154,
+        workflowName: 'Sync (Dev)',
+        runNumber: 154,
+        headCommitMessage: 'Sync queue task telegram:296362148:telegram_update_dev:dc9a6...',
+        startTime: '2026-07-06T00:10:05.000Z',
+      }),
+    ],
+    limit: 10,
+  });
+
+  assert.deepEqual(rows.map((row) => row.runId), [155, 154]);
+  assert.equal(rows[1].headCommitMessage, 'Sync queue task telegram:296362148:telegram_update_dev:dc9a6...');
+  assert.equal(rows[1].errorSummary, 'sync / Persist data: failure');
+  assert.equal(rows[1].failureCount, 1);
+});
+
 test('github action monitor finalizes an in-progress current run from the reporter job status', async () => {
   const snapshots = [];
   const fetchImpl = async (url) => {

@@ -40,24 +40,29 @@
     font-size: .98rem
 
     ul
+      display: flex
+      flex-wrap: nowrap
+      align-items: center
       margin: 0
       padding: 0
       list-style-type: none
       line-height: 1.7
 
       a
-        margin-right: 17px
+        margin-right: 0
         color: #16835f
         font-size: .98rem
         font-weight: 600
+        white-space: nowrap
 
       a:hover
         color: #0f6f50
         underline(5px, #0f6f50)
 
       li
-        display: inline-block
-        margin-right: 17px
+        display: inline-flex
+        margin-right: 13px
+        padding-right: 13px
         border-right: 1px dotted
         border-color: rgba(22, 131, 95, 0.72)
         vertical-align: middle
@@ -67,6 +72,7 @@
 
       li:last-child
         margin-right: 0
+        padding-right: 0
         border-right: 0
 
         a
@@ -89,6 +95,8 @@ if $logo-grayout
 
   #header #nav
     ul
+      display: block
+
       a:hover
         background: none
 

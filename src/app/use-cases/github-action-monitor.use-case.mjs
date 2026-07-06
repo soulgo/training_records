@@ -96,6 +96,59 @@ export async function reportGitHubActionRun(options = {}) {
   };
 }
 
+export async function listGitHubActionRunsForMonitor(options = {}) {
+  const owner = normalizeRequiredText(options.owner, 'owner');
+  const repo = normalizeRequiredText(options.repo, 'repo');
+  const token = normalizeRequiredText(options.token, 'token');
+  const branch = normalizeText(options.branch);
+  const limit = normalizeListLimit(options.limit, 50);
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const logger = options.logger ?? console;
+  const apiBaseUrl = String(options.apiBaseUrl ?? DEFAULT_GITHUB_API_BASE_URL).replace(/\/+$/u, '');
+  const query = new URLSearchParams();
+  if (branch) {
+    query.set('branch', branch);
+  }
+  query.set('per_page', String(limit));
+
+  const payload = await getGitHubJson({
+    url: `${apiBaseUrl}/repos/${owner}/${repo}/actions/runs?${query.toString()}`,
+    token,
+    fetchImpl,
+    logger,
+    event: 'github_action_monitor.fetch_recent_runs',
+  });
+
+  const monitorEnvironment = normalizeText(options.monitorEnvironment) ?? branch ?? 'unspecified';
+  return (Array.isArray(payload.workflow_runs) ? payload.workflow_runs : [])
+    .map((run) => normalizeMonitorApiRun(run, `${owner}/${repo}`, monitorEnvironment))
+    .filter(Boolean);
+}
+
+export function mergeActionMonitorRows({ databaseRows = [], githubRows = [], limit = 50 } = {}) {
+  const rowsByRunId = new Map();
+
+  for (const row of Array.isArray(databaseRows) ? databaseRows : []) {
+    const runId = normalizeNullableInteger(row?.runId ?? row?.run_id);
+    if (runId) {
+      rowsByRunId.set(runId, row);
+    }
+  }
+
+  for (const githubRow of Array.isArray(githubRows) ? githubRows : []) {
+    const runId = normalizeNullableInteger(githubRow?.runId ?? githubRow?.run_id);
+    if (!runId) {
+      continue;
+    }
+    const databaseRow = rowsByRunId.get(runId);
+    rowsByRunId.set(runId, databaseRow ? mergeActionMonitorRow(databaseRow, githubRow) : githubRow);
+  }
+
+  return [...rowsByRunId.values()]
+    .sort((left, right) => compareActionMonitorRowsByTime(right, left))
+    .slice(0, normalizeListLimit(limit, 50));
+}
+
 export function buildActionRunSnapshot({
   run,
   jobs,
@@ -179,6 +232,63 @@ export function buildActionRunSnapshot({
     steps: normalizedSteps,
     failures,
   };
+}
+
+function normalizeMonitorApiRun(run, repositoryFullName, monitorEnvironment) {
+  try {
+    const runId = normalizeRunId(run?.id);
+    const startTime = parseIsoTime(run.run_started_at ?? run.created_at);
+    const endTime = parseIsoTime(run.updated_at);
+    return {
+      runId,
+      repositoryFullName,
+      monitorEnvironment,
+      workflowId: normalizeNullableInteger(run.workflow_id),
+      workflowName: normalizeText(run.name) ?? normalizeText(run.workflow_name) ?? 'Unknown workflow',
+      workflowPath: normalizeText(run.path),
+      runNumber: normalizeNullableInteger(run.run_number),
+      runAttempt: normalizeNullableInteger(run.run_attempt),
+      event: normalizeText(run.event),
+      branch: normalizeText(run.head_branch) ?? monitorEnvironment,
+      commitSha: normalizeText(run.head_sha),
+      headCommitMessage: normalizeText(run.head_commit?.message),
+      actorLogin: normalizeText(run.actor?.login),
+      status: normalizeText(run.status) ?? 'unknown',
+      conclusion: normalizeText(run.conclusion),
+      startTime,
+      endTime: normalizeText(run.status) === 'completed' ? endTime : null,
+      duration: normalizeText(run.status) === 'completed' ? calculateDurationSeconds(startTime, endTime) : null,
+      htmlUrl: normalizeText(run.html_url),
+      errorSummary: '',
+      jobCount: 0,
+      stepCount: 0,
+      failureCount: isFailureConclusion(run.conclusion) ? 1 : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function mergeActionMonitorRow(databaseRow, githubRow) {
+  return {
+    ...databaseRow,
+    ...githubRow,
+    errorSummary: normalizeText(databaseRow.errorSummary ?? databaseRow.error_summary) ?? githubRow.errorSummary ?? '',
+    jobCount: normalizeNullableInteger(databaseRow.jobCount ?? databaseRow.job_count) ?? githubRow.jobCount ?? 0,
+    stepCount: normalizeNullableInteger(databaseRow.stepCount ?? databaseRow.step_count) ?? githubRow.stepCount ?? 0,
+    failureCount: normalizeNullableInteger(databaseRow.failureCount ?? databaseRow.failure_count) ?? githubRow.failureCount ?? 0,
+  };
+}
+
+function compareActionMonitorRowsByTime(left, right) {
+  const leftTime = Date.parse(left?.startTime ?? left?.start_time ?? left?.endTime ?? left?.end_time ?? '');
+  const rightTime = Date.parse(right?.startTime ?? right?.start_time ?? right?.endTime ?? right?.end_time ?? '');
+  const safeLeftTime = Number.isFinite(leftTime) ? leftTime : 0;
+  const safeRightTime = Number.isFinite(rightTime) ? rightTime : 0;
+  if (safeLeftTime !== safeRightTime) {
+    return safeLeftTime - safeRightTime;
+  }
+  return (normalizeNullableInteger(left?.runId ?? left?.run_id) ?? 0) - (normalizeNullableInteger(right?.runId ?? right?.run_id) ?? 0);
 }
 
 async function listGitHubJobs({ apiBaseUrl, owner, repo, runId, token, fetchImpl, logger }) {
@@ -372,6 +482,14 @@ function normalizeRequiredText(value, name) {
 function normalizeAllowedBranches(value) {
   const values = Array.isArray(value) ? value : String(value ?? '').split(',');
   return [...new Set(values.map((item) => normalizeText(item)).filter(Boolean))];
+}
+
+function normalizeListLimit(value, fallback) {
+  const numberValue = Number(value);
+  if (!Number.isSafeInteger(numberValue) || numberValue < 1) {
+    return fallback;
+  }
+  return Math.min(numberValue, 100);
 }
 
 function normalizeMonitorEnvironment(value, allowedBranches) {
