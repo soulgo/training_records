@@ -137,6 +137,7 @@ runs:
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_ACTIONS: 'true'
+        GITHUB_TOKEN: ${{ github.token }}
       run: npm run build
 
     - name: Verify generated site artifact

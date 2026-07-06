@@ -2,6 +2,8 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import pg from 'pg';
+
 import {
   appendTrainingArchiveFailureLog,
   persistTrainingArchive,
@@ -11,15 +13,23 @@ import { resolveTrainingCoreConfig } from '../../db/training/config.mjs';
 import { canFallbackToMarkdownSnapshot, canUseDatabaseFallback } from '../../shared/snapshot-fallback.mjs';
 import { buildTrainingSnapshot } from '../../domain/training/training-snapshot.mjs';
 import {
+  ActionMonitorGenerator,
   BodyMetricGenerator,
   DashboardGenerator,
   HexoGeneratorAdapter,
   MonitorGenerator,
   TrainingDayGenerator,
 } from '../../adapters/hexo/index.mjs';
+import { PostgresGitHubActionMonitorRepository } from '../../adapters/postgres/index.mjs';
+import {
+  listGitHubActionRunsForMonitor,
+  mergeActionMonitorRows,
+} from './github-action-monitor.use-case.mjs';
+import { buildActionMonitorViewModel } from '../../site/action-monitor-view.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..', '..', '..');
+const { Client } = pg;
 
 export async function generateTrainingData(options = {}) {
   const rootDir = options.rootDir ?? defaultRootDir;
@@ -38,6 +48,7 @@ export async function generateTrainingData(options = {}) {
   const outputPath = path.join(outputDir, 'training.json');
   const dashboardViewPath = path.join(outputDir, 'dashboardView.json');
   const monitorViewPath = path.join(outputDir, 'monitorView.json');
+  const actionMonitorViewPath = path.join(outputDir, 'actionMonitorView.json');
   const debugOutputPath = path.join(rootDir, '训练数据解析.md');
   const snapshotSource = resolveSnapshotSource(argv, env);
   const trainingDbConfig = resolveTrainingCoreConfig(env);
@@ -78,17 +89,29 @@ export async function generateTrainingData(options = {}) {
       new BodyMetricGenerator(),
       new DashboardGenerator(),
       new MonitorGenerator(),
+      new ActionMonitorGenerator({
+        loadActionMonitorView: options.loadActionMonitorView ?? loadActionMonitorViewFromPostgres,
+      }),
     ],
     writeJson: async (relativePath, payload) => {
       await writeFile(path.join(outputDir, relativePath), `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
     },
   });
-  await hexoGenerator.generate({ snapshot: parsed });
+  await hexoGenerator.generate({
+    snapshot: parsed,
+    env,
+    rootDir,
+    now: runStartedAt,
+    stderr,
+    fetchImpl: options.fetchImpl,
+    logger: options.logger,
+  });
   await writeFile(debugOutputPath, renderTrainingDebugMarkdown(parsed), 'utf8');
 
   stdout.write(`Generated ${toPosixRelativePath(rootDir, outputPath)}\n`);
   stdout.write(`Generated ${toPosixRelativePath(rootDir, dashboardViewPath)}\n`);
   stdout.write(`Generated ${toPosixRelativePath(rootDir, monitorViewPath)}\n`);
+  stdout.write(`Generated ${toPosixRelativePath(rootDir, actionMonitorViewPath)}\n`);
   stdout.write(`Generated ${toPosixRelativePath(rootDir, debugOutputPath)}\n`);
 
   const runtimeContext = resolveTrainingArchiveRuntimeContext({ env, argv });
@@ -107,6 +130,7 @@ export async function generateTrainingData(options = {}) {
       outputPath,
       dashboardViewPath,
       monitorViewPath,
+      actionMonitorViewPath,
       debugOutputPath,
       parsed,
     };
@@ -141,9 +165,189 @@ export async function generateTrainingData(options = {}) {
     outputPath,
     dashboardViewPath,
     monitorViewPath,
+    actionMonitorViewPath,
     debugOutputPath,
     parsed,
   };
+}
+
+async function loadActionMonitorViewFromPostgres(options = {}) {
+  const env = options.env ?? process.env;
+  const stderr = options.stderr ?? process.stderr;
+  const now = options.now ?? new Date();
+  const config = resolveActionMonitorReadConfig(env);
+  const githubConfig = resolveActionMonitorGitHubReadConfig(env, {
+    environment: config.environment,
+    limit: config.limit,
+  });
+
+  if (!config.enabled && !githubConfig.enabled) {
+    return buildActionMonitorViewModel([], {
+      environment: config.environment,
+      now,
+      limit: config.limit,
+    });
+  }
+
+  let databaseRows = [];
+  let githubRows = [];
+
+  if (githubConfig.enabled) {
+    try {
+      githubRows = await listGitHubActionRunsForMonitor({
+        owner: githubConfig.owner,
+        repo: githubConfig.repo,
+        token: githubConfig.token,
+        branch: githubConfig.branch,
+        monitorEnvironment: config.environment,
+        limit: config.limit,
+        fetchImpl: options.fetchImpl,
+        logger: options.logger,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      stderr.write(`[github-action-monitor-view] GitHub API fallback failed: ${message}\n`);
+    }
+  }
+
+  if (!config.enabled) {
+    return buildActionMonitorViewModel(githubRows, {
+      environment: config.environment,
+      now,
+      limit: config.limit,
+    });
+  }
+
+  const client = new Client({
+    connectionString: config.url,
+    application_name: config.appName,
+    connectionTimeoutMillis: config.timeoutMs,
+  });
+
+  try {
+    await client.connect();
+    const repository = new PostgresGitHubActionMonitorRepository(client);
+    databaseRows = await repository.listRecentActionRuns({
+      monitorEnvironment: config.environment,
+      limit: config.limit,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    stderr.write(`[github-action-monitor-view] ${message}; using GitHub API fallback rows\n`);
+  } finally {
+    await client.end().catch(() => {});
+  }
+
+  return buildActionMonitorViewModel(mergeActionMonitorRows({
+    databaseRows,
+    githubRows,
+    limit: config.limit,
+  }), {
+    environment: config.environment,
+    now,
+    limit: config.limit,
+  });
+}
+
+function resolveActionMonitorReadConfig(env) {
+  const actionMonitorUrl = firstNonEmpty([
+    env.GITHUB_ACTION_MONITOR_READONLY_DB_URL,
+    env.GITHUB_ACTION_MONITOR_DB_URL,
+  ]);
+  const trainingDbFallbackUrl = shouldUseTrainingDbForActionMonitor(env)
+    ? firstNonEmpty([
+        env.TRAINING_DB_READONLY_URL,
+        env.TRAINING_DB_URL,
+      ])
+    : '';
+  const url = actionMonitorUrl || trainingDbFallbackUrl;
+  const environment = firstNonEmpty([
+    env.GITHUB_ACTION_MONITOR_ENVIRONMENT,
+    env.GITHUB_REF_NAME,
+    env.CF_PAGES_BRANCH,
+    env.BRANCH,
+    'dev',
+  ]);
+
+  return {
+    enabled: Boolean(url),
+    url,
+    environment,
+    appName: firstNonEmpty([
+      env.GITHUB_ACTION_MONITOR_DB_APP_NAME,
+      env.TRAINING_DB_APP_NAME,
+      'github-action-monitor-view',
+    ]),
+    timeoutMs: parsePositiveInteger(env.GITHUB_ACTION_MONITOR_DB_TIMEOUT_MS, 5000),
+    limit: parseOptionalPositiveInteger(env.GITHUB_ACTION_MONITOR_VIEW_LIMIT),
+  };
+}
+
+function resolveActionMonitorGitHubReadConfig(env, options = {}) {
+  if (isExplicitlyDisabledFlag(env.GITHUB_ACTION_MONITOR_GITHUB_API_ENABLED)) {
+    return { enabled: false };
+  }
+
+  const repositoryFullName = firstNonEmpty([
+    env.GITHUB_ACTION_MONITOR_REPOSITORY,
+    env.GITHUB_REPOSITORY,
+  ]);
+  const [owner, repo] = repositoryFullName.split('/');
+  const token = firstNonEmpty([
+    env.GITHUB_ACTION_MONITOR_GITHUB_TOKEN,
+    env.GITHUB_TOKEN,
+    env.GH_TOKEN,
+  ]);
+
+  return {
+    enabled: Boolean(owner && repo && token),
+    owner,
+    repo,
+    token,
+    branch: firstNonEmpty([
+      env.GITHUB_ACTION_MONITOR_BRANCH,
+      options.environment,
+      env.GITHUB_REF_NAME,
+      env.CF_PAGES_BRANCH,
+      env.BRANCH,
+    ]),
+    limit: options.limit,
+  };
+}
+
+function firstNonEmpty(values) {
+  return values.map((value) => String(value ?? '').trim()).find(Boolean) || '';
+}
+
+function shouldUseTrainingDbForActionMonitor(env) {
+  if (!isEnabledFlag(env.TRAINING_DB_ENABLED)) {
+    return false;
+  }
+  if (isEnabledFlag(env.GITHUB_ACTION_MONITOR_VIEW_ENABLED)) {
+    return true;
+  }
+  return isEnabledFlag(env.GITHUB_ACTIONS) || Boolean(firstNonEmpty([
+    env.GITHUB_REF_NAME,
+    env.CF_PAGES_BRANCH,
+  ]));
+}
+
+function isEnabledFlag(value) {
+  return String(value ?? '').trim().toLowerCase() === 'true';
+}
+
+function isExplicitlyDisabledFlag(value) {
+  return ['0', 'false', 'no', 'off'].includes(String(value ?? '').trim().toLowerCase());
+}
+
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseOptionalPositiveInteger(value) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function toPosixRelativePath(rootDir, targetPath) {

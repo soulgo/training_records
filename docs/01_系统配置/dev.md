@@ -41,6 +41,9 @@ dev 环境对应：
 | --- | --- | --- | --- |
 | `TRAINING_DB_TIMEOUT_MS` | `5000` | 建议填 | 数据库连接超时。 |
 | `DEV_TRAINING_DB_APP_NAME` | `sync-dev` | 建议填 | PostgreSQL `application_name`，便于在 DB 侧区分来源。 |
+| `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` | dev 监控 API base URL | 可选 | `Report Action Status` 在没有可用 dev PostgreSQL 连接时的 HTTP 兜底上报地址。 |
+| `GITHUB_ACTION_MONITOR_REPORT_URL` | 共享监控 API base URL | 可选 | dev/main 专用 URL 未配置时的共享兜底地址。 |
+| `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` | main 监控 API base URL | 可选 | 所有 workflow 都注入该变量；dev 分支不会优先使用它。 |
 | `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED` | `false` | 可选 | 过渡期 DDL preflight 开关；默认关闭，日常 dev 业务账号不应启用。 |
 | `TRAINING_SNAPSHOT_SOURCE` | `database` | 建议填 | 构建站点时从数据库还是 Markdown 生成快照。 |
 | `AI_PROVIDER` | `openai-compatible` | 建议填 | 当前代码支持 OpenAI-compatible provider。 |
@@ -161,7 +164,11 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.dev.toml
 | `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED` | 自定义 | 默认 `false`；只有显式迁移兜底时才临时打开。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 建议 dev 使用 `database`。 |
 
-数据库 schema 以 `sql/pgsql17.sql` 为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `DEV_TRAINING_DB_URL` 映射后的默认路径。
+数据库 schema 以 `sql/pgsql17.sql` 和当前显式建表脚本为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `DEV_TRAINING_DB_URL` 映射后的默认路径。Action 监控当前在同一个 dev PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，建表脚本见 `docs/03_历史重构记录/重构历史/action日志监控/03_github_action_monitor.sql`。
+
+`Report Action Status` step 会把 `DEV_TRAINING_DB_URL` 映射为运行时 `TRAINING_DB_URL`，把 `DEV_TRAINING_DB_APP_NAME` 映射为 `TRAINING_DB_APP_NAME`，并使用 `github.token` 读取 GitHub Actions run/jobs/steps 后直写 `monitor.*`。只有当分支 DB URL 不可用时，才使用 `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` / `GITHUB_ACTION_MONITOR_REPORT_URL` 走 HTTP 兜底。
+
+`/action-monitor/` 页面在 dev Pages 构建时由 `build:data` 生成。构建 job 设置 `TRAINING_DB_ENABLED=true`，优先用 `DEV_TRAINING_DB_READONLY_URL` 映射后的 `TRAINING_DB_READONLY_URL` 读取 `monitor.*`；未配置只读连接时回退 `DEV_TRAINING_DB_URL`。共享 site-build action 会注入 `GITHUB_TOKEN`，用于通过 GitHub Actions API 补齐当前 dev 分支漏报或滞后的 runs。
 
 ### 3.5 COS 图片存储
 
@@ -195,6 +202,7 @@ dev workflow 会检查 `DEV_COS_BUCKET` / `DEV_COS_DOMAIN` 不能和 main 的 `C
 4. 运行 `Deploy Cloudflare Pages (Dev)`，确认 dev 站点能构建和部署。
 5. 给 dev Telegram bot 或 dev 飞书应用发测试消息，确认 `Sync (Dev)` 被触发。
 6. 检查 GitHub Actions summary：同步结果、数据库写入、图片上传、站点部署都应成功。
+7. 打开 dev 站点 `/action-monitor/`，确认新 run 出现在 Action 日志里；如果只有顶层 run 没有 job/step 明细，先回看该 run 的 `Report Action Status` step 是否成功写入 `monitor.*`。
 
 ## 5. 不需要配置 Docker
 

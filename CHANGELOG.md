@@ -15,6 +15,33 @@
 
 ### Added
 
+- dev 新增独立 `/action-monitor/` 的 `action 监控` 模块：`build:data` 会从 PostgreSQL `monitor.github_action_runs/jobs/steps/failures` 生成 `actionMonitorView.json`，页面展示 GitHub Actions 的状态、workflow、run 编号、commit、触发人、分支、耗时和失败摘要；本地无监控数据库时自动降级为空视图。
+- `action 监控` 独立模块新增按 15 条分页的完整 Action 日志列表：dev/main 各自展示对应分支所有 PostgreSQL/GitHub Action run，不再按“最近 2 天 / 更早 Action”拆分。
+
+### Changed
+
+- 按后续规划落地文档同步规则完成 action 日志监控规划归档：将已实现规划从 `docs/03_历史重构记录/后续规划_未实现/action 日志监控/` 移入 `docs/03_历史重构记录/重构历史/action日志监控/`，并把当前 `Report Action Status`、本地 PostgreSQL reporter、HTTP 上报兜底、`monitor.*` 表、`/action-monitor/` 页面和排查方式写回 `01_系统配置`、`02_系统核心逻辑`、`04_问题与排查` 及相关 README。
+- 将 dev 页面里的 Action 日志监控从首页拆出为独立页面模块 `/action-monitor/`，新增导航入口、独立 layout、样式与历史分页脚本，首页不再嵌入该监控模块。
+- `action 监控` 数据读取默认不再限制为最近一段时间或固定 50 条；`GITHUB_ACTION_MONITOR_VIEW_LIMIT` 仅在显式配置时作为最大读取数量。
+
+### Fixed
+
+- 修复顶部导航在 dev 系统页面宽度接近截图场景时把“关于”挤到第二行的问题；桌面导航改为单行 flex 布局并收敛导航项间距，保证“训练记录 / action 监控 / 监控 / 锻炼随想 / 杂七杂八 / 身体反馈 / 关于”在同一行展示。
+- 修复 Telegram/飞书图片识别触发的 Sync queue task 已出现在 GitHub Actions 但未被 `/action-monitor/` 页面统计的问题；生成 `actionMonitorView.json` 时会在 PostgreSQL 监控表基础上通过 GitHub Actions API 拉取当前分支最近 runs 并合并，避免上报漏写、滞后或生成时序导致页面少统计，同时保留数据库里的 job、step 和失败摘要细节。
+- 修复站点构建阶段未把 `${{ github.token }}` 传给 `build:data`、部署 workflow 也缺少 `actions: read` 权限，导致 `/action-monitor/` 实际只能显示 PostgreSQL 已上报的 19 条 dev Action 日志，无法通过 GitHub Actions API 补全当前分支完整运行历史的问题。
+- 修复 `action 监控` 独立页面已生成但 dev 站点导航不显示入口的问题；根 `_config.yml` 的 `theme_config.nav` 现在显式加入 `/action-monitor/`，避免只修改主题默认配置却被站点配置覆盖。
+- 修复 `action 监控` 数据暂为空时整个模块被隐藏的问题；现在即使暂未读到 run 记录，也会显示模块标题、环境和空状态，避免误判功能未上线。
+- 修复 dev Action 监控读取旧版 PostgreSQL 表结构时因缺少 `monitor_environment` 列生成空视图的问题；读取最近 run 失败时会自动回退到按 `branch=dev` 查询，并继续展示 job、step 与失败计数。
+- 修复 dev/main Actions 依赖外部 report URL 才能写入监控库的问题；所有 workflow 的 `Report Action Status` 会优先按当前分支选择 `DEV_TRAINING_DB_URL` / `TRAINING_DB_URL` 和对应 app name，使用本地 runner 脚本直接写入对应 PostgreSQL，URL 仅作为兜底路径，并兼容旧版监控表缺少 `monitor_environment` 列的写入路径。
+- 修复当前 workflow 在最终 `Report Action Status` 步骤中上报时 GitHub API 仍返回 `in_progress`，导致页面把已成功执行的 Action 显示为“运行中”、成功率为 0% 的问题；本地 reporter 现在会使用 `${{ job.status }}` 补齐当前 run 的最终结论。
+
+## [1.3.2] - 2026-07-05
+
+### Added
+
+- 新增 GitHub Actions 全量运行监控能力：提供 `POST /api/github/actions/report` 接收 `run_id`，通过 GitHub API 拉取 run、jobs、steps，生成失败摘要并幂等写入 PostgreSQL；新增 `monitor.github_action_runs/jobs/steps/failures` SQL 设计与中文注释，支持成功率、失败率、耗时、commit/branch/workflow 关联和后续 AI 失败归因。
+- GitHub Actions workflow 全面接入 `Report Action Status`：使用 `if: always()` 和最小 payload，只传 `github.run_id`；dev/main 分支分别优先使用 `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` / `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN`，非 dev/main 分支跳过上报。
+- Action 监控服务新增 dev/main 分支隔离保护：监控实例可通过 `GITHUB_ACTION_MONITOR_ALLOWED_BRANCH` 限定只写入 dev 或 main，分支不匹配时返回 `skipped=true` 且不拉取 jobs、不写数据库；SQL 同步增加 `monitor_environment` 字段，并说明 dev/main 数据库分别手动建表和配置。
 - 新增图片识别脱敏 fixture 评测集与 `npm run eval:recognition`，覆盖 measurement、workout、nutrition、sleep 四类样本，输出 schema 失败数、静默异常入库数、语义 warning 和字段准确率，作为后续识别 prompt/schema 调整的回归基线。
 - 新增 `/monitor/` 健身监控总览页：基于现有 PostgreSQL snapshot 生成 `monitorView.json`，汇总展示体重、体脂率、睡眠评分、热量平衡、近 30 天跨域趋势、连续性和预警信息，并在导航中新增“监控”入口。
 - 新增 `docs/02_系统核心逻辑/训练监控逻辑.md` 维护文档：覆盖监控页从快照到前端 Chart.js 渲染的端到端链路、视图模型结构（指标卡片、趋势图、连续性与预警）、配置参数、空数据降级和维护要点，并补全 `查询展示逻辑.md` 页面模块表与核心逻辑目录阅读顺序索引。
@@ -22,11 +49,13 @@
 
 ### Changed
 
+- 同步项目包版本号到 `1.3.2`。
 - 图片识别 schema 升级到 v3：`records.sleep` 成为必填字段，睡眠和非睡眠图片都必须显式输出 sleep 对象或 `null` 字段；prompt metadata 与 App Profile 记忆源同步升级，并增加 measurement/sleep 字段级语义 warning，避免明显异常值静默入库。
 - 收敛应用层入口边界：`src` 内部不再反向依赖 `tools` 兼容入口，训练分析、prompt 生成、随想 artifact、Markdown 渲染、快照 fallback 和训练数据生成逻辑迁移到 `src` canonical 模块，`tools` 仅保留薄 CLI/兼容包装；`sync:feishu` 统一指向 `src/app/use-cases/feishu-sync.use-case.mjs`。
 - 扩展 `/monitor/` 健身监控总览页：在原有体重、体脂、睡眠、热量、趋势和预警基础上，新增身体成分、恢复监控、训练结构、饮食维护、数据完整性与 7/30 天汇总模块；趋势图从 4 张扩展为 6 张，补充身体成分趋势、恢复监控趋势和骑行里程序列，并重写监控页专用 UI 样式，使桌面与移动端监控信息更完整、排版更协调。
 - 重构当前 docs 目录为 `01_系统配置`、`02_系统核心逻辑`、`03_历史重构记录`、`04_问题与排查`、`05_日常规则` 五类入口：重写 dev/main 环境配置文档，在开头直接列出 GitHub Settings 与 Cloudflare 必填参数；新增 dev/main 分支合并数据隔离规则和后续规划落地后的当前文档同步规则，明确 `dev` 与 `main` 运行数据互相独立、历史规划不能替代当前系统文档。
 - 重构并校准 docs 长期文档入口：将当前系统事实收敛到 `docs/01_系统配置/`、`docs/02_系统核心逻辑/`、`docs/04_问题与排查/` 和 `docs/05_日常规则/`，删除旧 `docs/归档/` 与临时 superpowers spec，保留 `docs/03_历史重构记录/` 作为非当前事实资料；同步修正 main/dev 配置、Cloudflare Worker secrets、Durable Object 绑定名、图片日期归档和随想命令合同。
+- 按后续规划落地文档同步规则完成数据库优化与 20260701 优化规划归档：将已实现的数据库权限收敛与运行时 DDL 下线方案移入 `docs/03_历史重构记录/重构历史/数据库优化/`，将 20260701 优化高/中优先级规划移入 `docs/03_历史重构记录/重构历史/20260701_优化高中优先级落地/`；未实现规划目录只保留数据库连接池/Markdown 治理和 20260701 低优先级剩余项，并把当前事实写回数据库模型、数据入库、图片识别、Action 日志、系统总览和 PostgreSQL 排查文档。
 - 完成 action 日志排查优化文档第三轮审计：通过 GitHub API 拉取实际运行日志（Sync #112/#117、Deploy #350/#233、Markdown Backup #20、CI Tests #285、Refresh Webhook #130）与 `main`/`dev` 两分支源码交叉验证，发现前两轮文档以 dev 工作树为"当前源码"导致生产 main 分支的 dispatch payload 泄漏被误判为"不成立问题"。新增 `07_第三轮审计_实际日志复核.md`，并修订 01-06 全部文档：dispatch payload 泄漏回退为 P0 安全阻塞项（实测 main 仍写 `SYNC_DISPATCH_PAYLOAD` 原文到 `$GITHUB_ENV`，dev 修复未合并）；Markdown snapshot 泄漏范围从"仅 backup"扩大到两个 deploy workflow（实测 Deploy #350 含 399 处、#233 含 223 处健康字段）；测试 fixture 噪声归属从 CI 修正为 deploy（site-build `run_tests:'true'`）；补全飞书 `oc_` chat_id 在 sync stdout 的脱敏规则；05 实施顺序前置 main 合并项；06 阻塞项从 1 个增至 2 个。
 - 落地 action 日志排查优化高收益项：新增统一 `[action-log]` JSON logger 与 `tools/action-sync-summary.mjs`，`sync.yml` / `sync-dev.yml` 共用 Telegram/飞书 summary formatter，summary 补齐 traceId、queueTaskId、AI provider/model/promptVersion/token、DB transaction/rowCounts/slowQueries、deploy duration 等排障字段，并删除重复 inline Node summary。
 - 按后续规划落地文档同步规则完成 action 日志排查优化归档：将已实现规划从 `docs/03_历史重构记录/后续规划_未实现/` 移入 `docs/03_历史重构记录/重构历史/action日志排查优化/`，并把当前日志链路、summary 字段、失败补偿、排查步骤和脱敏规则写回 `docs/02_系统核心逻辑/Action日志与失败补偿.md` 与 `docs/04_问题与排查/Action日志.md`。

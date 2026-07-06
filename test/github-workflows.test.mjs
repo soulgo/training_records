@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { constants } from 'node:fs';
-import { access, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { load as parseYaml } from 'js-yaml';
@@ -10,6 +10,48 @@ import { load as parseYaml } from 'js-yaml';
 const rootDir = new URL('../', import.meta.url);
 
 const readRepoFile = (relativePath) => readFile(new URL(relativePath, rootDir), 'utf8');
+
+test('all GitHub workflows report action status with minimal run id payload', async () => {
+  const workflowDir = new URL('.github/workflows/', rootDir);
+  const workflowFiles = (await readdir(workflowDir))
+    .filter((fileName) => fileName.endsWith('.yml') || fileName.endsWith('.yaml'))
+    .sort();
+
+  assert.ok(workflowFiles.length > 0);
+  for (const fileName of workflowFiles) {
+    const workflow = await readFile(new URL(fileName, workflowDir), 'utf8');
+    const reportStep = workflow.slice(workflow.indexOf('- name: Report Action Status'));
+    assert.match(workflow, /- name:\s*Report Action Status/, `${fileName} should report action status`);
+    assert.match(reportStep, /if:\s*always\(\)/, `${fileName} report step should run with if: always()`);
+    assert.match(reportStep, /continue-on-error:\s*true/, `${fileName} report step should not fail the workflow`);
+    assert.match(reportStep, /GITHUB_ACTION_MONITOR_REPORT_URL/, `${fileName} should use the shared report URL variable`);
+    assert.match(reportStep, /GITHUB_ACTION_MONITOR_REPORT_URL_DEV/, `${fileName} should support a dev monitor URL`);
+    assert.match(reportStep, /GITHUB_ACTION_MONITOR_REPORT_URL_MAIN/, `${fileName} should support a main monitor URL`);
+    assert.match(reportStep, /GITHUB_REF_NAME/, `${fileName} should choose monitor endpoint by branch`);
+    assert.match(reportStep, /not monitored by the Action monitor/, `${fileName} should skip non dev\/main branches`);
+    assert.match(reportStep, /\\"run_id\\":\s*\\"\$\{\{\s*github\.run_id\s*\}\}\\"/, `${fileName} should only send github.run_id`);
+    assert.doesNotMatch(reportStep, /github\.event_path|GITHUB_EVENT_PATH/, `${fileName} should not upload event payload to the monitor`);
+  }
+});
+
+test('GitHub workflows report action status directly to branch-scoped PostgreSQL when configured', async () => {
+  const workflowDir = new URL('.github/workflows/', rootDir);
+  const workflowFiles = (await readdir(workflowDir))
+    .filter((fileName) => fileName.endsWith('.yml') || fileName.endsWith('.yaml'))
+    .sort();
+
+  for (const fileName of workflowFiles) {
+    const workflow = await readRepoFile(`.github/workflows/${fileName}`);
+    const reportStep = workflow.slice(workflow.indexOf('- name: Report Action Status'));
+    assert.match(reportStep, /GITHUB_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/, `${fileName} should pass github.token to the local reporter`);
+    assert.match(reportStep, /GITHUB_ACTION_MONITOR_JOB_STATUS:\s*\$\{\{\s*job\.status\s*\}\}/, `${fileName} should pass the final job status to the local reporter`);
+    assert.match(reportStep, /TRAINING_DB_URL:\s*\$\{\{\s*github\.ref_name == 'dev' && secrets\.DEV_TRAINING_DB_URL \|\| github\.ref_name == 'main' && secrets\.TRAINING_DB_URL \|\| ''\s*\}\}/, `${fileName} should pass the branch-scoped database URL to the local reporter`);
+    assert.match(reportStep, /TRAINING_DB_APP_NAME:\s*\$\{\{\s*github\.ref_name == 'dev' && vars\.DEV_TRAINING_DB_APP_NAME \|\| github\.ref_name == 'main' && vars\.TRAINING_DB_APP_NAME \|\| ''\s*\}\}/, `${fileName} should pass the branch-scoped database app name to the local reporter`);
+    assert.match(reportStep, /if \[ -n "\$\{TRAINING_DB_URL:-\}" \]; then/, `${fileName} should prefer direct PostgreSQL reporting when configured`);
+    assert.match(reportStep, /Using local PostgreSQL Action monitor reporter\./, `${fileName} should explain direct PostgreSQL reporting`);
+    assert.match(reportStep, /node tools\/report-github-action-status\.mjs/, `${fileName} should invoke the local database reporter`);
+  }
+});
 
 test('shared site build action centralizes Hexo build cache and deploy steps', async () => {
   const action = await readWorkflow('.github/actions/site-build/action.yml');
@@ -63,6 +105,35 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
   assert.match(action, /actions\/configure-pages@v5/);
   assert.match(action, /actions\/upload-pages-artifact@v3/);
   assert.match(action, /actions\/deploy-pages@v4/);
+});
+
+test('shared site build action exposes GitHub API credentials for complete action monitor history', async () => {
+  const action = await readWorkflowConfig('.github/actions/site-build/action.yml');
+  const buildStep = action?.runs?.steps?.find((step) => step?.name === 'Build site data and static files');
+
+  assert.ok(buildStep, 'missing shared site build step');
+  assert.equal(buildStep.env?.GITHUB_ACTIONS, 'true');
+  assert.equal(
+    buildStep.env?.GITHUB_TOKEN,
+    '${{ github.token }}',
+    'site data generation needs github.token so action monitor can fetch all branch runs beyond stored database rows',
+  );
+});
+
+test('site deploy workflows allow reading GitHub Actions history during data generation', async () => {
+  for (const workflowPath of [
+    '.github/workflows/deploy-pages.yml',
+    '.github/workflows/deploy-cloudflare-pages-dev.yml',
+  ]) {
+    const workflow = await readWorkflowConfig(workflowPath);
+
+    assert.equal(workflow?.permissions?.contents, 'read', `${workflowPath} should keep read-only contents access`);
+    assert.equal(
+      workflow?.permissions?.actions,
+      'read',
+      `${workflowPath} should allow build data generation to list Actions runs for the action monitor page`,
+    );
+  }
 });
 
 test('deploy-pages workflow uses the shared site build action', async () => {

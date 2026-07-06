@@ -34,6 +34,7 @@ theme_config:
   projects_url: /
   nav:
     records: /
+    action_monitor: /action-monitor/
     monitor: /monitor/
     thoughts: /thoughts/
     misc: /misc/

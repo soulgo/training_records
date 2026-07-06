@@ -15,6 +15,7 @@ const require = createRequire(import.meta.url);
 const { readLatestChangelogVersion } = require('../tools/changelog-version.cjs');
 const trainingDataPath = path.join(rootDir, 'source', '_data', 'training.json');
 const dashboardViewPath = path.join(rootDir, 'source', '_data', 'dashboardView.json');
+const actionMonitorViewPath = path.join(rootDir, 'source', '_data', 'actionMonitorView.json');
 
 test('dashboard renders comparison pills for the latest metrics without relying on fixed values', () => {
   const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
@@ -206,6 +207,7 @@ test('homepage keeps the introduction at the bottom and uses a smaller header na
   assert.match(homepage, /<div class="dashboard-note">/);
   assert.match(homepage, /这里展示的是基于仓库中/);
   assert.match(homepage, /<div id="nav">[\s\S]*<a href="\/">训练记录<\/a>/);
+  assert.match(homepage, /<div id="nav">[\s\S]*<a href="\/action-monitor\/">action 监控<\/a>/);
 });
 
 test('homepage uses root-relative asset and navigation paths for custom domain deployment', { concurrency: false }, () => {
@@ -251,6 +253,170 @@ test('homepage places workout duration and trained days directly after training 
   );
   assert.doesNotMatch(metricGridMatch[1], /锻炼时长/);
   assert.doesNotMatch(metricGridMatch[1], /已训练天数/);
+});
+
+test('action monitor page renders the module from generated action monitor data', { concurrency: false }, () => {
+  const { homepage, actionMonitorPage } = withSharedSiteFixture(() => {
+    const originalTrainingData = readOptionalFile(trainingDataPath);
+    const originalDashboardView = readOptionalFile(dashboardViewPath);
+    const originalActionMonitorView = readOptionalFile(actionMonitorViewPath);
+
+    try {
+      ensureDataDir();
+      writeFileSync(trainingDataPath, JSON.stringify(buildHomepageDashboard(), null, 2));
+      writeFileSync(
+        dashboardViewPath,
+        JSON.stringify(buildDashboardViewModel(buildHomepageDashboard()), null, 2),
+      );
+      writeFileSync(actionMonitorViewPath, JSON.stringify({
+        title: 'action 监控',
+        environment: 'dev',
+        updatedTime: '14:30',
+        summaryCards: [
+          { label: '最近运行', value: '3 次', hint: '近 24 小时' },
+          { label: '成功率', value: '100%', hint: '近 20 次' },
+        ],
+        runs: [
+          {
+            runId: 1003,
+            title: 'chore: release 1.3.2 action monitor',
+            workflowName: 'Deploy Cloudflare Pages (Dev)',
+            runNumber: 280,
+            branch: 'dev',
+            actorLogin: 'soulgo',
+            commitShortSha: '18ba338',
+            statusLabel: '成功',
+            tone: 'success',
+            timeLabel: '6 minutes ago',
+            durationLabel: '5m 42s',
+            htmlUrl: 'https://github.com/soulgo/training_records/actions/runs/1003',
+            failureCount: 0,
+          },
+        ],
+      }, null, 2));
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      return {
+        homepage: readFileSync(path.join(rootDir, 'public', 'index.html'), 'utf8'),
+        actionMonitorPage: readFileSync(path.join(rootDir, 'public', 'action-monitor', 'index.html'), 'utf8'),
+      };
+    } finally {
+      restoreOptionalFile(trainingDataPath, originalTrainingData);
+      restoreOptionalFile(dashboardViewPath, originalDashboardView);
+      restoreOptionalFile(actionMonitorViewPath, originalActionMonitorView);
+    }
+  });
+
+  assert.doesNotMatch(homepage, /<section class="action-monitor"/);
+  assert.match(actionMonitorPage, /<section class="action-monitor-page"/);
+  assert.match(actionMonitorPage, /<section class="action-monitor"/);
+  assert.match(actionMonitorPage, /action 监控/);
+  assert.match(actionMonitorPage, /Deploy Cloudflare Pages \(Dev\) #280/);
+  assert.match(actionMonitorPage, /chore: release 1\.3\.2 action monitor/);
+  assert.match(actionMonitorPage, /18ba338/);
+  assert.match(actionMonitorPage, /soulgo/);
+  assert.match(actionMonitorPage, /dev/);
+  assert.match(actionMonitorPage, /5m 42s/);
+});
+
+test('action monitor page keeps the module visible when no Action rows were generated', { concurrency: false }, () => {
+  const actionMonitorPage = withSharedSiteFixture(() => {
+    const originalTrainingData = readOptionalFile(trainingDataPath);
+    const originalDashboardView = readOptionalFile(dashboardViewPath);
+    const originalActionMonitorView = readOptionalFile(actionMonitorViewPath);
+
+    try {
+      const snapshot = buildHomepageDashboard();
+      ensureDataDir();
+      writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
+      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
+      writeFileSync(actionMonitorViewPath, JSON.stringify({
+        title: 'action 监控',
+        environment: 'dev',
+        updatedTime: '14:30',
+        summaryCards: [],
+        runs: [],
+      }, null, 2));
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      return readFileSync(path.join(rootDir, 'public', 'action-monitor', 'index.html'), 'utf8');
+    } finally {
+      restoreOptionalFile(trainingDataPath, originalTrainingData);
+      restoreOptionalFile(dashboardViewPath, originalDashboardView);
+      restoreOptionalFile(actionMonitorViewPath, originalActionMonitorView);
+    }
+  });
+
+  assert.match(actionMonitorPage, /<section class="action-monitor"/);
+  assert.match(actionMonitorPage, /action 监控/);
+  assert.match(actionMonitorPage, /dev/);
+  assert.match(actionMonitorPage, /暂无 Action 监控数据/);
+});
+
+test('action monitor page renders all branch action logs with fifteen-item pagination', { concurrency: false }, () => {
+  const actionMonitorPage = withSharedSiteFixture(() => {
+    const originalTrainingData = readOptionalFile(trainingDataPath);
+    const originalDashboardView = readOptionalFile(dashboardViewPath);
+    const originalActionMonitorView = readOptionalFile(actionMonitorViewPath);
+
+    try {
+      const snapshot = buildHomepageDashboard();
+      ensureDataDir();
+      writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
+      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
+      writeFileSync(actionMonitorViewPath, JSON.stringify({
+        title: 'action 监控',
+        environment: 'dev',
+        updatedTime: '09:20',
+        recentWindowLabel: '全部 Action 日志',
+        summaryCards: [],
+        historyTitle: 'Action 日志',
+        historyPageSize: 15,
+        historyTotal: 16,
+        historyStatus: '1-15 / 共 16 次',
+        allRuns: Array.from({ length: 16 }, (_, index) => ({
+          runId: 2015 - index,
+          title: `action run ${2015 - index}`,
+          workflowName: index % 2 === 0 ? 'Deploy Cloudflare Pages (Dev)' : 'CI Tests',
+          runNumber: 325 - index,
+          branch: 'dev',
+          actorLogin: 'soulgo',
+          statusLabel: index === 1 ? '失败' : '成功',
+          tone: index === 1 ? 'failure' : 'success',
+          timeLabel: `${index + 1} hours ago`,
+          durationLabel: '45s',
+          htmlUrl: `https://github.com/soulgo/training_records/actions/runs/${2015 - index}`,
+        })),
+      }, null, 2));
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      return readFileSync(path.join(rootDir, 'public', 'action-monitor', 'index.html'), 'utf8');
+    } finally {
+      restoreOptionalFile(trainingDataPath, originalTrainingData);
+      restoreOptionalFile(dashboardViewPath, originalDashboardView);
+      restoreOptionalFile(actionMonitorViewPath, originalActionMonitorView);
+    }
+  });
+
+  const renderedCards = actionMonitorPage.match(/class="action-run action-run--/g) ?? [];
+
+  assert.doesNotMatch(actionMonitorPage, /最近 2 天/);
+  assert.match(actionMonitorPage, /全部 Action 日志/);
+  assert.match(actionMonitorPage, /Action 日志/);
+  assert.match(actionMonitorPage, /data-action-history-grid/);
+  assert.match(actionMonitorPage, /data-action-history-nav="next"/);
+  assert.match(actionMonitorPage, /id="action-history-data"/);
+  assert.match(actionMonitorPage, /data-page-size="15"/);
+  assert.match(actionMonitorPage, /1-15 \/ 共 16 次/);
+  assert.equal(renderedCards.length, 15);
+  assert.match(actionMonitorPage, /action run 2015/);
+  assert.match(actionMonitorPage, /action run 2000/);
 });
 
 function buildSyntheticDashboard({ startDate, days }) {
