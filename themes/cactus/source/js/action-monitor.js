@@ -4,6 +4,11 @@
   const actionHistoryStatus = document.querySelector('[data-action-history-status]');
   const actionHistoryNewerButton = document.querySelector('[data-action-history-nav="prev"]');
   const actionHistoryOlderButton = document.querySelector('[data-action-history-nav="next"]');
+  const parameterValidityPayload = document.getElementById('parameter-validity-data');
+  const parameterValidityGrid = document.querySelector('[data-parameter-validity-grid]');
+  const parameterValidityStatus = document.querySelector('[data-parameter-validity-status]');
+  const parameterValidityNewerButton = document.querySelector('[data-parameter-validity-nav="prev"]');
+  const parameterValidityOlderButton = document.querySelector('[data-parameter-validity-nav="next"]');
 
   function renderActionRange(pageIndex, pageSize, total) {
     if (!total) {
@@ -23,6 +28,16 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  function renderParameterRange(pageIndex, pageSize, total) {
+    if (!total) {
+      return '0 / 共 0 个';
+    }
+
+    const start = pageIndex * pageSize + 1;
+    const end = Math.min(start + pageSize, total);
+    return start + '-' + end + ' / 共 ' + total + ' 个';
   }
 
   function renderActionRun(run) {
@@ -57,6 +72,20 @@
       '<span>' + escapeHtml(run.durationLabel || '—') + '</span>' +
       '</div>' +
       '</a>';
+  }
+
+  function renderParameterValidityRow(item) {
+    const tone = escapeHtml(item.tone || 'neutral');
+
+    return '<div class="parameter-validity__row parameter-validity__row--' + tone + '" role="row">' +
+      '<span role="cell"><strong>' + escapeHtml(item.name) + '</strong></span>' +
+      '<span role="cell">' + escapeHtml(item.category) + '</span>' +
+      '<span role="cell">' + escapeHtml(item.scope) + '</span>' +
+      '<span role="cell"><em>' + escapeHtml(item.statusLabel) + '</em></span>' +
+      '<span role="cell">' + escapeHtml(item.dueDateLabel || '—') + '<small>' + escapeHtml(item.dueLabel || '无到期数据') + '</small></span>' +
+      '<span role="cell">' + escapeHtml(item.checkedAtLabel || '—') + '<small>' + escapeHtml(item.lastCheckedLabel || '—') + '</small></span>' +
+      '<span role="cell">' + escapeHtml(item.message || '—') + '</span>' +
+      '</div>';
   }
 
   if (
@@ -98,5 +127,46 @@
     });
 
     syncActionHistory();
+  }
+
+  if (
+    parameterValidityPayload &&
+    parameterValidityGrid &&
+    parameterValidityStatus &&
+    parameterValidityNewerButton &&
+    parameterValidityOlderButton
+  ) {
+    const entries = JSON.parse(parameterValidityPayload.textContent || '[]');
+    const pageSize = Number(parameterValidityPayload.dataset.pageSize || '5');
+    const maxPage = Math.max(Math.ceil(entries.length / pageSize) - 1, 0);
+    let pageIndex = 0;
+
+    function syncParameterValidity() {
+      const start = pageIndex * pageSize;
+      const visibleEntries = entries.slice(start, start + pageSize);
+
+      parameterValidityGrid.innerHTML = visibleEntries.map(renderParameterValidityRow).join('');
+      parameterValidityStatus.textContent = renderParameterRange(pageIndex, pageSize, entries.length);
+      parameterValidityNewerButton.disabled = pageIndex === 0;
+      parameterValidityOlderButton.disabled = pageIndex >= maxPage;
+    }
+
+    parameterValidityNewerButton.addEventListener('click', function () {
+      if (pageIndex === 0) {
+        return;
+      }
+      pageIndex -= 1;
+      syncParameterValidity();
+    });
+
+    parameterValidityOlderButton.addEventListener('click', function () {
+      if (pageIndex >= maxPage) {
+        return;
+      }
+      pageIndex += 1;
+      syncParameterValidity();
+    });
+
+    syncParameterValidity();
   }
 }());

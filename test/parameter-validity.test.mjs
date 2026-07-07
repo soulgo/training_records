@@ -267,6 +267,35 @@ test('action monitor view model includes sorted parameter validity summary', () 
   assert.equal(view.parameterValidity.items[1].dueLabel, '剩余 5 天');
 });
 
+test('action monitor view model paginates parameter validity rows at five visible items', () => {
+  const parameterRows = Array.from({ length: 6 }, (_, index) => ({
+    parameterKey: `dev.github.secret.PARAM_${index + 1}`,
+    parameterName: `PARAM_${index + 1}`,
+    scope: 'github_actions_secret',
+    category: 'ai',
+    status: 'ok',
+    daysUntilDue: 90 + index,
+    reviewAfterAt: `2026-10-${String(index + 1).padStart(2, '0')}`,
+    checkedAt: '2026-07-07T00:00:00.000Z',
+  }));
+
+  const view = buildActionMonitorViewModel([], {
+    environment: 'dev',
+    now: new Date('2026-07-07T00:00:00.000Z'),
+    parameterValidityRows: parameterRows,
+  });
+
+  assert.equal(view.parameterValidity.pageSize, 5);
+  assert.equal(view.parameterValidity.total, 6);
+  assert.equal(view.parameterValidity.status, '1-5 / 共 6 个');
+  assert.equal(view.parameterValidity.paginationEnabled, true);
+  assert.deepEqual(
+    view.parameterValidity.visibleItems.map((item) => item.name),
+    ['PARAM_1', 'PARAM_2', 'PARAM_3', 'PARAM_4', 'PARAM_5'],
+  );
+  assert.equal(view.parameterValidity.items.length, 6);
+});
+
 test('action monitor view model only includes parameter validity rows for the current environment', () => {
   const view = buildActionMonitorViewModel([], {
     environment: 'dev',
@@ -315,7 +344,8 @@ test('action monitor data uses the current environment registry before parameter
     assert.ok(view.parameterValidity.items.every((item) => item.key.startsWith(`${environment}.`)));
     assert.ok(!view.parameterValidity.items.some((item) => item.key.startsWith(environment === 'dev' ? 'main.' : 'dev.')));
     assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '监控参数' && card.value !== '0 个'));
-    assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '未知有效期' && card.value !== '0 个'));
+    assert.ok(view.parameterValidity.items.every((item) => item.status !== 'unknown'));
+    assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '未知有效期' && card.value === '0 个'));
   }
 });
 
@@ -332,6 +362,11 @@ test('parameter validity registry files avoid values and cover first high-risk s
     assert.ok(validated.parameters.every((parameter) => !Object.hasOwn(parameter, 'value')));
     assert.ok(validated.parameters.every((parameter) => parameter.sensitive === true));
     assert.ok(validated.parameters.every((parameter) => parameter.sourceDoc));
+    assert.ok(validated.parameters.every((parameter) => (
+      parameter.expiresAt ||
+      parameter.reviewAfterAt ||
+      (parameter.rotationCycleDays && parameter.validFrom)
+    )));
 
     if (environment === 'dev') {
       assert.ok(keys.has('dev.github.secret.DEV_TRAINING_DB_URL'));

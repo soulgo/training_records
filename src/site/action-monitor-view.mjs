@@ -1,4 +1,6 @@
 const DEFAULT_HISTORY_PAGE_SIZE = 15;
+const DEFAULT_PARAMETER_VALIDITY_PAGE_SIZE = 5;
+const PARAMETER_VALIDITY_PAGINATION_THRESHOLD = 4;
 const SUCCESS_CONCLUSIONS = new Set(['success']);
 const FAILURE_CONCLUSIONS = new Set(['failure', 'cancelled', 'timed_out', 'action_required', 'startup_failure']);
 const PARAMETER_STATUS_ORDER = new Map([
@@ -45,16 +47,22 @@ export function buildActionMonitorViewModel(rows = [], options = {}) {
 export function buildParameterValidityViewModel(rows = [], options = {}) {
   const now = normalizeDate(options.now) ?? new Date();
   const environment = normalizeText(options.environment) ?? 'dev';
+  const pageSize = normalizePositiveInteger(options.pageSize) ?? DEFAULT_PARAMETER_VALIDITY_PAGE_SIZE;
   const items = (Array.isArray(rows) ? rows : [])
     .map((row) => normalizeParameterValidityItem(row, { now }))
     .filter(Boolean)
     .filter((item) => isParameterValidityItemForEnvironment(item, environment))
     .sort(compareParameterValidityItems);
   const counts = countParameterStatuses(items);
+  const visibleItems = items.slice(0, pageSize);
 
   return {
     title: '系统参数有效期',
     environment,
+    pageSize,
+    total: items.length,
+    status: formatParameterValidityRange(0, pageSize, items.length),
+    paginationEnabled: items.length > PARAMETER_VALIDITY_PAGINATION_THRESHOLD,
     summaryCards: [
       {
         label: '监控参数',
@@ -83,6 +91,7 @@ export function buildParameterValidityViewModel(rows = [], options = {}) {
       },
     ],
     items,
+    visibleItems,
     emptyMessage: `暂无 ${environment} 参数有效期数据`,
   };
 }
@@ -145,7 +154,9 @@ function normalizeParameterValidityItem(row, { now }) {
     row.expiresAt ??
     row.expires_at ??
     row.reviewAfterAt ??
-    row.review_after_at,
+    row.review_after_at ??
+    row.details?.dueAt ??
+    row.details?.due_at,
   );
   const checkedAt = normalizeIso(row.checkedAt ?? row.checked_at ?? row.lastCheckedAt ?? row.last_checked_at);
 
@@ -256,6 +267,16 @@ function formatHistoryRange(pageIndex, pageSize, total) {
   const start = pageIndex * pageSize + 1;
   const end = Math.min(start + pageSize - 1, total);
   return `${start}-${end} / 共 ${total} 次`;
+}
+
+function formatParameterValidityRange(pageIndex, pageSize, total) {
+  if (!total) {
+    return '0 / 共 0 个';
+  }
+
+  const start = pageIndex * pageSize + 1;
+  const end = Math.min(start + pageSize - 1, total);
+  return `${start}-${end} / 共 ${total} 个`;
 }
 
 function formatStatusLabel({ status, conclusion }) {

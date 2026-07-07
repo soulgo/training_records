@@ -386,6 +386,69 @@ test('action monitor page renders parameter validity status without secret value
   assert.doesNotMatch(actionMonitorPage, /sk-live|postgres:\/\/|bot-token-value/);
 });
 
+test('action monitor page renders five parameter validity rows with pagination controls', { concurrency: false }, () => {
+  const actionMonitorPage = withSharedSiteFixture(() => {
+    const originalTrainingData = readOptionalFile(trainingDataPath);
+    const originalDashboardView = readOptionalFile(dashboardViewPath);
+    const originalActionMonitorView = readOptionalFile(actionMonitorViewPath);
+
+    try {
+      const snapshot = buildHomepageDashboard();
+      ensureDataDir();
+      writeFixtureFile(trainingDataPath, JSON.stringify(snapshot, null, 2));
+      writeFixtureFile(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
+      writeFixtureFile(actionMonitorViewPath, JSON.stringify({
+        title: 'action 监控',
+        environment: 'dev',
+        updatedTime: '14:30',
+        summaryCards: [],
+        runs: [],
+        parameterValidity: {
+          title: '系统参数有效期',
+          summaryCards: [
+            { label: '监控参数', value: '6 个', hint: 'dev 环境' },
+          ],
+          pageSize: 5,
+          total: 6,
+          status: '1-5 / 共 6 个',
+          paginationEnabled: true,
+          items: Array.from({ length: 6 }, (_, index) => ({
+            key: `dev.github.secret.PARAM_${index + 1}`,
+            name: `PARAM_${index + 1}`,
+            scope: 'github_actions_secret',
+            category: 'ai',
+            statusLabel: '正常',
+            tone: 'success',
+            dueDateLabel: `2026-10-${String(index + 1).padStart(2, '0')}`,
+            dueLabel: `剩余 ${80 + index} 天`,
+            checkedAtLabel: '2026-07-07',
+            lastCheckedLabel: '1 minute ago',
+            message: '距离到期或复核日期充足',
+          })),
+        },
+      }, null, 2));
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      return readFileSync(path.join(rootDir, 'public', 'action-monitor', 'index.html'), 'utf8');
+    } finally {
+      restoreOptionalFile(trainingDataPath, originalTrainingData);
+      restoreOptionalFile(dashboardViewPath, originalDashboardView);
+      restoreOptionalFile(actionMonitorViewPath, originalActionMonitorView);
+    }
+  });
+
+  const renderedParameterRows = actionMonitorPage.match(/parameter-validity__row parameter-validity__row--success/g) ?? [];
+
+  assert.equal(renderedParameterRows.length, 5);
+  assert.match(actionMonitorPage, /data-parameter-validity-grid/);
+  assert.match(actionMonitorPage, /data-parameter-validity-status>1-5 \/ 共 6 个/);
+  assert.match(actionMonitorPage, /data-parameter-validity-nav="next"/);
+  assert.match(actionMonitorPage, /id="parameter-validity-data"/);
+  assert.match(actionMonitorPage, /data-page-size="5"/);
+});
+
 test('action monitor page keeps the module visible when no Action rows were generated', { concurrency: false }, () => {
   const actionMonitorPage = withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);

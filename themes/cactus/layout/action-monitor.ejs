@@ -13,6 +13,13 @@ const actionMonitorSummaryCards = actionMonitorView.summaryCards || [];
 const parameterValidity = actionMonitorView.parameterValidity || {};
 const parameterValidityCards = parameterValidity.summaryCards || [];
 const parameterValidityItems = parameterValidity.items || [];
+const parameterValidityPageSize = parameterValidity.pageSize || 5;
+const parameterValidityVisibleItems = parameterValidity.visibleItems ||
+  parameterValidityItems.slice(0, parameterValidityPageSize);
+const parameterValidityTotal = parameterValidity.total || parameterValidityItems.length;
+const parameterValidityJson = JSON.stringify(parameterValidityItems);
+const showParameterValidityPagination = Boolean(parameterValidity.paginationEnabled) ||
+  parameterValidityTotal > 4;
 
 function formatActionRange(pageIndex, pageSize, total) {
   if (!total) {
@@ -72,6 +79,18 @@ function formatActionRange(pageIndex, pageSize, total) {
       <% } %>
 
       <% if (parameterValidityItems.length) { %>
+        <% if (showParameterValidityPagination) { %>
+          <div class="parameter-validity__controls">
+            <span data-parameter-validity-status><%= parameterValidity.status || formatActionRange(0, parameterValidityPageSize, parameterValidityTotal).replace('次', '个') %></span>
+            <button type="button" class="action-monitor__history-nav" data-parameter-validity-nav="prev" disabled>较新</button>
+            <button
+              type="button"
+              class="action-monitor__history-nav"
+              data-parameter-validity-nav="next"
+              <%= parameterValidityTotal > parameterValidityPageSize ? '' : 'disabled' %>
+            >较早</button>
+          </div>
+        <% } %>
         <div class="parameter-validity__table" role="table" aria-label="系统参数有效期列表">
           <div class="parameter-validity__row parameter-validity__row--head" role="row">
             <span role="columnheader">参数</span>
@@ -82,7 +101,8 @@ function formatActionRange(pageIndex, pageSize, total) {
             <span role="columnheader">最近检查</span>
             <span role="columnheader">处理提示</span>
           </div>
-          <% parameterValidityItems.forEach((item) => { %>
+          <div class="parameter-validity__body" data-parameter-validity-grid>
+          <% parameterValidityVisibleItems.forEach((item) => { %>
             <div class="parameter-validity__row parameter-validity__row--<%= item.tone || 'neutral' %>" role="row">
               <span role="cell"><strong><%= item.name %></strong></span>
               <span role="cell"><%= item.category %></span>
@@ -93,6 +113,7 @@ function formatActionRange(pageIndex, pageSize, total) {
               <span role="cell"><%= item.message || '—' %></span>
             </div>
           <% }); %>
+          </div>
         </div>
       <% } else { %>
         <div class="action-monitor__empty action-monitor__empty--compact">
@@ -168,8 +189,13 @@ function formatActionRange(pageIndex, pageSize, total) {
     <% } %>
   </section>
 
+  <% if (parameterValidityItems.length && showParameterValidityPagination) { %>
+    <script id="parameter-validity-data" type="application/json" data-page-size="<%= parameterValidityPageSize %>"><%- parameterValidityJson %></script>
+  <% } %>
   <% if (actionMonitorLogRuns.length) { %>
     <script id="action-history-data" type="application/json" data-page-size="<%= actionMonitorHistoryPageSize %>"><%- actionMonitorHistoryJson %></script>
+  <% } %>
+  <% if (actionMonitorLogRuns.length || (parameterValidityItems.length && showParameterValidityPagination)) { %>
     <script defer src="<%- url_for('/js/action-monitor.js') %>"></script>
   <% } %>
 </section>

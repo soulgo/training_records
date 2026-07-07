@@ -13,7 +13,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": [".github/workflows/sync.yml", ".github/workflows/deploy-pages.yml"]
+      "sourceCode": [".github/workflows/sync.yml", ".github/workflows/deploy-pages.yml"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.github.secret.TRAINING_DB_READONLY_URL",
@@ -27,7 +28,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": [".github/workflows/deploy-pages.yml", ".github/workflows/markdown-backup.yml"]
+      "sourceCode": [".github/workflows/deploy-pages.yml", ".github/workflows/markdown-backup.yml"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.github.secret.TRAINING_DB_MIGRATION_URL",
@@ -41,7 +43,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": ["tools/training-maintenance.mjs"]
+      "sourceCode": ["tools/training-maintenance.mjs"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.github.secret.AI_API_KEY",
@@ -55,7 +58,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": ["src/adapters/ai/openai-compatible.adapter.mjs"]
+      "sourceCode": ["src/adapters/ai/openai-compatible.adapter.mjs"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.github.secret.TELEGRAM_RECOGNITION_FALLBACK_API_KEY",
@@ -69,7 +73,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": ["src/core/ai/recognition-semantic-validator.mjs"]
+      "sourceCode": ["src/core/ai/recognition-semantic-validator.mjs"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.github.secret.TELEGRAM_BOT_TOKEN",
@@ -83,7 +88,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": [".github/workflows/sync.yml", "tools/telegram-webhook.mjs"]
+      "sourceCode": [".github/workflows/sync.yml", "tools/telegram-webhook.mjs"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.github.secret.TELEGRAM_SECRET_TOKEN",
@@ -97,7 +103,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": [".github/workflows/refresh-telegram-webhook.yml", "cloudflare/sync-dispatch-worker.mjs"]
+      "sourceCode": [".github/workflows/refresh-telegram-webhook.yml", "cloudflare/sync-dispatch-worker.mjs"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.github.secret.FEISHU_APP_SECRET",
@@ -111,7 +118,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": [".github/workflows/sync.yml", "src/adapters/feishu/feishu-api.mjs"]
+      "sourceCode": [".github/workflows/sync.yml", "src/adapters/feishu/feishu-api.mjs"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.github.secret.COS_SECRET_ID",
@@ -125,7 +133,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": ["src/app/use-cases/telegram-sync/image-processing.mjs"]
+      "sourceCode": ["src/app/use-cases/telegram-sync/image-processing.mjs"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.github.secret.COS_SECRET_KEY",
@@ -139,7 +148,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": ["src/app/use-cases/telegram-sync/image-processing.mjs"]
+      "sourceCode": ["src/app/use-cases/telegram-sync/image-processing.mjs"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.github.secret.CLOUDFLARE_API_TOKEN",
@@ -153,7 +163,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": [".github/workflows/deploy-pages.yml", ".github/workflows/deploy-cloudflare-worker.yml"]
+      "sourceCode": [".github/workflows/deploy-pages.yml", ".github/workflows/deploy-cloudflare-worker.yml"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.github.secret.CLOUDFLARE_PAGES_API_TOKEN",
@@ -167,7 +178,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": [".github/workflows/deploy-pages.yml"]
+      "sourceCode": [".github/workflows/deploy-pages.yml"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.cloudflare.secret.GITHUB_TOKEN",
@@ -181,7 +193,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": ["cloudflare/sync-dispatch-worker.mjs", "wrangler.toml"]
+      "sourceCode": ["cloudflare/sync-dispatch-worker.mjs", "wrangler.toml"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.cloudflare.secret.TELEGRAM_SECRET_TOKEN",
@@ -195,7 +208,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": ["cloudflare/sync-dispatch-worker.mjs", "wrangler.toml"]
+      "sourceCode": ["cloudflare/sync-dispatch-worker.mjs", "wrangler.toml"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.cloudflare.secret.TELEGRAM_BOT_TOKEN",
@@ -209,7 +223,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": ["cloudflare/sync-dispatch-worker.mjs", "wrangler.toml"]
+      "sourceCode": ["cloudflare/sync-dispatch-worker.mjs", "wrangler.toml"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.cloudflare.secret.FEISHU_ENCRYPT_KEY",
@@ -223,7 +238,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": ["cloudflare/sync-dispatch-worker.mjs", "wrangler.toml"]
+      "sourceCode": ["cloudflare/sync-dispatch-worker.mjs", "wrangler.toml"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.cloudflare.secret.FEISHU_VERIFICATION_TOKEN",
@@ -237,7 +253,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": ["cloudflare/sync-dispatch-worker.mjs", "wrangler.toml"]
+      "sourceCode": ["cloudflare/sync-dispatch-worker.mjs", "wrangler.toml"],
+      "reviewAfterAt": "2026-10-01"
     },
     {
       "key": "main.cloudflare.secret.FEISHU_APP_SECRET",
@@ -251,7 +268,8 @@
       "criticalDays": 7,
       "owner": "ops",
       "sourceDoc": "docs/01_系统配置/main.md",
-      "sourceCode": ["cloudflare/sync-dispatch-worker.mjs", "wrangler.toml"]
+      "sourceCode": ["cloudflare/sync-dispatch-worker.mjs", "wrangler.toml"],
+      "reviewAfterAt": "2026-10-01"
     }
   ]
 }
