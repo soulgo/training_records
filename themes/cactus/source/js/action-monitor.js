@@ -11,7 +11,6 @@
   const parameterValidityOlderButton = document.querySelector('[data-parameter-validity-nav="next"]');
   const parameterValidityModal = document.querySelector('[data-parameter-validity-modal]');
   const parameterValidityModalName = document.querySelector('[data-parameter-validity-modal-name]');
-  const parameterValidityModalCopy = document.querySelector('[data-parameter-validity-modal-copy]');
   const parameterValidityModalCategory = document.querySelector('[data-parameter-validity-modal-category]');
   const parameterValidityModalScope = document.querySelector('[data-parameter-validity-modal-scope]');
   const parameterValidityModalStatus = document.querySelector('[data-parameter-validity-modal-status]');
@@ -92,39 +91,11 @@
       '<small>' + escapeHtml(item.category) + ' · ' + escapeHtml(item.scope) + '</small>' +
       '</span>' +
       '<span class="parameter-validity__due">' + escapeHtml(item.dueDateLabel || '—') + '<small>' + escapeHtml(item.dueLabel || '无到期数据') + '</small></span>' +
+      '<span class="parameter-validity__state">' +
       '<span class="parameter-validity__status"><em>' + escapeHtml(item.statusLabel) + '</em></span>' +
       '<span class="parameter-validity__message">' + escapeHtml(item.message || '—') + '</span>' +
-      '<button type="button" class="parameter-validity__copy" data-parameter-validity-copy="' + escapeHtml(item.name) + '" aria-label="复制参数 ' + escapeHtml(item.name) + '">复制</button>' +
+      '</span>' +
       '</div>';
-  }
-
-  function fallbackCopyText(text) {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-      document.execCommand('copy');
-    } catch {}
-    textarea.remove();
-  }
-
-  function copyText(value) {
-    const text = String(value ?? '');
-    if (!text) {
-      return;
-    }
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).catch(function () {
-        fallbackCopyText(text);
-      });
-      return;
-    }
-
-    fallbackCopyText(text);
   }
 
   function closeParameterValidityModal() {
@@ -144,7 +115,6 @@
     const checkedText = [item.checkedAtLabel || '—', item.lastCheckedLabel || '—'].filter(Boolean).join(' · ');
 
     parameterValidityModalName.textContent = item.name || '—';
-    parameterValidityModalCopy.dataset.parameterValidityCopy = item.name || '';
     parameterValidityModalCategory.textContent = item.category || '—';
     parameterValidityModalScope.textContent = item.scope || '—';
     parameterValidityModalStatus.textContent = item.statusLabel || '未知';
@@ -242,13 +212,6 @@
     }
 
     parameterValidityGrid.addEventListener('click', function (event) {
-      const copyButton = event.target.closest('[data-parameter-validity-copy]');
-      if (copyButton) {
-        event.stopPropagation();
-        copyText(copyButton.dataset.parameterValidityCopy);
-        return;
-      }
-
       const row = event.target.closest('[data-parameter-validity-open]');
       if (row) {
         openParameterValidityModal(entriesByKey.get(row.dataset.parameterValidityOpen));
@@ -274,12 +237,6 @@
     const closeButton = event.target.closest('[data-parameter-validity-modal-close]');
     if (closeButton) {
       closeParameterValidityModal();
-      return;
-    }
-
-    const copyButton = event.target.closest('[data-parameter-validity-modal-copy]');
-    if (copyButton) {
-      copyText(copyButton.dataset.parameterValidityCopy);
     }
   });
 

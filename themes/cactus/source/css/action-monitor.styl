@@ -228,9 +228,10 @@
 
 .parameter-validity__row
   display grid
-  grid-template-columns minmax(18rem, 1fr) minmax(7.5rem, 0.42fr) auto minmax(10rem, 0.7fr) auto
+  grid-template-columns minmax(20rem, 1.25fr) minmax(7.5rem, 0.36fr) minmax(18rem, 0.9fr)
   align-items center
-  gap 0.75rem
+  column-gap 1rem
+  row-gap 0.55rem
   width 100%
   box-sizing border-box
   min-height 4rem
@@ -251,7 +252,7 @@
 
 .parameter-validity__identity,
 .parameter-validity__due,
-.parameter-validity__status,
+.parameter-validity__state,
 .parameter-validity__message
   min-width 0
   display block
@@ -278,6 +279,16 @@
   white-space normal
   overflow-wrap anywhere
 
+.parameter-validity__state
+  display flex
+  flex-direction column
+  align-items flex-start
+  gap 0.34rem
+  justify-self stretch
+
+.parameter-validity__status
+  display block
+
 .parameter-validity__row em
   display inline-flex
   align-items center
@@ -290,25 +301,7 @@
   font-size 0.78rem
   font-weight 800
   line-height 1
-
-.parameter-validity__copy
-  justify-self end
-  min-width 3.2rem
-  min-height 2rem
-  padding 0.34rem 0.7rem
-  border 1px solid #d6e3f0
-  border-radius 8px
-  background #ffffff
-  color #153b5d
-  font-size 0.78rem
-  font-weight 800
-  cursor pointer
-
-.parameter-validity__copy:hover,
-.parameter-validity__copy:focus-visible
-  border-color #93c5fd
-  color #2563eb
-  outline none
+  white-space nowrap
 
 .parameter-validity__row--success em
   background #dcfce7
@@ -382,10 +375,7 @@
   cursor pointer
 
 .parameter-validity__modal-name
-  display grid
-  grid-template-columns minmax(0, 1fr) auto
-  align-items center
-  gap 0.75rem
+  display block
   padding 0.85rem
   border 1px solid #dbe7f3
   border-radius 8px
@@ -527,10 +517,7 @@
     grid-template-columns repeat(2, minmax(0, 1fr))
 
   .parameter-validity__row
-    grid-template-columns minmax(16rem, 1fr) minmax(7rem, 0.42fr) auto auto
-
-  .parameter-validity__message
-    display none
+    grid-template-columns minmax(16rem, 1fr) minmax(7rem, 0.35fr) minmax(14rem, 0.8fr)
 
 @media (max-width: 860px)
   .action-monitor__summary,
@@ -540,8 +527,8 @@
   .parameter-validity__row
     grid-template-columns minmax(0, 1fr) minmax(0, 1fr)
 
-  .parameter-validity__copy
-    justify-self start
+  .parameter-validity__state
+    grid-column 1 / -1
 
   .action-run
     grid-template-columns auto minmax(0, 1fr) auto
@@ -579,9 +566,6 @@
   .parameter-validity__row
     grid-template-columns 1fr
 
-  .parameter-validity__message
-    display block
-
   .parameter-validity__modal
     align-items flex-end
     padding 0.75rem
@@ -590,9 +574,6 @@
     max-height calc(100vh - 1.5rem)
 
   .parameter-validity__modal-fields
-    grid-template-columns 1fr
-
-  .parameter-validity__modal-name
     grid-template-columns 1fr
 
   .action-run

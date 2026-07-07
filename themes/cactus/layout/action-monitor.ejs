@@ -105,9 +105,10 @@ function formatActionRange(pageIndex, pageSize, total) {
                 <small><%= item.category %> · <%= item.scope %></small>
               </span>
               <span class="parameter-validity__due"><%= item.dueDateLabel || '—' %><small><%= item.dueLabel || '无到期数据' %></small></span>
-              <span class="parameter-validity__status"><em><%= item.statusLabel %></em></span>
-              <span class="parameter-validity__message"><%= item.message || '—' %></span>
-              <button type="button" class="parameter-validity__copy" data-parameter-validity-copy="<%= item.name %>" aria-label="复制参数 <%= item.name %>">复制</button>
+              <span class="parameter-validity__state">
+                <span class="parameter-validity__status"><em><%= item.statusLabel %></em></span>
+                <span class="parameter-validity__message"><%= item.message || '—' %></span>
+              </span>
             </div>
           <% }); %>
           </div>
@@ -133,7 +134,6 @@ function formatActionRange(pageIndex, pageSize, total) {
           </div>
           <div class="parameter-validity__modal-name">
             <code data-parameter-validity-modal-name></code>
-            <button type="button" class="parameter-validity__copy" data-parameter-validity-modal-copy>复制</button>
           </div>
           <dl class="parameter-validity__modal-fields">
             <div><dt>分类</dt><dd data-parameter-validity-modal-category></dd></div>

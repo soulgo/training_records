@@ -385,7 +385,10 @@ test('action monitor page renders parameter validity status without secret value
   assert.match(actionMonitorPage, /即将到期/);
   assert.match(actionMonitorPage, /剩余 13 天/);
   assert.match(actionMonitorPage, /data-parameter-validity-open="dev\.github\.secret\.AI_API_KEY"/);
-  assert.match(actionMonitorPage, /data-parameter-validity-copy="TELEGRAM_RECOGNITION_FALLBACK_API_KEY"/);
+  assert.match(actionMonitorPage, /parameter-validity__state/);
+  assert.doesNotMatch(actionMonitorPage, /data-parameter-validity-copy=/);
+  assert.doesNotMatch(actionMonitorPage, /data-parameter-validity-modal-copy/);
+  assert.doesNotMatch(actionMonitorPage, /复制参数/);
   assert.match(actionMonitorPage, /class="parameter-validity__modal"[^>]*data-parameter-validity-modal/);
   assert.match(actionMonitorPage, /data-parameter-validity-modal-name/);
   assert.match(actionMonitorPage, /data-parameter-validity-modal-category/);
@@ -467,11 +470,12 @@ test('action monitor client pagination labels use the visible row count as the r
   assert.equal(closedRangeCalculations.length, 2);
 });
 
-test('action monitor copy buttons fall back when clipboard permission is denied', () => {
+test('action monitor client keeps parameter rows click-only without row copy controls', () => {
   const actionMonitorScript = readFileSync(actionMonitorScriptPath, 'utf8');
 
-  assert.ok(actionMonitorScript.includes('navigator.clipboard.writeText(text).catch(function () {'));
-  assert.ok(actionMonitorScript.includes('fallbackCopyText(text);'));
+  assert.doesNotMatch(actionMonitorScript, /data-parameter-validity-copy/);
+  assert.doesNotMatch(actionMonitorScript, /copyText/);
+  assert.match(actionMonitorScript, /data-parameter-validity-open/);
 });
 
 test('action monitor page keeps the module visible when no Action rows were generated', { concurrency: false }, () => {
