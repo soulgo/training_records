@@ -91,26 +91,23 @@ function formatActionRange(pageIndex, pageSize, total) {
             >较早</button>
           </div>
         <% } %>
-        <div class="parameter-validity__table" role="table" aria-label="系统参数有效期列表">
-          <div class="parameter-validity__row parameter-validity__row--head" role="row">
-            <span role="columnheader">参数</span>
-            <span role="columnheader">分类</span>
-            <span role="columnheader">位置</span>
-            <span role="columnheader">状态</span>
-            <span role="columnheader">到期 / 复核</span>
-            <span role="columnheader">最近检查</span>
-            <span role="columnheader">处理提示</span>
-          </div>
+        <div class="parameter-validity__table" role="list" aria-label="系统参数有效期列表">
           <div class="parameter-validity__body" data-parameter-validity-grid>
           <% parameterValidityVisibleItems.forEach((item) => { %>
-            <div class="parameter-validity__row parameter-validity__row--<%= item.tone || 'neutral' %>" role="row">
-              <span role="cell"><strong><%= item.name %></strong></span>
-              <span role="cell"><%= item.category %></span>
-              <span role="cell"><%= item.scope %></span>
-              <span role="cell"><em><%= item.statusLabel %></em></span>
-              <span role="cell"><%= item.dueDateLabel || '—' %><small><%= item.dueLabel || '无到期数据' %></small></span>
-              <span role="cell"><%= item.checkedAtLabel || '—' %><small><%= item.lastCheckedLabel || '—' %></small></span>
-              <span role="cell"><%= item.message || '—' %></span>
+            <div
+              class="parameter-validity__row parameter-validity__row--<%= item.tone || 'neutral' %>"
+              role="listitem"
+              tabindex="0"
+              data-parameter-validity-open="<%= item.key %>"
+            >
+              <span class="parameter-validity__identity">
+                <strong class="parameter-validity__name" title="<%= item.name %>"><%= item.name %></strong>
+                <small><%= item.category %> · <%= item.scope %></small>
+              </span>
+              <span class="parameter-validity__due"><%= item.dueDateLabel || '—' %><small><%= item.dueLabel || '无到期数据' %></small></span>
+              <span class="parameter-validity__status"><em><%= item.statusLabel %></em></span>
+              <span class="parameter-validity__message"><%= item.message || '—' %></span>
+              <button type="button" class="parameter-validity__copy" data-parameter-validity-copy="<%= item.name %>" aria-label="复制参数 <%= item.name %>">复制</button>
             </div>
           <% }); %>
           </div>
@@ -122,6 +119,33 @@ function formatActionRange(pageIndex, pageSize, total) {
         </div>
       <% } %>
     </section>
+
+    <% if (parameterValidityItems.length) { %>
+      <div class="parameter-validity__modal" data-parameter-validity-modal hidden role="dialog" aria-modal="true" aria-labelledby="parameter-validity-modal-title">
+        <div class="parameter-validity__modal-backdrop" data-parameter-validity-modal-close></div>
+        <div class="parameter-validity__modal-panel">
+          <div class="parameter-validity__modal-header">
+            <div>
+              <span class="action-monitor__eyebrow">PARAMETER DETAIL</span>
+              <h3 id="parameter-validity-modal-title">参数详情</h3>
+            </div>
+            <button type="button" class="parameter-validity__modal-close" data-parameter-validity-modal-close aria-label="关闭参数详情">×</button>
+          </div>
+          <div class="parameter-validity__modal-name">
+            <code data-parameter-validity-modal-name></code>
+            <button type="button" class="parameter-validity__copy" data-parameter-validity-modal-copy>复制</button>
+          </div>
+          <dl class="parameter-validity__modal-fields">
+            <div><dt>分类</dt><dd data-parameter-validity-modal-category></dd></div>
+            <div><dt>位置</dt><dd data-parameter-validity-modal-scope></dd></div>
+            <div><dt>状态</dt><dd data-parameter-validity-modal-status></dd></div>
+            <div><dt>到期 / 复核</dt><dd data-parameter-validity-modal-due></dd></div>
+            <div><dt>最近检查</dt><dd data-parameter-validity-modal-checked></dd></div>
+            <div><dt>处理提示</dt><dd data-parameter-validity-modal-message></dd></div>
+          </dl>
+        </div>
+      </div>
+    <% } %>
 
     <% if (actionMonitorLogRuns.length) { %>
       <div class="action-monitor__subheader">
@@ -189,13 +213,13 @@ function formatActionRange(pageIndex, pageSize, total) {
     <% } %>
   </section>
 
-  <% if (parameterValidityItems.length && showParameterValidityPagination) { %>
+  <% if (parameterValidityItems.length) { %>
     <script id="parameter-validity-data" type="application/json" data-page-size="<%= parameterValidityPageSize %>"><%- parameterValidityJson %></script>
   <% } %>
   <% if (actionMonitorLogRuns.length) { %>
     <script id="action-history-data" type="application/json" data-page-size="<%= actionMonitorHistoryPageSize %>"><%- actionMonitorHistoryJson %></script>
   <% } %>
-  <% if (actionMonitorLogRuns.length || (parameterValidityItems.length && showParameterValidityPagination)) { %>
+  <% if (actionMonitorLogRuns.length || parameterValidityItems.length) { %>
     <script defer src="<%- url_for('/js/action-monitor.js') %>"></script>
   <% } %>
 </section>

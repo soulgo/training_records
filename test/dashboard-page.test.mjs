@@ -352,7 +352,7 @@ test('action monitor page renders parameter validity status without secret value
           items: [
             {
               key: 'dev.github.secret.AI_API_KEY',
-              name: 'AI_API_KEY',
+              name: 'TELEGRAM_RECOGNITION_FALLBACK_API_KEY',
               scope: 'github_actions_secret',
               category: 'ai',
               statusLabel: '即将到期',
@@ -379,10 +379,20 @@ test('action monitor page renders parameter validity status without secret value
   });
 
   assert.match(actionMonitorPage, /系统参数有效期/);
-  assert.match(actionMonitorPage, /AI_API_KEY/);
+  assert.match(actionMonitorPage, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY/);
   assert.match(actionMonitorPage, /github_actions_secret/);
   assert.match(actionMonitorPage, /即将到期/);
   assert.match(actionMonitorPage, /剩余 13 天/);
+  assert.match(actionMonitorPage, /data-parameter-validity-open="dev\.github\.secret\.AI_API_KEY"/);
+  assert.match(actionMonitorPage, /data-parameter-validity-copy="TELEGRAM_RECOGNITION_FALLBACK_API_KEY"/);
+  assert.match(actionMonitorPage, /class="parameter-validity__modal"[^>]*data-parameter-validity-modal/);
+  assert.match(actionMonitorPage, /data-parameter-validity-modal-name/);
+  assert.match(actionMonitorPage, /data-parameter-validity-modal-category/);
+  assert.match(actionMonitorPage, /data-parameter-validity-modal-scope/);
+  assert.match(actionMonitorPage, /data-parameter-validity-modal-status/);
+  assert.match(actionMonitorPage, /data-parameter-validity-modal-due/);
+  assert.match(actionMonitorPage, /data-parameter-validity-modal-checked/);
+  assert.match(actionMonitorPage, /data-parameter-validity-modal-message/);
   assert.doesNotMatch(actionMonitorPage, /sk-live|postgres:\/\/|bot-token-value/);
 });
 
