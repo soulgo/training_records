@@ -21,6 +21,7 @@ const { readLatestChangelogVersion } = require('../tools/changelog-version.cjs')
 const trainingDataPath = path.join(rootDir, 'source', '_data', 'training.json');
 const dashboardViewPath = path.join(rootDir, 'source', '_data', 'dashboardView.json');
 const actionMonitorViewPath = path.join(rootDir, 'source', '_data', 'actionMonitorView.json');
+const actionMonitorScriptPath = path.join(rootDir, 'themes', 'cactus', 'source', 'js', 'action-monitor.js');
 
 test('dashboard renders comparison pills for the latest metrics without relying on fixed values', () => {
   const homepage = renderHomepageWithDashboard(buildHomepageDashboard());
@@ -457,6 +458,13 @@ test('action monitor page renders five parameter validity rows with pagination c
   assert.match(actionMonitorPage, /data-parameter-validity-nav="next"/);
   assert.match(actionMonitorPage, /id="parameter-validity-data"/);
   assert.match(actionMonitorPage, /data-page-size="5"/);
+});
+
+test('action monitor client pagination labels use the visible row count as the range end', () => {
+  const actionMonitorScript = readFileSync(actionMonitorScriptPath, 'utf8');
+  const closedRangeCalculations = actionMonitorScript.match(/Math\.min\(start \+ pageSize - 1, total\)/g) ?? [];
+
+  assert.equal(closedRangeCalculations.length, 2);
 });
 
 test('action monitor page keeps the module visible when no Action rows were generated', { concurrency: false }, () => {

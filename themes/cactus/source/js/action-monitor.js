@@ -25,7 +25,7 @@
     }
 
     const start = pageIndex * pageSize + 1;
-    const end = Math.min(start + pageSize, total);
+    const end = Math.min(start + pageSize - 1, total);
 
     return start + '-' + end + ' / 共 ' + total + ' 次';
   }
@@ -45,7 +45,7 @@
     }
 
     const start = pageIndex * pageSize + 1;
-    const end = Math.min(start + pageSize, total);
+    const end = Math.min(start + pageSize - 1, total);
     return start + '-' + end + ' / 共 ' + total + ' 个';
   }
 
