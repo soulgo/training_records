@@ -17,6 +17,7 @@ on:
       - themes/**
       - tools/**
       - cloudflare/**
+      - config/**
       - docs/**
       - prompts/**
       - sql/**
@@ -29,6 +30,7 @@ on:
       - .github/workflows/deploy-cloudflare-pages-dev.yml
       - .github/workflows/refresh-telegram-webhook.yml
       - .github/workflows/markdown-backup.yml
+      - .github/workflows/parameter-validity-audit.yml
       - .github/workflows/ci-tests.yml
       - package.json
       - package-lock.json
@@ -42,6 +44,7 @@ on:
       - themes/**
       - tools/**
       - cloudflare/**
+      - config/**
       - docs/**
       - prompts/**
       - sql/**
@@ -54,6 +57,7 @@ on:
       - .github/workflows/deploy-cloudflare-pages-dev.yml
       - .github/workflows/refresh-telegram-webhook.yml
       - .github/workflows/markdown-backup.yml
+      - .github/workflows/parameter-validity-audit.yml
       - .github/workflows/ci-tests.yml
       - package.json
       - package-lock.json

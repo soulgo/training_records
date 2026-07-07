@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 
 import { buildFeishuSyncReport } from '../src/app/use-cases/feishu-sync.use-case.mjs';
 import { buildTelegramSyncReport } from '../src/app/use-cases/telegram-sync.use-case.mjs';
@@ -8,7 +9,7 @@ import {
   hashSensitive,
 } from './lib/action-logger.mjs';
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const result = await main(process.argv.slice(2));
   process.exitCode = result.exitCode;
 }

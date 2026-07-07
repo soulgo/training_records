@@ -12,6 +12,7 @@ Action 日志现在由 workflow、同步结果文件、统一 summary 脚本、�
 - Action 监控只上报或读取 `run_id`，由 GitHub API 拉取 run/job/step 结构化数据；不上传 workflow event payload、业务 payload、step 输出或日志正文。
 - Action 监控数据写入 `monitor.github_action_runs/jobs/steps/failures`，用于长期统计成功率、失败率、耗时和失败摘要。
 - `/action-monitor/` 是独立站点页面；`build:data` 生成 `source/_data/actionMonitorView.json`，合并 PostgreSQL 监控表和 GitHub Actions API 最近 runs 后展示。
+- `/action-monitor/` 同时展示系统参数有效期。`.github/workflows/parameter-validity-audit.yml` 调用 `tools/check-parameter-validity.mjs` 读取 `config/parameter-validity/<env>.json`，写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`，并把风险计数写入 GitHub Step Summary。
 - `traceId` 由 `queueTaskId` 派生，格式为 `tr_<sha256前16位>`；workflow 没有队列任务时使用 `GITHUB_RUN_ID` 作为兜底 seed。
 - Telegram / 飞书 sync CLI stdout 默认只输出 safe report；完整 report 只写入 `TELEGRAM_SYNC_RESULT_PATH` / `FEISHU_SYNC_RESULT_PATH`，供 summary 和 notify step 读取。
 - `npm run export:markdown` 默认只输出 compact summary；完整导出 payload 只允许本地显式 `--debug-json`，GitHub Actions 中会拒绝该参数。
@@ -45,6 +46,7 @@ flowchart LR
   HttpReporter --> GitHubAPI
   GitHubAPI --> Normalize["github-action-monitor.use-case<br/>normalize + failure summary"]
   Normalize --> MonitorDB["PostgreSQL monitor.*"]
+  ParamAudit["Parameter Validity Audit<br/>registry + status"] --> MonitorDB
   MonitorDB --> SiteData["build:data<br/>actionMonitorView.json"]
   SiteData --> Page["/action-monitor/"]
 ```
@@ -62,7 +64,7 @@ flowchart LR
 
 ## Action monitor 页面
 
-`/action-monitor/` 由 `ActionMonitorGenerator` 和 `themes/cactus/layout/action-monitor.ejs` 生成。页面展示当前环境、最近运行数、成功率、失败数、平均耗时，并按 15 条分页显示 Action 日志。
+`/action-monitor/` 由 `ActionMonitorGenerator` 和 `themes/cactus/layout/action-monitor.ejs` 生成。页面展示当前环境、最近运行数、成功率、失败数、平均耗时、系统参数有效期摘要，并按 15 条分页显示 Action 日志。
 
 | 数据项 | 来源 |
 | --- | --- |
@@ -72,6 +74,17 @@ flowchart LR
 | 耗时 | `start_time`、`end_time` 或 GitHub API `run_started_at` / `updated_at` 计算。 |
 | 失败摘要 | 优先由失败 step 生成，最多取前三条，最长 800 字符。 |
 | 明细计数 | 读取时聚合 job、step 和 failure 数量。 |
+| 参数有效期 | 读取 `monitor.system_config_parameters` 和每个参数最新一条 `monitor.system_config_parameter_checks`，展示参数名、分类、位置、状态、到期/复核日期、最近检查和安全提示。 |
+
+参数有效期状态含义：
+
+| 状态 | 含义 |
+| --- | --- |
+| `ok` | 已有有效期或复核日期，且未进入预警窗口。 |
+| `warning` | 距到期或复核日期小于等于 registry 中的 `warningDays`。 |
+| `expired` | 当前时间已超过到期或复核日期。 |
+| `missing` | audit 能确认必填参数未注入或不存在。 |
+| `unknown` | registry 缺少有效期 / 复核时间，或当前只能确认参数名称而不能确认 provider metadata。 |
 
 ## 关键状态字段
 
@@ -113,6 +126,7 @@ flowchart LR
 | --- | --- |
 | Action 监控上报 | workflow 只发送 `run_id`；本地 reporter 用 GitHub API 拉取 run/job/step，不上传 `github.event_path`、业务 payload、step 输出或日志正文。 |
 | Action 监控落库 | `raw_payload_json` 只保存 GitHub API 返回的结构化 run/job/step 安全对象；失败摘要限制长度，不保存完整 logs。 |
+| 参数有效期监控 | registry、检查结果和页面只保存参数名、分类、位置、有效期规则和非敏感提示；不保存参数值、hash、DB URL、token、API key、聊天 ID 或 COS key。 |
 | 原始 dispatch payload | 只落到 runner 临时 event 文件；跨 step 只传 `SYNC_DISPATCH_EVENT_PATH`。 |
 | 文件、图片、聊天和来源 ID | `file_id`、`file_unique_id`、`image_key`、`chat_id`、`chatIds`、`sourceId`、飞书 `oc_` 默认 hash 或不输出。 |
 | COS 信息 | `bucket`、`pathPrefix`、`object key` 默认 hash 或不输出完整值。 |

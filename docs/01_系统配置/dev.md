@@ -164,11 +164,13 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.dev.toml
 | `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED` | 自定义 | 默认 `false`；只有显式迁移兜底时才临时打开。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 建议 dev 使用 `database`。 |
 
-数据库 schema 以 `sql/pgsql17.sql` 和当前显式建表脚本为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `DEV_TRAINING_DB_URL` 映射后的默认路径。Action 监控当前在同一个 dev PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，建表脚本见 `docs/03_历史重构记录/重构历史/action日志监控/03_github_action_monitor.sql`。
+数据库 schema 以 `sql/pgsql17.sql` 和当前显式建表脚本为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `DEV_TRAINING_DB_URL` 映射后的默认路径。Action 监控当前在同一个 dev PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，参数有效期 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
 
 `Report Action Status` step 会把 `DEV_TRAINING_DB_URL` 映射为运行时 `TRAINING_DB_URL`，把 `DEV_TRAINING_DB_APP_NAME` 映射为 `TRAINING_DB_APP_NAME`，并使用 `github.token` 读取 GitHub Actions run/jobs/steps 后直写 `monitor.*`。只有当分支 DB URL 不可用时，才使用 `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` / `GITHUB_ACTION_MONITOR_REPORT_URL` 走 HTTP 兜底。
 
-`/action-monitor/` 页面在 dev Pages 构建时由 `build:data` 生成。构建 job 设置 `TRAINING_DB_ENABLED=true`，优先用 `DEV_TRAINING_DB_READONLY_URL` 映射后的 `TRAINING_DB_READONLY_URL` 读取 `monitor.*`；未配置只读连接时回退 `DEV_TRAINING_DB_URL`。共享 site-build action 会注入 `GITHUB_TOKEN`，用于通过 GitHub Actions API 补齐当前 dev 分支漏报或滞后的 runs。
+参数有效期元数据维护在 `config/parameter-validity/dev.json`。当前 registry 只登记第一批高风险 Secret 名称和来源，不保存实际值；没有填写 `expiresAt` 或 `reviewAfterAt` 的参数会在 `/action-monitor/` 中显示为 `unknown`。
+
+`/action-monitor/` 页面在 dev Pages 构建时由 `build:data` 生成。构建 job 设置 `TRAINING_DB_ENABLED=true`，优先用 `DEV_TRAINING_DB_READONLY_URL` 映射后的 `TRAINING_DB_READONLY_URL` 读取 `monitor.*`；未配置只读连接时回退 `DEV_TRAINING_DB_URL`。共享 site-build action 会注入 `GITHUB_TOKEN`，用于通过 GitHub Actions API 补齐当前 dev 分支漏报或滞后的 runs，并读取最新参数有效期检查结果。
 
 ### 3.5 COS 图片存储
 
@@ -202,7 +204,8 @@ dev workflow 会检查 `DEV_COS_BUCKET` / `DEV_COS_DOMAIN` 不能和 main 的 `C
 4. 运行 `Deploy Cloudflare Pages (Dev)`，确认 dev 站点能构建和部署。
 5. 给 dev Telegram bot 或 dev 飞书应用发测试消息，确认 `Sync (Dev)` 被触发。
 6. 检查 GitHub Actions summary：同步结果、数据库写入、图片上传、站点部署都应成功。
-7. 打开 dev 站点 `/action-monitor/`，确认新 run 出现在 Action 日志里；如果只有顶层 run 没有 job/step 明细，先回看该 run 的 `Report Action Status` step 是否成功写入 `monitor.*`。
+7. 手动运行 `Parameter Validity Audit`，确认 Step Summary 出现 dev 参数有效期计数，并且 workflow 触发 dev Pages 刷新。
+8. 打开 dev 站点 `/action-monitor/`，确认新 run 出现在 Action 日志里，且“系统参数有效期”展示 dev registry 中的参数状态；如果只有顶层 run 没有 job/step 明细，先回看该 run 的 `Report Action Status` step 是否成功写入 `monitor.*`。
 
 ## 5. 不需要配置 Docker
 

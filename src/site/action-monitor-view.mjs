@@ -1,6 +1,13 @@
 const DEFAULT_HISTORY_PAGE_SIZE = 15;
 const SUCCESS_CONCLUSIONS = new Set(['success']);
 const FAILURE_CONCLUSIONS = new Set(['failure', 'cancelled', 'timed_out', 'action_required', 'startup_failure']);
+const PARAMETER_STATUS_ORDER = new Map([
+  ['expired', 1],
+  ['missing', 2],
+  ['warning', 3],
+  ['unknown', 4],
+  ['ok', 5],
+]);
 
 export function buildActionMonitorViewModel(rows = [], options = {}) {
   const now = normalizeDate(options.now) ?? new Date();
@@ -28,6 +35,54 @@ export function buildActionMonitorViewModel(rows = [], options = {}) {
     historyRuns: actionRuns,
     runs: visibleRuns,
     allRuns: actionRuns,
+    parameterValidity: buildParameterValidityViewModel(options.parameterValidityRows, {
+      environment,
+      now,
+    }),
+  };
+}
+
+export function buildParameterValidityViewModel(rows = [], options = {}) {
+  const now = normalizeDate(options.now) ?? new Date();
+  const environment = normalizeText(options.environment) ?? 'dev';
+  const items = (Array.isArray(rows) ? rows : [])
+    .map((row) => normalizeParameterValidityItem(row, { now }))
+    .filter(Boolean)
+    .sort(compareParameterValidityItems);
+  const counts = countParameterStatuses(items);
+
+  return {
+    title: '系统参数有效期',
+    environment,
+    summaryCards: [
+      {
+        label: '监控参数',
+        value: `${counts.total} 个`,
+        hint: `${environment} 环境`,
+      },
+      {
+        label: '已过期',
+        value: `${counts.expired} 个`,
+        hint: counts.expired ? '需要立即处理' : '当前无过期参数',
+      },
+      {
+        label: '配置缺失',
+        value: `${counts.missing} 个`,
+        hint: counts.missing ? '需要补齐配置' : '当前无缺失参数',
+      },
+      {
+        label: '即将到期',
+        value: `${counts.warning} 个`,
+        hint: counts.warning ? '进入预警窗口' : '当前无预警参数',
+      },
+      {
+        label: '未知有效期',
+        value: `${counts.unknown} 个`,
+        hint: counts.unknown ? '需要补齐元数据' : '元数据完整',
+      },
+    ],
+    items,
+    emptyMessage: '暂无参数有效期数据',
   };
 }
 
@@ -70,6 +125,77 @@ function normalizeRun(row, { now }) {
     stepCount: normalizeNonNegativeInteger(row.stepCount ?? row.step_count) ?? 0,
     failureCount: normalizeNonNegativeInteger(row.failureCount ?? row.failure_count) ?? 0,
   };
+}
+
+function normalizeParameterValidityItem(row, { now }) {
+  const key = normalizeText(row.parameterKey ?? row.parameter_key ?? row.key);
+  const name = normalizeText(row.parameterName ?? row.parameter_name ?? row.name);
+  if (!key || !name) {
+    return null;
+  }
+
+  const status = normalizeParameterStatus(row.status);
+  const daysUntilDue = normalizeInteger(row.daysUntilDue ?? row.days_until_due);
+  const dueAt = normalizeIso(
+    row.dueAt ??
+    row.due_at ??
+    row.expiresAt ??
+    row.expires_at ??
+    row.reviewAfterAt ??
+    row.review_after_at,
+  );
+  const checkedAt = normalizeIso(row.checkedAt ?? row.checked_at ?? row.lastCheckedAt ?? row.last_checked_at);
+
+  return {
+    key,
+    name,
+    scope: normalizeText(row.scope) ?? 'unknown',
+    category: normalizeText(row.category) ?? 'unknown',
+    status,
+    statusLabel: formatParameterStatusLabel(status),
+    tone: formatParameterStatusTone(status),
+    dueAt,
+    dueDateLabel: formatDateLabel(dueAt),
+    daysUntilDue,
+    dueLabel: formatDueLabel(daysUntilDue),
+    checkedAt,
+    checkedAtLabel: formatDateLabel(checkedAt),
+    lastCheckedLabel: formatRelativeTime(checkedAt, now),
+    evidenceSource: normalizeText(row.evidenceSource ?? row.evidence_source) ?? 'registry',
+    message: normalizeText(row.message) ?? '',
+  };
+}
+
+function compareParameterValidityItems(left, right) {
+  const statusDiff = (PARAMETER_STATUS_ORDER.get(left.status) ?? 99) - (PARAMETER_STATUS_ORDER.get(right.status) ?? 99);
+  if (statusDiff) {
+    return statusDiff;
+  }
+
+  const leftDays = Number.isFinite(left.daysUntilDue) ? left.daysUntilDue : Number.POSITIVE_INFINITY;
+  const rightDays = Number.isFinite(right.daysUntilDue) ? right.daysUntilDue : Number.POSITIVE_INFINITY;
+  if (leftDays !== rightDays) {
+    return leftDays - rightDays;
+  }
+
+  return left.name.localeCompare(right.name, 'zh-CN');
+}
+
+function countParameterStatuses(items) {
+  const counts = {
+    total: items.length,
+    ok: 0,
+    warning: 0,
+    expired: 0,
+    missing: 0,
+    unknown: 0,
+  };
+
+  for (const item of items) {
+    counts[item.status] = (counts[item.status] ?? 0) + 1;
+  }
+
+  return counts;
 }
 
 function buildSummaryCards(runs) {
@@ -183,6 +309,53 @@ function formatDuration(seconds) {
   return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
+function formatParameterStatusLabel(status) {
+  if (status === 'ok') {
+    return '正常';
+  }
+  if (status === 'warning') {
+    return '即将到期';
+  }
+  if (status === 'expired') {
+    return '已过期';
+  }
+  if (status === 'missing') {
+    return '配置缺失';
+  }
+  return '未知有效期';
+}
+
+function formatParameterStatusTone(status) {
+  if (status === 'ok') {
+    return 'success';
+  }
+  if (status === 'warning') {
+    return 'warning';
+  }
+  if (status === 'expired' || status === 'missing') {
+    return 'failure';
+  }
+  return 'neutral';
+}
+
+function formatDueLabel(daysUntilDue) {
+  if (!Number.isFinite(daysUntilDue)) {
+    return '无到期数据';
+  }
+  if (daysUntilDue < 0) {
+    return `逾期 ${Math.abs(daysUntilDue)} 天`;
+  }
+  if (daysUntilDue === 0) {
+    return '今天到期';
+  }
+  return `剩余 ${daysUntilDue} 天`;
+}
+
+function formatDateLabel(value) {
+  const date = normalizeDate(value);
+  return date ? date.toISOString().slice(0, 10) : '—';
+}
+
 function formatRelativeTime(value, now) {
   const date = normalizeDate(value);
   if (!date) {
@@ -251,4 +424,17 @@ function normalizeNonNegativeInteger(value) {
   }
   const numberValue = Number(value);
   return Number.isFinite(numberValue) && numberValue >= 0 ? Math.round(numberValue) : null;
+}
+
+function normalizeInteger(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const numberValue = Number(value);
+  return Number.isSafeInteger(numberValue) ? numberValue : null;
+}
+
+function normalizeParameterStatus(value) {
+  const normalized = normalizeText(value);
+  return PARAMETER_STATUS_ORDER.has(normalized) ? normalized : 'unknown';
 }

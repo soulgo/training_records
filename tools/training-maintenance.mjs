@@ -16,7 +16,7 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..');
 const { Client } = pg;
-const migrationDir = path.join('sql', 'training_records', 'migrations');
+const migrationDir = 'sql/training_records/migrations';
 const pendingDatabaseThresholds = {
   p2OldestAgeMinutes: 30,
   p1OldestAgeMinutes: 24 * 60,
@@ -1171,7 +1171,7 @@ async function readMigrationPlan(rootDir) {
     const sql = await readFile(filePath, 'utf8');
     migrations.push({
       id: entry.name.replace(/\.sql$/u, ''),
-      file: path.join(migrationDir, entry.name),
+      file: `${migrationDir}/${entry.name}`,
       description: parseMigrationDescription(sql),
       checksumSha256: createHash('sha256').update(sql, 'utf8').digest('hex'),
       status: 'pending',

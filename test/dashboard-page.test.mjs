@@ -44,8 +44,8 @@ test('dashboard defaults charts to the latest 30 days and daily cards to the lat
 
     try {
       ensureDataDir();
-      writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
-      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(syntheticDashboard), null, 2));
+      writeFixtureFile(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
+      writeFixtureFile(dashboardViewPath, JSON.stringify(buildDashboardViewModel(syntheticDashboard), null, 2));
       execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
         cwd: rootDir,
         stdio: 'pipe',
@@ -131,8 +131,8 @@ test('dashboard embeds daily overview pagination controls without changing the d
 
     try {
       ensureDataDir();
-      writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
-      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(syntheticDashboard), null, 2));
+      writeFixtureFile(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
+      writeFixtureFile(dashboardViewPath, JSON.stringify(buildDashboardViewModel(syntheticDashboard), null, 2));
       execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
         cwd: rootDir,
         stdio: 'pipe',
@@ -177,8 +177,8 @@ test('dashboard fallback view handles ISO datetime dates from generated data', {
 
     try {
       ensureDataDir();
-      writeFileSync(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
-      writeFileSync(dashboardViewPath, JSON.stringify({ generatedAt: 'stale' }, null, 2));
+      writeFixtureFile(trainingDataPath, JSON.stringify(syntheticDashboard, null, 2));
+      writeFixtureFile(dashboardViewPath, JSON.stringify({ generatedAt: 'stale' }, null, 2));
       execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
         cwd: rootDir,
         stdio: 'pipe',
@@ -263,12 +263,12 @@ test('action monitor page renders the module from generated action monitor data'
 
     try {
       ensureDataDir();
-      writeFileSync(trainingDataPath, JSON.stringify(buildHomepageDashboard(), null, 2));
-      writeFileSync(
+      writeFixtureFile(trainingDataPath, JSON.stringify(buildHomepageDashboard(), null, 2));
+      writeFixtureFile(
         dashboardViewPath,
         JSON.stringify(buildDashboardViewModel(buildHomepageDashboard()), null, 2),
       );
-      writeFileSync(actionMonitorViewPath, JSON.stringify({
+      writeFixtureFile(actionMonitorViewPath, JSON.stringify({
         title: 'action 监控',
         environment: 'dev',
         updatedTime: '14:30',
@@ -321,6 +321,66 @@ test('action monitor page renders the module from generated action monitor data'
   assert.match(actionMonitorPage, /5m 42s/);
 });
 
+test('action monitor page renders parameter validity status without secret values', { concurrency: false }, () => {
+  const actionMonitorPage = withSharedSiteFixture(() => {
+    const originalTrainingData = readOptionalFile(trainingDataPath);
+    const originalDashboardView = readOptionalFile(dashboardViewPath);
+    const originalActionMonitorView = readOptionalFile(actionMonitorViewPath);
+
+    try {
+      const snapshot = buildHomepageDashboard();
+      ensureDataDir();
+      writeFixtureFile(trainingDataPath, JSON.stringify(snapshot, null, 2));
+      writeFixtureFile(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
+      writeFixtureFile(actionMonitorViewPath, JSON.stringify({
+        title: 'action 监控',
+        environment: 'dev',
+        updatedTime: '14:30',
+        summaryCards: [],
+        runs: [],
+        parameterValidity: {
+          title: '系统参数有效期',
+          summaryCards: [
+            { label: '监控参数', value: '2 个', hint: 'dev 环境' },
+            { label: '即将到期', value: '1 个', hint: '进入预警窗口' },
+          ],
+          items: [
+            {
+              key: 'dev.github.secret.AI_API_KEY',
+              name: 'AI_API_KEY',
+              scope: 'github_actions_secret',
+              category: 'ai',
+              statusLabel: '即将到期',
+              tone: 'warning',
+              dueDateLabel: '2026-07-20',
+              dueLabel: '剩余 13 天',
+              checkedAtLabel: '2026-07-07',
+              lastCheckedLabel: '1 minute ago',
+              message: '距离到期或复核日期 13 天',
+            },
+          ],
+        },
+      }, null, 2));
+      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
+        cwd: rootDir,
+        stdio: 'pipe',
+      });
+      return readFileSync(path.join(rootDir, 'public', 'action-monitor', 'index.html'), 'utf8');
+    } finally {
+      restoreOptionalFile(trainingDataPath, originalTrainingData);
+      restoreOptionalFile(dashboardViewPath, originalDashboardView);
+      restoreOptionalFile(actionMonitorViewPath, originalActionMonitorView);
+    }
+  });
+
+  assert.match(actionMonitorPage, /系统参数有效期/);
+  assert.match(actionMonitorPage, /AI_API_KEY/);
+  assert.match(actionMonitorPage, /github_actions_secret/);
+  assert.match(actionMonitorPage, /即将到期/);
+  assert.match(actionMonitorPage, /剩余 13 天/);
+  assert.doesNotMatch(actionMonitorPage, /sk-live|postgres:\/\/|bot-token-value/);
+});
+
 test('action monitor page keeps the module visible when no Action rows were generated', { concurrency: false }, () => {
   const actionMonitorPage = withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
@@ -330,9 +390,9 @@ test('action monitor page keeps the module visible when no Action rows were gene
     try {
       const snapshot = buildHomepageDashboard();
       ensureDataDir();
-      writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
-      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
-      writeFileSync(actionMonitorViewPath, JSON.stringify({
+      writeFixtureFile(trainingDataPath, JSON.stringify(snapshot, null, 2));
+      writeFixtureFile(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
+      writeFixtureFile(actionMonitorViewPath, JSON.stringify({
         title: 'action 监控',
         environment: 'dev',
         updatedTime: '14:30',
@@ -366,9 +426,9 @@ test('action monitor page renders all branch action logs with fifteen-item pagin
     try {
       const snapshot = buildHomepageDashboard();
       ensureDataDir();
-      writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
-      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
-      writeFileSync(actionMonitorViewPath, JSON.stringify({
+      writeFixtureFile(trainingDataPath, JSON.stringify(snapshot, null, 2));
+      writeFixtureFile(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
+      writeFixtureFile(actionMonitorViewPath, JSON.stringify({
         title: 'action 监控',
         environment: 'dev',
         updatedTime: '09:20',
@@ -589,8 +649,8 @@ function renderHomepageWithDashboard(snapshot) {
 
     try {
       ensureDataDir();
-      writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
-      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
+      writeFixtureFile(trainingDataPath, JSON.stringify(snapshot, null, 2));
+      writeFixtureFile(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
       execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
         cwd: rootDir,
         stdio: 'pipe',
@@ -618,5 +678,24 @@ function restoreOptionalFile(filePath, originalContent) {
     }
     return;
   }
-  writeFileSync(filePath, originalContent);
+  writeFixtureFile(filePath, originalContent);
+}
+
+function writeFixtureFile(filePath, content) {
+  const retryableCodes = new Set(['UNKNOWN', 'EBUSY', 'EPERM']);
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      writeFileSync(filePath, content);
+      return;
+    } catch (error) {
+      if (!retryableCodes.has(error?.code) || attempt === 19) {
+        throw error;
+      }
+      sleep(50);
+    }
+  }
+}
+
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }

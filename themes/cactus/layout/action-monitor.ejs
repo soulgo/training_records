@@ -10,6 +10,9 @@ const actionMonitorLogRuns = actionMonitorView.allRuns ||
 const actionMonitorHistoryPageSize = actionMonitorView.historyPageSize || 15;
 const actionMonitorHistoryJson = JSON.stringify(actionMonitorLogRuns);
 const actionMonitorSummaryCards = actionMonitorView.summaryCards || [];
+const parameterValidity = actionMonitorView.parameterValidity || {};
+const parameterValidityCards = parameterValidity.summaryCards || [];
+const parameterValidityItems = parameterValidity.items || [];
 
 function formatActionRange(pageIndex, pageSize, total) {
   if (!total) {
@@ -47,6 +50,57 @@ function formatActionRange(pageIndex, pageSize, total) {
         <% }); %>
       </div>
     <% } %>
+
+    <section class="parameter-validity" aria-label="系统参数有效期">
+      <div class="action-monitor__subheader">
+        <div>
+          <h2><%= parameterValidity.title || '系统参数有效期' %></h2>
+          <span><%= parameterValidity.environment || actionMonitorView.environment || 'dev' %> 参数有效期状态</span>
+        </div>
+      </div>
+
+      <% if (parameterValidityCards.length) { %>
+        <div class="parameter-validity__summary" aria-label="系统参数有效期摘要">
+          <% parameterValidityCards.forEach((card) => { %>
+            <div class="action-monitor__summary-card">
+              <span><%= card.label %></span>
+              <strong><%= card.value %></strong>
+              <small><%= card.hint %></small>
+            </div>
+          <% }); %>
+        </div>
+      <% } %>
+
+      <% if (parameterValidityItems.length) { %>
+        <div class="parameter-validity__table" role="table" aria-label="系统参数有效期列表">
+          <div class="parameter-validity__row parameter-validity__row--head" role="row">
+            <span role="columnheader">参数</span>
+            <span role="columnheader">分类</span>
+            <span role="columnheader">位置</span>
+            <span role="columnheader">状态</span>
+            <span role="columnheader">到期 / 复核</span>
+            <span role="columnheader">最近检查</span>
+            <span role="columnheader">处理提示</span>
+          </div>
+          <% parameterValidityItems.forEach((item) => { %>
+            <div class="parameter-validity__row parameter-validity__row--<%= item.tone || 'neutral' %>" role="row">
+              <span role="cell"><strong><%= item.name %></strong></span>
+              <span role="cell"><%= item.category %></span>
+              <span role="cell"><%= item.scope %></span>
+              <span role="cell"><em><%= item.statusLabel %></em></span>
+              <span role="cell"><%= item.dueDateLabel || '—' %><small><%= item.dueLabel || '无到期数据' %></small></span>
+              <span role="cell"><%= item.checkedAtLabel || '—' %><small><%= item.lastCheckedLabel || '—' %></small></span>
+              <span role="cell"><%= item.message || '—' %></span>
+            </div>
+          <% }); %>
+        </div>
+      <% } else { %>
+        <div class="action-monitor__empty action-monitor__empty--compact">
+          <strong><%= parameterValidity.emptyMessage || '暂无参数有效期数据' %></strong>
+          <span>参数有效期 audit 写入监控库并重新构建站点后，这里会显示 dev/main 的参数状态。</span>
+        </div>
+      <% } %>
+    </section>
 
     <% if (actionMonitorLogRuns.length) { %>
       <div class="action-monitor__subheader">

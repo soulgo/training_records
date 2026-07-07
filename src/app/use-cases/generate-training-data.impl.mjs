@@ -20,7 +20,10 @@ import {
   MonitorGenerator,
   TrainingDayGenerator,
 } from '../../adapters/hexo/index.mjs';
-import { PostgresGitHubActionMonitorRepository } from '../../adapters/postgres/index.mjs';
+import {
+  PostgresGitHubActionMonitorRepository,
+  PostgresParameterValidityMonitorRepository,
+} from '../../adapters/postgres/index.mjs';
 import {
   listGitHubActionRunsForMonitor,
   mergeActionMonitorRows,
@@ -191,6 +194,7 @@ async function loadActionMonitorViewFromPostgres(options = {}) {
 
   let databaseRows = [];
   let githubRows = [];
+  let parameterValidityRows = [];
 
   if (githubConfig.enabled) {
     try {
@@ -231,6 +235,15 @@ async function loadActionMonitorViewFromPostgres(options = {}) {
       monitorEnvironment: config.environment,
       limit: config.limit,
     });
+    try {
+      const parameterRepository = new PostgresParameterValidityMonitorRepository(client);
+      parameterValidityRows = await parameterRepository.listLatestParameterChecks({
+        monitorEnvironment: config.environment,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      stderr.write(`[parameter-validity-monitor-view] ${message}; showing empty parameter validity data\n`);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     stderr.write(`[github-action-monitor-view] ${message}; using GitHub API fallback rows\n`);
@@ -246,6 +259,7 @@ async function loadActionMonitorViewFromPostgres(options = {}) {
     environment: config.environment,
     now,
     limit: config.limit,
+    parameterValidityRows,
   });
 }
 

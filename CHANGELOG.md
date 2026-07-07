@@ -13,19 +13,29 @@
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-07-07
+
 ### Added
 
+- 新增系统参数有效期监控：提供 `config/parameter-validity/dev.json`、`config/parameter-validity/main.json` 和 registry schema，记录 dev/main 高风险 Secret、变量与运行时参数的名称、范围、有效期规则、责任方和来源路径，不保存参数值或 value hash。
+- 新增 `tools/check-parameter-validity.mjs` 审计命令与 `Parameter Validity Audit` workflow，支持手动 / 定时检查参数状态，写入 `monitor.system_config_parameters` 与 `monitor.system_config_parameter_checks`，并在审计后触发 dev/main `/action-monitor/` 页面刷新。
+- `/action-monitor/` 页面新增“系统参数有效期”模块：`build:data` 读取 PostgreSQL 最新检查结果，展示监控参数数量、过期、缺失、即将到期和未知有效期状态，并按风险优先级排序。
 - dev 新增独立 `/action-monitor/` 的 `action 监控` 模块：`build:data` 会从 PostgreSQL `monitor.github_action_runs/jobs/steps/failures` 生成 `actionMonitorView.json`，页面展示 GitHub Actions 的状态、workflow、run 编号、commit、触发人、分支、耗时和失败摘要；本地无监控数据库时自动降级为空视图。
 - `action 监控` 独立模块新增按 15 条分页的完整 Action 日志列表：dev/main 各自展示对应分支所有 PostgreSQL/GitHub Action run，不再按“最近 2 天 / 更早 Action”拆分。
 
 ### Changed
 
+- 同步项目包版本号到 `1.3.3`。
+- 补齐参数有效期监控的当前系统文档：更新 dev/main 配置说明、数据库模型、Action 日志与失败补偿、Action 日志排查文档，明确监控表只保存非敏感元数据和检查状态。
 - 按后续规划落地文档同步规则完成 action 日志监控规划归档：将已实现规划从 `docs/03_历史重构记录/后续规划_未实现/action 日志监控/` 移入 `docs/03_历史重构记录/重构历史/action日志监控/`，并把当前 `Report Action Status`、本地 PostgreSQL reporter、HTTP 上报兜底、`monitor.*` 表、`/action-monitor/` 页面和排查方式写回 `01_系统配置`、`02_系统核心逻辑`、`04_问题与排查` 及相关 README。
 - 将 dev 页面里的 Action 日志监控从首页拆出为独立页面模块 `/action-monitor/`，新增导航入口、独立 layout、样式与历史分页脚本，首页不再嵌入该监控模块。
 - `action 监控` 数据读取默认不再限制为最近一段时间或固定 50 条；`GITHUB_ACTION_MONITOR_VIEW_LIMIT` 仅在显式配置时作为最大读取数量。
 
 ### Fixed
 
+- 修复 Windows 下 `tools/action-sync-summary.mjs` 直接执行时入口判断不兼容路径格式的问题。
+- 修复 Windows 下页面渲染测试偶发文件锁导致夹具恢复失败的问题，测试写入派生站点数据时会对临时锁错误进行短重试。
+- 修复 Windows 下 recognition eval 测试通过 `npm` 子进程执行时的跨平台不稳定问题，并让 migration dry-run 输出使用 POSIX 相对路径，避免路径分隔符导致断言漂移。
 - 修复顶部导航在 dev 系统页面宽度接近截图场景时把“关于”挤到第二行的问题；桌面导航改为单行 flex 布局并收敛导航项间距，保证“训练记录 / action 监控 / 监控 / 锻炼随想 / 杂七杂八 / 身体反馈 / 关于”在同一行展示。
 - 修复 Telegram/飞书图片识别触发的 Sync queue task 已出现在 GitHub Actions 但未被 `/action-monitor/` 页面统计的问题；生成 `actionMonitorView.json` 时会在 PostgreSQL 监控表基础上通过 GitHub Actions API 拉取当前分支最近 runs 并合并，避免上报漏写、滞后或生成时序导致页面少统计，同时保留数据库里的 job、step 和失败摘要细节。
 - 修复站点构建阶段未把 `${{ github.token }}` 传给 `build:data`、部署 workflow 也缺少 `actions: read` 权限，导致 `/action-monitor/` 实际只能显示 PostgreSQL 已上报的 19 条 dev Action 日志，无法通过 GitHub Actions API 补全当前分支完整运行历史的问题。
