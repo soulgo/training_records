@@ -467,6 +467,13 @@ test('action monitor client pagination labels use the visible row count as the r
   assert.equal(closedRangeCalculations.length, 2);
 });
 
+test('action monitor copy buttons fall back when clipboard permission is denied', () => {
+  const actionMonitorScript = readFileSync(actionMonitorScriptPath, 'utf8');
+
+  assert.ok(actionMonitorScript.includes('navigator.clipboard.writeText(text).catch(function () {'));
+  assert.ok(actionMonitorScript.includes('fallbackCopyText(text);'));
+});
+
 test('action monitor page keeps the module visible when no Action rows were generated', { concurrency: false }, () => {
   const actionMonitorPage = withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);

@@ -98,16 +98,7 @@
       '</div>';
   }
 
-  function copyText(value) {
-    const text = String(value ?? '');
-    if (!text) {
-      return;
-    }
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(text).catch(function () {});
-      return;
-    }
-
+  function fallbackCopyText(text) {
     const textarea = document.createElement('textarea');
     textarea.value = text;
     textarea.setAttribute('readonly', '');
@@ -119,6 +110,21 @@
       document.execCommand('copy');
     } catch {}
     textarea.remove();
+  }
+
+  function copyText(value) {
+    const text = String(value ?? '');
+    if (!text) {
+      return;
+    }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).catch(function () {
+        fallbackCopyText(text);
+      });
+      return;
+    }
+
+    fallbackCopyText(text);
   }
 
   function closeParameterValidityModal() {
