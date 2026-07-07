@@ -173,11 +173,24 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 | `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED` | 自定义 | 默认 `false`；只有显式迁移兜底时才临时打开。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 生产建议使用 `database`。 |
 
-数据库 schema 以 `sql/pgsql17.sql` 和当前显式建表脚本为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `TRAINING_DB_URL` 默认路径。Action 监控当前在同一个生产 PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，建表脚本见 `docs/03_历史重构记录/重构历史/action日志监控/03_github_action_monitor.sql`。
+数据库 schema 以 `sql/pgsql17.sql` 和当前显式建表脚本为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `TRAINING_DB_URL` 默认路径。Action 监控当前在同一个生产 PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，参数有效期 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
 
 `Report Action Status` step 会使用运行时 `TRAINING_DB_URL`、`TRAINING_DB_APP_NAME` 和 `github.token` 读取 GitHub Actions run/jobs/steps 后直写 `monitor.*`。只有当生产 DB URL 不可用时，才使用 `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` / `GITHUB_ACTION_MONITOR_REPORT_URL` 走 HTTP 兜底。
 
-`/action-monitor/` 页面在生产 Pages 构建时由 `build:data` 生成。构建 job 只有在 `TRAINING_DB_ENABLED=true` 时读取 PostgreSQL，优先使用 `TRAINING_DB_READONLY_URL`，未配置只读连接时回退 `TRAINING_DB_URL`。共享 site-build action 会注入 `GITHUB_TOKEN`，用于通过 GitHub Actions API 补齐当前 main 分支漏报或滞后的 runs。
+参数有效期元数据维护在 `config/parameter-validity/main.json`。当前 registry 只登记第一批高风险 Secret、变量和运行时参数的名称、范围、分类、来源、有效期或复核日期，不保存实际值或 value hash；没有填写 `expiresAt`、`reviewAfterAt`，且无法通过 `rotationCycleDays` 计算到期日的参数会在 `/action-monitor/` 中显示为 `unknown`。
+
+registry 字段边界如下：
+
+| 字段 | 维护要求 |
+| --- | --- |
+| `key` / `name` / `scope` / `category` | 记录参数身份、所在位置和业务分类；不得写入参数值。 |
+| `required` / `sensitive` | 标记是否必填、是否敏感；敏感参数只展示名称和状态。 |
+| `validityMode` | 只能使用 `fixed_expires_at`、`rotation_cycle`、`review_after`、`non_expiring_manual_review`、`provider_metadata`。 |
+| `validFrom` / `expiresAt` / `reviewAfterAt` / `rotationCycleDays` | 记录人工维护的有效期或复核规则；不能把 Secret 更新时间直接当成真实过期时间。 |
+| `warningDays` / `criticalDays` | 到期前提醒窗口；未填时程序默认使用 30 天和 7 天。 |
+| `sourceDoc` / `sourceCode` | 指向当前文档、workflow、代码或配置文件，便于排查来源。 |
+
+`/action-monitor/` 页面在生产 Pages 构建时由 `build:data` 生成。构建 job 只有在 `TRAINING_DB_ENABLED=true` 时读取 PostgreSQL，优先使用 `TRAINING_DB_READONLY_URL`，未配置只读连接时回退 `TRAINING_DB_URL`。共享 site-build action 会注入 `GITHUB_TOKEN`，用于通过 GitHub Actions API 补齐当前 main 分支漏报或滞后的 runs，并读取最新参数有效期检查结果。
 
 ### 3.5 COS 图片存储
 
@@ -212,7 +225,8 @@ main 只有在 `COS_ENABLED=true` 时才需要配置 COS。
 5. 给生产 Telegram bot 或生产飞书应用发测试消息，确认 `Sync (Main)` 被触发。
 6. 检查 GitHub Actions summary：同步结果、数据库写入、图片上传、站点部署、缓存清理都应成功。
 7. 如启用备份，手动运行一次 `Markdown Backup`，确认能从生产 DB 导出 Markdown。
-8. 打开生产站点 `/action-monitor/`，确认新 run 出现在 Action 日志里；如果只有顶层 run 没有 job/step 明细，先回看该 run 的 `Report Action Status` step 是否成功写入 `monitor.*`。
+8. 手动运行 `Parameter Validity Audit` 并选择 `main`，确认 Step Summary 出现 main 参数有效期计数，并且 workflow 触发生产 Pages 刷新。
+9. 打开生产站点 `/action-monitor/`，确认新 run 出现在 Action 日志里，且“系统参数有效期”展示 main registry 中的参数状态；如果只有顶层 run 没有 job/step 明细，先回看该 run 的 `Report Action Status` step 是否成功写入 `monitor.*`。
 
 ## 5. 不需要配置 Docker
 

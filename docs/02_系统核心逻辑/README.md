@@ -28,6 +28,7 @@
 | PostgreSQL 写入 | `src/db/training/write.mjs`、`src/adapters/postgres/*` |
 | 数据读取和快照 | `src/domain/training/training-snapshot.mjs`、`src/db/training/read*.mjs` |
 | GitHub Action 监控 | `tools/report-github-action-status.mjs`、`tools/github-action-monitor-server.mjs`、`src/app/use-cases/github-action-monitor.use-case.mjs`、`src/adapters/postgres/github-action-monitor-repository.pg.mjs` |
+| 系统参数有效期监控 | `config/parameter-validity/<env>.json`、`tools/check-parameter-validity.mjs`、`src/app/use-cases/parameter-validity-monitor.use-case.mjs`、`src/adapters/postgres/parameter-validity-monitor-repository.pg.mjs` |
 | 站点生成 | `tools/generate-training-data.mjs`、`src/site/dashboard-view.mjs`、`themes/cactus/*` |
 | Worker 入口 | `cloudflare/sync-dispatch-worker.mjs`、`cloudflare/*dispatch-worker.mjs`、`cloudflare/sync-dispatch-queue.mjs` |
 | SQL schema | `sql/pgsql17.sql` |
@@ -36,7 +37,7 @@
 
 - PostgreSQL `core.*` 是训练、饮食、体脂、睡眠、随想和展示读取的业务事实源。
 - `ingest.*` 保存消息、识别、AI 调用日志和 pending 批次。
-- `monitor.*` 保存 GitHub Actions run/job/step/failure 监控事实，只存结构化安全摘要，不存业务 payload 或日志正文。
+- `monitor.*` 保存 GitHub Actions run/job/step/failure 和系统参数有效期监控事实，只存结构化安全摘要，不存业务 payload、日志正文、Secret 明文或参数值。
 - `archive.*` 保存历史 Markdown 解析和归档。
 - Telegram 和飞书共享同一套应用层同步逻辑；飞书先转换为 Telegram 形态的中间消息。
 - 图片只有通过 schema、置信度、日期和业务校验后才会写入 `core.*`。

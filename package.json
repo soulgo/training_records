@@ -1,6 +1,6 @@
 {
   "name": "training-records-dashboard",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "private": true,
   "description": "Hexo dashboard for Markdown-based training records",
   "scripts": {

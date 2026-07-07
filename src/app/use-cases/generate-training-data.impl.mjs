@@ -20,11 +20,15 @@ import {
   MonitorGenerator,
   TrainingDayGenerator,
 } from '../../adapters/hexo/index.mjs';
-import { PostgresGitHubActionMonitorRepository } from '../../adapters/postgres/index.mjs';
+import {
+  PostgresGitHubActionMonitorRepository,
+  PostgresParameterValidityMonitorRepository,
+} from '../../adapters/postgres/index.mjs';
 import {
   listGitHubActionRunsForMonitor,
   mergeActionMonitorRows,
 } from './github-action-monitor.use-case.mjs';
+import { runParameterValidityAudit } from './parameter-validity-monitor.use-case.mjs';
 import { buildActionMonitorViewModel } from '../../site/action-monitor-view.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -171,7 +175,7 @@ export async function generateTrainingData(options = {}) {
   };
 }
 
-async function loadActionMonitorViewFromPostgres(options = {}) {
+export async function loadActionMonitorViewFromPostgres(options = {}) {
   const env = options.env ?? process.env;
   const stderr = options.stderr ?? process.stderr;
   const now = options.now ?? new Date();
@@ -180,17 +184,26 @@ async function loadActionMonitorViewFromPostgres(options = {}) {
     environment: config.environment,
     limit: config.limit,
   });
+  const registryParameterRows = await loadParameterValidityRowsFromRegistry({
+    rootDir: options.rootDir ?? defaultRootDir,
+    environment: config.environment,
+    env,
+    now,
+    stderr,
+  });
 
   if (!config.enabled && !githubConfig.enabled) {
     return buildActionMonitorViewModel([], {
       environment: config.environment,
       now,
       limit: config.limit,
+      parameterValidityRows: registryParameterRows,
     });
   }
 
   let databaseRows = [];
   let githubRows = [];
+  let parameterValidityRows = [];
 
   if (githubConfig.enabled) {
     try {
@@ -215,6 +228,7 @@ async function loadActionMonitorViewFromPostgres(options = {}) {
       environment: config.environment,
       now,
       limit: config.limit,
+      parameterValidityRows: registryParameterRows,
     });
   }
 
@@ -231,9 +245,24 @@ async function loadActionMonitorViewFromPostgres(options = {}) {
       monitorEnvironment: config.environment,
       limit: config.limit,
     });
+    try {
+      const parameterRepository = new PostgresParameterValidityMonitorRepository(client);
+      const databaseParameterRows = await parameterRepository.listLatestParameterChecks({
+        monitorEnvironment: config.environment,
+      });
+      parameterValidityRows = mergeParameterValidityRows({
+        registryRows: registryParameterRows,
+        databaseRows: databaseParameterRows,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      stderr.write(`[parameter-validity-monitor-view] ${message}; using registry parameter validity data\n`);
+      parameterValidityRows = registryParameterRows;
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     stderr.write(`[github-action-monitor-view] ${message}; using GitHub API fallback rows\n`);
+    parameterValidityRows = registryParameterRows;
   } finally {
     await client.end().catch(() => {});
   }
@@ -246,7 +275,79 @@ async function loadActionMonitorViewFromPostgres(options = {}) {
     environment: config.environment,
     now,
     limit: config.limit,
+    parameterValidityRows,
   });
+}
+
+export async function loadParameterValidityRowsFromRegistry(options = {}) {
+  const rootDir = normalizeRootDir(options.rootDir ?? defaultRootDir);
+  const environment = firstNonEmpty([options.environment, 'dev']);
+  const registryPath = path.join(rootDir, 'config', 'parameter-validity', `${environment}.json`);
+
+  try {
+    const registry = JSON.parse(await readFile(registryPath, 'utf8'));
+    const audit = runParameterValidityAudit({
+      registry,
+      environment,
+      env: options.env ?? {},
+      now: options.now ?? new Date(),
+    });
+    return mapParameterValidityAuditToRows(audit);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    options.stderr?.write?.(`[parameter-validity-monitor-view] registry ${registryPath} unavailable: ${message}\n`);
+    return [];
+  }
+}
+
+function mapParameterValidityAuditToRows(audit) {
+  const checksByKey = new Map((audit.checks ?? []).map((check) => [check.parameterKey, check]));
+  return (audit.parameters ?? []).map((parameter) => {
+    const check = checksByKey.get(parameter.key) ?? {};
+    return {
+      parameterKey: parameter.key,
+      monitorEnvironment: parameter.environment ?? audit.environment,
+      parameterName: parameter.name,
+      scope: parameter.scope,
+      category: parameter.category,
+      required: parameter.required,
+      sensitive: parameter.sensitive,
+      validityMode: parameter.validityMode,
+      validFrom: parameter.validFrom,
+      expiresAt: parameter.expiresAt,
+      reviewAfterAt: parameter.reviewAfterAt,
+      rotationCycleDays: parameter.rotationCycleDays,
+      warningDays: parameter.warningDays,
+      criticalDays: parameter.criticalDays,
+      owner: parameter.owner,
+      sourceDoc: parameter.sourceDoc,
+      sourceCode: parameter.sourceCode,
+      metadata: parameter.metadata,
+      checkedAt: check.checkedAt ?? audit.checkedAt,
+      status: check.status ?? 'unknown',
+      daysUntilDue: check.daysUntilDue ?? null,
+      evidenceSource: check.evidenceSource ?? 'registry',
+      message: check.message ?? '缺少有效期或复核时间元数据',
+      details: check.details ?? {},
+    };
+  });
+}
+
+function mergeParameterValidityRows({ registryRows = [], databaseRows = [] } = {}) {
+  const rowsByKey = new Map();
+  for (const row of registryRows) {
+    const key = firstNonEmpty([row.parameterKey, row.parameter_key, row.key]);
+    if (key) {
+      rowsByKey.set(key, row);
+    }
+  }
+  for (const row of databaseRows) {
+    const key = firstNonEmpty([row.parameterKey, row.parameter_key, row.key]);
+    if (key) {
+      rowsByKey.set(key, row);
+    }
+  }
+  return Array.from(rowsByKey.values());
 }
 
 function resolveActionMonitorReadConfig(env) {
@@ -348,6 +449,13 @@ function parsePositiveInteger(value, fallback) {
 function parseOptionalPositiveInteger(value) {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeRootDir(value) {
+  if (value instanceof URL) {
+    return fileURLToPath(value);
+  }
+  return path.resolve(String(value ?? defaultRootDir));
 }
 
 function toPosixRelativePath(rootDir, targetPath) {

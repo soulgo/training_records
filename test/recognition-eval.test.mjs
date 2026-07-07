@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = new URL('../', import.meta.url);
-const rootDirPath = fileURLToPath(rootDir);
+const rootPath = fileURLToPath(rootDir);
 
 test('eval:recognition script reports field accuracy and schema warning statistics', async () => {
   const packageJson = JSON.parse(await readFile(new URL('package.json', rootDir), 'utf8'));
@@ -13,7 +13,7 @@ test('eval:recognition script reports field accuracy and schema warning statisti
   assert.equal(packageJson.scripts['eval:recognition'], 'node tools/eval-recognition.mjs');
 
   const stdout = execFileSync(process.execPath, ['tools/eval-recognition.mjs', '--json'], {
-    cwd: rootDirPath,
+    cwd: rootPath,
     encoding: 'utf8',
   });
   const report = JSON.parse(stdout.trim().split(/\r?\n/).at(-1));

@@ -12,6 +12,7 @@ Action 日志现在由 workflow、同步结果文件、统一 summary 脚本、�
 - Action 监控只上报或读取 `run_id`，由 GitHub API 拉取 run/job/step 结构化数据；不上传 workflow event payload、业务 payload、step 输出或日志正文。
 - Action 监控数据写入 `monitor.github_action_runs/jobs/steps/failures`，用于长期统计成功率、失败率、耗时和失败摘要。
 - `/action-monitor/` 是独立站点页面；`build:data` 生成 `source/_data/actionMonitorView.json`，合并 PostgreSQL 监控表和 GitHub Actions API 最近 runs 后展示。
+- `/action-monitor/` 同时展示系统参数有效期。`.github/workflows/parameter-validity-audit.yml` 支持手动选择 dev/main，也会每天定时运行；它调用 `tools/check-parameter-validity.mjs` 读取 `config/parameter-validity/<env>.json`，写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`，把风险计数写入 GitHub Step Summary，并在审计成功后触发对应环境的 Pages 构建刷新静态页面。
 - `traceId` 由 `queueTaskId` 派生，格式为 `tr_<sha256前16位>`；workflow 没有队列任务时使用 `GITHUB_RUN_ID` 作为兜底 seed。
 - Telegram / 飞书 sync CLI stdout 默认只输出 safe report；完整 report 只写入 `TELEGRAM_SYNC_RESULT_PATH` / `FEISHU_SYNC_RESULT_PATH`，供 summary 和 notify step 读取。
 - `npm run export:markdown` 默认只输出 compact summary；完整导出 payload 只允许本地显式 `--debug-json`，GitHub Actions 中会拒绝该参数。
@@ -45,6 +46,7 @@ flowchart LR
   HttpReporter --> GitHubAPI
   GitHubAPI --> Normalize["github-action-monitor.use-case<br/>normalize + failure summary"]
   Normalize --> MonitorDB["PostgreSQL monitor.*"]
+  ParamAudit["Parameter Validity Audit<br/>registry + status"] --> MonitorDB
   MonitorDB --> SiteData["build:data<br/>actionMonitorView.json"]
   SiteData --> Page["/action-monitor/"]
 ```
@@ -59,10 +61,13 @@ flowchart LR
 | 当前 run 结论 | GitHub API 在最终 step 执行时可能仍返回 `in_progress`；本地 reporter 用 `${{ job.status }}` 作为当前 run 兜底结论。 |
 | 写库 | `PostgresGitHubActionMonitorRepository` 在事务内 upsert run/job/step，删除当前 run 旧 failures 后写入最新 failures。 |
 | 读取 | 站点构建优先从 `monitor.*` 读取；配置了 GitHub token 时会合并 GitHub Actions API 当前分支 runs，补齐漏报或延迟上报的 run。 |
+| 参数有效期 audit | `Parameter Validity Audit` 读取 registry，只计算名称、范围、有效期和存在性状态；输出 compact summary 与 GitHub Step Summary，不输出参数值。 |
+| 参数有效期写库 | `PostgresParameterValidityMonitorRepository.writeParameterAudit()` upsert 参数元数据并追加本次检查结果；没有 DB URL 时只输出 summary 并跳过写库。 |
+| 参数有效期页面刷新 | audit 成功后按环境触发 dev Pages 或 main Pages workflow；刷新失败 `continue-on-error`，不会改变 audit 已完成的检查结果。 |
 
 ## Action monitor 页面
 
-`/action-monitor/` 由 `ActionMonitorGenerator` 和 `themes/cactus/layout/action-monitor.ejs` 生成。页面展示当前环境、最近运行数、成功率、失败数、平均耗时，并按 15 条分页显示 Action 日志。
+`/action-monitor/` 由 `ActionMonitorGenerator` 和 `themes/cactus/layout/action-monitor.ejs` 生成。页面展示当前环境、最近运行数、成功率、失败数、平均耗时、系统参数有效期摘要，并按 15 条分页显示 Action 日志。
 
 | 数据项 | 来源 |
 | --- | --- |
@@ -72,6 +77,19 @@ flowchart LR
 | 耗时 | `start_time`、`end_time` 或 GitHub API `run_started_at` / `updated_at` 计算。 |
 | 失败摘要 | 优先由失败 step 生成，最多取前三条，最长 800 字符。 |
 | 明细计数 | 读取时聚合 job、step 和 failure 数量。 |
+| 参数有效期 | 读取 `monitor.system_config_parameters` 和每个参数最新一条 `monitor.system_config_parameter_checks`，展示参数名、分类、位置、状态、到期/复核日期、最近检查和安全提示。 |
+
+参数有效期列表默认按风险排序：`expired`、`missing`、`warning`、`unknown`、`ok`，同状态下优先显示更接近到期或复核日期的参数。数据库暂无检查结果时，站点构建会按当前环境 registry 生成兜底视图，避免页面完全空白。
+
+参数有效期状态含义：
+
+| 状态 | 含义 |
+| --- | --- |
+| `ok` | 已有有效期或复核日期，且未进入预警窗口。 |
+| `warning` | 距到期或复核日期小于等于 registry 中的 `warningDays`。 |
+| `expired` | 当前时间已超过到期或复核日期。 |
+| `missing` | audit 能确认必填参数未注入或不存在。 |
+| `unknown` | registry 缺少有效期 / 复核时间，或当前只能确认参数名称而不能确认 provider metadata。 |
 
 ## 关键状态字段
 
@@ -113,6 +131,7 @@ flowchart LR
 | --- | --- |
 | Action 监控上报 | workflow 只发送 `run_id`；本地 reporter 用 GitHub API 拉取 run/job/step，不上传 `github.event_path`、业务 payload、step 输出或日志正文。 |
 | Action 监控落库 | `raw_payload_json` 只保存 GitHub API 返回的结构化 run/job/step 安全对象；失败摘要限制长度，不保存完整 logs。 |
+| 参数有效期监控 | registry、检查结果和页面只保存参数名、分类、位置、有效期规则和非敏感提示；不保存参数值、hash、DB URL、token、API key、聊天 ID 或 COS key。 |
 | 原始 dispatch payload | 只落到 runner 临时 event 文件；跨 step 只传 `SYNC_DISPATCH_EVENT_PATH`。 |
 | 文件、图片、聊天和来源 ID | `file_id`、`file_unique_id`、`image_key`、`chat_id`、`chatIds`、`sourceId`、飞书 `oc_` 默认 hash 或不输出。 |
 | COS 信息 | `bucket`、`pathPrefix`、`object key` 默认 hash 或不输出完整值。 |
@@ -134,6 +153,8 @@ flowchart LR
 | Action 监控上报失败 | `Report Action Status` step | `continue-on-error: true`，不反向改变原 workflow 结论；后续页面可通过 GitHub API fallback 补齐 run。 |
 | Action 监控写库失败 | `tools/report-github-action-status.mjs` / HTTP report handler | 事务 rollback；本地 reporter 输出 `[github-action-monitor] local report failed`，HTTP handler 返回 5xx JSON。 |
 | Action 监控分支不匹配 | `reportGitHubActionRun()` | 返回 `skipped=true` / `branch_not_allowed`，不拉 jobs、不写库。 |
+| 参数有效期过期、缺失或未知 | `tools/check-parameter-validity.mjs` / `Parameter Validity Audit` | 写入 Step Summary 和 `monitor.system_config_parameter_checks`；不让同步、部署、备份 workflow 因健康告警失败。 |
+| 参数有效期写库失败 | `tools/check-parameter-validity.mjs` | audit 命令失败并暴露维护问题；不会输出 Secret 明文或参数值。 |
 
 ## 通知脚本
 

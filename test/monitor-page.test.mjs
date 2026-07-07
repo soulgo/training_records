@@ -1,13 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildDashboardViewModel } from '../tools/dashboard-view.mjs';
 import { buildMonitorViewModel } from '../tools/monitor-view.mjs';
-import { withSharedSiteFixture } from './shared-site-fixture.mjs';
+import {
+  readFixtureFile,
+  restoreFixtureFile,
+  withSharedSiteFixture,
+  writeFixtureFile,
+} from './shared-site-fixture.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -97,9 +102,9 @@ test('monitor page renders at /monitor with the generated view model and chart p
 
     try {
       ensureDataDir();
-      writeFileSync(trainingDataPath, JSON.stringify(snapshot, null, 2));
-      writeFileSync(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
-      writeFileSync(
+      writeFixtureFile(trainingDataPath, JSON.stringify(snapshot, null, 2));
+      writeFixtureFile(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
+      writeFixtureFile(
         monitorViewPath,
         JSON.stringify(
           buildMonitorViewModel(snapshot, {
@@ -289,15 +294,9 @@ function ensureDataDir() {
 }
 
 function readOptionalFile(filePath) {
-  return existsSync(filePath) ? readFileSync(filePath, 'utf8') : null;
+  return readFixtureFile(filePath);
 }
 
 function restoreOptionalFile(filePath, originalContent) {
-  if (originalContent === null) {
-    if (existsSync(filePath)) {
-      rmSync(filePath, { force: true });
-    }
-    return;
-  }
-  writeFileSync(filePath, originalContent);
+  restoreFixtureFile(filePath, originalContent);
 }

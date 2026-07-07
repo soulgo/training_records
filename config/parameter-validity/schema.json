@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Parameter validity registry",
+  "type": "object",
+  "required": ["environment", "parameters"],
+  "additionalProperties": false,
+  "properties": {
+    "environment": {
+      "type": "string",
+      "enum": ["dev", "main"]
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "name",
+          "scope",
+          "category",
+          "required",
+          "sensitive",
+          "validityMode",
+          "sourceDoc"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string" },
+          "name": { "type": "string" },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "github_actions_secret",
+              "github_actions_variable",
+              "cloudflare_worker_secret",
+              "wrangler_var",
+              "runtime_env",
+              "config_file"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "database",
+              "ai",
+              "telegram",
+              "feishu",
+              "cos",
+              "cloudflare",
+              "github",
+              "monitor",
+              "site"
+            ]
+          },
+          "required": { "type": "boolean" },
+          "sensitive": { "type": "boolean" },
+          "validityMode": {
+            "type": "string",
+            "enum": [
+              "fixed_expires_at",
+              "rotation_cycle",
+              "review_after",
+              "non_expiring_manual_review",
+              "provider_metadata"
+            ]
+          },
+          "validFrom": { "type": "string", "format": "date" },
+          "expiresAt": { "type": "string", "format": "date" },
+          "reviewAfterAt": { "type": "string", "format": "date" },
+          "rotationCycleDays": { "type": "integer", "minimum": 1 },
+          "warningDays": { "type": "integer", "minimum": 1 },
+          "criticalDays": { "type": "integer", "minimum": 1 },
+          "owner": { "type": "string" },
+          "sourceDoc": { "type": "string" },
+          "sourceCode": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "not": {
+          "required": ["value"]
+        }
+      }
+    }
+  }
+}
