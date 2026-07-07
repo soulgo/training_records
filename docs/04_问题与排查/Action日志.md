@@ -30,6 +30,7 @@
 - 站点构建读取 `/action-monitor/` 时优先读 PostgreSQL `monitor.*`，同时可用 `GITHUB_TOKEN` 从 GitHub Actions API 补齐当前分支最近 runs。
 - 参数有效期 registry 中没有 `expiresAt` / `reviewAfterAt` 时，audit 会把参数标为 `unknown`；这表示元数据待补齐，不表示已经读取到 Secret 值。
 - 参数有效期 audit 只在能确认必填参数不存在时标为 `missing`；无法读取 provider metadata 时不会把未知误判为缺失。
+- `Parameter Validity Audit` 写库成功后还需要触发对应 Pages 构建刷新静态 `actionMonitorView.json`；如果触发构建失败，Step Summary 仍是本次 audit 的即时证据，页面会停留在上一次构建结果。
 
 ## 日志特征
 
@@ -99,7 +100,9 @@
 16. 如果页面有 run 但没有 job/step/failure 计数，说明该 run 可能只来自 GitHub API fallback，尚未有 PostgreSQL 明细；回看该 run 的 `Report Action Status` step。
 17. 如果参数有效期 summary 有 `expired` 或 `warning`，打开 `config/parameter-validity/<env>.json` 查对应参数的 `expiresAt` / `reviewAfterAt`，按外部平台实际轮换结果更新 registry。
 18. 如果参数长期为 `unknown`，先补 `reviewAfterAt`；只有确有真实过期日的 token / key 才补 `expiresAt`，不要用 Secret 更新时间冒充过期时间。
-19. 如果“系统参数有效期”为空，先确认 `Parameter Validity Audit` 是否成功写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`，再确认该 workflow 是否触发对应 Pages 构建刷新 `source/_data/actionMonitorView.json`。
+19. 如果参数显示 `missing`，先确认 registry 的 `name` 和 `scope` 是否写对，再到 GitHub Settings 或 Cloudflare Worker Secret 补齐外部配置；不要把参数值写入 registry、文档、summary 或日志。
+20. 如果“系统参数有效期”为空，先确认 `Parameter Validity Audit` 是否成功写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`，再确认该 workflow 是否触发对应 Pages 构建刷新 `source/_data/actionMonitorView.json`。
+21. 如果 Step Summary 有最新结果但页面仍旧，查 audit workflow 的 `Trigger dev action monitor page refresh` / `Trigger main action monitor page refresh` step，再查对应 Pages workflow 是否完成构建。
 
 ## 解决方案
 
@@ -124,6 +127,7 @@
 - `expired` / `warning`：按外部平台轮换参数后，更新 registry 的 `validFrom`、`expiresAt` 或 `reviewAfterAt`，再重跑 `Parameter Validity Audit`。
 - `missing`：补齐对应 GitHub Secret / Variable 或 Cloudflare Worker Secret；不要把参数值写进 registry、summary、日志或文档。
 - `unknown`：补齐有效期或复核日期元数据；当前实现不会反读 Secret 明文，也不会保存 value hash。
+- 页面未刷新：手动重跑对应环境的 Pages workflow，或重新运行 `Parameter Validity Audit` 触发刷新；排查时以最新 Step Summary 和 `monitor.system_config_parameter_checks.checked_at` 为准。
 
 ## 预防措施
 
@@ -138,5 +142,6 @@
 - 外部 report URL 只能作为兜底入口；常规 GitHub Actions 内优先使用分支对应 PostgreSQL 本地 reporter。
 - 页面读取上限只在需要时配置 `GITHUB_ACTION_MONITOR_VIEW_LIMIT`；默认保留完整可读取历史，不再按最近 2 天拆分。
 - registry 只维护参数元数据，不维护实际值；新增参数时同步更新 `config/parameter-validity/dev.json` 或 `main.json`。
+- 轮换外部 token / key 后，同步更新 registry 的 `validFrom`、`expiresAt` 或 `reviewAfterAt`，再手动运行一次 `Parameter Validity Audit`。
 - 参数有效期 audit 不应让业务同步、部署、备份 workflow 因参数过期告警而失败。
 - 当前系统文档只记录已落地事实；未实施设想保留在历史记录，不作为排查入口。

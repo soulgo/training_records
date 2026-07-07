@@ -24,6 +24,7 @@
 | `prompt改造02-后续计划/` | 早期 | Prompt 改造后续计划 | Prompt 模块化、准确率提升、数据库映射审查的方案与实施路线图 |
 | `action日志排查优化/` | 2026-06-30 | Action 日志排查与结构化日志优化 | 已落地 action logger、sync summary、compact markdown export、DB summary 和 deploy wait 日志；当前事实见 `02_系统核心逻辑/Action日志与失败补偿.md` 与 `04_问题与排查/Action日志.md` |
 | `action日志监控/` | 2026-07-06 | GitHub Actions run/job/step/failure 监控落库与页面展示 | 已落地 `Report Action Status`、本地 PostgreSQL reporter、HTTP report 兜底、`monitor.*` 表和 `/action-monitor/` 页面；当前事实见 `01_系统配置/`、`02_系统核心逻辑/Action日志与失败补偿.md`、`02_系统核心逻辑/数据库模型.md` 与 `04_问题与排查/Action日志.md` |
+| `参数有效时间监控/` | 2026-07-07 | 系统参数有效期 registry、audit 和页面展示 | 已落地 `config/parameter-validity/<env>.json`、`Parameter Validity Audit`、`monitor.system_config_parameters/checks` 和 `/action-monitor/` 参数有效期模块；当前事实见 `01_系统配置/`、`02_系统核心逻辑/Action日志与失败补偿.md`、`02_系统核心逻辑/数据库模型.md` 与 `04_问题与排查/Action日志.md` |
 | `数据库优化/` | 2026-07-02 | PostgreSQL 权限收敛与运行时 DDL 下线 | 已落地显式 migration 边界、只读连接、运行时 DDL 默认下线和权限巡检；当前事实见 `01_系统配置/`、`02_系统核心逻辑/数据库模型.md` 与 `04_问题与排查/PostgreSQL.md` |
 | `20260701_优化高中优先级落地/` | 2026-07-02 | 20260701 优化高 / 中优先级落地 | 已落地日志脱敏、sleepBackfill 目标日期回填、schema v3、语义 warning、识别评测、只读 DB、入口迁移和旧 NDJSON 主链路下线；低优先级剩余项仍在 `后续规划_未实现/20260701_优化/` |
 | `核心代码优化01/` | 早期 | 核心代码优化全量重构包 | AI 容灾与调度优化、数据库优化、消息链路梳理、分支与环境一致性等 |

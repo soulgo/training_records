@@ -177,7 +177,18 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 
 `Report Action Status` step 会使用运行时 `TRAINING_DB_URL`、`TRAINING_DB_APP_NAME` 和 `github.token` 读取 GitHub Actions run/jobs/steps 后直写 `monitor.*`。只有当生产 DB URL 不可用时，才使用 `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` / `GITHUB_ACTION_MONITOR_REPORT_URL` 走 HTTP 兜底。
 
-参数有效期元数据维护在 `config/parameter-validity/main.json`。当前 registry 只登记第一批高风险 Secret 名称和来源，不保存实际值；没有填写 `expiresAt` 或 `reviewAfterAt` 的参数会在 `/action-monitor/` 中显示为 `unknown`。
+参数有效期元数据维护在 `config/parameter-validity/main.json`。当前 registry 只登记第一批高风险 Secret、变量和运行时参数的名称、范围、分类、来源、有效期或复核日期，不保存实际值或 value hash；没有填写 `expiresAt`、`reviewAfterAt`，且无法通过 `rotationCycleDays` 计算到期日的参数会在 `/action-monitor/` 中显示为 `unknown`。
+
+registry 字段边界如下：
+
+| 字段 | 维护要求 |
+| --- | --- |
+| `key` / `name` / `scope` / `category` | 记录参数身份、所在位置和业务分类；不得写入参数值。 |
+| `required` / `sensitive` | 标记是否必填、是否敏感；敏感参数只展示名称和状态。 |
+| `validityMode` | 只能使用 `fixed_expires_at`、`rotation_cycle`、`review_after`、`non_expiring_manual_review`、`provider_metadata`。 |
+| `validFrom` / `expiresAt` / `reviewAfterAt` / `rotationCycleDays` | 记录人工维护的有效期或复核规则；不能把 Secret 更新时间直接当成真实过期时间。 |
+| `warningDays` / `criticalDays` | 到期前提醒窗口；未填时程序默认使用 30 天和 7 天。 |
+| `sourceDoc` / `sourceCode` | 指向当前文档、workflow、代码或配置文件，便于排查来源。 |
 
 `/action-monitor/` 页面在生产 Pages 构建时由 `build:data` 生成。构建 job 只有在 `TRAINING_DB_ENABLED=true` 时读取 PostgreSQL，优先使用 `TRAINING_DB_READONLY_URL`，未配置只读连接时回退 `TRAINING_DB_URL`。共享 site-build action 会注入 `GITHUB_TOKEN`，用于通过 GitHub Actions API 补齐当前 main 分支漏报或滞后的 runs，并读取最新参数有效期检查结果。
 
