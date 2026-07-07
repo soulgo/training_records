@@ -33,6 +33,7 @@
 
 ### Fixed
 
+- 修复 `/action-monitor/` 系统参数有效期模块在 dev/main 分支之间混显参数、且参数检查尚未写入数据库时页面显示为空的问题；页面现在按当前分支只展示对应 registry/数据库参数，并在数据库暂无检查结果时使用当前环境 registry 兜底展示。
 - 修复 Windows 下 `tools/action-sync-summary.mjs` 直接执行时入口判断不兼容路径格式的问题。
 - 修复 Windows 下页面渲染测试偶发文件锁导致夹具恢复失败的问题，测试写入派生站点数据时会对临时锁错误进行短重试。
 - 修复 Windows 下 recognition eval 测试通过 `npm` 子进程执行时的跨平台不稳定问题，并让 migration dry-run 输出使用 POSIX 相对路径，避免路径分隔符导致断言漂移。

@@ -1,13 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildDashboardViewModel } from '../tools/dashboard-view.mjs';
-import { withSharedSiteFixture } from './shared-site-fixture.mjs';
+import {
+  readFixtureFile,
+  restoreFixtureFile,
+  withSharedSiteFixture,
+  writeFixtureFile as writeSharedFixtureFile,
+} from './shared-site-fixture.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -668,34 +673,13 @@ function ensureDataDir() {
 }
 
 function readOptionalFile(filePath) {
-  return existsSync(filePath) ? readFileSync(filePath, 'utf8') : null;
+  return readFixtureFile(filePath);
 }
 
 function restoreOptionalFile(filePath, originalContent) {
-  if (originalContent === null) {
-    if (existsSync(filePath)) {
-      rmSync(filePath, { force: true });
-    }
-    return;
-  }
-  writeFixtureFile(filePath, originalContent);
+  restoreFixtureFile(filePath, originalContent);
 }
 
 function writeFixtureFile(filePath, content) {
-  const retryableCodes = new Set(['UNKNOWN', 'EBUSY', 'EPERM']);
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    try {
-      writeFileSync(filePath, content);
-      return;
-    } catch (error) {
-      if (!retryableCodes.has(error?.code) || attempt === 19) {
-        throw error;
-      }
-      sleep(50);
-    }
-  }
-}
-
-function sleep(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+  writeSharedFixtureFile(filePath, content);
 }

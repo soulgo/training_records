@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,6 +8,9 @@ const lockDir = path.join(rootDir, '.tmp', 'site-fixture.lock');
 const lockWaitTimeoutMs = 300_000;
 const staleLockMs = 600_000;
 const lockRetryMs = 100;
+const fileRetryMs = 100;
+const fileRetryAttempts = 300;
+const retryableFileErrorCodes = new Set(['UNKNOWN', 'EBUSY', 'EPERM']);
 const generatedSourceDataPaths = [
   path.join(rootDir, 'source', '_data', 'training.json'),
   path.join(rootDir, 'source', '_data', 'dashboardView.json'),
@@ -35,25 +38,72 @@ export function withSharedSiteFixture(run) {
 function snapshotFiles(filePaths) {
   return filePaths.map((filePath) => ({
     filePath,
-    content: existsSync(filePath) ? readFileSync(filePath, 'utf8') : null,
+    content: readFixtureFile(filePath),
   }));
 }
 
 function restoreFiles(snapshot) {
   for (const { filePath, content } of snapshot) {
-    if (content === null) {
-      rmSync(filePath, { force: true });
-      continue;
-    }
+    restoreFixtureFile(filePath, content);
+  }
+}
 
-    mkdirSync(path.dirname(filePath), { recursive: true });
-    writeFileSync(filePath, content, 'utf8');
+export function readFixtureFile(filePath) {
+  if (!existsSync(filePath)) {
+    return null;
+  }
+  return runFileOperationWithRetry(() => readFileSync(filePath, 'utf8'));
+}
+
+export function restoreFixtureFile(filePath, content) {
+  if (content === null) {
+    runFileOperationWithRetry(() => rmSync(filePath, { force: true }));
+    return;
+  }
+
+  if (readFixtureFile(filePath) === content) {
+    return;
+  }
+
+  writeFixtureFile(filePath, content);
+}
+
+export function writeFixtureFile(filePath, content) {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  runFileOperationWithRetry(() => writeFileSync(filePath, content, 'utf8'));
+}
+
+function runFileOperationWithRetry(operation) {
+  for (let attempt = 0; attempt < fileRetryAttempts; attempt += 1) {
+    try {
+      return operation();
+    } catch (error) {
+      if (!retryableFileErrorCodes.has(error?.code) || attempt === fileRetryAttempts - 1) {
+        throw error;
+      }
+      sleep(fileRetryMs);
+    }
   }
 }
 
 function releaseFixture(sourceDataSnapshot) {
-  restoreFiles(sourceDataSnapshot);
-  rmSync(lockDir, { recursive: true, force: true });
+  let releaseError;
+
+  try {
+    restoreFiles(sourceDataSnapshot);
+  } catch (error) {
+    releaseError = error;
+  }
+
+  try {
+    runFileOperationWithRetry(() => rmSync(lockDir, { recursive: true, force: true }));
+  } catch (error) {
+    releaseError ??= error;
+  }
+
+  if (releaseError) {
+    throw releaseError;
+  }
 }
 
 function acquireLock() {
@@ -63,6 +113,12 @@ function acquireLock() {
   while (Date.now() < deadline) {
     try {
       mkdirSync(lockDir);
+      try {
+        waitForGeneratedSourceDataFiles();
+      } catch (error) {
+        runFileOperationWithRetry(() => rmSync(lockDir, { recursive: true, force: true }));
+        throw error;
+      }
       return;
     } catch (error) {
       if (error.code !== 'EEXIST') {
@@ -77,6 +133,19 @@ function acquireLock() {
   throw new Error(`Timed out waiting for shared site fixture lock: ${lockDir}`);
 }
 
+function waitForGeneratedSourceDataFiles() {
+  for (const filePath of generatedSourceDataPaths) {
+    if (!existsSync(filePath)) {
+      continue;
+    }
+
+    runFileOperationWithRetry(() => {
+      const descriptor = openSync(filePath, 'r+');
+      closeSync(descriptor);
+    });
+  }
+}
+
 function removeStaleLock() {
   if (!existsSync(lockDir)) {
     return;
@@ -84,7 +153,7 @@ function removeStaleLock() {
 
   const ageMs = Date.now() - statSync(lockDir).mtimeMs;
   if (ageMs > staleLockMs) {
-    rmSync(lockDir, { recursive: true, force: true });
+    runFileOperationWithRetry(() => rmSync(lockDir, { recursive: true, force: true }));
   }
 }
 

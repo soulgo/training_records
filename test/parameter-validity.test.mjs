@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 
+import {
+  loadActionMonitorViewFromPostgres,
+} from '../src/app/use-cases/generate-training-data.impl.mjs';
 import {
   buildParameterValiditySummary,
   evaluateParameterValidity,
@@ -261,6 +265,58 @@ test('action monitor view model includes sorted parameter validity summary', () 
   assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '未知有效期' && card.value === '1 个'));
   assert.equal(view.parameterValidity.items[0].statusLabel, '已过期');
   assert.equal(view.parameterValidity.items[1].dueLabel, '剩余 5 天');
+});
+
+test('action monitor view model only includes parameter validity rows for the current environment', () => {
+  const view = buildActionMonitorViewModel([], {
+    environment: 'dev',
+    now: new Date('2026-07-07T00:00:00.000Z'),
+    parameterValidityRows: [
+      {
+        parameterKey: 'dev.github.secret.DEV_TRAINING_DB_URL',
+        monitorEnvironment: 'dev',
+        parameterName: 'DEV_TRAINING_DB_URL',
+        scope: 'github_actions_secret',
+        category: 'database',
+        status: 'unknown',
+      },
+      {
+        parameterKey: 'main.github.secret.TRAINING_DB_URL',
+        monitorEnvironment: 'main',
+        parameterName: 'TRAINING_DB_URL',
+        scope: 'github_actions_secret',
+        category: 'database',
+        status: 'expired',
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    view.parameterValidity.items.map((item) => item.key),
+    ['dev.github.secret.DEV_TRAINING_DB_URL'],
+  );
+  assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '监控参数' && card.value === '1 个'));
+  assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '已过期' && card.value === '0 个'));
+});
+
+test('action monitor data uses the current environment registry before parameter checks exist', async () => {
+  for (const environment of ['dev', 'main']) {
+    const view = await loadActionMonitorViewFromPostgres({
+      rootDir: fileURLToPath(new URL('..', import.meta.url)),
+      env: {
+        GITHUB_REF_NAME: environment,
+      },
+      now: new Date('2026-07-07T00:00:00.000Z'),
+      stderr: { write() {} },
+    });
+
+    assert.equal(view.parameterValidity.environment, environment);
+    assert.ok(view.parameterValidity.items.length >= 10);
+    assert.ok(view.parameterValidity.items.every((item) => item.key.startsWith(`${environment}.`)));
+    assert.ok(!view.parameterValidity.items.some((item) => item.key.startsWith(environment === 'dev' ? 'main.' : 'dev.')));
+    assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '监控参数' && card.value !== '0 个'));
+    assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '未知有效期' && card.value !== '0 个'));
+  }
 });
 
 test('parameter validity registry files avoid values and cover first high-risk secrets', async () => {

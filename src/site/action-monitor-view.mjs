@@ -48,6 +48,7 @@ export function buildParameterValidityViewModel(rows = [], options = {}) {
   const items = (Array.isArray(rows) ? rows : [])
     .map((row) => normalizeParameterValidityItem(row, { now }))
     .filter(Boolean)
+    .filter((item) => isParameterValidityItemForEnvironment(item, environment))
     .sort(compareParameterValidityItems);
   const counts = countParameterStatuses(items);
 
@@ -82,7 +83,7 @@ export function buildParameterValidityViewModel(rows = [], options = {}) {
       },
     ],
     items,
-    emptyMessage: '暂无参数有效期数据',
+    emptyMessage: `暂无 ${environment} 参数有效期数据`,
   };
 }
 
@@ -134,6 +135,8 @@ function normalizeParameterValidityItem(row, { now }) {
     return null;
   }
 
+  const environment = normalizeText(row.monitorEnvironment ?? row.monitor_environment ?? row.environment) ??
+    inferParameterEnvironment(key);
   const status = normalizeParameterStatus(row.status);
   const daysUntilDue = normalizeInteger(row.daysUntilDue ?? row.days_until_due);
   const dueAt = normalizeIso(
@@ -148,6 +151,7 @@ function normalizeParameterValidityItem(row, { now }) {
 
   return {
     key,
+    environment,
     name,
     scope: normalizeText(row.scope) ?? 'unknown',
     category: normalizeText(row.category) ?? 'unknown',
@@ -164,6 +168,15 @@ function normalizeParameterValidityItem(row, { now }) {
     evidenceSource: normalizeText(row.evidenceSource ?? row.evidence_source) ?? 'registry',
     message: normalizeText(row.message) ?? '',
   };
+}
+
+function isParameterValidityItemForEnvironment(item, environment) {
+  return !item.environment || item.environment === environment;
+}
+
+function inferParameterEnvironment(key) {
+  const [prefix] = String(key ?? '').split('.');
+  return prefix === 'dev' || prefix === 'main' ? prefix : null;
 }
 
 function compareParameterValidityItems(left, right) {

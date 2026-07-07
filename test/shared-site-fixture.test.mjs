@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { withSharedSiteFixture } from './shared-site-fixture.mjs';
+import { withSharedSiteFixture, writeFixtureFile } from './shared-site-fixture.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -24,11 +24,10 @@ test('withSharedSiteFixture restores generated source data files after site test
     originalDashboardView = readOptionalFile(dashboardViewPath);
     originalMonitorView = readOptionalFile(monitorViewPath);
     originalBodyMetrics = readOptionalFile(bodyMetricsPath);
-    mkdirSync(path.dirname(trainingDataPath), { recursive: true });
-    writeFileSync(trainingDataPath, '{"dirty":true}\n', 'utf8');
-    writeFileSync(dashboardViewPath, '{"dirty":true}\n', 'utf8');
-    writeFileSync(monitorViewPath, '{"dirty":true}\n', 'utf8');
-    writeFileSync(bodyMetricsPath, '{"dirty":true}\n', 'utf8');
+    writeFixtureFile(trainingDataPath, '{"dirty":true}\n');
+    writeFixtureFile(dashboardViewPath, '{"dirty":true}\n');
+    writeFixtureFile(monitorViewPath, '{"dirty":true}\n');
+    writeFixtureFile(bodyMetricsPath, '{"dirty":true}\n');
   });
 
   withSharedSiteFixture(() => {
@@ -45,10 +44,9 @@ test('withSharedSiteFixture keeps generated source data snapshot until async sit
 
   await withSharedSiteFixture(async () => {
     originalTrainingData = readOptionalFile(trainingDataPath);
-    mkdirSync(path.dirname(trainingDataPath), { recursive: true });
-    writeFileSync(trainingDataPath, '{"dirty":"before-await"}\n', 'utf8');
+    writeFixtureFile(trainingDataPath, '{"dirty":"before-await"}\n');
     await Promise.resolve();
-    writeFileSync(trainingDataPath, '{"dirty":"after-await"}\n', 'utf8');
+    writeFixtureFile(trainingDataPath, '{"dirty":"after-await"}\n');
   });
 
   withSharedSiteFixture(() => {
