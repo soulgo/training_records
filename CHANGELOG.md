@@ -15,10 +15,14 @@
 
 ### Changed
 
+- 将 `/action-monitor/` 的系统参数监控从“有效期推断”升级为“参数健康探测”：新增 `config/parameter-health/<env>.json` registry、`tools/check-parameter-health.mjs`、`Parameter Health Audit` workflow、主动只读 probes 和参数健康视图，健康状态改为 `healthy`、`present`、`invalid`、`missing`、`not_configured`、`unreachable`、`unsupported`、`unknown`，到期时间仅作为有真实证据时的附加信息。
+- 同步参数健康监控的数据库与文档入口：`monitor.system_config_parameters/checks` 新增 `health_probe_key`、`health_check_type`、`check_type`、`latency_ms`、`failure_kind`、`observed_expires_at`、`last_healthy` 查询索引和健康状态约束，当前事实文档与排查文档改为指向参数健康模型。
 - 按后续规划落地文档同步规则完成参数有效时间监控规划归档：将已实现规划从 `docs/03_历史重构记录/后续规划_未实现/参数有效时间/` 移入 `docs/03_历史重构记录/重构历史/参数有效时间监控/`，并把当前 registry、audit workflow、monitor 表、页面展示和排查方式写回 `01_系统配置`、`02_系统核心逻辑`、`04_问题与排查` 及相关 README。
 
 ### Fixed
 
+- 修复 `tools/check-parameter-health.mjs` 默认仍读取旧 `config/parameter-validity/<env>.json` 的问题；未显式传 `--registry` 时现在读取 `config/parameter-health/<env>.json`。
+- 修复 Windows 下全量测试并发执行 `build:data` 时多个进程同时写 `source/_data/*.json` 偶发 `UNKNOWN` / 文件锁错误的问题；生成器对瞬时写文件错误进行短重试。
 - 优化 `/action-monitor/` 系统参数有效期列表 UI：长参数名现在可完整换行显示并可直接选中，移除冗余复制按钮；列表行尾的状态与处理提示改为竖排状态区，避免在窄桌面宽度下互相重叠，点击参数仍可在弹窗中查看完整信息。
 - 修复 `/action-monitor/` 将人工编写的统一 `reviewAfterAt=2026-10-01` 冒充真实参数有效期的问题：移除 dev/main 共 36 个无外部证据的日期，registry-only 参数诚实显示“未获取真实有效期”；模型和页面新增 `expiry` / `review` / `unknown` 语义与证据标签，人工复核不再计入真实“已过期/即将到期”，并阻止数据库旧检查结果覆盖最新 registry 定义。
 - 修复系统参数有效期表格“处理提示”列在桌面宽度下溢出页面的问题；表格列宽改为容器内自适应，提示内容在单元格内换行。
@@ -28,7 +32,7 @@
 
 ### Added
 
-- 新增系统参数有效期监控：提供 `config/parameter-validity/dev.json`、`config/parameter-validity/main.json` 和 registry schema，记录 dev/main 高风险 Secret、变量与运行时参数的名称、范围、有效期规则、责任方和来源路径，不保存参数值或 value hash。
+- 新增系统参数有效期监控：提供 `config/parameter-health/dev.json`、`config/parameter-health/main.json` 和 registry schema，记录 dev/main 高风险 Secret、变量与运行时参数的名称、范围、有效期规则、责任方和来源路径，不保存参数值或 value hash。
 - 新增 `tools/check-parameter-validity.mjs` 审计命令与 `Parameter Validity Audit` workflow，支持手动 / 定时检查参数状态，写入 `monitor.system_config_parameters` 与 `monitor.system_config_parameter_checks`，并在审计后触发 dev/main `/action-monitor/` 页面刷新。
 - `/action-monitor/` 页面新增“系统参数有效期”模块：`build:data` 读取 PostgreSQL 最新检查结果，展示监控参数数量、过期、缺失、即将到期和未知有效期状态，并按风险优先级排序。
 - dev 新增独立 `/action-monitor/` 的 `action 监控` 模块：`build:data` 会从 PostgreSQL `monitor.github_action_runs/jobs/steps/failures` 生成 `actionMonitorView.json`，页面展示 GitHub Actions 的状态、workflow、run 编号、commit、触发人、分支、耗时和失败摘要；本地无监控数据库时自动降级为空视图。

@@ -15,3 +15,5 @@ telegram/inbox/
 .tmp*
 logs*
 runtime/*
+AGENTS.md
+CLAUDE.md

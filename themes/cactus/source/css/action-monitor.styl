@@ -78,12 +78,12 @@
   gap 0.85rem
   margin-bottom 1.05rem
 
-.parameter-validity
+.parameter-health
   margin 1.1rem 0 1.35rem
   padding-top 1rem
   border-top 1px solid #e2edf7
 
-.parameter-validity__summary
+.parameter-health__summary
   display grid
   grid-template-columns repeat(5, minmax(0, 1fr))
   gap 0.85rem
@@ -92,8 +92,8 @@
 .action-monitor__summary-card,
 .action-monitor__empty,
 .action-run,
-.parameter-validity__row,
-.parameter-validity__modal-panel
+.parameter-health__row,
+.parameter-health__modal-panel
   background rgba(255, 255, 255, 0.88)
   border 1px solid rgba(191, 219, 254, 0.85)
   box-shadow 0 18px 48px rgba(30, 64, 175, 0.09)
@@ -203,7 +203,7 @@
   min-height auto
   margin-bottom 0.75rem
 
-.parameter-validity__table
+.parameter-health__table
   display flex
   flex-direction column
   gap 0.58rem
@@ -211,12 +211,12 @@
   max-width 100%
   overflow hidden
 
-.parameter-validity__body
+.parameter-health__body
   display flex
   flex-direction column
   gap 0.58rem
 
-.parameter-validity__controls
+.parameter-health__controls
   display flex
   align-items center
   justify-content flex-end
@@ -226,7 +226,7 @@
   color #64748b
   font-size 0.86rem
 
-.parameter-validity__row
+.parameter-health__row
   display grid
   grid-template-columns minmax(20rem, 1.25fr) minmax(7.5rem, 0.36fr) minmax(18rem, 0.9fr)
   align-items center
@@ -243,29 +243,29 @@
   cursor pointer
   transition border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease
 
-.parameter-validity__row:hover,
-.parameter-validity__row:focus-visible
+.parameter-health__row:hover,
+.parameter-health__row:focus-visible
   border-color #93c5fd
   box-shadow 0 22px 54px rgba(37, 99, 235, 0.12)
   transform translateY(-1px)
   outline none
 
-.parameter-validity__identity,
-.parameter-validity__due,
-.parameter-validity__state,
-.parameter-validity__message
+.parameter-health__identity,
+.parameter-health__due,
+.parameter-health__state,
+.parameter-health__message
   min-width 0
   display block
 
-.parameter-validity__identity small,
-.parameter-validity__due small
+.parameter-health__identity small,
+.parameter-health__due small
   display block
   margin-top 0.2rem
   color #64748b
   font-size 0.76rem
   font-weight 700
 
-.parameter-validity__name
+.parameter-health__name
   display block
   color #0f2d4a
   font-size 0.92rem
@@ -273,23 +273,23 @@
   overflow-wrap anywhere
   white-space normal
 
-.parameter-validity__message
+.parameter-health__message
   color #64748b
   font-weight 700
   white-space normal
   overflow-wrap anywhere
 
-.parameter-validity__state
+.parameter-health__state
   display flex
   flex-direction column
   align-items flex-start
   gap 0.34rem
   justify-self stretch
 
-.parameter-validity__status
+.parameter-health__status
   display block
 
-.parameter-validity__row em
+.parameter-health__row em
   display inline-flex
   align-items center
   min-height 1.7rem
@@ -303,29 +303,29 @@
   line-height 1
   white-space nowrap
 
-.parameter-validity__row--success em
+.parameter-health__row--success em
   background #dcfce7
   color #15803d
 
-.parameter-validity__row--warning em
+.parameter-health__row--warning em
   background #fef3c7
   color #a16207
 
-.parameter-validity__row--failure em
+.parameter-health__row--failure em
   background #fee2e2
   color #b91c1c
 
-.parameter-validity__row--neutral em
+.parameter-health__row--neutral em
   background #e2e8f0
   color #475569
 
-.parameter-validity-modal-open
+.parameter-health-modal-open
   overflow hidden
 
-.parameter-validity__modal[hidden]
+.parameter-health__modal[hidden]
   display none
 
-.parameter-validity__modal
+.parameter-health__modal
   position fixed
   inset 0
   z-index 50
@@ -334,13 +334,13 @@
   justify-content center
   padding 1.25rem
 
-.parameter-validity__modal-backdrop
+.parameter-health__modal-backdrop
   position absolute
   inset 0
   background rgba(15, 45, 74, 0.34)
   backdrop-filter blur(4px)
 
-.parameter-validity__modal-panel
+.parameter-health__modal-panel
   position relative
   z-index 1
   width 100%
@@ -350,19 +350,19 @@
   border-radius 12px
   padding 1.1rem
 
-.parameter-validity__modal-header
+.parameter-health__modal-header
   display flex
   align-items flex-start
   justify-content space-between
   gap 1rem
   margin-bottom 1rem
 
-.parameter-validity__modal-header h3
+.parameter-health__modal-header h3
   color #153b5d
   font-size 1.15rem
   line-height 1.25
 
-.parameter-validity__modal-close
+.parameter-health__modal-close
   width 2.25rem
   height 2.25rem
   border 1px solid #d6e3f0
@@ -374,14 +374,14 @@
   line-height 1
   cursor pointer
 
-.parameter-validity__modal-name
+.parameter-health__modal-name
   display block
   padding 0.85rem
   border 1px solid #dbe7f3
   border-radius 8px
   background #f8fbff
 
-.parameter-validity__modal-name code
+.parameter-health__modal-name code
   color #0f2d4a
   font-size 0.95rem
   font-weight 800
@@ -389,25 +389,25 @@
   overflow-wrap anywhere
   user-select text
 
-.parameter-validity__modal-fields
+.parameter-health__modal-fields
   display grid
   grid-template-columns repeat(2, minmax(0, 1fr))
   gap 0.75rem
   margin 1rem 0 0
 
-.parameter-validity__modal-fields div
+.parameter-health__modal-fields div
   min-width 0
   padding 0.75rem
   border 1px solid #dbe7f3
   border-radius 8px
   background rgba(248, 251, 255, 0.74)
 
-.parameter-validity__modal-fields dt
+.parameter-health__modal-fields dt
   color #64748b
   font-size 0.76rem
   font-weight 800
 
-.parameter-validity__modal-fields dd
+.parameter-health__modal-fields dd
   margin 0.28rem 0 0
   color #0f2d4a
   font-size 0.9rem
@@ -513,21 +513,21 @@
 
 @media (max-width: 1180px)
   .action-monitor__summary,
-  .parameter-validity__summary
+  .parameter-health__summary
     grid-template-columns repeat(2, minmax(0, 1fr))
 
-  .parameter-validity__row
+  .parameter-health__row
     grid-template-columns minmax(16rem, 1fr) minmax(7rem, 0.35fr) minmax(14rem, 0.8fr)
 
 @media (max-width: 860px)
   .action-monitor__summary,
-  .parameter-validity__summary
+  .parameter-health__summary
     grid-template-columns 1fr
 
-  .parameter-validity__row
+  .parameter-health__row
     grid-template-columns minmax(0, 1fr) minmax(0, 1fr)
 
-  .parameter-validity__state
+  .parameter-health__state
     grid-column 1 / -1
 
   .action-run
@@ -554,26 +554,26 @@
 
   .action-monitor__meta,
   .action-monitor__history-controls,
-  .parameter-validity__controls
+  .parameter-health__controls
     justify-content flex-start
 
   .action-monitor__summary-card,
   .action-monitor__empty,
   .action-run,
-  .parameter-validity__row
+  .parameter-health__row
     padding 1rem
 
-  .parameter-validity__row
+  .parameter-health__row
     grid-template-columns 1fr
 
-  .parameter-validity__modal
+  .parameter-health__modal
     align-items flex-end
     padding 0.75rem
 
-  .parameter-validity__modal-panel
+  .parameter-health__modal-panel
     max-height calc(100vh - 1.5rem)
 
-  .parameter-validity__modal-fields
+  .parameter-health__modal-fields
     grid-template-columns 1fr
 
   .action-run

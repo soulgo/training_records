@@ -263,7 +263,7 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
 	    '.github/workflows/deploy-cloudflare-pages-dev.yml',
     '.github/workflows/refresh-telegram-webhook.yml',
     '.github/workflows/markdown-backup.yml',
-    '.github/workflows/parameter-validity-audit.yml',
+    '.github/workflows/parameter-health-audit.yml',
     '.github/workflows/ci-tests.yml',
     'package.json',
     'package-lock.json',

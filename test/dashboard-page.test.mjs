@@ -327,7 +327,7 @@ test('action monitor page renders the module from generated action monitor data'
   assert.match(actionMonitorPage, /5m 42s/);
 });
 
-test('action monitor page renders parameter validity status without secret values', { concurrency: false }, () => {
+test('action monitor page renders parameter health status without secret values', { concurrency: false }, () => {
   const actionMonitorPage = withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
     const originalDashboardView = readOptionalFile(dashboardViewPath);
@@ -344,11 +344,11 @@ test('action monitor page renders parameter validity status without secret value
         updatedTime: '14:30',
         summaryCards: [],
         runs: [],
-        parameterValidity: {
-          title: '系统参数有效期与复核',
+        parameterHealth: {
+          title: '系统参数健康',
           summaryCards: [
             { label: '监控参数', value: '2 个', hint: 'dev 环境' },
-            { label: '即将到期', value: '1 个', hint: '进入预警窗口' },
+            { label: '健康', value: '1 个', hint: '真实探测通过' },
           ],
           items: [
             {
@@ -356,14 +356,16 @@ test('action monitor page renders parameter validity status without secret value
               name: 'TELEGRAM_RECOGNITION_FALLBACK_API_KEY',
               scope: 'github_actions_secret',
               category: 'ai',
-              statusLabel: '即将到期',
-              tone: 'warning',
-              dueDateLabel: '2026-07-20',
-              dueLabel: '剩余 13 天',
-              evidenceLabel: 'Provider 元数据',
-              checkedAtLabel: '2026-07-07',
-              lastCheckedLabel: '1 minute ago',
-              message: '距离真实到期日 13 天',
+              statusLabel: '健康',
+              tone: 'success',
+              checkTypeLabel: 'AI 模型列表鉴权',
+              latencyLabel: '42 ms',
+              evidenceLabel: '真实 API 探测',
+              checkedAtLabel: '2026-07-10 00:00',
+              lastCheckedLabel: '1 小时前',
+              lastHealthyLabel: '1 小时前',
+              expiryLabel: 'Provider 未提供到期时间',
+              message: 'AI Provider 鉴权成功',
             },
           ],
         },
@@ -380,31 +382,31 @@ test('action monitor page renders parameter validity status without secret value
     }
   });
 
-  assert.match(actionMonitorPage, /系统参数有效期与复核/);
-  assert.match(actionMonitorPage, /真实到期与人工复核分开显示/);
+  assert.match(actionMonitorPage, /系统参数健康/);
+  assert.match(actionMonitorPage, /真实 API 探测优先；仅存在不代表凭证可用/);
   assert.match(actionMonitorPage, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY/);
   assert.match(actionMonitorPage, /github_actions_secret/);
-  assert.match(actionMonitorPage, /即将到期/);
-  assert.match(actionMonitorPage, /剩余 13 天/);
-  assert.match(actionMonitorPage, /Provider 元数据/);
-  assert.match(actionMonitorPage, /data-parameter-validity-open="dev\.github\.secret\.AI_API_KEY"/);
-  assert.match(actionMonitorPage, /parameter-validity__state/);
-  assert.doesNotMatch(actionMonitorPage, /data-parameter-validity-copy=/);
-  assert.doesNotMatch(actionMonitorPage, /data-parameter-validity-modal-copy/);
+  assert.match(actionMonitorPage, /健康/);
+  assert.match(actionMonitorPage, /AI 模型列表鉴权/);
+  assert.match(actionMonitorPage, /真实 API 探测/);
+  assert.match(actionMonitorPage, /data-parameter-health-open="dev\.github\.secret\.AI_API_KEY"/);
+  assert.match(actionMonitorPage, /parameter-health__state/);
+  assert.doesNotMatch(actionMonitorPage, /data-parameter-health-copy=/);
+  assert.doesNotMatch(actionMonitorPage, /data-parameter-health-modal-copy/);
   assert.doesNotMatch(actionMonitorPage, /复制参数/);
-  assert.match(actionMonitorPage, /class="parameter-validity__modal"[^>]*data-parameter-validity-modal/);
-  assert.match(actionMonitorPage, /data-parameter-validity-modal-name/);
-  assert.match(actionMonitorPage, /data-parameter-validity-modal-category/);
-  assert.match(actionMonitorPage, /data-parameter-validity-modal-scope/);
-  assert.match(actionMonitorPage, /data-parameter-validity-modal-status/);
-  assert.match(actionMonitorPage, /data-parameter-validity-modal-due/);
-  assert.match(actionMonitorPage, /data-parameter-validity-modal-evidence/);
-  assert.match(actionMonitorPage, /data-parameter-validity-modal-checked/);
-  assert.match(actionMonitorPage, /data-parameter-validity-modal-message/);
+  assert.match(actionMonitorPage, /class="parameter-health__modal"[^>]*data-parameter-health-modal/);
+  assert.match(actionMonitorPage, /data-parameter-health-modal-name/);
+  assert.match(actionMonitorPage, /data-parameter-health-modal-category/);
+  assert.match(actionMonitorPage, /data-parameter-health-modal-scope/);
+  assert.match(actionMonitorPage, /data-parameter-health-modal-status/);
+  assert.match(actionMonitorPage, /data-parameter-health-modal-check/);
+  assert.match(actionMonitorPage, /data-parameter-health-modal-evidence/);
+  assert.match(actionMonitorPage, /data-parameter-health-modal-checked/);
+  assert.match(actionMonitorPage, /data-parameter-health-modal-message/);
   assert.doesNotMatch(actionMonitorPage, /sk-live|postgres:\/\/|bot-token-value/);
 });
 
-test('action monitor page renders five parameter validity rows with pagination controls', { concurrency: false }, () => {
+test('action monitor page renders five parameter health rows with pagination controls', { concurrency: false }, () => {
   const actionMonitorPage = withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
     const originalDashboardView = readOptionalFile(dashboardViewPath);
@@ -421,8 +423,8 @@ test('action monitor page renders five parameter validity rows with pagination c
         updatedTime: '14:30',
         summaryCards: [],
         runs: [],
-        parameterValidity: {
-          title: '系统参数有效期',
+        parameterHealth: {
+          title: '系统参数健康',
           summaryCards: [
             { label: '监控参数', value: '6 个', hint: 'dev 环境' },
           ],
@@ -435,13 +437,16 @@ test('action monitor page renders five parameter validity rows with pagination c
             name: `PARAM_${index + 1}`,
             scope: 'github_actions_secret',
             category: 'ai',
-            statusLabel: '正常',
+            statusLabel: '健康',
             tone: 'success',
-            dueDateLabel: `2026-10-${String(index + 1).padStart(2, '0')}`,
-            dueLabel: `剩余 ${80 + index} 天`,
-            checkedAtLabel: '2026-07-07',
-            lastCheckedLabel: '1 minute ago',
-            message: '距离到期或复核日期充足',
+            checkTypeLabel: 'AI 模型列表鉴权',
+            latencyLabel: `${40 + index} ms`,
+            evidenceLabel: '真实 API 探测',
+            checkedAtLabel: '2026-07-10 00:00',
+            lastCheckedLabel: '1 小时前',
+            lastHealthyLabel: '1 小时前',
+            expiryLabel: 'Provider 未提供到期时间',
+            message: 'AI Provider 鉴权成功',
           })),
         },
       }, null, 2));
@@ -457,13 +462,13 @@ test('action monitor page renders five parameter validity rows with pagination c
     }
   });
 
-  const renderedParameterRows = actionMonitorPage.match(/parameter-validity__row parameter-validity__row--success/g) ?? [];
+  const renderedParameterRows = actionMonitorPage.match(/parameter-health__row parameter-health__row--success/g) ?? [];
 
   assert.equal(renderedParameterRows.length, 5);
-  assert.match(actionMonitorPage, /data-parameter-validity-grid/);
-  assert.match(actionMonitorPage, /data-parameter-validity-status>1-5 \/ 共 6 个/);
-  assert.match(actionMonitorPage, /data-parameter-validity-nav="next"/);
-  assert.match(actionMonitorPage, /id="parameter-validity-data"/);
+  assert.match(actionMonitorPage, /data-parameter-health-grid/);
+  assert.match(actionMonitorPage, /data-parameter-health-status>1-5 \/ 共 6 个/);
+  assert.match(actionMonitorPage, /data-parameter-health-nav="next"/);
+  assert.match(actionMonitorPage, /id="parameter-health-data"/);
   assert.match(actionMonitorPage, /data-page-size="5"/);
 });
 
@@ -477,9 +482,9 @@ test('action monitor client pagination labels use the visible row count as the r
 test('action monitor client keeps parameter rows click-only without row copy controls', () => {
   const actionMonitorScript = readFileSync(actionMonitorScriptPath, 'utf8');
 
-  assert.doesNotMatch(actionMonitorScript, /data-parameter-validity-copy/);
+  assert.doesNotMatch(actionMonitorScript, /data-parameter-health-copy/);
   assert.doesNotMatch(actionMonitorScript, /copyText/);
-  assert.match(actionMonitorScript, /data-parameter-validity-open/);
+  assert.match(actionMonitorScript, /data-parameter-health-open/);
 });
 
 test('action monitor page keeps the module visible when no Action rows were generated', { concurrency: false }, () => {

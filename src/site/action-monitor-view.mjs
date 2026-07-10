@@ -1,15 +1,8 @@
+import { buildParameterHealthViewModel } from './parameter-health-view.mjs';
+
 const DEFAULT_HISTORY_PAGE_SIZE = 15;
-const DEFAULT_PARAMETER_VALIDITY_PAGE_SIZE = 5;
-const PARAMETER_VALIDITY_PAGINATION_THRESHOLD = 4;
 const SUCCESS_CONCLUSIONS = new Set(['success']);
 const FAILURE_CONCLUSIONS = new Set(['failure', 'cancelled', 'timed_out', 'action_required', 'startup_failure']);
-const PARAMETER_STATUS_ORDER = new Map([
-  ['expired', 1],
-  ['missing', 2],
-  ['warning', 3],
-  ['unknown', 4],
-  ['ok', 5],
-]);
 
 export function buildActionMonitorViewModel(rows = [], options = {}) {
   const now = normalizeDate(options.now) ?? new Date();
@@ -37,62 +30,10 @@ export function buildActionMonitorViewModel(rows = [], options = {}) {
     historyRuns: actionRuns,
     runs: visibleRuns,
     allRuns: actionRuns,
-    parameterValidity: buildParameterValidityViewModel(options.parameterValidityRows, {
+    parameterHealth: buildParameterHealthViewModel(options.parameterHealthRows, {
       environment,
       now,
     }),
-  };
-}
-
-export function buildParameterValidityViewModel(rows = [], options = {}) {
-  const now = normalizeDate(options.now) ?? new Date();
-  const environment = normalizeText(options.environment) ?? 'dev';
-  const pageSize = normalizePositiveInteger(options.pageSize) ?? DEFAULT_PARAMETER_VALIDITY_PAGE_SIZE;
-  const items = (Array.isArray(rows) ? rows : [])
-    .map((row) => normalizeParameterValidityItem(row, { now }))
-    .filter(Boolean)
-    .filter((item) => isParameterValidityItemForEnvironment(item, environment))
-    .sort(compareParameterValidityItems);
-  const counts = countParameterStatuses(items);
-  const visibleItems = items.slice(0, pageSize);
-
-  return {
-    title: '系统参数有效期与复核',
-    environment,
-    pageSize,
-    total: items.length,
-    status: formatParameterValidityRange(0, pageSize, items.length),
-    paginationEnabled: items.length > PARAMETER_VALIDITY_PAGINATION_THRESHOLD,
-    summaryCards: [
-      {
-        label: '监控参数',
-        value: `${counts.total} 个`,
-        hint: `${environment} 环境`,
-      },
-      {
-        label: '已过期',
-        value: `${counts.expired} 个`,
-        hint: counts.expired ? '需要立即处理' : '当前无过期参数',
-      },
-      {
-        label: '配置缺失',
-        value: `${counts.missing} 个`,
-        hint: counts.missing ? '需要补齐配置' : '当前无缺失参数',
-      },
-      {
-        label: '即将到期',
-        value: `${counts.warning} 个`,
-        hint: counts.warning ? '进入预警窗口' : '当前无预警参数',
-      },
-      {
-        label: '未获取真实有效期',
-        value: `${counts.unknownValidity} 个`,
-        hint: counts.unknownValidity ? '包括人工复核与未知项' : '真实有效期证据完整',
-      },
-    ],
-    items,
-    visibleItems,
-    emptyMessage: `暂无 ${environment} 参数有效期数据`,
   };
 }
 
@@ -135,120 +76,6 @@ function normalizeRun(row, { now }) {
     stepCount: normalizeNonNegativeInteger(row.stepCount ?? row.step_count) ?? 0,
     failureCount: normalizeNonNegativeInteger(row.failureCount ?? row.failure_count) ?? 0,
   };
-}
-
-function normalizeParameterValidityItem(row, { now }) {
-  const key = normalizeText(row.parameterKey ?? row.parameter_key ?? row.key);
-  const name = normalizeText(row.parameterName ?? row.parameter_name ?? row.name);
-  if (!key || !name) {
-    return null;
-  }
-
-  const environment = normalizeText(row.monitorEnvironment ?? row.monitor_environment ?? row.environment) ??
-    inferParameterEnvironment(key);
-  const status = normalizeParameterStatus(row.status);
-  const validityMode = normalizeText(row.validityMode ?? row.validity_mode);
-  const daysUntilDue = normalizeInteger(row.daysUntilDue ?? row.days_until_due);
-  const dueAt = normalizeIso(
-    row.dueAt ??
-    row.due_at ??
-    row.expiresAt ??
-    row.expires_at ??
-    row.reviewAfterAt ??
-    row.review_after_at ??
-    row.details?.dueAt ??
-    row.details?.due_at,
-  );
-  const checkedAt = normalizeIso(row.checkedAt ?? row.checked_at ?? row.lastCheckedAt ?? row.last_checked_at);
-  const dueField = normalizeText(
-    row.dueField ??
-    row.due_field ??
-    row.details?.dueField ??
-    row.details?.due_field ??
-    (row.expiresAt ?? row.expires_at ? 'expiresAt' : null) ??
-    (row.reviewAfterAt ?? row.review_after_at ? 'reviewAfterAt' : null),
-  );
-  const dueKind = resolveParameterDueKind({
-    dueKind: row.dueKind ?? row.due_kind ?? row.details?.dueKind ?? row.details?.due_kind,
-    dueField,
-    validityMode,
-    dueAt,
-  });
-  const evidenceSource = normalizeText(row.evidenceSource ?? row.evidence_source) ?? 'registry';
-
-  return {
-    key,
-    environment,
-    name,
-    scope: normalizeText(row.scope) ?? 'unknown',
-    category: normalizeText(row.category) ?? 'unknown',
-    status,
-    validityMode,
-    statusLabel: formatParameterStatusLabel(status, dueKind),
-    tone: formatParameterStatusTone(status, dueKind),
-    dueKind,
-    dueAt,
-    dueDateLabel: formatDateLabel(dueAt),
-    daysUntilDue,
-    dueLabel: formatDueLabel(daysUntilDue, dueKind),
-    checkedAt,
-    checkedAtLabel: formatDateLabel(checkedAt),
-    lastCheckedLabel: formatRelativeTime(checkedAt, now),
-    evidenceSource,
-    evidenceLabel: formatParameterEvidenceLabel({ dueKind, evidenceSource }),
-    message: formatParameterMessage({ status, dueKind, daysUntilDue, message: row.message }),
-  };
-}
-
-function isParameterValidityItemForEnvironment(item, environment) {
-  return !item.environment || item.environment === environment;
-}
-
-function inferParameterEnvironment(key) {
-  const [prefix] = String(key ?? '').split('.');
-  return prefix === 'dev' || prefix === 'main' ? prefix : null;
-}
-
-function compareParameterValidityItems(left, right) {
-  const statusDiff = (PARAMETER_STATUS_ORDER.get(left.status) ?? 99) - (PARAMETER_STATUS_ORDER.get(right.status) ?? 99);
-  if (statusDiff) {
-    return statusDiff;
-  }
-
-  const leftDays = Number.isFinite(left.daysUntilDue) ? left.daysUntilDue : Number.POSITIVE_INFINITY;
-  const rightDays = Number.isFinite(right.daysUntilDue) ? right.daysUntilDue : Number.POSITIVE_INFINITY;
-  if (leftDays !== rightDays) {
-    return leftDays - rightDays;
-  }
-
-  return left.name.localeCompare(right.name, 'zh-CN');
-}
-
-function countParameterStatuses(items) {
-  const counts = {
-    total: items.length,
-    expired: 0,
-    missing: 0,
-    warning: 0,
-    unknownValidity: 0,
-  };
-
-  for (const item of items) {
-    if (item.status === 'missing') {
-      counts.missing += 1;
-    }
-    if (item.dueKind === 'expiry' && item.status === 'expired') {
-      counts.expired += 1;
-    }
-    if (item.dueKind === 'expiry' && item.status === 'warning') {
-      counts.warning += 1;
-    }
-    if (item.dueKind !== 'expiry') {
-      counts.unknownValidity += 1;
-    }
-  }
-
-  return counts;
 }
 
 function buildSummaryCards(runs) {
@@ -296,16 +123,6 @@ function formatHistoryRange(pageIndex, pageSize, total) {
   const start = pageIndex * pageSize + 1;
   const end = Math.min(start + pageSize - 1, total);
   return `${start}-${end} / 共 ${total} 次`;
-}
-
-function formatParameterValidityRange(pageIndex, pageSize, total) {
-  if (!total) {
-    return '0 / 共 0 个';
-  }
-
-  const start = pageIndex * pageSize + 1;
-  const end = Math.min(start + pageSize - 1, total);
-  return `${start}-${end} / 共 ${total} 个`;
 }
 
 function formatStatusLabel({ status, conclusion }) {
@@ -370,117 +187,6 @@ function formatDuration(seconds) {
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
   return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-}
-
-function resolveParameterDueKind({ dueKind, dueField, validityMode, dueAt }) {
-  const normalized = normalizeText(dueKind);
-  if (normalized === 'expiry' || normalized === 'review') {
-    return normalized;
-  }
-  if (!dueAt) {
-    return 'unknown';
-  }
-  if (dueField === 'reviewAfterAt' || validityMode === 'review_after' || validityMode === 'non_expiring_manual_review') {
-    return 'review';
-  }
-  if (dueField === 'expiresAt' || dueField === 'rotationCycleDays' || validityMode === 'fixed_expires_at' || validityMode === 'rotation_cycle') {
-    return 'expiry';
-  }
-  return 'unknown';
-}
-
-function formatParameterStatusLabel(status, dueKind) {
-  if (status === 'missing') {
-    return '配置缺失';
-  }
-  if (dueKind === 'review') {
-    if (status === 'expired') {
-      return '人工复核逾期';
-    }
-    if (status === 'warning') {
-      return '临近人工复核';
-    }
-    return '待人工复核';
-  }
-  if (dueKind === 'unknown') {
-    return '真实有效期未知';
-  }
-  if (status === 'ok') {
-    return '有效期正常';
-  }
-  if (status === 'warning') {
-    return '即将到期';
-  }
-  if (status === 'expired') {
-    return '已过期';
-  }
-  return '真实有效期未知';
-}
-
-function formatParameterStatusTone(status, dueKind) {
-  if (status === 'missing' || status === 'expired') {
-    return 'failure';
-  }
-  if (status === 'warning') {
-    return 'warning';
-  }
-  if (status === 'ok' && dueKind === 'expiry') {
-    return 'success';
-  }
-  return 'neutral';
-}
-
-function formatDueLabel(daysUntilDue, dueKind) {
-  if (dueKind === 'unknown' || !Number.isFinite(daysUntilDue)) {
-    return '未获取真实有效期';
-  }
-  if (dueKind === 'review') {
-    if (daysUntilDue < 0) {
-      return `复核逾期 ${Math.abs(daysUntilDue)} 天`;
-    }
-    if (daysUntilDue === 0) {
-      return '今天人工复核';
-    }
-    return `距复核 ${daysUntilDue} 天`;
-  }
-  if (daysUntilDue < 0) {
-    return `过期 ${Math.abs(daysUntilDue)} 天`;
-  }
-  if (daysUntilDue === 0) {
-    return '今天到期';
-  }
-  return `剩余 ${daysUntilDue} 天`;
-}
-
-function formatParameterEvidenceLabel({ dueKind, evidenceSource }) {
-  if (dueKind === 'review') {
-    return '人工复核计划';
-  }
-  if (dueKind === 'unknown') {
-    return '仅登记参数名称';
-  }
-  if (/provider|github_metadata|cloudflare_metadata/u.test(evidenceSource)) {
-    return 'Provider 元数据';
-  }
-  return '人工登记到期日';
-}
-
-function formatParameterMessage({ status, dueKind, daysUntilDue, message }) {
-  if (status === 'missing') {
-    return '必填参数缺失';
-  }
-  if (dueKind === 'unknown') {
-    return '未获取真实有效期；unknown 不代表参数仍然有效';
-  }
-  if (dueKind === 'review') {
-    return '人工复核提醒，不代表参数真实到期时间';
-  }
-  return normalizeText(message) ?? (Number.isFinite(daysUntilDue) ? `距离真实到期日 ${daysUntilDue} 天` : '真实有效期已登记');
-}
-
-function formatDateLabel(value) {
-  const date = normalizeDate(value);
-  return date ? date.toISOString().slice(0, 10) : '—';
 }
 
 function formatRelativeTime(value, now) {
@@ -561,7 +267,3 @@ function normalizeInteger(value) {
   return Number.isSafeInteger(numberValue) ? numberValue : null;
 }
 
-function normalizeParameterStatus(value) {
-  const normalized = normalizeText(value);
-  return PARAMETER_STATUS_ORDER.has(normalized) ? normalized : 'unknown';
-}
