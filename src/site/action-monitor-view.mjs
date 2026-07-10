@@ -57,7 +57,7 @@ export function buildParameterValidityViewModel(rows = [], options = {}) {
   const visibleItems = items.slice(0, pageSize);
 
   return {
-    title: '系统参数有效期',
+    title: '系统参数有效期与复核',
     environment,
     pageSize,
     total: items.length,
@@ -85,9 +85,9 @@ export function buildParameterValidityViewModel(rows = [], options = {}) {
         hint: counts.warning ? '进入预警窗口' : '当前无预警参数',
       },
       {
-        label: '未知有效期',
-        value: `${counts.unknown} 个`,
-        hint: counts.unknown ? '需要补齐元数据' : '元数据完整',
+        label: '未获取真实有效期',
+        value: `${counts.unknownValidity} 个`,
+        hint: counts.unknownValidity ? '包括人工复核与未知项' : '真实有效期证据完整',
       },
     ],
     items,
@@ -147,6 +147,7 @@ function normalizeParameterValidityItem(row, { now }) {
   const environment = normalizeText(row.monitorEnvironment ?? row.monitor_environment ?? row.environment) ??
     inferParameterEnvironment(key);
   const status = normalizeParameterStatus(row.status);
+  const validityMode = normalizeText(row.validityMode ?? row.validity_mode);
   const daysUntilDue = normalizeInteger(row.daysUntilDue ?? row.days_until_due);
   const dueAt = normalizeIso(
     row.dueAt ??
@@ -159,6 +160,21 @@ function normalizeParameterValidityItem(row, { now }) {
     row.details?.due_at,
   );
   const checkedAt = normalizeIso(row.checkedAt ?? row.checked_at ?? row.lastCheckedAt ?? row.last_checked_at);
+  const dueField = normalizeText(
+    row.dueField ??
+    row.due_field ??
+    row.details?.dueField ??
+    row.details?.due_field ??
+    (row.expiresAt ?? row.expires_at ? 'expiresAt' : null) ??
+    (row.reviewAfterAt ?? row.review_after_at ? 'reviewAfterAt' : null),
+  );
+  const dueKind = resolveParameterDueKind({
+    dueKind: row.dueKind ?? row.due_kind ?? row.details?.dueKind ?? row.details?.due_kind,
+    dueField,
+    validityMode,
+    dueAt,
+  });
+  const evidenceSource = normalizeText(row.evidenceSource ?? row.evidence_source) ?? 'registry';
 
   return {
     key,
@@ -167,17 +183,20 @@ function normalizeParameterValidityItem(row, { now }) {
     scope: normalizeText(row.scope) ?? 'unknown',
     category: normalizeText(row.category) ?? 'unknown',
     status,
-    statusLabel: formatParameterStatusLabel(status),
-    tone: formatParameterStatusTone(status),
+    validityMode,
+    statusLabel: formatParameterStatusLabel(status, dueKind),
+    tone: formatParameterStatusTone(status, dueKind),
+    dueKind,
     dueAt,
     dueDateLabel: formatDateLabel(dueAt),
     daysUntilDue,
-    dueLabel: formatDueLabel(daysUntilDue),
+    dueLabel: formatDueLabel(daysUntilDue, dueKind),
     checkedAt,
     checkedAtLabel: formatDateLabel(checkedAt),
     lastCheckedLabel: formatRelativeTime(checkedAt, now),
-    evidenceSource: normalizeText(row.evidenceSource ?? row.evidence_source) ?? 'registry',
-    message: normalizeText(row.message) ?? '',
+    evidenceSource,
+    evidenceLabel: formatParameterEvidenceLabel({ dueKind, evidenceSource }),
+    message: formatParameterMessage({ status, dueKind, daysUntilDue, message: row.message }),
   };
 }
 
@@ -208,15 +227,25 @@ function compareParameterValidityItems(left, right) {
 function countParameterStatuses(items) {
   const counts = {
     total: items.length,
-    ok: 0,
-    warning: 0,
     expired: 0,
     missing: 0,
-    unknown: 0,
+    warning: 0,
+    unknownValidity: 0,
   };
 
   for (const item of items) {
-    counts[item.status] = (counts[item.status] ?? 0) + 1;
+    if (item.status === 'missing') {
+      counts.missing += 1;
+    }
+    if (item.dueKind === 'expiry' && item.status === 'expired') {
+      counts.expired += 1;
+    }
+    if (item.dueKind === 'expiry' && item.status === 'warning') {
+      counts.warning += 1;
+    }
+    if (item.dueKind !== 'expiry') {
+      counts.unknownValidity += 1;
+    }
   }
 
   return counts;
@@ -343,9 +372,41 @@ function formatDuration(seconds) {
   return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
-function formatParameterStatusLabel(status) {
+function resolveParameterDueKind({ dueKind, dueField, validityMode, dueAt }) {
+  const normalized = normalizeText(dueKind);
+  if (normalized === 'expiry' || normalized === 'review') {
+    return normalized;
+  }
+  if (!dueAt) {
+    return 'unknown';
+  }
+  if (dueField === 'reviewAfterAt' || validityMode === 'review_after' || validityMode === 'non_expiring_manual_review') {
+    return 'review';
+  }
+  if (dueField === 'expiresAt' || dueField === 'rotationCycleDays' || validityMode === 'fixed_expires_at' || validityMode === 'rotation_cycle') {
+    return 'expiry';
+  }
+  return 'unknown';
+}
+
+function formatParameterStatusLabel(status, dueKind) {
+  if (status === 'missing') {
+    return '配置缺失';
+  }
+  if (dueKind === 'review') {
+    if (status === 'expired') {
+      return '人工复核逾期';
+    }
+    if (status === 'warning') {
+      return '临近人工复核';
+    }
+    return '待人工复核';
+  }
+  if (dueKind === 'unknown') {
+    return '真实有效期未知';
+  }
   if (status === 'ok') {
-    return '正常';
+    return '有效期正常';
   }
   if (status === 'warning') {
     return '即将到期';
@@ -353,36 +414,68 @@ function formatParameterStatusLabel(status) {
   if (status === 'expired') {
     return '已过期';
   }
-  if (status === 'missing') {
-    return '配置缺失';
-  }
-  return '未知有效期';
+  return '真实有效期未知';
 }
 
-function formatParameterStatusTone(status) {
-  if (status === 'ok') {
-    return 'success';
+function formatParameterStatusTone(status, dueKind) {
+  if (status === 'missing' || status === 'expired') {
+    return 'failure';
   }
   if (status === 'warning') {
     return 'warning';
   }
-  if (status === 'expired' || status === 'missing') {
-    return 'failure';
+  if (status === 'ok' && dueKind === 'expiry') {
+    return 'success';
   }
   return 'neutral';
 }
 
-function formatDueLabel(daysUntilDue) {
-  if (!Number.isFinite(daysUntilDue)) {
-    return '无到期数据';
+function formatDueLabel(daysUntilDue, dueKind) {
+  if (dueKind === 'unknown' || !Number.isFinite(daysUntilDue)) {
+    return '未获取真实有效期';
+  }
+  if (dueKind === 'review') {
+    if (daysUntilDue < 0) {
+      return `复核逾期 ${Math.abs(daysUntilDue)} 天`;
+    }
+    if (daysUntilDue === 0) {
+      return '今天人工复核';
+    }
+    return `距复核 ${daysUntilDue} 天`;
   }
   if (daysUntilDue < 0) {
-    return `逾期 ${Math.abs(daysUntilDue)} 天`;
+    return `过期 ${Math.abs(daysUntilDue)} 天`;
   }
   if (daysUntilDue === 0) {
     return '今天到期';
   }
   return `剩余 ${daysUntilDue} 天`;
+}
+
+function formatParameterEvidenceLabel({ dueKind, evidenceSource }) {
+  if (dueKind === 'review') {
+    return '人工复核计划';
+  }
+  if (dueKind === 'unknown') {
+    return '仅登记参数名称';
+  }
+  if (/provider|github_metadata|cloudflare_metadata/u.test(evidenceSource)) {
+    return 'Provider 元数据';
+  }
+  return '人工登记到期日';
+}
+
+function formatParameterMessage({ status, dueKind, daysUntilDue, message }) {
+  if (status === 'missing') {
+    return '必填参数缺失';
+  }
+  if (dueKind === 'unknown') {
+    return '未获取真实有效期；unknown 不代表参数仍然有效';
+  }
+  if (dueKind === 'review') {
+    return '人工复核提醒，不代表参数真实到期时间';
+  }
+  return normalizeText(message) ?? (Number.isFinite(daysUntilDue) ? `距离真实到期日 ${daysUntilDue} 天` : '真实有效期已登记');
 }
 
 function formatDateLabel(value) {

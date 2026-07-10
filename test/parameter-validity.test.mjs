@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
   loadActionMonitorViewFromPostgres,
+  mergeParameterValidityRows,
 } from '../src/app/use-cases/generate-training-data.impl.mjs';
 import {
   buildParameterValiditySummary,
@@ -41,7 +42,8 @@ test('parameter validity evaluator classifies ok warning expired missing and unk
   }, { now, presence: true });
   assert.equal(warning.status, 'warning');
   assert.equal(warning.daysUntilDue, 13);
-  assert.equal(warning.message, '距离到期或复核日期 13 天');
+  assert.equal(warning.dueKind, 'expiry');
+  assert.equal(warning.message, '距离真实到期日 13 天');
   assert.equal(warning.details.value, undefined);
 
   const expired = evaluateParameterValidity({
@@ -50,6 +52,18 @@ test('parameter validity evaluator classifies ok warning expired missing and unk
   }, { now, presence: true });
   assert.equal(expired.status, 'expired');
   assert.equal(expired.daysUntilDue, -6);
+  assert.equal(expired.dueKind, 'expiry');
+  assert.equal(expired.message, '已超过真实到期日 6 天');
+
+  const review = evaluateParameterValidity({
+    ...baseParameter,
+    validityMode: 'review_after',
+    expiresAt: undefined,
+    reviewAfterAt: '2026-07-20',
+  }, { now, presence: true });
+  assert.equal(review.status, 'warning');
+  assert.equal(review.dueKind, 'review');
+  assert.equal(review.message, '距离人工复核日期 13 天');
 
   const missing = evaluateParameterValidity({
     ...baseParameter,
@@ -66,7 +80,8 @@ test('parameter validity evaluator classifies ok warning expired missing and unk
   }, { now, presence: true });
   assert.equal(unknown.status, 'unknown');
   assert.equal(unknown.daysUntilDue, null);
-  assert.equal(unknown.message, '缺少有效期或复核时间元数据');
+  assert.equal(unknown.dueKind, 'unknown');
+  assert.equal(unknown.message, '未获取真实有效期，且未设置人工复核日期');
 });
 
 test('parameter validity audit validates registry and builds safe check rows', () => {
@@ -126,6 +141,33 @@ test('parameter validity audit validates registry and builds safe check rows', (
   assert.equal(audit.checks[0].status, 'expired');
   assert.equal(audit.checks[0].details.value, undefined);
   assert.equal(audit.parameters[0].metadata.value, undefined);
+});
+
+test('parameter validity audit labels provider metadata as external evidence', () => {
+  const key = 'dev.github.secret.AI_API_KEY';
+  const audit = runParameterValidityAudit({
+    registry: {
+      environment: 'dev',
+      parameters: [{
+        key,
+        name: 'AI_API_KEY',
+        scope: 'github_actions_secret',
+        category: 'ai',
+        required: true,
+        sensitive: true,
+        validityMode: 'provider_metadata',
+        warningDays: 30,
+        criticalDays: 7,
+        sourceDoc: 'docs/01_系统配置/dev.md',
+      }],
+    },
+    now: new Date('2026-07-07T00:00:00.000Z'),
+    metadataByKey: new Map([[key, { expiresAt: '2026-09-01' }]]),
+  });
+
+  assert.equal(audit.checks[0].status, 'ok');
+  assert.equal(audit.checks[0].details.dueKind, 'expiry');
+  assert.equal(audit.checks[0].evidenceSource, 'registry+provider_metadata');
 });
 
 test('postgres parameter validity repository writes audit rows and lists latest checks', async () => {
@@ -217,8 +259,10 @@ test('action monitor view model includes sorted parameter validity summary', () 
       parameterName: 'OK',
       scope: 'github_actions_secret',
       category: 'ai',
+      validityMode: 'fixed_expires_at',
       status: 'ok',
       daysUntilDue: 80,
+      expiresAt: '2026-09-25',
       checkedAt: '2026-07-07T00:00:00.000Z',
     },
     {
@@ -226,8 +270,10 @@ test('action monitor view model includes sorted parameter validity summary', () 
       parameterName: 'EXPIRED',
       scope: 'github_actions_secret',
       category: 'database',
+      validityMode: 'fixed_expires_at',
       status: 'expired',
       daysUntilDue: -1,
+      expiresAt: '2026-07-06',
       checkedAt: '2026-07-07T00:00:00.000Z',
     },
     {
@@ -235,6 +281,7 @@ test('action monitor view model includes sorted parameter validity summary', () 
       parameterName: 'UNKNOWN',
       scope: 'cloudflare_worker_secret',
       category: 'github',
+      validityMode: 'provider_metadata',
       status: 'unknown',
       daysUntilDue: null,
       checkedAt: '2026-07-07T00:00:00.000Z',
@@ -244,8 +291,10 @@ test('action monitor view model includes sorted parameter validity summary', () 
       parameterName: 'WARNING',
       scope: 'github_actions_secret',
       category: 'telegram',
+      validityMode: 'fixed_expires_at',
       status: 'warning',
       daysUntilDue: 5,
+      expiresAt: '2026-07-12',
       checkedAt: '2026-07-07T00:00:00.000Z',
     },
   ];
@@ -262,9 +311,55 @@ test('action monitor view model includes sorted parameter validity summary', () 
   );
   assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '已过期' && card.value === '1 个'));
   assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '即将到期' && card.value === '1 个'));
-  assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '未知有效期' && card.value === '1 个'));
+  assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '未获取真实有效期' && card.value === '1 个'));
   assert.equal(view.parameterValidity.items[0].statusLabel, '已过期');
   assert.equal(view.parameterValidity.items[1].dueLabel, '剩余 5 天');
+});
+
+test('action monitor separates manual review reminders from real expiry evidence', () => {
+  const view = buildActionMonitorViewModel([], {
+    environment: 'dev',
+    now: new Date('2026-07-07T00:00:00.000Z'),
+    parameterValidityRows: [
+      {
+        parameterKey: 'dev.github.secret.AI_API_KEY',
+        parameterName: 'AI_API_KEY',
+        scope: 'github_actions_secret',
+        category: 'ai',
+        validityMode: 'review_after',
+        status: 'warning',
+        daysUntilDue: 13,
+        reviewAfterAt: '2026-07-20',
+        evidenceSource: 'registry',
+        details: { dueField: 'reviewAfterAt' },
+      },
+      {
+        parameterKey: 'dev.github.secret.DEV_TRAINING_DB_URL',
+        parameterName: 'DEV_TRAINING_DB_URL',
+        scope: 'github_actions_secret',
+        category: 'database',
+        validityMode: 'provider_metadata',
+        status: 'unknown',
+        evidenceSource: 'registry',
+      },
+    ],
+  });
+
+  const review = view.parameterValidity.items.find((item) => item.name === 'AI_API_KEY');
+  const unknown = view.parameterValidity.items.find((item) => item.name === 'DEV_TRAINING_DB_URL');
+
+  assert.equal(view.parameterValidity.title, '系统参数有效期与复核');
+  assert.equal(review.dueKind, 'review');
+  assert.equal(review.statusLabel, '临近人工复核');
+  assert.equal(review.dueLabel, '距复核 13 天');
+  assert.equal(review.evidenceLabel, '人工复核计划');
+  assert.equal(unknown.dueKind, 'unknown');
+  assert.equal(unknown.statusLabel, '真实有效期未知');
+  assert.equal(unknown.dueLabel, '未获取真实有效期');
+  assert.equal(unknown.evidenceLabel, '仅登记参数名称');
+  assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '已过期' && card.value === '0 个'));
+  assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '即将到期' && card.value === '0 个'));
+  assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '未获取真实有效期' && card.value === '2 个'));
 });
 
 test('action monitor view model paginates parameter validity rows at five visible items', () => {
@@ -328,6 +423,38 @@ test('action monitor view model only includes parameter validity rows for the cu
   assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '已过期' && card.value === '0 个'));
 });
 
+test('latest registry definition rejects stale database validity dates', () => {
+  const registryRow = {
+    parameterKey: 'dev.github.secret.AI_API_KEY',
+    monitorEnvironment: 'dev',
+    parameterName: 'AI_API_KEY',
+    validityMode: 'review_after',
+    reviewAfterAt: null,
+    status: 'unknown',
+    daysUntilDue: null,
+    evidenceSource: 'registry',
+    message: '未获取真实有效期，且未设置人工复核日期',
+  };
+  const staleDatabaseRow = {
+    ...registryRow,
+    reviewAfterAt: '2026-10-01T00:00:00.000Z',
+    status: 'ok',
+    daysUntilDue: 83,
+    evidenceSource: 'registry',
+    message: '距离到期或复核日期 83 天',
+  };
+
+  const [merged] = mergeParameterValidityRows({
+    registryRows: [registryRow],
+    databaseRows: [staleDatabaseRow],
+  });
+
+  assert.equal(merged.reviewAfterAt, null);
+  assert.equal(merged.status, 'unknown');
+  assert.equal(merged.daysUntilDue, null);
+  assert.equal(merged.message, '未获取真实有效期，且未设置人工复核日期');
+});
+
 test('action monitor data uses the current environment registry before parameter checks exist', async () => {
   for (const environment of ['dev', 'main']) {
     const view = await loadActionMonitorViewFromPostgres({
@@ -344,8 +471,12 @@ test('action monitor data uses the current environment registry before parameter
     assert.ok(view.parameterValidity.items.every((item) => item.key.startsWith(`${environment}.`)));
     assert.ok(!view.parameterValidity.items.some((item) => item.key.startsWith(environment === 'dev' ? 'main.' : 'dev.')));
     assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '监控参数' && card.value !== '0 个'));
-    assert.ok(view.parameterValidity.items.every((item) => item.status !== 'unknown'));
-    assert.ok(view.parameterValidity.summaryCards.some((card) => card.label === '未知有效期' && card.value === '0 个'));
+    assert.ok(view.parameterValidity.items.every((item) => item.status === 'unknown'));
+    assert.ok(view.parameterValidity.items.every((item) => item.dueKind === 'unknown'));
+    assert.ok(view.parameterValidity.items.every((item) => item.dueLabel === '未获取真实有效期'));
+    assert.ok(view.parameterValidity.summaryCards.some((card) => (
+      card.label === '未获取真实有效期' && card.value === `${view.parameterValidity.items.length} 个`
+    )));
   }
 });
 
@@ -362,11 +493,7 @@ test('parameter validity registry files avoid values and cover first high-risk s
     assert.ok(validated.parameters.every((parameter) => !Object.hasOwn(parameter, 'value')));
     assert.ok(validated.parameters.every((parameter) => parameter.sensitive === true));
     assert.ok(validated.parameters.every((parameter) => parameter.sourceDoc));
-    assert.ok(validated.parameters.every((parameter) => (
-      parameter.expiresAt ||
-      parameter.reviewAfterAt ||
-      (parameter.rotationCycleDays && parameter.validFrom)
-    )));
+    assert.ok(validated.parameters.every((parameter) => !Object.hasOwn(parameter, 'reviewAfterAt')));
 
     if (environment === 'dev') {
       assert.ok(keys.has('dev.github.secret.DEV_TRAINING_DB_URL'));

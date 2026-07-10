@@ -77,19 +77,19 @@ flowchart LR
 | 耗时 | `start_time`、`end_time` 或 GitHub API `run_started_at` / `updated_at` 计算。 |
 | 失败摘要 | 优先由失败 step 生成，最多取前三条，最长 800 字符。 |
 | 明细计数 | 读取时聚合 job、step 和 failure 数量。 |
-| 参数有效期 | 读取 `monitor.system_config_parameters` 和每个参数最新一条 `monitor.system_config_parameter_checks`，展示参数名、分类、位置、状态、到期/复核日期、最近检查和安全提示。 |
+| 参数有效期与复核 | 读取当前 registry 和 `monitor.system_config_parameters` / 最新检查结果，展示参数名、分类、位置、状态、日期、证据类型、最近检查和安全提示；registry 定义变化时不会继续采用数据库中的旧日期。 |
 
-参数有效期列表默认按风险排序：`expired`、`missing`、`warning`、`unknown`、`ok`，同状态下优先显示更接近到期或复核日期的参数。数据库暂无检查结果时，站点构建会按当前环境 registry 生成兜底视图，避免页面完全空白。
+参数有效期与复核列表默认按风险排序：`expired`、`missing`、`warning`、`unknown`、`ok`。页面使用 `dueKind=expiry|review|unknown` 区分真实到期、人工复核和无有效期证据；只有 `expiry` 才计入“已过期/即将到期”，`review` 会明确显示“人工复核”，`unknown` 明确提示“不代表参数仍然有效”。数据库暂无检查结果时，站点构建按当前环境 registry 生成兜底视图。
 
-参数有效期状态含义：
+参数有效期检查状态含义（页面还会结合 `dueKind` 转成不混淆的中文标签）：
 
 | 状态 | 含义 |
 | --- | --- |
-| `ok` | 已有有效期或复核日期，且未进入预警窗口。 |
-| `warning` | 距到期或复核日期小于等于 registry 中的 `warningDays`。 |
-| `expired` | 当前时间已超过到期或复核日期。 |
+| `ok` | 已登记的真实到期日尚远，或人工复核计划尚远；人工复核的 `ok` 不证明参数真实有效。 |
+| `warning` | 距真实到期日或人工复核日期小于等于 `warningDays`；页面分别显示“即将到期”或“临近人工复核”。 |
+| `expired` | 当前时间已超过真实到期日或人工复核日期；页面分别显示“已过期”或“人工复核逾期”。 |
 | `missing` | audit 能确认必填参数未注入或不存在。 |
-| `unknown` | registry 缺少有效期 / 复核时间，或当前只能确认参数名称而不能确认 provider metadata。 |
+| `unknown` | 未获得真实有效期，也没有人工复核计划；这不等于参数仍然有效。 |
 
 ## 关键状态字段
 

@@ -89,11 +89,18 @@ export function runParameterValidityAudit(options = {}) {
 
   const checks = parameters.map((parameter) => {
     const presence = resolvePresence(parameter, { env, presenceByKey, presenceByName });
+    const evidenceParts = ['registry'];
+    if (metadataByKey.has(parameter.key)) {
+      evidenceParts.push('provider_metadata');
+    }
+    if (presence !== undefined) {
+      evidenceParts.push('runtime_env');
+    }
     const evaluated = evaluateParameterValidity(parameter, {
       now,
       presence,
       metadata: parameter.metadata,
-      evidenceSource: presence === undefined ? 'registry' : 'registry+runtime_env',
+      evidenceSource: evidenceParts.join('+'),
     });
 
     return {
@@ -124,6 +131,7 @@ export function evaluateParameterValidity(parameter, options = {}) {
   const criticalDays = normalizePositiveInteger(parameter.criticalDays) ?? DEFAULT_CRITICAL_DAYS;
   const metadata = sanitizeDetails(options.metadata ?? parameter.metadata ?? {});
   const due = resolveDue(parameter, metadata);
+  const dueKind = resolveDueKind(due.field);
   const daysUntilDue = due.date ? Math.ceil((due.date.getTime() - now.getTime()) / DAY_MS) : null;
   const presence = typeof options.presence === 'boolean' ? options.presence : undefined;
   const evidenceSource = normalizeText(options.evidenceSource) ?? (presence === undefined ? 'registry' : 'registry+runtime_env');
@@ -144,6 +152,7 @@ export function evaluateParameterValidity(parameter, options = {}) {
   const details = sanitizeDetails({
     validityMode: parameter.validityMode,
     dueField: due.field,
+    dueKind,
     dueAt: due.date ? due.date.toISOString() : null,
     warningDays,
     criticalDays,
@@ -156,9 +165,10 @@ export function evaluateParameterValidity(parameter, options = {}) {
     name: parameter.name,
     status,
     daysUntilDue,
+    dueKind,
     dueAt: due.date ? due.date.toISOString() : null,
     evidenceSource,
-    message: buildStatusMessage({ status, daysUntilDue }),
+    message: buildStatusMessage({ status, daysUntilDue, dueKind }),
     details,
   };
 }
@@ -291,20 +301,29 @@ function resolveDue(parameter, metadata = {}) {
   return { date: null, field: null };
 }
 
-function buildStatusMessage({ status, daysUntilDue }) {
+function resolveDueKind(field) {
+  if (field === 'reviewAfterAt') {
+    return 'review';
+  }
+  if (field === 'expiresAt' || field === 'rotationCycleDays') {
+    return 'expiry';
+  }
+  return 'unknown';
+}
+
+function buildStatusMessage({ status, daysUntilDue, dueKind }) {
   if (status === 'missing') {
     return '必填参数缺失';
   }
-  if (status === 'unknown') {
-    return '缺少有效期或复核时间元数据';
+  if (status === 'unknown' || dueKind === 'unknown') {
+    return '未获取真实有效期，且未设置人工复核日期';
   }
+
+  const dateName = dueKind === 'review' ? '人工复核日期' : '真实到期日';
   if (status === 'expired') {
-    return `已超过到期或复核日期 ${Math.abs(daysUntilDue ?? 0)} 天`;
+    return `已超过${dateName} ${Math.abs(daysUntilDue ?? 0)} 天`;
   }
-  if (status === 'warning') {
-    return `距离到期或复核日期 ${daysUntilDue} 天`;
-  }
-  return daysUntilDue === null ? '正常' : `距离到期或复核日期 ${daysUntilDue} 天`;
+  return `距离${dateName} ${daysUntilDue} 天`;
 }
 
 function sanitizeDetails(value) {

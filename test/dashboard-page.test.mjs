@@ -345,7 +345,7 @@ test('action monitor page renders parameter validity status without secret value
         summaryCards: [],
         runs: [],
         parameterValidity: {
-          title: '系统参数有效期',
+          title: '系统参数有效期与复核',
           summaryCards: [
             { label: '监控参数', value: '2 个', hint: 'dev 环境' },
             { label: '即将到期', value: '1 个', hint: '进入预警窗口' },
@@ -360,9 +360,10 @@ test('action monitor page renders parameter validity status without secret value
               tone: 'warning',
               dueDateLabel: '2026-07-20',
               dueLabel: '剩余 13 天',
+              evidenceLabel: 'Provider 元数据',
               checkedAtLabel: '2026-07-07',
               lastCheckedLabel: '1 minute ago',
-              message: '距离到期或复核日期 13 天',
+              message: '距离真实到期日 13 天',
             },
           ],
         },
@@ -379,11 +380,13 @@ test('action monitor page renders parameter validity status without secret value
     }
   });
 
-  assert.match(actionMonitorPage, /系统参数有效期/);
+  assert.match(actionMonitorPage, /系统参数有效期与复核/);
+  assert.match(actionMonitorPage, /真实到期与人工复核分开显示/);
   assert.match(actionMonitorPage, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY/);
   assert.match(actionMonitorPage, /github_actions_secret/);
   assert.match(actionMonitorPage, /即将到期/);
   assert.match(actionMonitorPage, /剩余 13 天/);
+  assert.match(actionMonitorPage, /Provider 元数据/);
   assert.match(actionMonitorPage, /data-parameter-validity-open="dev\.github\.secret\.AI_API_KEY"/);
   assert.match(actionMonitorPage, /parameter-validity__state/);
   assert.doesNotMatch(actionMonitorPage, /data-parameter-validity-copy=/);
@@ -395,6 +398,7 @@ test('action monitor page renders parameter validity status without secret value
   assert.match(actionMonitorPage, /data-parameter-validity-modal-scope/);
   assert.match(actionMonitorPage, /data-parameter-validity-modal-status/);
   assert.match(actionMonitorPage, /data-parameter-validity-modal-due/);
+  assert.match(actionMonitorPage, /data-parameter-validity-modal-evidence/);
   assert.match(actionMonitorPage, /data-parameter-validity-modal-checked/);
   assert.match(actionMonitorPage, /data-parameter-validity-modal-message/);
   assert.doesNotMatch(actionMonitorPage, /sk-live|postgres:\/\/|bot-token-value/);

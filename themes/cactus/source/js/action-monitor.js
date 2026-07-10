@@ -15,6 +15,7 @@
   const parameterValidityModalScope = document.querySelector('[data-parameter-validity-modal-scope]');
   const parameterValidityModalStatus = document.querySelector('[data-parameter-validity-modal-status]');
   const parameterValidityModalDue = document.querySelector('[data-parameter-validity-modal-due]');
+  const parameterValidityModalEvidence = document.querySelector('[data-parameter-validity-modal-evidence]');
   const parameterValidityModalChecked = document.querySelector('[data-parameter-validity-modal-checked]');
   const parameterValidityModalMessage = document.querySelector('[data-parameter-validity-modal-message]');
 
@@ -88,7 +89,7 @@
     return '<div class="parameter-validity__row parameter-validity__row--' + tone + '" role="listitem" tabindex="0" data-parameter-validity-open="' + escapeHtml(item.key) + '">' +
       '<span class="parameter-validity__identity">' +
       '<strong class="parameter-validity__name" title="' + escapeHtml(item.name) + '">' + escapeHtml(item.name) + '</strong>' +
-      '<small>' + escapeHtml(item.category) + ' · ' + escapeHtml(item.scope) + '</small>' +
+      '<small>' + escapeHtml(item.category) + ' · ' + escapeHtml(item.scope) + ' · ' + escapeHtml(item.evidenceLabel || '仅登记参数名称') + '</small>' +
       '</span>' +
       '<span class="parameter-validity__due">' + escapeHtml(item.dueDateLabel || '—') + '<small>' + escapeHtml(item.dueLabel || '无到期数据') + '</small></span>' +
       '<span class="parameter-validity__state">' +
@@ -119,6 +120,9 @@
     parameterValidityModalScope.textContent = item.scope || '—';
     parameterValidityModalStatus.textContent = item.statusLabel || '未知';
     parameterValidityModalDue.textContent = dueText;
+    if (parameterValidityModalEvidence) {
+      parameterValidityModalEvidence.textContent = item.evidenceLabel || '仅登记参数名称';
+    }
     parameterValidityModalChecked.textContent = checkedText;
     parameterValidityModalMessage.textContent = item.message || '—';
     parameterValidityModal.hidden = false;

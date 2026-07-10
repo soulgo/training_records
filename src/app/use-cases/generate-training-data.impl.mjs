@@ -327,27 +327,74 @@ function mapParameterValidityAuditToRows(audit) {
       status: check.status ?? 'unknown',
       daysUntilDue: check.daysUntilDue ?? null,
       evidenceSource: check.evidenceSource ?? 'registry',
-      message: check.message ?? '缺少有效期或复核时间元数据',
+      message: check.message ?? '未获取真实有效期，且未设置人工复核日期',
       details: check.details ?? {},
     };
   });
 }
 
-function mergeParameterValidityRows({ registryRows = [], databaseRows = [] } = {}) {
-  const rowsByKey = new Map();
-  for (const row of registryRows) {
+export function mergeParameterValidityRows({ registryRows = [], databaseRows = [] } = {}) {
+  if (!registryRows.length) {
+    return Array.isArray(databaseRows) ? databaseRows : [];
+  }
+
+  const databaseRowsByKey = new Map();
+  for (const row of Array.isArray(databaseRows) ? databaseRows : []) {
     const key = firstNonEmpty([row.parameterKey, row.parameter_key, row.key]);
     if (key) {
-      rowsByKey.set(key, row);
+      databaseRowsByKey.set(key, row);
     }
   }
-  for (const row of databaseRows) {
-    const key = firstNonEmpty([row.parameterKey, row.parameter_key, row.key]);
-    if (key) {
-      rowsByKey.set(key, row);
+
+  return registryRows.map((registryRow) => {
+    const key = firstNonEmpty([registryRow.parameterKey, registryRow.parameter_key, registryRow.key]);
+    const databaseRow = databaseRowsByKey.get(key);
+    if (!databaseRow || !hasSameParameterValidityDefinition(registryRow, databaseRow)) {
+      return registryRow;
     }
+    return {
+      ...registryRow,
+      ...databaseRow,
+      validityMode: registryRow.validityMode,
+      validFrom: registryRow.validFrom,
+      expiresAt: registryRow.expiresAt,
+      reviewAfterAt: registryRow.reviewAfterAt,
+      rotationCycleDays: registryRow.rotationCycleDays,
+      warningDays: registryRow.warningDays,
+      criticalDays: registryRow.criticalDays,
+    };
+  });
+}
+
+function hasSameParameterValidityDefinition(left, right) {
+  return [
+    ['validityMode', 'validity_mode', normalizeValidityText],
+    ['validFrom', 'valid_from', normalizeValidityDate],
+    ['expiresAt', 'expires_at', normalizeValidityDate],
+    ['reviewAfterAt', 'review_after_at', normalizeValidityDate],
+    ['rotationCycleDays', 'rotation_cycle_days', normalizeValidityNumber],
+    ['warningDays', 'warning_days', normalizeValidityNumber],
+    ['criticalDays', 'critical_days', normalizeValidityNumber],
+  ].every(([camelKey, snakeKey, normalize]) => (
+    normalize(left?.[camelKey] ?? left?.[snakeKey]) === normalize(right?.[camelKey] ?? right?.[snakeKey])
+  ));
+}
+
+function normalizeValidityText(value) {
+  return String(value ?? '').trim();
+}
+
+function normalizeValidityDate(value) {
+  if (!value) {
+    return '';
   }
-  return Array.from(rowsByKey.values());
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value).trim() : date.toISOString();
+}
+
+function normalizeValidityNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function resolveActionMonitorReadConfig(env) {

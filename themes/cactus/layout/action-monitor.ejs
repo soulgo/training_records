@@ -58,16 +58,16 @@ function formatActionRange(pageIndex, pageSize, total) {
       </div>
     <% } %>
 
-    <section class="parameter-validity" aria-label="系统参数有效期">
+    <section class="parameter-validity" aria-label="系统参数有效期与复核">
       <div class="action-monitor__subheader">
         <div>
-          <h2><%= parameterValidity.title || '系统参数有效期' %></h2>
-          <span><%= parameterValidity.environment || actionMonitorView.environment || 'dev' %> 参数有效期状态</span>
+          <h2><%= parameterValidity.title || '系统参数有效期与复核' %></h2>
+          <span><%= parameterValidity.environment || actionMonitorView.environment || 'dev' %> 真实到期与人工复核分开显示；未知不代表有效</span>
         </div>
       </div>
 
       <% if (parameterValidityCards.length) { %>
-        <div class="parameter-validity__summary" aria-label="系统参数有效期摘要">
+        <div class="parameter-validity__summary" aria-label="系统参数有效期与复核摘要">
           <% parameterValidityCards.forEach((card) => { %>
             <div class="action-monitor__summary-card">
               <span><%= card.label %></span>
@@ -91,7 +91,7 @@ function formatActionRange(pageIndex, pageSize, total) {
             >较早</button>
           </div>
         <% } %>
-        <div class="parameter-validity__table" role="list" aria-label="系统参数有效期列表">
+        <div class="parameter-validity__table" role="list" aria-label="系统参数有效期与复核列表">
           <div class="parameter-validity__body" data-parameter-validity-grid>
           <% parameterValidityVisibleItems.forEach((item) => { %>
             <div
@@ -102,7 +102,7 @@ function formatActionRange(pageIndex, pageSize, total) {
             >
               <span class="parameter-validity__identity">
                 <strong class="parameter-validity__name" title="<%= item.name %>"><%= item.name %></strong>
-                <small><%= item.category %> · <%= item.scope %></small>
+                <small><%= item.category %> · <%= item.scope %> · <%= item.evidenceLabel || '仅登记参数名称' %></small>
               </span>
               <span class="parameter-validity__due"><%= item.dueDateLabel || '—' %><small><%= item.dueLabel || '无到期数据' %></small></span>
               <span class="parameter-validity__state">
@@ -140,6 +140,7 @@ function formatActionRange(pageIndex, pageSize, total) {
             <div><dt>位置</dt><dd data-parameter-validity-modal-scope></dd></div>
             <div><dt>状态</dt><dd data-parameter-validity-modal-status></dd></div>
             <div><dt>到期 / 复核</dt><dd data-parameter-validity-modal-due></dd></div>
+            <div><dt>证据来源</dt><dd data-parameter-validity-modal-evidence></dd></div>
             <div><dt>最近检查</dt><dd data-parameter-validity-modal-checked></dd></div>
             <div><dt>处理提示</dt><dd data-parameter-validity-modal-message></dd></div>
           </dl>
