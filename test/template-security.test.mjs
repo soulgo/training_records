@@ -50,15 +50,18 @@ test('dev workflow shares the repository AI configuration with main', async () =
   );
 });
 
-test('dev workflow keeps chat and Feishu credentials isolated from main', async () => {
+test('dev workflow falls back to the shared Telegram allowlist while keeping Feishu credentials isolated', async () => {
   const workflow = await readFile(new URL('../.github/workflows/sync-dev.yml', import.meta.url), 'utf8');
 
-  assert.match(workflow, /TELEGRAM_ALLOWED_CHAT_IDS:\s*\$\{\{ vars\.DEV_TELEGRAM_ALLOWED_CHAT_IDS \}\}/);
+  assert.match(
+    workflow,
+    /TELEGRAM_ALLOWED_CHAT_IDS:\s*\$\{\{ secrets\.DEV_TELEGRAM_ALLOWED_CHAT_IDS \|\| secrets\.TELEGRAM_ALLOWED_CHAT_IDS \}\}/,
+  );
   assert.match(workflow, /FEISHU_APP_ID:\s*\$\{\{ secrets\.DEV_FEISHU_APP_ID \}\}/);
   assert.match(workflow, /FEISHU_APP_SECRET:\s*\$\{\{ secrets\.DEV_FEISHU_APP_SECRET \}\}/);
   assert.match(workflow, /FEISHU_ALLOWED_CHAT_IDS:\s*\$\{\{ secrets\.DEV_FEISHU_ALLOWED_CHAT_IDS \}\}/);
   assert.doesNotMatch(
     workflow,
-    /DEV_(?:TELEGRAM_ALLOWED_CHAT_IDS|FEISHU_APP_ID|FEISHU_APP_SECRET|FEISHU_ALLOWED_CHAT_IDS)\s*\|\|/,
+    /DEV_(?:FEISHU_APP_ID|FEISHU_APP_SECRET|FEISHU_ALLOWED_CHAT_IDS)\s*\|\|/,
   );
 });

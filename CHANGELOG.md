@@ -24,7 +24,7 @@
 - 收敛根目录 Markdown：保留 `README.md`、`CHANGELOG.md` 和运行链路固定的 `训练记录.md`、`训练数据解析.md`；将系统代码重构分析、目标、方案、TDD 与最终报告统一归档到 `docs/03_历史重构记录/重构历史/系统代码终极重构/`，并更新文档导航和交叉链接。
 - 修正站点首页对数据来源的描述：线上看板以 PostgreSQL `core.*` 为业务事实源，`训练记录.md` 是数据库派生备份和受保护恢复入口。
 - Telegram 与飞书现在直接转换为共享来源消息契约；识别缓存、Telegram offset、一致性检查、AI monitoring、batch audit、睡眠修复和 pending replay 全部切换到通用 ingest 表，不再以 Telegram 表名或飞书数字代理 ID 作为主路径身份。
-- dev 同步改为只读取 `DEV_AI_*`、`DEV_TELEGRAM_*`、`DEV_FEISHU_*` 和对应识别配置，不再回退 main 的 AI、聊天白名单或飞书凭据；main/dev OCR 继续通过各自 Variables 独立控制。
+- dev 同步复用 main 的通用 AI、OCR、识别模型和备用 provider 配置；Telegram、飞书、数据库与 COS 凭据继续保持 dev 隔离，其中 Telegram 白名单优先读取 `DEV_TELEGRAM_ALLOWED_CHAT_IDS`，未配置时复用通用白名单。
 - Telegram 与飞书 Worker 在进入 Durable Object 缓冲或触发 GitHub Actions 前执行聊天白名单检查；Dashboard、Monitor 与 Action Monitor 的 EJS JSON 数据改为脚本上下文安全转义。
 - dev PostgreSQL 已于 2026-07-11 手工执行 `sql/migration.sql` 和 `sql/migration_phase2_generic_ingest.sql`；main 数据库仍须在部署本代码前按相同顺序迁移。
 - 将 `/action-monitor/` 的系统参数监控从“有效期推断”升级为“参数健康探测”：新增 `config/parameter-health/<env>.json` registry、`tools/check-parameter-health.mjs`、`Parameter Health Audit` workflow、主动只读 probes 和参数健康视图，健康状态改为 `healthy`、`present`、`invalid`、`missing`、`not_configured`、`unreachable`、`unsupported`、`unknown`，到期时间仅作为有真实证据时的附加信息。
@@ -43,6 +43,8 @@
 
 ### Fixed
 
+- 修复 dev Telegram 同步读取不存在的 `DEV_TELEGRAM_ALLOWED_CHAT_IDS` Variable，导致图片任务在启动阶段报白名单缺失的问题；workflow 现在优先读取同名 dev Secret，并在未配置时回退现有通用白名单。
+- 修复飞书图片已经识别并入库后不返回结果的问题；通知 CLI 现在直接引用 canonical 飞书同步 use case，不再导入重构中已删除的 `tools/feishu-sync.mjs`。
 - 修复 canonical ingest SQL 将标准化识别字段错误放入 `telegram_message` 的 schema 漂移；识别元数据现归属 recognition 记录，并在 generic migration 中回填到 `ingest.recognition_run`。
 - 修复 `tools/check-parameter-health.mjs` 默认仍读取旧 `config/parameter-validity/<env>.json` 的问题；未显式传 `--registry` 时现在读取 `config/parameter-health/<env>.json`。
 - 修复 Windows 下全量测试并发执行 `build:data` 时多个进程同时写 `source/_data/*.json` 偶发 `UNKNOWN` / 文件锁错误的问题；生成器对瞬时写文件错误进行短重试。

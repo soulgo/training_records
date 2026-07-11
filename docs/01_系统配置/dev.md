@@ -27,6 +27,7 @@ dev 环境对应：
 | `AI_BASE_URL` | 必填 | dev 与 main 共用的 OpenAI-compatible base URL。 |
 | `DEV_TELEGRAM_BOT_TOKEN` | 必填 | dev Telegram Bot token，用于拉取消息、下载图片、通知结果、刷新 webhook。 |
 | `DEV_TELEGRAM_SECRET_TOKEN` | 必填 | dev Telegram webhook secret。必须和 Cloudflare Worker Secret `TELEGRAM_SECRET_TOKEN` 的值一致。 |
+| `DEV_TELEGRAM_ALLOWED_CHAT_IDS` | 可选 | dev Telegram chat 白名单；未配置时复用通用 Secret `TELEGRAM_ALLOWED_CHAT_IDS`。 |
 | `DEV_FEISHU_APP_ID` | 必填 | dev 飞书应用 App ID；未配置时不回退生产凭据。 |
 | `DEV_FEISHU_APP_SECRET` | 必填 | dev 飞书应用 App Secret；未配置时不回退生产凭据。 |
 | `DEV_FEISHU_ALLOWED_CHAT_IDS` | 必填 | dev 飞书 chat 白名单；作为 Secret 独立于 main。 |
@@ -58,7 +59,6 @@ dev 环境对应：
 | `TELEGRAM_RECOGNITION_CACHE_ENABLED` | `true` | 建议填 | dev 与 main 是否启用识别结果缓存。 |
 | `TELEGRAM_RECOGNITION_FALLBACK_MODEL` | 模型名 | 可选 | dev 与 main 共用的备用 AI provider 模型。 |
 | `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS` | `60000` | 可选 | dev 与 main 共用的备用 AI 请求超时。 |
-| `DEV_TELEGRAM_ALLOWED_CHAT_IDS` | dev chat id，多个用逗号分隔 | 必填 | dev Telegram chat 白名单 Variable，不读取 main 白名单。 |
 | `TELEGRAM_POLL_LIMIT` | `20` | 可选 | poll 模式拉取数量；dev workflow 当前固定 webhook 模式。 |
 | `DEV_TELEGRAM_WEBHOOK_URL` | `https://feishu-dev.soulgo.chat/telegram` | 必填 | 刷新 dev Telegram webhook 的目标 URL。 |
 | `DEV_COS_ENABLED` | `true` / `false` | 按需 | 是否把随想图片上传 dev COS。 |
@@ -135,7 +135,7 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.dev.toml
 | 参数 | 来源 | 说明 |
 | --- | --- | --- |
 | `DEV_TELEGRAM_BOT_TOKEN` | Telegram `@BotFather` | dev bot token。 |
-| `DEV_TELEGRAM_ALLOWED_CHAT_IDS` | Telegram 消息来源 chat id | dev 白名单 Variable，多个 id 用逗号分隔。 |
+| `DEV_TELEGRAM_ALLOWED_CHAT_IDS` | Telegram 消息来源 chat id | 可选的 dev 白名单 Secret，多个 id 用逗号分隔；不填时使用通用 Secret `TELEGRAM_ALLOWED_CHAT_IDS`。 |
 | `DEV_TELEGRAM_SECRET_TOKEN` | 自己生成 | 用于 `setWebhook`。必须和 Cloudflare Worker Secret `TELEGRAM_SECRET_TOKEN` 一致。 |
 | `DEV_TELEGRAM_WEBHOOK_URL` | dev Worker URL | 通常是 `https://feishu-dev.soulgo.chat/telegram`。 |
 

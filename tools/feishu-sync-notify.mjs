@@ -1,4 +1,4 @@
-import { notifyFeishuSyncResultFromFile } from './feishu-sync.mjs';
+import { notifyFeishuSyncResultFromFile } from '../src/app/use-cases/feishu-sync.use-case.mjs';
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const result = await notifyFeishuSyncFromEnv({ env: process.env });

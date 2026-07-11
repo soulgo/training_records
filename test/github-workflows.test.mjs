@@ -623,7 +623,10 @@ test('telegram-sync workflows share AI sources while isolating environment resou
   assert.equal(devSyncEnv.TELEGRAM_BOT_TOKEN, '${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}');
   assert.notEqual(devSyncEnv.TELEGRAM_BOT_TOKEN, mainSyncEnv.TELEGRAM_BOT_TOKEN);
   assert.equal(mainSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS, '${{ secrets.TELEGRAM_ALLOWED_CHAT_IDS }}');
-  assert.equal(devSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS, '${{ vars.DEV_TELEGRAM_ALLOWED_CHAT_IDS }}');
+  assert.equal(
+    devSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS,
+    '${{ secrets.DEV_TELEGRAM_ALLOWED_CHAT_IDS || secrets.TELEGRAM_ALLOWED_CHAT_IDS }}',
+  );
   assert.notEqual(devSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS, mainSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS);
 
   assert.equal(mainSyncEnv.FEISHU_APP_ID, '${{ secrets.FEISHU_APP_ID }}');
