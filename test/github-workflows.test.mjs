@@ -580,15 +580,15 @@ test('telegram-sync workflows keep database-only detection without blocking on p
   const prodWorkflow = await readWorkflow('.github/workflows/sync.yml');
   const devWorkflow = await readWorkflow('.github/workflows/sync-dev.yml');
 
-  for (const [workflow, prefix] of [[prodWorkflow, ''], [devWorkflow, 'DEV_']]) {
+  for (const workflow of [prodWorkflow, devWorkflow]) {
     assert.match(workflow, /TELEGRAM_SYNC_RESULT_PATH/);
-    assert.match(workflow, new RegExp(`AI_PROVIDER:\\s*\\$\\{\\{\\s*vars\\.${prefix}AI_PROVIDER \\|\\| 'openai-compatible'\\s*\\}\\}`));
-    assert.match(workflow, new RegExp(`AI_TIMEOUT_MS:\\s*\\$\\{\\{\\s*vars\\.${prefix}AI_TIMEOUT_MS\\s*\\}\\}`));
-    assert.match(workflow, new RegExp(`TELEGRAM_RECOGNITION_CACHE_ENABLED: \\$\\{\\{ vars\\.${prefix}TELEGRAM_RECOGNITION_CACHE_ENABLED \\}\\}`));
-    assert.match(workflow, new RegExp(`TELEGRAM_RECOGNITION_FALLBACK_API_KEY: \\$\\{\\{ secrets\\.${prefix}TELEGRAM_RECOGNITION_FALLBACK_API_KEY \\}\\}`));
-    assert.match(workflow, new RegExp(`TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \\$\\{\\{ secrets\\.${prefix}TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \\}\\}`));
-    assert.match(workflow, new RegExp(`TELEGRAM_RECOGNITION_FALLBACK_MODEL: \\$\\{\\{ vars\\.${prefix}TELEGRAM_RECOGNITION_FALLBACK_MODEL \\}\\}`));
-    assert.match(workflow, new RegExp(`TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \\$\\{\\{ vars\\.${prefix}TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \\}\\}`));
+    assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
+    assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
+    assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
+    assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_API_KEY \}\}/);
+    assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \}\}/);
+    assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
+    assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
     assert.match(workflow, /db_content_changed=true/);
     assert.match(workflow, /readyStoredContentBatches/);
     assert.match(workflow, /- name: Write Telegram sync summary/);
@@ -599,7 +599,7 @@ test('telegram-sync workflows keep database-only detection without blocking on p
   }
 });
 
-test('telegram-sync workflows keep dev and main environment sources isolated', async () => {
+test('telegram-sync workflows share AI sources while isolating environment resources', async () => {
   const main = await readWorkflowConfig('.github/workflows/sync.yml');
   const dev = await readWorkflowConfig('.github/workflows/sync-dev.yml');
   const mainSyncEnv = getWorkflowStep(main, 'sync', 'Sync updates').env;
@@ -622,6 +622,9 @@ test('telegram-sync workflows keep dev and main environment sources isolated', a
   assert.equal(mainSyncEnv.TELEGRAM_BOT_TOKEN, '${{ secrets.TELEGRAM_BOT_TOKEN }}');
   assert.equal(devSyncEnv.TELEGRAM_BOT_TOKEN, '${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}');
   assert.notEqual(devSyncEnv.TELEGRAM_BOT_TOKEN, mainSyncEnv.TELEGRAM_BOT_TOKEN);
+  assert.equal(mainSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS, '${{ secrets.TELEGRAM_ALLOWED_CHAT_IDS }}');
+  assert.equal(devSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS, '${{ vars.DEV_TELEGRAM_ALLOWED_CHAT_IDS }}');
+  assert.notEqual(devSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS, mainSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS);
 
   assert.equal(mainSyncEnv.FEISHU_APP_ID, '${{ secrets.FEISHU_APP_ID }}');
   assert.equal(mainSyncEnv.FEISHU_APP_SECRET, '${{ secrets.FEISHU_APP_SECRET }}');
@@ -682,7 +685,7 @@ test('telegram-sync workflows keep dev and main environment sources isolated', a
     'TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS',
     'TELEGRAM_RECOGNITION_CACHE_ENABLED',
   ]) {
-    assert.notEqual(devSyncEnv[envName], mainSyncEnv[envName], `${envName} must use a dev-only source`);
+    assert.equal(devSyncEnv[envName], mainSyncEnv[envName], `${envName} must use the shared AI source`);
   }
 });
 
@@ -1302,15 +1305,15 @@ test('telegram-sync dev workflow waits for the dev deploy workflow', async () =>
   assert.doesNotMatch(workflow, /STEP_PAGES_DEPLOY_OUTCOME/);
   assert.match(workflow, /- name: Trigger and wait for async dev site deploy/);
   assert.match(workflow, /actions\/workflows\/deploy-cloudflare-pages-dev\.yml\/dispatches/);
-  assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.DEV_AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
-  assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.DEV_AI_TIMEOUT_MS\s*\}\}/);
+  assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
+  assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline/);
-  assert.match(workflow, /TELEGRAM_RECOGNITION_MODEL: \$\{\{ vars\.DEV_TELEGRAM_RECOGNITION_MODEL \}\}/);
-  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY: \$\{\{ secrets\.DEV_TELEGRAM_RECOGNITION_FALLBACK_API_KEY \}\}/);
-  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \$\{\{ secrets\.DEV_TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \}\}/);
-  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.DEV_TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
-  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.DEV_TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
-  assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.DEV_TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_MODEL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_API_KEY \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: \$\{\{ secrets\.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
+  assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
   assert.match(workflow, /dispatch_body="\$\(node <<'NODE'/);
   assert.match(workflow, /process\.stdout\.write\(JSON\.stringify\(\{ ref: 'dev', inputs \}\)\)/);
   assert.match(workflow, /target_thought_expectation/);
