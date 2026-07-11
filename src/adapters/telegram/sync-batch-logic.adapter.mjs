@@ -131,18 +131,25 @@ const telegramCommandResolver = createTelegramCommandResolver({
 });
 
 export function groupTelegramUpdates(updates, options = {}) {
-  const batches = [];
-  const albumMap = new Map();
-  const knownThoughtMessageKeys = new Set(options.knownThoughtMessageKeys ?? []);
-
+  const messages = [];
   for (const update of updates) {
     const message = update.message ?? update.edited_message;
     if (!message) {
       continue;
     }
-
     const normalized = normalizeTelegramMessage(update, message);
     normalized.updateType = update.edited_message ? 'edited_message' : 'message';
+    messages.push(normalized);
+  }
+  return groupSourceMessages(messages, options);
+}
+
+export function groupSourceMessages(messages, options = {}) {
+  const batches = [];
+  const albumMap = new Map();
+  const knownThoughtMessageKeys = new Set(options.knownThoughtMessageKeys ?? []);
+
+  for (const normalized of messages ?? []) {
 
     const parsedThoughtEdit = parseThoughtEditCommand(normalized.text) ?? parseThoughtEditCommand(normalized.caption);
     const parsedThought = parseThoughtCommand(normalized.text) ?? parseThoughtCommand(normalized.caption);
@@ -193,7 +200,7 @@ export function groupTelegramUpdates(updates, options = {}) {
   }
 
   for (const batch of batches) {
-    batch.messages.sort((left, right) => left.messageId - right.messageId);
+    batch.messages.sort(compareSourceMessageIdentity);
     if (batch.kind === 'image') {
       const thoughtEditBatch = buildExplicitThoughtEditBatchFromMessages(batch.messages);
       if (thoughtEditBatch) {
@@ -208,6 +215,15 @@ export function groupTelegramUpdates(updates, options = {}) {
   }
 
   return batches;
+}
+
+function compareSourceMessageIdentity(left, right) {
+  const leftNumber = Number(left.messageId);
+  const rightNumber = Number(right.messageId);
+  if (Number.isSafeInteger(leftNumber) && Number.isSafeInteger(rightNumber)) {
+    return leftNumber - rightNumber;
+  }
+  return String(left.messageId ?? '').localeCompare(String(right.messageId ?? ''));
 }
 
 export function analyzeTelegramBatch(batch, recognitions, options = {}) {

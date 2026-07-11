@@ -50,10 +50,10 @@ export async function checkTrainingDataConsistencyClient(client) {
     `,
   }));
   checks.push(await countRows(client, {
-    name: "ready ingest.telegram_batch rows have core.training_day",
+    name: "ready ingest.source_batch rows have core.training_day",
     sql: `
       select count(*)::int as count
-      from ingest.telegram_batch b
+      from ingest.source_batch b
       left join core.training_day d on d.archived_date = b.archived_date
       where b.status = 'ready'
         and b.archived_date is not null

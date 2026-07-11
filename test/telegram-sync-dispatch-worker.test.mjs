@@ -123,6 +123,22 @@ test('handleTelegramWebhook dispatches with a configured GitHub event type', asy
   assert.equal(JSON.parse(calls[0].init.body).event_type, 'telegram_update_dev');
 });
 
+test('handleTelegramWebhook rejects disallowed chats before buffering or GitHub dispatch', async () => {
+  let fetchCount = 0;
+  const response = await handleTelegramWebhook(
+    createTelegramRequest({
+      update_id: 122,
+      message: { message_id: 1, chat: { id: 999 } },
+    }),
+    { ...createEnv(), TELEGRAM_ALLOWED_CHAT_IDS: '42,43' },
+    { fetchImpl: async () => { fetchCount += 1; return new Response(null, { status: 204 }); } },
+  );
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { ok: false, error: 'chat_not_allowed' });
+  assert.equal(fetchCount, 0);
+});
+
 test('handleTelegramWebhook enqueues non-album telegram updates when the sync dispatch queue is bound', async () => {
   const enqueued = [];
   const request = createTelegramRequest({

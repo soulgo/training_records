@@ -1,0 +1,12 @@
+.git
+.github
+node_modules
+public
+.deploy_git
+coverage
+*.log
+.DS_Store
+CURRENT_SYSTEM_ANALYSIS.md
+REFACTOR_GOAL.md
+REFACTOR_PLAN.md
+REFACTOR_REPORT.md

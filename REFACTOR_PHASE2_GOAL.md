@@ -1,0 +1,131 @@
+# Goal Document: 第二阶段通用 Ingest 与来源身份收口
+
+## Go / No-Go
+- **Judgment**: Go
+- **Reason**: 目标架构已在 `REFACTOR_PLAN.md` 定义，当前代码与 SQL 的差距可由仓储测试、SQL 静态契约和全量回归直接证明；不需要新的产品决策。
+
+## Target Outcome
+系统的消息、资源和 AI 识别持久化不再以 Telegram 表名或 Telegram numeric ID 为核心身份。Telegram 与飞书共同写入来源无关的 ingest 表；所有数据库变更以独立 SQL 文件交付，由用户手工执行。
+
+## Goal Definition
+- **Type**: technical / quality / operational
+- **Boundary**: 通用 ingest schema、来源身份、识别缓存、消息/资源/识别仓储、迁移与验收 SQL、对应测试和报告。
+- **Non-goals**:
+  - 本阶段不直接执行任何数据库 SQL。
+  - 不删除 `core.*` 训练业务表。
+  - 不改变用户现有训练、随想、通知行为。
+- **Deferred work**:
+  - 旧 `ingest.telegram_*` 表的物理 DROP 放入后续独立 cleanup SQL，必须在新路径观察稳定后执行。
+  - `core.thought.telegram_message_id` 的删除在 thought source identity 全链路完成后执行。
+- **Verification rule**: 新仓储测试必须证明只写/读 generic ingest 表；迁移 SQL 必须包含建表、中文注释、回填、索引、验收和回滚；全量测试通过。
+- **Evidence source**: Node tests、SQL contract tests、`rg` 调用扫描、`git diff --check`、`npm test`。
+- **Pass criteria**: 生产仓储不再查询或写入 `ingest.telegram_batch/message/recognition`；来源身份使用 `source_channel + source_chat_id + source_message_id`；迁移 SQL 可由用户独立执行；现有业务回归为绿。
+- **Confidence note**: 测试覆盖仓储 SQL 和 Telegram/飞书运行路径；实库执行仍由用户在目标 PostgreSQL 环境验收。
+- **Judgment owner**: 自动化测试与用户的手工 SQL 执行结果共同判定。
+
+## Current State
+- 已有来源字段，但主表仍名为 `telegram_*`，仓储类仍为 `PostgresTelegramBatchRepository`。
+- 飞书运行期仍生成稳定数字代理供旧 batch/核心逻辑关联。
+- `sql/training_records/ingest.sql` 当前把识别元数据列误放在 `telegram_message`，与 `sql/migration.sql` 和运行写入不一致。
+- `REFACTOR_PLAN.md` 已定义 generic ingest 目标，但上一阶段报告过早宣称整体完成。
+
+## Plan Rewrite Notes
+| Existing item | Decision | Reason |
+| --- | --- | --- |
+| Slice 4 SourceMessage | keep + deepen | 已去掉 Telegram-shaped 飞书转换，但 numeric proxy 尚未退出 |
+| Slice 5 数据库新表与旧表退役 | move first | 这是当前最大架构缺口，也是去 numeric proxy 的前置条件 |
+| 旧表直接 DROP | defer | 需要新路径运行观察，不能在同一迁移中破坏性删除 |
+| 图片/OCR优化 | keep completed | 本轮不重复已通过的工作 |
+| 配置/部署 | keep completed | 只在新表配置需要时调整 |
+
+## Drift Diagnosis
+- **Goal drift**: 上一阶段只给旧 recognition 表加列，未完成来源无关 ingest。
+- **Phase drift**: 报告把阶段性兼容状态写成最终状态。
+- **Validation drift**: SQL dump 未被测试约束，导致列落在错误表仍未被发现。
+- **Compatibility drift**: 飞书 numeric proxy 仍是多个内部关联键。
+- **Cleanup drift**: 不能先删旧表；必须先建立新表、切换、观察，再独立 cleanup。
+
+## Priority Rationale
+- 先修 SQL 真相源和 generic schema，否则继续改业务只会扩大错误模型。
+- 再切仓储读写，让运行证据证明新表有真实调用者。
+- 最后减少 numeric proxy 的职责，避免一次跨越 thought/core 的高风险破坏。
+
+## Assumptions and Open Decisions
+| Item | Status | Impact | Owner / Next step |
+| --- | --- | --- | --- |
+| 用户会在部署新代码前手工执行 Phase 2 SQL | confirmed by request | 新代码依赖新表 | 报告给出明确执行顺序 |
+| 旧表暂不 DROP | assumed | 支持回滚与核对 | 后续观察后提供 cleanup SQL |
+| `core.*` 保持当前结构 | confirmed | 降低业务回归风险 | 本阶段不改 core 表 |
+
+## Phases
+
+### Phase 1: 修复 schema 漂移并定义 generic migration
+- **Purpose**: 让 SQL 真相源与目标表结构一致。
+- **Entry condition**: 当前 schema 和仓储已完成审计。
+- **Phase rules**:
+  - 不连接数据库，不执行 SQL。
+  - 新迁移只新增和回填，不 DROP 旧表。
+  - SQL 必须有中文注释、验收和回滚。
+- **Todos**:
+  - [x] 增加 SQL contract RED，约束识别列属于 recognition 而非 message。
+    - **Surface**: test / SQL
+    - **Proof**: 定向测试先失败后通过
+    - **Depends on**: none
+  - [x] 新建 Phase 2 generic ingest migration。
+    - **Surface**: `sql/migration_phase2_generic_ingest.sql`
+    - **Proof**: contract test 验证表、列、索引、回填、注释、验收与回滚段
+    - **Depends on**: schema contract
+- **Exit proof**: SQL contract tests 全绿。
+- **Stop condition**: 发现无法从旧表无损回填来源身份。
+
+### Phase 2: 切换消息与识别仓储
+- **Purpose**: 让生产代码真实使用 generic ingest 表。
+- **Entry condition**: Phase 2 SQL 已生成。
+- **Phase rules**:
+  - 不双写旧表。
+  - 缓存只从 `recognition_run.cache_key` 读取。
+  - 旧表保留只为回滚和人工核对。
+- **Todos**:
+  - [x] 以测试驱动新增 `PostgresSourceBatchRepository`。
+    - **Surface**: adapter / tests
+    - **Proof**: SQL 只出现 generic 表名
+    - **Depends on**: Phase 1
+  - [x] 切换持久化 use case 与缓存读取。
+    - **Surface**: app/db
+    - **Proof**: repository、DB core、AI cache 测试和全量测试
+    - **Depends on**: generic repository
+- **Exit proof**: 生产 `src/` 中 ingest 写读不再引用 `telegram_batch/message/recognition`。
+- **Stop condition**: 某个现有业务只能依赖旧表且没有来源身份替代。
+
+### Phase 3: 收窄 numeric proxy 并形成 cleanup 门禁
+- **Purpose**: numeric proxy 只作为尚未迁移的 UI/命令兼容，不再作为 ingest 身份。
+- **Entry condition**: generic 仓储已接管主路径。
+- **Phase rules**:
+  - 不破坏现有 thought 命令可寻址性。
+  - 每删除一个代理用途必须有来源身份回归测试。
+- **Todos**:
+  - [x] 盘点并移除 ingest、cache、asset 关联中的 numeric proxy。
+    - **Surface**: Feishu adapter / repository
+    - **Proof**: 相同代理数字的跨来源测试不冲突
+    - **Depends on**: Phase 2
+  - [x] 生成后续 cleanup SQL 门禁，不执行。
+    - **Surface**: SQL/report
+    - **Proof**: cleanup SQL 有显式预检查和事务 guard
+    - **Depends on**: 调用扫描为零
+- **Exit proof**: numeric proxy 不再决定 ingest 主键或缓存身份。
+- **Stop condition**: 删除会使用户无法通过现有 thought ID 编辑历史内容。
+
+## Dry-Run Findings
+- generic 表可从旧 `telegram_*` 表已有 `source_*` 字段回填，不需要猜测来源。
+- asset 需要从两个 JSON 数组按位置展开；SQL 应使用 `jsonb_array_elements_text ... with ordinality`。
+- 新仓储切换后部署顺序必须是“先手工执行新增迁移，再部署代码”。
+- 旧表 DROP 不能与本轮切换一起交付为默认执行段。
+
+## Final Validation
+- `node --test test/generic-ingest-migration.test.mjs test/core-repositories.test.mjs test/ai-recognition-service.test.mjs`
+- `rg -n "ingest\\.telegram_(batch|message|recognition)" src`
+- `git diff --check`
+- `npm test`
+
+## First Execution Step
+先写 SQL contract RED，复现 `ingest.sql` 把 recognition 元数据列放错表的问题。

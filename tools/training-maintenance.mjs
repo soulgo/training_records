@@ -215,11 +215,11 @@ async function readAiMonitoringSummary({ env, createClient, now }) {
       client.query(
         `
           select
-            count(*) filter (where recognition_json->>'aiAttemptKind' = 'fallback')::int
+            count(*) filter (where raw_result_json->>'aiAttemptKind' = 'fallback')::int
               as recognition_fallback_count,
-            count(*) filter (where recognition_json ? 'aiAttemptKind')::int
+            count(*) filter (where raw_result_json ? 'aiAttemptKind')::int
               as recognition_total_count
-          from ingest.telegram_recognition
+          from ingest.recognition_run
           where updated_at >= $1
             and updated_at <= $2
         `,
@@ -358,7 +358,7 @@ function buildAiMonitoringSummary({ callLogRow, recognitionRow }) {
     totalCostUsd: normalizeNullableNumber(callLogRow.total_cost_usd) ?? 0,
     sources: [
       'ingest.ai_call_log',
-      'ingest.telegram_recognition.recognition_json.aiAttemptKind',
+      'ingest.recognition_run.raw_result_json.aiAttemptKind',
     ],
     alertReasons,
     thresholds: aiMonitoringThresholds,
@@ -383,7 +383,7 @@ function emptyAiMonitoringSummary({ status, error = null }) {
     totalCostUsd: 0,
     sources: [
       'ingest.ai_call_log',
-      'ingest.telegram_recognition.recognition_json.aiAttemptKind',
+      'ingest.recognition_run.raw_result_json.aiAttemptKind',
     ],
     alertReasons: [],
     thresholds: aiMonitoringThresholds,
@@ -549,8 +549,8 @@ export async function readTrainingBatchAuditClient(client, { batchId }) {
           reason,
           confidence,
           processed_at,
-          batch_payload_json
-        from ingest.telegram_batch
+          payload_json as batch_payload_json
+        from ingest.source_batch
         where batch_id = $1
       `,
       [batchId],
@@ -558,13 +558,13 @@ export async function readTrainingBatchAuditClient(client, { batchId }) {
     client.query(
       `
         select
-          message_id::text as message_id,
+          source_message_id as message_id,
           source_channel,
           source_chat_id,
           source_message_id,
-          recognition_json,
+          raw_result_json as recognition_json,
           updated_at
-        from ingest.telegram_recognition
+        from ingest.recognition_run
         where batch_id = $1
         order by source_channel, source_chat_id, source_message_id
       `,

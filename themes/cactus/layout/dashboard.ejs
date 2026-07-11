@@ -7,7 +7,13 @@ const previousDay = dashboardView.previousDay || null;
 const recentDays = dashboardView.recentDays || [];
 const recentDaysHtml = recentDays.map((d) => d.cardHtml).join('');
 const dailyOverviewEntries = dashboardView.dailyOverviewEntries || [];
-const dailyOverviewJson = JSON.stringify(dailyOverviewEntries.map(({ cardHtml, ...rest }) => rest));
+const scriptSafeJson = (value) => JSON.stringify(value)
+  .replace(/</g, '\\u003c')
+  .replace(/>/g, '\\u003e')
+  .replace(/&/g, '\\u0026')
+  .replace(/\u2028/g, '\\u2028')
+  .replace(/\u2029/g, '\\u2029');
+const dailyOverviewJson = scriptSafeJson(dailyOverviewEntries.map(({ cardHtml, ...rest }) => rest));
 const dailyCardLimit = dashboardView.dailyCardLimit || 4;
 const dailyOverviewTotal = dashboardView.dailyOverviewTotal || dailyOverviewEntries.length;
 const trainedDays = dashboardView.trainedDays || 0;
@@ -171,7 +177,7 @@ function formatDailyRange(pageIndex, pageSize, total) {
       <div class="dashboard-note"><%- page.content %></div>
     <% } %>
 
-    <script id="training-dashboard-data" type="application/json"><%- JSON.stringify(chartPayload) %></script>
+    <script id="training-dashboard-data" type="application/json"><%- scriptSafeJson(chartPayload) %></script>
     <script id="daily-overview-data" type="application/json" data-page-size="<%= dailyCardLimit %>"><%- dailyOverviewJson %></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" integrity="sha384-JUh163oCRItcbPme8pYnROHQMC6fNKTBWtRG3I3I0erJkzNgL7uxKlNwcrcFKeqF" crossorigin="anonymous" defer></script>
     <script defer src="<%- url_for('/js/training-dashboard.js') %>"></script>

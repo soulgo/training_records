@@ -53,6 +53,8 @@ main 环境对应：
 | `AI_MODEL` | 例如 `gpt-4.1-mini` | 必填 | 默认 AI 模型。 |
 | `AI_TIMEOUT_MS` | `60000` | 建议填 | AI 请求超时。 |
 | `AI_CONCURRENCY` | `3` | 建议填 | 图片识别并发数。 |
+| `AI_OCR_ENABLED` | `false` / `true` | 按需 | 是否启用 OCR 文本与坐标提取。 |
+| `AI_OCR_FAILURE_MODE` | `best_effort` | 建议填 | OCR 失败时继续视觉识别或终止处理。 |
 | `TELEGRAM_RECOGNITION_MODEL` | 识别模型名 | 可选 | 只覆盖 Telegram/飞书图片识别模型；不填用 `AI_MODEL`。 |
 | `TELEGRAM_RECOGNITION_CACHE_ENABLED` | `true` | 建议填 | 是否启用识别结果缓存。 |
 | `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` | `https://.../v1` | 可选 | 备用 AI provider base URL。 |
@@ -173,6 +175,8 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 
 数据库 schema 以 `sql/pgsql17.sql` 和当前显式建表脚本为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `TRAINING_DB_URL` 默认路径。Action 监控当前在同一个生产 PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，参数健康 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
 
+当前 main 数据库尚未执行通用 ingest 的 `sql/migration.sql` 与 `sql/migration_phase2_generic_ingest.sql`。部署包含 `PostgresSourceBatchRepository` 的当前代码前，必须先备份、按顺序手工执行两个文件并运行文件末尾验收查询。`sql/cleanup_phase2_legacy_ingest.sql` 不属于本次上线前置步骤，观察期内禁止执行。
+
 `Report Action Status` step 会使用运行时 `TRAINING_DB_URL`、`TRAINING_DB_APP_NAME` 和 `github.token` 读取 GitHub Actions run/jobs/steps 后直写 `monitor.*`。只有当生产 DB URL 不可用时，才使用 `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` / `GITHUB_ACTION_MONITOR_REPORT_URL` 走 HTTP 兜底。
 
 参数健康 registry 维护在 `config/parameter-health/main.json`。根级 `probes` 定义 PostgreSQL、AI、Telegram、飞书、COS、Cloudflare、存在性检查和不支持探测；参数项通过 `healthProbeKey` 引用 probe。registry 只保存环境变量名和非敏感配置，不保存实际值或 value hash。只有真实 API/连接探测成功才是 `healthy`；`present` 只表示参数已注入，`unsupported` 表示没有安全探测方式。
@@ -227,6 +231,6 @@ main 只有在 `COS_ENABLED=true` 时才需要配置 COS。
 8. 先在 main 数据库手工执行 `sql/training_records/migrate_parameter_health_monitor.sql`，再运行 `Parameter Health Audit` 并选择 `main`，确认 Step Summary 出现 main 健康状态计数并触发生产 Pages 刷新。
 9. 打开生产站点 `/action-monitor/`，确认新 run 出现在 Action 日志里，且“系统参数健康”展示 main registry 中的真实探测状态；如果只有顶层 run 没有 job/step 明细，先回看该 run 的 `Report Action Status` step 是否成功写入 `monitor.*`。
 
-## 5. 不需要配置 Docker
+## 5. 可选 Docker 运行
 
-当前仓库没有 `Dockerfile` 或 `docker-compose` 入口。main 环境由 GitHub Actions、GitHub Pages、Cloudflare Worker、Node scripts、PostgreSQL 和可选 COS 组成，不需要 Docker 参数。
+main 当前默认仍由 GitHub Pages 和 Cloudflare Worker 运行；若迁移到普通云服务器、Docker 或 Kubernetes，可使用根目录 `Dockerfile`、`compose.yml` 与 `deploy/nginx.conf`。`docker compose up --build -d` 默认监听宿主机 `8080`，可通过 `SITE_PORT` 覆盖；生产 Secret 只能在构建/运行环境安全注入，不能写入镜像层。

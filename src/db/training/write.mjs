@@ -10,7 +10,7 @@ import {
 } from '../../core/thought-modules.mjs';
 import {
   persistThoughtToCore as persistThoughtToCoreViaRepository,
-  PostgresTelegramBatchRepository,
+  PostgresSourceBatchRepository,
   PostgresThoughtRepository,
   readCoreDay,
   readCoreDays,
@@ -98,8 +98,8 @@ export async function persistNormalizedBatch(options) {
     await observedClient.query('BEGIN');
     transactionStarted = true;
 
-    const telegramBatchRepository = new PostgresTelegramBatchRepository(observedClient);
-    const batchUpsertResult = await telegramBatchRepository.upsertBatch(batch, payloadHash, processedAt);
+    const sourceBatchRepository = new PostgresSourceBatchRepository(observedClient);
+    const batchUpsertResult = await sourceBatchRepository.upsertBatch(batch, payloadHash, processedAt);
     if (batchUpsertResult?.rowCount === 0) {
       await observedClient.query('ROLLBACK');
       transactionStarted = false;
@@ -118,8 +118,9 @@ export async function persistNormalizedBatch(options) {
       });
     }
 
-    await telegramBatchRepository.upsertMessages(batch, processedAt);
-    await telegramBatchRepository.upsertRecognitions(batch, processedAt);
+    await sourceBatchRepository.upsertMessages(batch, processedAt);
+    await sourceBatchRepository.upsertAssets(batch, processedAt);
+    await sourceBatchRepository.upsertRecognitions(batch, processedAt);
 
     let thoughtMirrorResult = null;
     if (isThoughtBatchKind(batch.kind) && batch.status === 'ready') {
@@ -139,7 +140,7 @@ export async function persistNormalizedBatch(options) {
     transactionStarted = false;
 
     try {
-      await telegramBatchRepository.upsertRecognitionAiCallLogs(batch, processedAt);
+      await sourceBatchRepository.upsertRecognitionAiCallLogs(batch, processedAt);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       process.stderr.write(
@@ -252,14 +253,17 @@ function observeQuery({ sql, result, startedAt, rowCounts, slowQueries, threshol
 
 function classifyDatabaseQuery(sql) {
   const normalized = String(sql ?? '').replace(/\s+/gu, ' ').trim().toLowerCase();
-  if (/ingest\.telegram_batch/u.test(normalized)) {
-    return { operation: 'persist.batch', table: 'ingest.telegram_batch', rowCountKey: 'ingestBatch' };
+  if (/ingest\.source_batch/u.test(normalized)) {
+    return { operation: 'persist.batch', table: 'ingest.source_batch', rowCountKey: 'ingestBatch' };
   }
-  if (/ingest\.telegram_message/u.test(normalized)) {
-    return { operation: 'persist.message', table: 'ingest.telegram_message', rowCountKey: 'ingestMessage' };
+  if (/ingest\.source_message/u.test(normalized)) {
+    return { operation: 'persist.message', table: 'ingest.source_message', rowCountKey: 'ingestMessage' };
   }
-  if (/ingest\.telegram_recognition/u.test(normalized)) {
-    return { operation: 'persist.recognition', table: 'ingest.telegram_recognition', rowCountKey: 'ingestRecognition' };
+  if (/ingest\.source_asset/u.test(normalized)) {
+    return { operation: 'persist.asset', table: 'ingest.source_asset', rowCountKey: null };
+  }
+  if (/ingest\.recognition_run/u.test(normalized)) {
+    return { operation: 'persist.recognition', table: 'ingest.recognition_run', rowCountKey: 'ingestRecognition' };
   }
   if (/ingest\.ai_call_log/u.test(normalized)) {
     return { operation: 'persist.ai_call_log', table: 'ingest.ai_call_log', rowCountKey: 'aiCallLog' };
@@ -491,8 +495,8 @@ export async function backfillCoreSleepFromIngestBatchesClient(client, options =
   const ingestCandidateResult = await client.query(`
     select
       b.batch_id,
-      b.batch_payload_json
-    from ingest.telegram_batch b
+      b.payload_json as batch_payload_json
+    from ingest.source_batch b
     where b.status = 'ready'
       and b.archived_date is not null
       and b.batch_payload_json->'sleep' is not null

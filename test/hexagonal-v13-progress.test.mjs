@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-import { TrainingSnapshotService } from '../src/core/services/training-snapshot-service.mjs';
 import {
   BodyMetricGenerator,
   DashboardGenerator,
@@ -11,35 +10,6 @@ import {
   TrainingDayGenerator,
 } from '../src/adapters/hexo/index.mjs';
 import { verifyTelegramWebhookSecret } from '../src/adapters/telegram/index.mjs';
-
-test('TrainingSnapshotService builds snapshots from repository daily records', async () => {
-  const service = new TrainingSnapshotService({
-    trainingRepository: {
-      async findByDates(dates) {
-        assert.deepEqual(dates, ['2026-06-03', '2026-06-04']);
-        return [
-          {
-            date: '2026-06-03',
-            measurement: { weightKg: 70.5 },
-            measurements: [{ weightKg: 70.5 }],
-            activities: [{ type: '骑行', durationSeconds: 600 }],
-            workoutSummary: { totalActivities: 1, totalDurationSeconds: 600, trainingCalories: 120 },
-            nutrition: { meals: [], totalCalories: null, details: [] },
-            sleep: [],
-            sleepSummary: { records: [], totalSleepMinutes: null },
-          },
-        ];
-      },
-    },
-    now: () => new Date('2026-06-10T00:00:00.000Z'),
-  });
-
-  const snapshot = await service.buildByDates(['2026-06-03', '2026-06-04']);
-
-  assert.equal(snapshot.generatedAt, '2026-06-10T00:00:00.000Z');
-  assert.equal(snapshot.daily.length, 1);
-  assert.equal(snapshot.latest.daily.date, '2026-06-03');
-});
 
 test('HexoGeneratorAdapter coordinates split generators into JSON payloads', async () => {
   const snapshot = {

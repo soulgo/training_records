@@ -1,0 +1,311 @@
+# 系统代码终极重构报告
+
+完成日期：2026-07-11
+目标代码库：`training_records`
+验收状态：第二阶段代码重构完成；全量测试 763/763 通过；dev PostgreSQL 已手工执行 Phase 1/Phase 2 迁移，main 尚待迁移；旧表 cleanup 尚未执行。
+
+## 0. 第二阶段增量结论
+
+上一版报告将“旧 recognition 表加标准化列”误写成了完整数据库收口。本阶段已补齐真实差距：
+
+- 修复 `sql/training_records/ingest.sql` 将识别字段错误放入 `telegram_message` 的 schema 漂移。
+- 新增来源无关的 `ingest.source_batch`、`source_message`、`source_asset`、`recognition_run`、`pending_task`。
+- 新增 `PostgresSourceBatchRepository`，生产写入不再使用 `ingest.telegram_batch/message/recognition`。
+- 识别缓存、Telegram offset、数据一致性检查、AI monitoring、batch audit、睡眠修复和 pending replay 全部切到 generic 表。
+- 删除 `src/adapters/postgres/telegram-batch-repository.pg.mjs`。
+- 飞书 numeric proxy 仅保留给现有 thought/命令兼容；不再参与 ingest 主键、资源关联、识别 ID 或缓存。
+- 提供独立、默认拒绝执行的旧表 cleanup SQL，不与安全迁移混合。
+
+阶段目标与 TDD 证据：`REFACTOR_PHASE2_GOAL.md`、`REFACTOR_PHASE2_TDD.md`。
+
+## 1. 当前系统问题与处理结论
+
+本轮工作严格以真实代码、SQL、GitHub Actions、Cloudflare Worker 和运行路径为依据。`docs/` 只用于理解历史背景，没有作为重构对象。
+
+| 原问题 | 真实位置 | 本轮结论 |
+| --- | --- | --- |
+| AI 识别结果只保留固定训练 schema，缺少跨 App 的稳定外层契约 | `src/app/use-cases/image-recognition.use-case.mjs` | 新增 `NormalizedRecognition`，实时与缓存路径统一输出来源 App、数据类型、字段、置信度、证据和运行元数据 |
+| 没有真实图片增强/压缩模块 | `src/app/use-cases/telegram-sync/image-processing.mjs` | 新增基于 Sharp 的自动旋转、缩放、像素预算、标准化、锐化和 JPEG 压缩 |
+| 没有独立 OCR、文本坐标或 OCR 证据 | AI 运行路径中原本不存在 | 新增 OCR 文档契约和 OpenAI-compatible OCR 适配器，保存文本块、归一化坐标、语言、置信度、模型信息 |
+| 识别缓存通过 JSON 表达式查询，早期版本还依赖 Telegram `message_id` | `src/app/use-cases/image-recognition.use-case.mjs` | 改为来源范围内的精确 `cache_key` 列查询，不再通过旧 Telegram 消息连接定位 |
+| 飞书事件先伪装为 Telegram update 再进入共享逻辑 | `src/adapters/feishu/sync-batch-logic.adapter.mjs` | 删除 Telegram-shaped 中间对象，飞书直接生成来源无关消息并进入 `groupSourceMessages` |
+| Worker 在 GitHub 调度后才由应用检查允许聊天 | `cloudflare/*-sync-dispatch-worker.mjs` | Telegram/飞书均在缓冲和 GitHub 调度前检查聊天白名单 |
+| dev 可回退生产 AI、飞书和聊天白名单密钥 | `.github/workflows/sync-dev.yml` | dev 全部改为 `DEV_*` 独立密钥/变量，不再回退生产值 |
+| EJS 在 `application/json` script 中直接输出原始 JSON | `themes/cactus/layout/*.ejs` | 对 `<`、`>`、`&`、U+2028、U+2029 做脚本上下文安全转义 |
+| 数据库高频 AI 元数据全部藏在 JSONB 中 | `ingest.telegram_recognition` | 新增有类型列、中文注释、回填 SQL 和索引 |
+| 多个空仓储端口和服务只被测试调用 | `src/core/repositories/*`、`src/core/services/training-snapshot-service.mjs` | 删除无生产调用者的浅层占位抽象 |
+| 部署主要绑定 GitHub Pages/Cloudflare | 根目录与部署文件 | 新增 Docker 多阶段构建、Nginx 运行配置、Compose 和环境变量模板 |
+
+详细的重构前证据见 `CURRENT_SYSTEM_ANALYSIS.md`，目标和阶段计划见 `REFACTOR_GOAL.md`、`REFACTOR_PLAN.md`。
+
+## 2. 删除的旧代码
+
+已删除以下确认无生产调用者、只用于“证明存在架构层”的代码：
+
+- `src/core/repositories/body-metric-repository.port.mjs`
+- `src/core/repositories/health-daily-repository.port.mjs`
+- `src/core/repositories/sleep-repository.port.mjs`
+- `src/core/services/training-snapshot-service.mjs`
+
+同时删除对应测试占位断言和导出。仍被 PostgreSQL 适配器实际实现的 `TrainingRepositoryPort`、`ThoughtRepositoryPort` 保留。
+
+飞书兼容链路中删除了：
+
+- 飞书消息转 Telegram `update_id/message/photo/chat` 对象的过程
+- 再从 Telegram-shaped 对象回贴飞书元数据的二次转换
+
+保留了数据库旧 `message_id` 列作为迁移期数据兼容字段，但新缓存定位和来源身份不再依赖它。
+
+## 3. 新架构设计
+
+当前采用进程内稳定契约，避免在现阶段引入运维成本更高的伪微服务：
+
+```text
+Telegram / Feishu Event
+        ↓
+SourceMessage / Source Batch
+        ↓
+Image Processor (Sharp)
+        ↓
+OcrDocument (optional, independent failure policy)
+        ↓
+Vision + Semantic Recognition
+        ↓
+NormalizedRecognition
+        ↓
+Training Batch Mapper
+        ↓
+PostgreSQL core.* / ingest.*
+        ↓
+Hexo Static Frontend
+```
+
+边界职责：
+
+- Frontend：Hexo/EJS 只读取生成后的视图数据，不直接依赖 AI 或数据库实现。
+- Source adapters：Telegram、飞书只负责把平台事件变成共享消息契约。
+- Image adapter：负责格式读取、质量处理、资源限制和输出元数据。
+- OCR adapter：负责文字、坐标和 OCR 置信度，不负责业务字段判断。
+- AI understanding：负责页面/字段语义和训练业务 schema。
+- Normalization：向下游提供与缓存状态、模型提供方无关的稳定外层结构。
+- Persistence：同时保存原始识别 JSON 和可查询的标准化列。
+
+## 4. AI 识别能力提升
+
+### 图片处理
+
+新增 `src/adapters/image/sharp-image-processor.mjs`：
+
+- 支持 HTTPS 与 base64 data URL 输入
+- 限制输入字节、解码像素、最大边长和总像素
+- EXIF 自动旋转
+- 等比缩放且不放大
+- normalize + sharpen
+- 标准 JPEG 压缩
+- 输出处理前后格式、尺寸、字节数和操作列表
+
+生产同步工作流已启用 `AI_IMAGE_PROCESSING_ENABLED=true`。
+
+### OCR
+
+新增：
+
+- `src/core/ai/ocr-document.mjs`
+- `src/adapters/ocr/openai-compatible-ocr.adapter.mjs`
+
+标准 OCR 结果包含：
+
+```json
+{
+  "text": "...",
+  "blocks": [
+    {
+      "text": "...",
+      "confidence": 0.98,
+      "bbox": { "x": 0.1, "y": 0.2, "width": 0.3, "height": 0.05 }
+    }
+  ],
+  "language": "zh",
+  "confidence": 0.95,
+  "provider": "openai-compatible",
+  "model": "..."
+}
+```
+
+OCR 通过 `AI_OCR_ENABLED` 独立启用；`AI_OCR_FAILURE_MODE=best_effort|required` 控制 OCR 失败时继续视觉识别还是终止处理。OCR 文本作为明确标记的证据传入语义识别，坐标与完整 OCR 文档进入标准化结果和数据库。
+
+### 标准化结果
+
+新增 `src/core/ai/normalized-recognition.mjs`，稳定输出：
+
+```json
+{
+  "sourceApp": "Apple Health",
+  "dataType": "sleep",
+  "fields": {},
+  "confidence": 0.94,
+  "warnings": [],
+  "evidence": {
+    "detectedDate": "2026-06-12",
+    "dateEvidence": "image header: Jun 12",
+    "ocr": {},
+    "image": {}
+  },
+  "runtime": {
+    "pipelineVersion": "v1",
+    "schemaName": "telegram_training_image",
+    "schemaVersion": "v3",
+    "provider": "openai-compatible",
+    "model": "...",
+    "promptVersion": "...",
+    "cacheKey": "...",
+    "cacheStatus": "hit|miss|disabled"
+  }
+}
+```
+
+不同 App 不再需要不同代码入口；来源差异由视觉/OCR/语义映射处理，业务写入仍受现有 measurement/workout/nutrition/sleep 规则保护。
+
+## 5. 数据库变化
+
+Phase 1 可执行迁移：`sql/migration.sql`
+
+Phase 2 可执行迁移：`sql/migration_phase2_generic_ingest.sql`
+
+观察稳定后可选清理：`sql/cleanup_phase2_legacy_ingest.sql`
+
+`ingest.telegram_recognition` 新增：
+
+| 字段 | 类型 | 用途 |
+| --- | --- | --- |
+| `source_app` | text | 识别出的来源 App |
+| `data_type` | text | 标准化数据类型 |
+| `fields_json` | jsonb | 标准化业务字段 |
+| `confidence` | numeric(5,4) | 0 到 1 的置信度 |
+| `pipeline_version` | text | 识别管线版本 |
+| `ocr_json` | jsonb | OCR 文本与坐标证据 |
+| `image_json` | jsonb | 图片处理元数据 |
+| `cache_key` | text | 精确、来源范围内的缓存键 |
+
+索引：
+
+- `idx_ingest_telegram_recognition_cache_key`
+- `idx_ingest_telegram_recognition_type_updated`
+- `idx_ingest_telegram_recognition_source_app_updated`
+
+迁移包含：事务、幂等加列、中文注释、旧 JSON 回填、置信度约束、索引、验收查询和回滚说明。同步更新了 `sql/pgsql17.sql` 与 `sql/training_records/ingest.sql`。
+
+注意：当前代码已经切换到 Phase 2 generic 表，因此不能在未执行 Phase 2 SQL 的数据库上先部署代码。
+
+环境状态（2026-07-11）：
+
+- dev：`sql/migration.sql` 与 `sql/migration_phase2_generic_ingest.sql` 已手工执行，可进入代码部署和同步观察。
+- main：两阶段迁移尚未执行，不得先部署当前代码。
+- cleanup：`sql/cleanup_phase2_legacy_ingest.sql` 尚未执行，继续保留旧表用于观察和核对。
+
+第二阶段推荐手工顺序：
+
+1. 备份数据库。
+2. 执行 `sql/migration.sql`。
+3. 执行 `sql/migration_phase2_generic_ingest.sql`。
+4. 运行两个 SQL 文件末尾的验收查询。
+5. 部署当前代码。
+6. 观察至少一个完整同步、pending 重试、备份和维护周期。
+7. 只有确认旧表调用为 0 后，才考虑执行 `cleanup_phase2_legacy_ingest.sql`；该文件需要显式 session 开关和计数校验。
+
+## 6. 配置优化
+
+main 继续使用生产配置：
+
+- `AI_*`
+- `TELEGRAM_*`
+- `FEISHU_*`
+- `TRAINING_DB_*`
+- `COS_*`
+
+dev 改为独立配置：
+
+- `DEV_AI_*`
+- `DEV_TELEGRAM_*`
+- `DEV_FEISHU_*`
+- `DEV_TRAINING_DB_*`
+- `DEV_COS_*`
+
+移除了 dev 对生产 AI、飞书凭据和聊天白名单的回退。现有 dev 数据库和 COS 隔离检查继续保留。新增 `.env.example`，只包含变量名和空值，不保存任何真实密钥。
+
+## 7. 部署迁移能力
+
+新增：
+
+- `Dockerfile`：Node 构建 + Nginx 静态运行的多阶段镜像
+- `deploy/nginx.conf`：8080 端口、静态路由、缓存和基础安全响应头
+- `compose.yml`：本地/服务器通用启动入口
+- `.dockerignore`：排除密钥风险文件、依赖和构建输出
+- `.env.example`：跨平台配置清单
+
+因此前端站点可继续部署到 GitHub Pages/Cloudflare Pages，也可迁移到普通云服务器、Docker 或 Kubernetes。Cloudflare Worker 仍是消息入口适配器，不再是核心业务逻辑唯一可运行位置。
+
+本机验收环境没有 Docker 命令/daemon，故未执行镜像构建；`npm run build` 已验证实际站点构建成功。
+
+## 8. 安全提升
+
+- Worker 在任何 Durable Object 缓冲或 GitHub 调度前检查 `TELEGRAM_ALLOWED_CHAT_IDS` / `FEISHU_ALLOWED_CHAT_IDS`。
+- OCR/图片输入限制字节数、像素数、协议和内容类型，降低解压炸弹及异常输入风险。
+- dev 不再读取生产 AI、飞书、聊天白名单密钥。
+- EJS JSON script 数据对脚本终止字符和 HTML 关键字符做安全转义，阻断 `</script>` 注入。
+- 数据库只保存图片处理元数据，不把原图 base64 写入标准化证据列。
+- 缓存键包含来源渠道、文件身份、prompt、schema 和 model，防止跨来源误命中。
+- 日志沿用已有敏感字段脱敏机制；新增 OCR best-effort 日志不输出图片、Token 或原始 OCR 全文。
+
+## 9. 修改记录（文件 / 内容 / 原因 / 影响）
+
+| 文件 | 修改内容 | 原因 | 影响范围 |
+| --- | --- | --- | --- |
+| `src/core/ai/normalized-recognition.mjs` | 新增统一识别信封 | 稳定跨 App、跨缓存状态契约 | AI、数据库、后续业务映射 |
+| `src/app/use-cases/image-recognition.use-case.mjs` | 接入图片、OCR、统一信封和列缓存键 | 拆分职责并消除缓存双结构 | 所有截图识别 |
+| `src/adapters/image/sharp-image-processor.mjs` | 新增真实图片处理 | 提升识别质量并限制资源 | Telegram/飞书图片 |
+| `src/core/ai/ocr-document.mjs` | 新增 OCR 领域契约 | 保存坐标和置信度 | OCR、AI证据、数据库 |
+| `src/adapters/ocr/openai-compatible-ocr.adapter.mjs` | 新增 OCR 提供方适配 | OCR 与业务理解解耦 | 可选 OCR 调用 |
+| `src/app/use-cases/telegram-sync/image-processing.mjs` | 组装图片/OCR管线和失败策略 | 将新模块接入真实运行路径 | 同步图片批次 |
+| `src/adapters/feishu/sync-batch-logic.adapter.mjs` | 删除 Telegram-shaped 转换 | 消除历史平台兼容耦合 | 飞书消息分组 |
+| `src/adapters/telegram/sync-batch-logic.adapter.mjs` | 提取 `groupSourceMessages` | 建立共享来源消息边界 | Telegram/飞书 |
+| `src/adapters/postgres/telegram-batch-repository.pg.mjs` | 删除旧平台命名仓储 | 生产持久化已切换 generic 表 | ingest 持久化 |
+| `sql/migration.sql` | Phase 1 识别元数据列迁移 | 安全升级旧 recognition 表 | PostgreSQL |
+| `sql/migration_phase2_generic_ingest.sql` | 新建并回填 generic ingest 与 pending 表 | 删除平台表名和 numeric identity 对主路径的约束 | PostgreSQL |
+| `sql/cleanup_phase2_legacy_ingest.sql` | 带显式开关和计数门禁的旧表清理 | 稳定观察后退役历史表 | PostgreSQL（可选、不可逆） |
+| `src/adapters/postgres/source-batch-repository.pg.mjs` | generic batch/message/asset/recognition 仓储 | 让新表成为真实生产路径 | 所有消息同步 |
+| `.github/workflows/sync*.yml` | 图片管线配置、OCR开关、dev密钥隔离 | 环境与密钥隔离 | CI/CD 同步 |
+| `cloudflare/*-sync-dispatch-worker.mjs` | 调度前白名单 | 避免未授权任务占用外部资源 | Webhook 入口 |
+| `themes/cactus/layout/*.ejs` | script-safe JSON | 修复持久型脚本注入边界 | Dashboard/Monitor |
+| `Dockerfile`、`compose.yml`、`deploy/nginx.conf` | 新增可移植部署入口 | 降低平台绑定 | 云服务器/Docker/K8s |
+| `src/core/repositories/*`、`training-snapshot-service.mjs` | 删除无生产调用的占位抽象 | 降低虚假架构复杂度 | 内部维护 |
+| `test/*` | 新增/更新 TDD 回归 | 保护缓存、图片、OCR、白名单、配置和模板安全 | 全系统测试 |
+| `source/_data/*` | 构建时刷新派生站点数据 | `npm run build` 验证产生 | 静态站点当前快照 |
+
+## 10. 验收证据
+
+通过：
+
+- `git diff --check`
+- `npm test`：763 tests，763 pass，0 fail
+- 生产调用扫描：`src/`、`tools/`、`cloudflare/` 不再引用 `ingest.telegram_batch/message/recognition/pending_batch`
+- `npm run build`：Hexo 数据与站点生成成功
+- AI 定向测试：实时/缓存统一信封、图片证据、OCR 证据、来源范围缓存键
+- Worker 定向测试：未授权聊天在缓冲/调度前返回 403
+- 数据库仓储测试：标准化列映射正确
+- 模板安全测试：所有 JSON script 输出均执行安全转义
+
+未能在本机执行：
+
+- Docker image build：环境没有可用 Docker
+- main PostgreSQL 实库 migration：尚未在生产数据库执行
+
+dev 两阶段 migration 已由用户在目标数据库手工执行。Docker 镜像和 main 数据库仍属于对应部署环境验收；main 上线时必须按第 5 节顺序执行迁移并运行验收 SQL。
+
+## 11. 后续扩展方向
+
+1. 为 OCR 增加非视觉大模型提供方（如云 OCR）适配器，但保持 `OcrDocument` 不变。
+2. 基于真实匿名截图建立端到端评测集；当前 `eval:recognition` 的历史夹具仍主要验证 JSON，不等于真实图像评测。
+3. 在业务需求明确后，将 `NormalizedRecognition.fields` 的通用观察映射到更多领域实体，而不是为每个 App 新建解析器。
+4. 数据量增长后按 `data_type + updated_at` 观察查询计划，再决定分区或归档策略。
+5. 在 CI 提供 PostgreSQL service 和 Docker buildx，补齐迁移执行与镜像构建的自动验收。

@@ -31,7 +31,7 @@
 1. 核对 workflow env：`sync.yml` / `sync-dev.yml` 中 `TRAINING_DB_*`，确认日常 workflow 没有注入 `TRAINING_DB_MIGRATION_URL`。
 2. 核对代码读取：`src/db/training/config.mjs`。
 3. 核对写入入口：`src/db/training/write.mjs:21`。
-4. 核对 schema：`sql/pgsql17.sql` 与 `sql/training_records/migrations/`。
+4. 核对 schema：`sql/pgsql17.sql`、`sql/training_records/migrations/`、`sql/migration.sql` 与 `sql/migration_phase2_generic_ingest.sql`。
 5. 先运行 `npm run maintenance:migrate -- --dry-run` 查看 migration 状态；需要写入时再配置 `TRAINING_DB_MIGRATION_URL` 并使用 `--confirm`。
 6. 运行 `npm run maintenance:inspect`，检查 `database.permissionAudit` 中的 superuser、migrator-like 和 schema `CREATE` 权限摘要。
 7. 运行 `npm run check:data-consistency`。
@@ -42,6 +42,7 @@
 - 先用迁移账号执行 schema migration，再重跑同步；不要临时给日常业务账号 `CREATE`、migrator 或 superuser 权限。
 - 为读取型任务配置 `TRAINING_DB_READONLY_URL` / `DEV_TRAINING_DB_READONLY_URL`。
 - 对 `pending_replay` 批次，修复 DB 后通过同步流程重放。
+- 若报错缺少 `ingest.source_batch`、`source_message`、`source_asset`、`recognition_run` 或 `pending_task`，说明 Phase 2 未执行；先备份并手工执行两阶段迁移，不能通过临时恢复旧 repository 绕过。
 
 ## 预防措施
 
@@ -50,3 +51,4 @@
 - 日常同步账号只做业务 DML；DDL 只通过 `maintenance:migrate` 和 migration URL 执行。
 - 不在日常业务路径中恢复运行时 DDL 或 schema preflight。
 - 不把 Markdown fallback 成功误判为 database 成功。
+- 不自动执行 `sql/cleanup_phase2_legacy_ingest.sql`；只有观察完整同步/重试周期且旧表调用与数据计数验收通过后才人工开启清理门禁。

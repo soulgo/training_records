@@ -7,8 +7,14 @@ const actionMonitorLogRuns = actionMonitorView.allRuns ||
   (actionMonitorRecentRuns.length || actionMonitorHistoryRuns.length
     ? actionMonitorRecentRuns.concat(actionMonitorHistoryRuns)
     : actionMonitorRuns);
+const scriptSafeJson = (value) => JSON.stringify(value)
+  .replace(/</g, '\\u003c')
+  .replace(/>/g, '\\u003e')
+  .replace(/&/g, '\\u0026')
+  .replace(/\u2028/g, '\\u2028')
+  .replace(/\u2029/g, '\\u2029');
 const actionMonitorHistoryPageSize = actionMonitorView.historyPageSize || 15;
-const actionMonitorHistoryJson = JSON.stringify(actionMonitorLogRuns);
+const actionMonitorHistoryJson = scriptSafeJson(actionMonitorLogRuns);
 const actionMonitorSummaryCards = actionMonitorView.summaryCards || [];
 const parameterHealth = actionMonitorView.parameterHealth || {};
 const parameterHealthCards = parameterHealth.summaryCards || [];
@@ -17,7 +23,7 @@ const parameterHealthPageSize = parameterHealth.pageSize || 5;
 const parameterHealthVisibleItems = parameterHealth.visibleItems ||
   parameterHealthItems.slice(0, parameterHealthPageSize);
 const parameterHealthTotal = parameterHealth.total || parameterHealthItems.length;
-const parameterHealthJson = JSON.stringify(parameterHealthItems);
+const parameterHealthJson = scriptSafeJson(parameterHealthItems);
 const showParameterHealthPagination = Boolean(parameterHealth.paginationEnabled) ||
   parameterHealthTotal > 4;
 

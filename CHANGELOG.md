@@ -13,8 +13,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增来源无关的通用截图识别链路：图片先经 Sharp 自动旋转、尺寸/像素限制、增强和压缩，可选提取带归一化坐标的 OCR 证据，再由视觉模型完成语义识别并输出稳定的 `NormalizedRecognition` 外层契约。
+- 新增通用 ingest 数据模型 `ingest.source_batch`、`source_message`、`source_asset`、`recognition_run`、`pending_task`，以及对应的 `PostgresSourceBatchRepository`；提供 Phase 1/Phase 2 可执行迁移和默认拒绝执行的旧表清理脚本。
+- 新增 Docker 多阶段构建、Nginx 静态运行配置、Compose 启动入口和无密钥 `.env.example`，支持脱离 GitHub Pages / Cloudflare Pages 部署静态站点。
+
 ### Changed
 
+- Telegram 与飞书现在直接转换为共享来源消息契约；识别缓存、Telegram offset、一致性检查、AI monitoring、batch audit、睡眠修复和 pending replay 全部切换到通用 ingest 表，不再以 Telegram 表名或飞书数字代理 ID 作为主路径身份。
+- dev 同步改为只读取 `DEV_AI_*`、`DEV_TELEGRAM_*`、`DEV_FEISHU_*` 和对应识别配置，不再回退 main 的 AI、聊天白名单或飞书凭据；main/dev OCR 继续通过各自 Variables 独立控制。
+- Telegram 与飞书 Worker 在进入 Durable Object 缓冲或触发 GitHub Actions 前执行聊天白名单检查；Dashboard、Monitor 与 Action Monitor 的 EJS JSON 数据改为脚本上下文安全转义。
+- dev PostgreSQL 已于 2026-07-11 手工执行 `sql/migration.sql` 和 `sql/migration_phase2_generic_ingest.sql`；main 数据库仍须在部署本代码前按相同顺序迁移。
 - 将 `/action-monitor/` 的系统参数监控从“有效期推断”升级为“参数健康探测”：新增 `config/parameter-health/<env>.json` registry、`tools/check-parameter-health.mjs`、`Parameter Health Audit` workflow、主动只读 probes 和参数健康视图，健康状态改为 `healthy`、`present`、`invalid`、`missing`、`not_configured`、`unreachable`、`unsupported`、`unknown`，到期时间仅作为有真实证据时的附加信息。
 - 同步参数健康监控的数据库与文档入口：`monitor.system_config_parameters/checks` 新增 `health_probe_key`、`health_check_type`、`check_type`、`latency_ms`、`failure_kind`、`observed_expires_at`、`last_healthy` 查询索引和健康状态约束，当前事实文档与排查文档改为指向参数健康模型。
 - 按后续规划落地文档同步规则完成参数有效时间监控规划归档：将已实现规划从 `docs/03_历史重构记录/后续规划_未实现/参数有效时间/` 移入 `docs/03_历史重构记录/重构历史/参数有效时间监控/`，并把当前 registry、audit workflow、monitor 表、页面展示和排查方式写回 `01_系统配置`、`02_系统核心逻辑`、`04_问题与排查` 及相关 README。
@@ -24,12 +34,14 @@
 
 ### Removed
 
+- 删除无生产调用的空仓储端口、`training-snapshot-service` 占位服务和旧 `PostgresTelegramBatchRepository`；生产代码不再访问 `ingest.telegram_batch`、`telegram_message`、`telegram_recognition` 或 `telegram_pending_batch`。
 - 删除未进入生产链路的 `src/jobs`、`src/infra` 架构壳、无消费者 barrel、`src/ai`/PostgreSQL facade，以及 `tools` 下的纯 re-export 兼容入口；保留真实 CLI 和承载业务复杂度的模块。
-- 删除旧 schema preflight 实现、环境开关与重试代码；删除已为空且不再消费的 runtime NDJSON pending 文件、fallback inspect 工具和重复文件队列实现，pending 恢复仅保留 PostgreSQL `ingest.telegram_pending_batch`。
+- 删除旧 schema preflight 实现、环境开关与重试代码；删除已为空且不再消费的 runtime NDJSON pending 文件、fallback inspect 工具和重复文件队列实现，pending 恢复仅保留 PostgreSQL `ingest.pending_task`。
 - 删除同步结果中的 `batchResults` 别名和无生产消费者的 `tasks` 派生集合，所有内部消费者统一读取 `batches`。
 
 ### Fixed
 
+- 修复 canonical ingest SQL 将标准化识别字段错误放入 `telegram_message` 的 schema 漂移；识别元数据现归属 recognition 记录，并在 generic migration 中回填到 `ingest.recognition_run`。
 - 修复 `tools/check-parameter-health.mjs` 默认仍读取旧 `config/parameter-validity/<env>.json` 的问题；未显式传 `--registry` 时现在读取 `config/parameter-health/<env>.json`。
 - 修复 Windows 下全量测试并发执行 `build:data` 时多个进程同时写 `source/_data/*.json` 偶发 `UNKNOWN` / 文件锁错误的问题；生成器对瞬时写文件错误进行短重试。
 - 优化 `/action-monitor/` 系统参数有效期列表 UI：长参数名现在可完整换行显示并可直接选中，移除冗余复制按钮；列表行尾的状态与处理提示改为竖排状态区，避免在窄桌面宽度下互相重叠，点击参数仍可在弹窗中查看完整信息。

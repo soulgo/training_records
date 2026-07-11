@@ -431,7 +431,10 @@ export async function runMessageSync(options = {}) {
         ...(persistenceResult ? { persistenceResult } : {}),
       });
       await measureSyncStage(timings, 'markRecognitionResolved', () =>
-        markPendingRecognitionResolved({ batchId: persistedBatch.batchId }),
+        markPendingRecognitionResolved({
+          batchId: persistedBatch.batchId,
+          sourceChannel: persistedBatch.sourceChannel ?? sourceChannel,
+        }),
       );
     } catch (error) {
       if (persistedBatch.status === 'ready') {

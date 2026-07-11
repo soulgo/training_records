@@ -114,29 +114,32 @@ jobs:
       - name: Sync updates
         id: sync
         env:
-          AI_API_KEY: ${{ secrets.AI_API_KEY }}
-          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openai-compatible' }}
-          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
-          AI_MODEL: ${{ vars.AI_MODEL }}
-          AI_TIMEOUT_MS: ${{ vars.AI_TIMEOUT_MS }}
-          AI_CONCURRENCY: ${{ vars.AI_CONCURRENCY }}
+          AI_API_KEY: ${{ secrets.DEV_AI_API_KEY }}
+          AI_PROVIDER: ${{ vars.DEV_AI_PROVIDER || 'openai-compatible' }}
+          AI_BASE_URL: ${{ secrets.DEV_AI_BASE_URL }}
+          AI_MODEL: ${{ vars.DEV_AI_MODEL }}
+          AI_TIMEOUT_MS: ${{ vars.DEV_AI_TIMEOUT_MS }}
+          AI_CONCURRENCY: ${{ vars.DEV_AI_CONCURRENCY }}
           TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline
-          TELEGRAM_RECOGNITION_MODEL: ${{ vars.TELEGRAM_RECOGNITION_MODEL }}
-          TELEGRAM_RECOGNITION_FALLBACK_API_KEY: ${{ secrets.TELEGRAM_RECOGNITION_FALLBACK_API_KEY }}
-          TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: ${{ secrets.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL }}
-          TELEGRAM_RECOGNITION_FALLBACK_MODEL: ${{ vars.TELEGRAM_RECOGNITION_FALLBACK_MODEL }}
-          TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: ${{ vars.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS }}
-          TELEGRAM_RECOGNITION_CACHE_ENABLED: ${{ vars.TELEGRAM_RECOGNITION_CACHE_ENABLED }}
-          TRAINING_ANALYSIS_GOAL: ${{ vars.TRAINING_ANALYSIS_GOAL }}
+          AI_IMAGE_PROCESSING_ENABLED: "true"
+          AI_OCR_ENABLED: ${{ vars.DEV_AI_OCR_ENABLED }}
+          AI_OCR_FAILURE_MODE: ${{ vars.DEV_AI_OCR_FAILURE_MODE }}
+          TELEGRAM_RECOGNITION_MODEL: ${{ vars.DEV_TELEGRAM_RECOGNITION_MODEL }}
+          TELEGRAM_RECOGNITION_FALLBACK_API_KEY: ${{ secrets.DEV_TELEGRAM_RECOGNITION_FALLBACK_API_KEY }}
+          TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: ${{ secrets.DEV_TELEGRAM_RECOGNITION_FALLBACK_BASE_URL }}
+          TELEGRAM_RECOGNITION_FALLBACK_MODEL: ${{ vars.DEV_TELEGRAM_RECOGNITION_FALLBACK_MODEL }}
+          TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: ${{ vars.DEV_TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS }}
+          TELEGRAM_RECOGNITION_CACHE_ENABLED: ${{ vars.DEV_TELEGRAM_RECOGNITION_CACHE_ENABLED }}
+          TRAINING_ANALYSIS_GOAL: ${{ vars.DEV_TRAINING_ANALYSIS_GOAL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_ALLOWED_CHAT_IDS: ${{ secrets.DEV_TELEGRAM_ALLOWED_CHAT_IDS || secrets.TELEGRAM_ALLOWED_CHAT_IDS }}
+          TELEGRAM_ALLOWED_CHAT_IDS: ${{ secrets.DEV_TELEGRAM_ALLOWED_CHAT_IDS }}
           TELEGRAM_POLL_LIMIT: ${{ vars.TELEGRAM_POLL_LIMIT }}
           TELEGRAM_SYNC_TRANSPORT: webhook
           TELEGRAM_SYNC_NOTIFY_STAGE: after_action
           TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
-          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID || secrets.FEISHU_APP_ID }}
-          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET || secrets.FEISHU_APP_SECRET }}
-          FEISHU_ALLOWED_CHAT_IDS: ${{ secrets.DEV_FEISHU_ALLOWED_CHAT_IDS || secrets.FEISHU_ALLOWED_CHAT_IDS }}
+          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET }}
+          FEISHU_ALLOWED_CHAT_IDS: ${{ secrets.DEV_FEISHU_ALLOWED_CHAT_IDS }}
           FEISHU_RECOGNITION_IMAGE_INPUT_MODE: inline
           FEISHU_SYNC_TRANSPORT: webhook
           FEISHU_SYNC_NOTIFY_STAGE: after_action
@@ -320,8 +323,8 @@ jobs:
         if: success() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'feishu'
         continue-on-error: true
         env:
-          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID || secrets.FEISHU_APP_ID }}
-          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET || secrets.FEISHU_APP_SECRET }}
+          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET }}
           FEISHU_SYNC_NOTIFY: true
           FEISHU_SYNC_NOTIFY_STAGE: after_action
           FEISHU_SYNC_RESULT_PATH: ${{ runner.temp }}/feishu-sync-result.json
@@ -480,8 +483,8 @@ jobs:
         if: failure() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'feishu'
         continue-on-error: true
         env:
-          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID || secrets.FEISHU_APP_ID }}
-          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET || secrets.FEISHU_APP_SECRET }}
+          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET }}
           STEP_INSTALL_OUTCOME: ${{ steps.install.outcome }}
           STEP_SYNC_OUTCOME: ${{ steps.sync.outcome }}
           STEP_DETECT_OUTCOME: ${{ steps.detect.outcome }}

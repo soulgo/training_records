@@ -186,11 +186,11 @@ flowchart LR
 
 安全数据库修复：`sync:db` 内部按维护阶段执行，可显式使用 `--phase archive`、`--phase ingest`、`--phase markdown`、`--phase thoughts` 或 `--phase all`。Markdown 导入属于 legacy 修复阶段，生产写入前先 dry-run 并核对 affected days。
 
-pending 队列巡检重点看 `pendingDatabaseOldestAgeMinutes`、`pendingDatabaseMaxAttemptCount`、`pendingDatabaseAlertLevel` 和 `pendingDatabaseAlertReasons`。AI monitoring 重点看 `aiMonitoringFallbackRate`、`aiMonitoringSchemaFailureCount`、`aiMonitoringAvgRecognitionLatencyMs`、`aiMonitoringTotalCostUsd`，来源是 `ingest.ai_call_log` 和 `ingest.telegram_recognition.recognition_json.aiAttemptKind`。DB 权限巡检重点看 `database.permissionAudit.isSuperuser`、`database.permissionAudit.isMigratorLikeUser`、`database.permissionAudit.schemaCreatePrivileges` 和 `database.permissionAudit.dangerousPrivilegeReasons`；这些字段只来自只读权限查询，不会输出 DB URL 或 Secret。
+pending 队列巡检重点看 `pendingDatabaseOldestAgeMinutes`、`pendingDatabaseMaxAttemptCount`、`pendingDatabaseAlertLevel` 和 `pendingDatabaseAlertReasons`。AI monitoring 重点看 `aiMonitoringFallbackRate`、`aiMonitoringSchemaFailureCount`、`aiMonitoringAvgRecognitionLatencyMs`、`aiMonitoringTotalCostUsd`，来源是 `ingest.ai_call_log` 和 `ingest.recognition_run.raw_result_json` 中的 AI attempt 审计字段。DB 权限巡检重点看 `database.permissionAudit.isSuperuser`、`database.permissionAudit.isMigratorLikeUser`、`database.permissionAudit.schemaCreatePrivileges` 和 `database.permissionAudit.dangerousPrivilegeReasons`；这些字段只来自只读权限查询，不会输出 DB URL 或 Secret。
 
 配置 `TRAINING_DB_READONLY_URL` 后，`maintenance:inspect` 的 pending summary、AI monitoring、单批次审计和 DB 权限巡检优先使用只读连接；未配置时才回退 `TRAINING_DB_URL`。
 
-pending 恢复只有 PostgreSQL `ingest.telegram_pending_batch` 一条路径。本地 NDJSON 队列及其 inspect 工具已删除，排障统一使用 `npm run maintenance:inspect` 和单批次审计。
+pending 恢复只有 PostgreSQL `ingest.pending_task` 一条路径。本地 NDJSON 队列及其 inspect 工具已删除，排障统一使用 `npm run maintenance:inspect` 和单批次审计。
 
 Markdown backup workflow 的告警值包括 `changed_without_commit` 和 `workflow_failed_before_alert_evaluation`。出现 `changed_without_commit` 时先确认是否应由 `npm run export:markdown` 在目标分支提交，不能手工改派生备份来绕过数据库事实源。
 

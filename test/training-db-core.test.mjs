@@ -633,10 +633,11 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls[0][0], 'connect');
   assert.equal(calls.some(([sql]) => /alter table core\.sleep/i.test(sql)), false);
   assert.equal(calls[1][0], 'BEGIN');
-  assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)));
-  assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_message/i.test(sql)));
-  const recognitionCall = calls.find(([sql]) => /insert into ingest\.telegram_recognition/i.test(sql));
-  const recognitionJson = JSON.parse(recognitionCall[1][2]);
+  assert.ok(calls.some(([sql]) => /insert into ingest\.source_batch/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into ingest\.source_message/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into ingest\.source_asset/i.test(sql)));
+  const recognitionCall = calls.find(([sql]) => /insert into ingest\.recognition_run/i.test(sql));
+  const recognitionJson = JSON.parse(recognitionCall[1][20]);
   assert.equal(recognitionJson.detectedApp, '华为健康');
   assert.equal(recognitionJson.aiAttemptKind, 'normal');
   assert.ok(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)));
@@ -651,13 +652,13 @@ test('persistNormalizedBatch returns safe persistence summary with row counts an
   const fakeClient = {
     async connect() {},
     async query(sql) {
-      if (/insert into ingest\.telegram_batch/i.test(sql)) {
+      if (/insert into ingest\.source_batch/i.test(sql)) {
         return { rows: [], rowCount: 1 };
       }
-      if (/insert into ingest\.telegram_message/i.test(sql)) {
+      if (/insert into ingest\.source_message/i.test(sql)) {
         return { rows: [], rowCount: 1 };
       }
-      if (/insert into ingest\.telegram_recognition/i.test(sql)) {
+      if (/insert into ingest\.recognition_run/i.test(sql)) {
         return { rows: [], rowCount: 1 };
       }
       if (/insert into core\.training_day/i.test(sql)) {
@@ -769,8 +770,8 @@ test('persistNormalizedBatch preserves fallback AI audit fields in recognition j
     processedAt: new Date('2026-05-13T00:00:00.000Z'),
   });
 
-  const recognitionCall = calls.find(([sql]) => /insert into ingest\.telegram_recognition/i.test(sql));
-  const recognitionJson = JSON.parse(recognitionCall[1][2]);
+  const recognitionCall = calls.find(([sql]) => /insert into ingest\.recognition_run/i.test(sql));
+  const recognitionJson = JSON.parse(recognitionCall[1][20]);
 
   assert.equal(result.status, 'stored');
   assert.equal(recognitionJson.aiAttemptKind, 'fallback');
@@ -824,8 +825,8 @@ test('persistNormalizedBatch preserves strict JSON retry AI audit fields in reco
     processedAt: new Date('2026-05-13T00:00:00.000Z'),
   });
 
-  const recognitionCall = calls.find(([sql]) => /insert into ingest\.telegram_recognition/i.test(sql));
-  const recognitionJson = JSON.parse(recognitionCall[1][2]);
+  const recognitionCall = calls.find(([sql]) => /insert into ingest\.recognition_run/i.test(sql));
+  const recognitionJson = JSON.parse(recognitionCall[1][20]);
 
   assert.equal(result.status, 'stored');
   assert.equal(recognitionJson.aiAttemptKind, 'strict_json_retry');
@@ -1178,9 +1179,6 @@ test('persistNormalizedBatch stores Feishu image batches with nullable legacy ch
       if (/select payload_hash from ingest\.telegram_batch/i.test(sql)) {
         return { rows: [] };
       }
-      if (/insert into ingest\.telegram_message/i.test(sql) && typeof params?.[4] === 'string') {
-        throw new Error(`invalid input syntax for type bigint: "${params[4]}"`);
-      }
       return { rows: [] };
     },
     async end() {
@@ -1211,13 +1209,14 @@ test('persistNormalizedBatch stores Feishu image batches with nullable legacy ch
     processedAt: new Date('2026-06-14T00:00:00.000Z'),
   });
 
-  const messageInsert = calls.find(([sql]) => /insert into ingest\.telegram_message/i.test(sql));
+  const messageInsert = calls.find(([sql]) => /insert into ingest\.source_message/i.test(sql));
   const summaryInsert = calls.find(([sql]) =>
     /with\s+activity_summary/i.test(sql) && /insert into core\.training_day/i.test(sql)
   );
 
   assert.equal(result.status, 'stored');
-  assert.equal(messageInsert[1][4], null);
+  assert.equal(messageInsert[1][0], 'feishu');
+  assert.equal(messageInsert[1][1], 'oc_chat_1');
   assert.equal(summaryInsert[1][2], 'feishu');
 });
 
@@ -1316,8 +1315,8 @@ test('persistNormalizedBatch does not treat image batches without photos as Tele
   });
 
   assert.equal(result.status, 'stored');
-  assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)));
-  assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_message/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into ingest\.source_batch/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into ingest\.source_message/i.test(sql)));
   assert.equal(calls.some(([sql]) => /insert into core\.(measurement|activity|meal|sleep|training_day)/i.test(sql)), false);
 });
 
@@ -1742,7 +1741,7 @@ test('persistNormalizedBatch stores sleep payload in core without writing archiv
   const sleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
   const archiveSleepInsert = calls.find(([sql]) => /insert into archive\.training_sleep/i.test(sql));
   const archiveSnapshotInsert = calls.find(([sql]) => /insert into archive\.training_parse_snapshot/i.test(sql));
-  const ingestBatchInsert = calls.find(([sql]) => /insert into ingest\.telegram_batch/i.test(sql));
+  const ingestBatchInsert = calls.find(([sql]) => /insert into ingest\.source_batch/i.test(sql));
 
   assert.ok(trainingDayInsert);
   assert.ok(sleepInsert);
@@ -1761,7 +1760,7 @@ test('persistNormalizedBatch stores sleep payload in core without writing archiv
   assert.deepEqual(sleepInsert[1][24], [68]);
   assert.deepEqual(sleepInsert[1][29], ['建议睡觉时关灯。']);
   assert.equal(trainingDayInsert[1].length, 11);
-  assert.equal(JSON.parse(ingestBatchInsert[1][9]).sleep.records[0].totalSleepMinutes, 411);
+  assert.equal(JSON.parse(ingestBatchInsert[1][10]).sleep.records[0].totalSleepMinutes, 411);
   const sleepCleanup = calls.find(([sql]) => /delete from core\.sleep/i.test(sql));
   assert.ok(sleepCleanup);
   assert.match(sleepCleanup[0], /coalesce\(existing\.bedtime, ''\) = coalesce\(incoming\.bedtime, ''\)/i);
@@ -1878,7 +1877,7 @@ test('backfillCoreSleepFromIngestBatchesClient does not write archive sleep with
   const fakeClient = {
     async query(sql, params) {
       calls.push([sql, params]);
-      if (/from ingest\.telegram_batch b/i.test(sql)) {
+      if (/from ingest\.source_batch b/i.test(sql)) {
         return {
           rows: [
             {
@@ -1946,7 +1945,7 @@ test('backfillCoreSleepFromIngestBatchesClient repairs stored sleep batches miss
   const fakeClient = {
     async query(sql, params) {
       calls.push([sql, params]);
-      if (/from ingest\.telegram_batch b/i.test(sql)) {
+      if (/from ingest\.source_batch b/i.test(sql)) {
         return {
           rows: [
             {
@@ -2030,7 +2029,7 @@ test('backfillCoreSleepFromIngestBatchesClient limits ingest and archive candida
   const fakeClient = {
     async query(sql, params) {
       calls.push([sql, params]);
-      if (/from ingest\.telegram_batch b/i.test(sql)) {
+      if (/from ingest\.source_batch b/i.test(sql)) {
         assert.match(sql, /b\.archived_date = any\(\$1::date\[\]\)/);
         assert.deepEqual(params, [['2026-06-04']]);
         return { rows: [] };
@@ -2050,7 +2049,7 @@ test('backfillCoreSleepFromIngestBatchesClient limits ingest and archive candida
   });
 
   assert.equal(result.status, 'unchanged');
-  assert.equal(calls.filter(([sql]) => /from ingest\.telegram_batch b|from archive\.training_sleep\s+a/i.test(sql)).length, 2);
+  assert.equal(calls.filter(([sql]) => /from ingest\.source_batch b|from archive\.training_sleep\s+a/i.test(sql)).length, 2);
 });
 
 test('backfillCoreSleepFromIngestBatchesClient replays latest ingest sleep batches for existing core sleep rows', async () => {
@@ -2058,7 +2057,7 @@ test('backfillCoreSleepFromIngestBatchesClient replays latest ingest sleep batch
   const fakeClient = {
     async query(sql, params) {
       calls.push([sql, params]);
-      if (/from ingest\.telegram_batch b/i.test(sql)) {
+      if (/from ingest\.source_batch b/i.test(sql)) {
         if (/not exists[\s\S]*from core\.sleep/i.test(sql)) {
           return { rows: [] };
         }
@@ -2132,7 +2131,7 @@ test('backfillCoreSleepFromIngestBatchesClient replays latest ingest sleep batch
   assert.equal(result.status, 'stored');
   assert.equal(result.batchesBackfilled, 2);
   assert.deepEqual(result.daysBackfilled, ['2026-06-29']);
-  assert.equal(calls.some(([sql]) => /from ingest\.telegram_batch b[\s\S]*not exists[\s\S]*from core\.sleep/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /from ingest\.source_batch b[\s\S]*not exists[\s\S]*from core\.sleep/i.test(sql)), false);
   assert.equal(sleepInserts.length, 2);
   assert.deepEqual(sleepInserts.at(-1)[1][7], [387]);
   assert.deepEqual(sleepInserts.at(-1)[1][8], [387]);
@@ -2143,7 +2142,7 @@ test('backfillCoreSleepFromIngestBatchesClient creates core day from archive-onl
   const fakeClient = {
     async query(sql, params) {
       calls.push([sql, params]);
-      if (/from ingest\.telegram_batch b/i.test(sql)) {
+      if (/from ingest\.source_batch b/i.test(sql)) {
         return { rows: [] };
       }
       if (/from archive\.training_sleep\s+a/i.test(sql)) {
@@ -2219,7 +2218,7 @@ test('pending recognition store reads, queues, and resolves database rows', asyn
     },
     async query(sql, params) {
       calls.push([sql, params]);
-      if (/from ingest\.telegram_pending_batch/i.test(sql)) {
+        if (/from ingest\.pending_task/i.test(sql)) {
         return {
           rows: [
             {
@@ -2280,10 +2279,10 @@ test('pending recognition store reads, queues, and resolves database rows', asyn
   assert.equal(pending[0].batchId, 'single-383');
   assert.equal(queued.status, 'queued');
   assert.equal(resolved.status, 'resolved');
-  assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_pending_batch/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into ingest\.pending_task/i.test(sql)));
   assert.ok(
     calls.some(([sql]) =>
-      /update ingest\.telegram_pending_batch/i.test(sql) &&
+      /update ingest\.pending_task/i.test(sql) &&
       /set\s+status\s*=\s*'resolved'/i.test(sql),
     ),
   );
@@ -2297,7 +2296,7 @@ test('appendPendingRecognitionBatch writes failed AI call log best-effort', asyn
     },
     async query(sql, params) {
       calls.push([sql, params]);
-      if (/select status\s+from ingest\.telegram_pending_batch/i.test(sql)) {
+      if (/select status\s+from ingest\.pending_task/i.test(sql)) {
         return { rows: [{ status: 'pending' }] };
       }
       return { rows: [] };
@@ -2377,7 +2376,7 @@ test('appendPendingRecognitionBatch keeps queued result when failed AI call log 
   const fakeClient = {
     async connect() {},
     async query(sql) {
-      if (/select status\s+from ingest\.telegram_pending_batch/i.test(sql)) {
+      if (/select status\s+from ingest\.pending_task/i.test(sql)) {
         return { rows: [{ status: 'pending' }] };
       }
       if (/insert into ingest\.ai_call_log/i.test(sql)) {
@@ -2493,7 +2492,7 @@ test('readPendingRecognitionBatches claims pending rows so concurrent workers do
         }
         return { rows: claimed };
       }
-      if (/from ingest\.telegram_pending_batch/i.test(sql)) {
+        if (/from ingest\.pending_task/i.test(sql)) {
         const [nowIso, limit] = params;
         return {
           rows: rows
@@ -2571,7 +2570,7 @@ test('readPendingRecognitionSummary reads pending metrics without claiming rows'
     },
   ]);
   assert.equal(calls.some(([sql]) => sql === 'BEGIN' || sql === 'COMMIT'), false);
-  assert.ok(calls.some(([sql]) => /from ingest\.telegram_pending_batch/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /from ingest\.pending_task/i.test(sql)));
 });
 
 test('readPendingRecognitionBatches abandons retry rows over the attempt limit before claiming work', async () => {
@@ -2670,11 +2669,11 @@ test('appendPendingRecognitionBatch does not reactivate abandoned pending rows',
     },
     async query(sql, params = []) {
       calls.push([sql, params]);
-      if (/insert into ingest\.telegram_pending_batch/i.test(sql)) {
-        assert.match(sql, /where\s+ingest\.telegram_pending_batch\.status\s+<>\s+'abandoned'/i);
+      if (/insert into ingest\.pending_task/i.test(sql)) {
+        assert.match(sql, /where\s+ingest\.pending_task\.status\s+<>\s+'abandoned'/i);
         return { rows: [] };
       }
-      if (/select status\s+from ingest\.telegram_pending_batch/i.test(sql)) {
+      if (/select status\s+from ingest\.pending_task/i.test(sql)) {
         return { rows: [{ status: row.status }] };
       }
       return { rows: [] };
@@ -2705,7 +2704,7 @@ test('appendPendingRecognitionBatch does not reactivate abandoned pending rows',
   assert.equal(result.status, 'abandoned');
   assert.equal(result.batchId, 'single-abandoned');
   assert.equal(result.aiCallLogStatus, 'skipped');
-  assert.ok(calls.some(([sql]) => /select status\s+from ingest\.telegram_pending_batch/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /select status\s+from ingest\.pending_task/i.test(sql)));
 });
 
 test('persistNormalizedBatch can merge an existing core day without failing on body feedback reads', async () => {
@@ -2820,7 +2819,7 @@ test('persistNormalizedBatch rolls back the transaction when a core write fails'
   assert.equal(statements.includes('ROLLBACK'), true);
   assert.equal(statements.includes('COMMIT'), false);
   assert.equal(calls.at(-1)[0], 'end');
-  assert.ok(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into ingest\.source_batch/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)));
 });
 
@@ -2891,8 +2890,8 @@ test('persistNormalizedBatch returns unchanged from atomic batch upsert when pay
       if (/select payload_hash\s+from ingest\.telegram_batch/i.test(sql)) {
         throw new Error('payload hash check must be atomic with batch upsert');
       }
-      if (/insert into ingest\.telegram_batch/i.test(sql)) {
-        assert.match(sql, /where\s+ingest\.telegram_batch\.payload_hash\s+<>\s+excluded\.payload_hash/i);
+      if (/insert into ingest\.source_batch/i.test(sql)) {
+        assert.match(sql, /where\s+ingest\.source_batch\.payload_hash\s+<>\s+excluded\.payload_hash/i);
         return { rows: [], rowCount: 0 };
       }
       return { rows: [] };
@@ -2923,7 +2922,7 @@ test('persistNormalizedBatch returns unchanged from atomic batch upsert when pay
   assert.equal(result.persistenceResult.rollbackStatus, 'not_needed');
   const statements = calls.map(([sql]) => sql);
   const beginIndex = statements.indexOf('BEGIN');
-  const batchUpsertIndex = calls.findIndex(([sql]) => /insert into ingest\.telegram_batch/i.test(sql));
+  const batchUpsertIndex = calls.findIndex(([sql]) => /insert into ingest\.source_batch/i.test(sql));
   const rollbackIndex = statements.indexOf('ROLLBACK');
   assert.notEqual(batchUpsertIndex, -1);
   assert.ok(beginIndex < batchUpsertIndex);
@@ -3278,7 +3277,7 @@ test('persistNormalizedBatch reports missing thought edit targets without insert
   assert.match(result.transactionId, /^dbtx_[a-f0-9]{16}$/);
   assert.equal(result.persistenceResult.status, 'not_found');
   assert.equal(result.persistenceResult.batchId, 'thought-edit-999');
-  assert.equal(calls.some(([sql]) => /insert into ingest\.telegram_batch/i.test(sql)), true);
+  assert.equal(calls.some(([sql]) => /insert into ingest\.source_batch/i.test(sql)), true);
   assert.equal(calls.some(([sql]) => /insert into core\.thought/i.test(sql)), false);
   assert.equal(calls.some(([sql]) => sql === 'COMMIT'), true);
 });
@@ -3369,7 +3368,9 @@ test('getLastProcessedTelegramUpdateId reads the max update id from ingest recor
     async connect() {},
     async end() {},
     async query(sql) {
-      assert.match(sql, /max\(update_id\)/i);
+      assert.match(sql, /max\(legacy_update_id\)/i);
+      assert.match(sql, /from ingest\.source_message/i);
+      assert.match(sql, /source_channel = 'telegram'/i);
       return {
         rows: [{ last_processed_update_id: 903 }],
       };

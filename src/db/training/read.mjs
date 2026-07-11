@@ -8,7 +8,7 @@ import {
   readTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabaseWithClients,
 } from './read-client.mjs';
-import { getLastProcessedTelegramUpdateId as getLastUpdateIdFromAdapter } from '../../adapters/postgres/telegram-batch-repository.pg.mjs';
+import { getLastProcessedTelegramUpdateId as getLastUpdateIdFromAdapter } from '../../adapters/postgres/source-batch-repository.pg.mjs';
 
 const { Client } = pg;
 

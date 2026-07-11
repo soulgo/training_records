@@ -97,6 +97,28 @@ test('handleFeishuWebhook dispatches a single Feishu event with the singular pay
   });
 });
 
+test('handleFeishuWebhook rejects disallowed chats before buffering or GitHub dispatch', async () => {
+  let fetchCount = 0;
+  const event = createFeishuImageEvent({
+    eventId: 'evt-disallowed',
+    messageId: 'om_disallowed',
+    chatId: 'oc_not_allowed',
+    imageKey: 'img_disallowed',
+  });
+  const response = await handleFeishuWebhook(
+    createFeishuRequest(event),
+    createEnv({ FEISHU_ALLOWED_CHAT_IDS: 'oc_chat_1' }),
+    {
+      skipSignatureVerification: true,
+      fetchImpl: async () => { fetchCount += 1; return new Response(null, { status: 204 }); },
+    },
+  );
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { ok: false, error: 'chat_not_allowed' });
+  assert.equal(fetchCount, 0);
+});
+
 test('handleFeishuWebhook enqueues single Feishu text events when the sync dispatch queue is bound', async () => {
   const enqueued = [];
   const event = createFeishuTextEvent({

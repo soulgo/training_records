@@ -166,6 +166,72 @@ test('recognizeTelegramImageMessage applies recognition scene max attempts to pr
   assert.equal(requestInput.maxAttempts, 2);
 });
 
+test('recognizeTelegramImageMessage sends the processed image and preserves image evidence', async () => {
+  let providerImageUrl = null;
+  const imageMetadata = {
+    original: { format: 'png', width: 1800, height: 3200, bytes: 900000 },
+    processed: { format: 'jpeg', width: 675, height: 1200, bytes: 120000 },
+    operations: ['autoRotate', 'resize', 'normalize', 'sharpen', 'jpeg'],
+  };
+  const ocrDocument = {
+    text: 'Sleep 7 hr 30 min',
+    blocks: [{ text: 'Sleep', confidence: 0.98, bbox: { x: 0.1, y: 0.1, width: 0.3, height: 0.05 } }],
+    language: 'en',
+    confidence: 0.96,
+    provider: 'openai-compatible',
+    model: 'vision-ocr',
+  };
+  let providerContext = null;
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      env: { model: 'gpt-test' },
+      async requestChatCompletion(input) {
+        providerImageUrl = input.messages[1].content.find((item) => item.type === 'image_url').image_url.url;
+        providerContext = input.messages[1].content.find((item) => item.type === 'text').text;
+        return {
+          ok: true,
+          async json() {
+            return { choices: [{ message: { content: JSON.stringify({
+              imageType: 'unknown',
+              detectedApp: 'Generic Fitness',
+              detectedDate: null,
+              dateEvidence: 'no visible date',
+              confidence: 0.7,
+              warnings: [],
+              records: {
+                measurement: null,
+                activities: [],
+                meals: [],
+                totalCalories: null,
+                details: [],
+                dailyWorkoutSummary: null,
+              },
+            }) } }] };
+          },
+        };
+      },
+    },
+    message: { messageId: 1770, photos: [{ fileUniqueId: 'processed-image' }] },
+    imageUrl: 'data:image/png;base64,original',
+    processImage: async ({ imageUrl }) => {
+      assert.equal(imageUrl, 'data:image/png;base64,original');
+      return { imageUrl: 'data:image/jpeg;base64,processed', metadata: imageMetadata };
+    },
+    extractOcr: async ({ imageUrl }) => {
+      assert.equal(imageUrl, 'data:image/jpeg;base64,processed');
+      return ocrDocument;
+    },
+    systemPrompt: 'system prompt',
+    promptMetadata,
+    env: { AI_MODEL: 'gpt-test' },
+  });
+
+  assert.equal(providerImageUrl, 'data:image/jpeg;base64,processed');
+  assert.match(providerContext, /Sleep 7 hr 30 min/);
+  assert.deepEqual(result.normalizedRecognition.evidence.image, imageMetadata);
+  assert.deepEqual(result.normalizedRecognition.evidence.ocr, ocrDocument);
+});
+
 test('recognizeTelegramImageMessage emits started AI audit before provider call', async () => {
   const events = [];
 
@@ -405,6 +471,29 @@ test('recognizeTelegramImageMessage preserves detectedApp and visible non-Huawei
   assert.equal(result.records.sleep.totalSleepMinutes, 450);
   assert.equal(result.records.sleep.sleepScore, null);
   assert.equal(result.records.sleep.averageHeartRateBpm, null);
+  assert.deepEqual(result.normalizedRecognition, {
+    sourceApp: 'Apple Health',
+    dataType: 'sleep',
+    fields: fixture.records,
+    confidence: 0.94,
+    warnings: [],
+    evidence: {
+      detectedDate: '2026-06-12',
+      dateEvidence: 'image header: Jun 12',
+      ocr: null,
+      image: null,
+    },
+    runtime: {
+      pipelineVersion: 'v1',
+      schemaName: 'telegram_training_image',
+      schemaVersion: 'v2',
+      provider: 'openai-compatible',
+      model: 'gpt-test',
+      promptVersion: '2026-05-24',
+      cacheKey: 'telegram:file_unique_id:apple-health-sleep-file:prompt:2026-05-24:schema:v2:model:gpt-test',
+      cacheStatus: 'disabled',
+    },
+  });
 });
 
 test('recognizeTelegramImageMessage normalizes incomplete Huawei sleep payloads before schema validation', async () => {
@@ -536,6 +625,29 @@ test('recognizeTelegramImageMessage hits cache when versioned metadata matches',
   assert.equal(result.detectedApp, '华为健康');
   assert.equal(result.messageId, 78);
   assert.equal(result.promptVersion, undefined);
+  assert.deepEqual(result.normalizedRecognition, {
+    sourceApp: '华为健康',
+    dataType: 'measurement',
+    fields: cached.records,
+    confidence: 0.99,
+    warnings: [],
+    evidence: {
+      detectedDate: '2026-05-24',
+      dateEvidence: 'image header: 2026-05-24',
+      ocr: null,
+      image: null,
+    },
+    runtime: {
+      pipelineVersion: 'v1',
+      schemaName: 'telegram_training_image',
+      schemaVersion: 'v2',
+      provider: 'openai-compatible',
+      model: 'gpt-test',
+      promptVersion: '2026-05-24',
+      cacheKey: 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:model:gpt-test',
+      cacheStatus: 'hit',
+    },
+  });
 });
 
 test('recognizeTelegramImageMessage keeps Feishu recognition cache keys channel-scoped', async () => {
@@ -604,7 +716,7 @@ test('recognizeTelegramImageMessage keeps Feishu recognition cache keys channel-
   assert.equal(result.cacheStatus, 'miss');
 });
 
-test('readRecognitionFromDatabaseCache keeps legacy ingest telegram table read path', async () => {
+test('readRecognitionFromDatabaseCache reads by the exact source-scoped cache key', async () => {
   const calls = [];
   const cached = {
     imageType: 'workout',
@@ -615,6 +727,7 @@ test('readRecognitionFromDatabaseCache keeps legacy ingest telegram table read p
   };
 
   const result = await readRecognitionFromDatabaseCache({
+    cacheKey: 'feishu:file_unique_id:file-legacy-cache:prompt:2026-05-24:schema:v2:model:gpt-test',
     fileUniqueId: 'file-legacy-cache',
     promptVersion: '2026-05-24',
     schemaVersion: 'v2',
@@ -639,16 +752,15 @@ test('readRecognitionFromDatabaseCache keeps legacy ingest telegram table read p
     },
   });
 
-  const cacheQuery = calls.find(([sql]) => /from ingest\.telegram_recognition/i.test(sql));
+  const cacheQuery = calls.find(([sql]) => /from ingest\.recognition_run/i.test(sql));
   assert.deepEqual(result, cached);
-  assert.ok(cacheQuery, 'expected cache read from ingest.telegram_recognition');
-  assert.match(cacheQuery[0], /join ingest\.telegram_message m on m\.message_id = r\.message_id/i);
-  assert.match(cacheQuery[0], /m\.photo_file_unique_ids_json @> \$1::jsonb/i);
+  assert.ok(cacheQuery, 'expected cache read from ingest.recognition_run');
+  assert.doesNotMatch(cacheQuery[0], /join ingest\.source_message/i);
+  assert.match(cacheQuery[0], /raw_result_json as recognition_json/i);
+  assert.match(cacheQuery[0], /r\.cache_key = \$1/i);
+  assert.doesNotMatch(cacheQuery[0], /recognition_json->>'cacheKey'/i);
   assert.deepEqual(cacheQuery[1], [
-    JSON.stringify(['file-legacy-cache']),
-    '2026-05-24',
-    'v2',
-    'gpt-test',
+    'feishu:file_unique_id:file-legacy-cache:prompt:2026-05-24:schema:v2:model:gpt-test',
   ]);
 });
 

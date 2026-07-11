@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { groupTelegramUpdates } from '../telegram/sync-batch-logic.adapter.mjs';
+import { groupSourceMessages } from '../telegram/sync-batch-logic.adapter.mjs';
 
 const DEFAULT_IMAGE_WINDOW_MS = 3_000;
 
@@ -51,42 +51,29 @@ export function groupFeishuUpdates(events, options = {}) {
     .filter((message) => message.sourceMessageId || message.eventId)
     .sort(compareFeishuMessages);
   const mediaGroupIds = assignFeishuImageGroups(normalizedMessages, imageWindowMs);
-  const metadataByMessageId = new Map();
+  const sourceMessages = normalizedMessages.map((message) => ({
+    ...message,
+    kind: 'message',
+    updateType: 'message',
+    mediaGroupId: mediaGroupIds.get(message.messageId) ?? null,
+    markdownDocuments: [],
+    photos: message.imageKey
+      ? [{
+          fileId: message.imageKey,
+          fileUniqueId: message.imageKey,
+          width: null,
+          height: null,
+          fileSize: null,
+          fileName: null,
+          mimeType: null,
+          source: 'feishu_image',
+          imageKey: message.imageKey,
+          sourceMessageId: message.sourceMessageId,
+        }]
+      : [],
+  }));
 
-  const telegramUpdates = normalizedMessages.map((message) => {
-    metadataByMessageId.set(message.messageId, message);
-    return {
-      update_id: message.updateId,
-      message: {
-        message_id: message.messageId,
-        media_group_id: mediaGroupIds.get(message.messageId) ?? null,
-        caption: message.caption,
-        text: message.text,
-        chat: { id: message.chatId },
-        date: message.dateUnix,
-        ...(message.replyToMessageId
-          ? {
-              reply_to_message: {
-                message_id: message.replyToMessageId,
-              },
-            }
-          : {}),
-        photo: message.imageKey
-          ? [{
-              file_id: message.imageKey,
-              file_unique_id: message.imageKey,
-              width: null,
-              height: null,
-              file_size: null,
-            }]
-          : [],
-      },
-    };
-  });
-
-  return groupTelegramUpdates(telegramUpdates, options).map((batch) =>
-    attachFeishuMetadata(batch, metadataByMessageId)
-  );
+  return groupSourceMessages(sourceMessages, options).map(attachFeishuBatchSource);
 }
 
 export function buildStableSafeInteger(value) {
@@ -174,11 +161,10 @@ function assignFeishuImageGroups(messages, imageWindowMs) {
   return groupIds;
 }
 
-function attachFeishuMetadata(batch, metadataByMessageId) {
+function attachFeishuBatchSource(batch) {
   const sourceBatch = {
     ...batch,
     sourceChannel: 'feishu',
-    messages: (batch.messages ?? []).map((message) => attachFeishuMessageMetadata(message, metadataByMessageId)),
   };
 
   for (const key of ['thought', 'thoughtEdit', 'thoughtDelete', 'thoughtMove', 'analysis', 'help']) {
@@ -191,30 +177,4 @@ function attachFeishuMetadata(batch, metadataByMessageId) {
   }
 
   return sourceBatch;
-}
-
-function attachFeishuMessageMetadata(message, metadataByMessageId) {
-  const metadata = metadataByMessageId.get(message.messageId);
-  if (!metadata) {
-    return message;
-  }
-
-  return {
-    ...message,
-    sourceChannel: 'feishu',
-    sourceMessageId: metadata.sourceMessageId,
-    sourceChatId: metadata.sourceChatId,
-    replySourceMessageId: metadata.replySourceMessageId,
-    replyToMessageId: metadata.replyToMessageId,
-    eventId: metadata.eventId,
-    senderId: metadata.senderId,
-    messageType: metadata.messageType,
-    rawEvent: metadata.rawEvent,
-    photos: (message.photos ?? []).map((photo) => ({
-      ...photo,
-      source: 'feishu_image',
-      imageKey: photo.fileId,
-      sourceMessageId: metadata.sourceMessageId,
-    })),
-  };
 }

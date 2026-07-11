@@ -23,7 +23,7 @@
 | Telegram 同步 | `src/app/use-cases/telegram-sync.use-case.mjs` |
 | 飞书同步 | `src/app/use-cases/feishu-sync.use-case.mjs` |
 | 消息分组和命令解析 | `src/adapters/telegram/sync-batch-logic.adapter.mjs`、`src/adapters/feishu/sync-batch-logic.adapter.mjs` |
-| AI 图片识别 | `src/app/use-cases/image-recognition.use-case.mjs`、`src/core/ai/telegram-recognition-schema.mjs` |
+| AI 图片识别 | `src/app/use-cases/image-recognition.use-case.mjs`、`src/adapters/image/sharp-image-processor.mjs`、`src/adapters/ocr/openai-compatible-ocr.adapter.mjs`、`src/core/ai/normalized-recognition.mjs` |
 | Prompt | `prompts/telegram-training-image-recognition.md`、`prompts/training-analysis.md` |
 | PostgreSQL 写入 | `src/db/training/write.mjs`、`src/adapters/postgres/*` |
 | 数据读取和快照 | `src/domain/training/training-snapshot.mjs`、`src/db/training/read*.mjs` |
@@ -39,6 +39,6 @@
 - `ingest.*` 保存消息、识别、AI 调用日志和 pending 批次。
 - `monitor.*` 保存 GitHub Actions run/job/step/failure 和系统参数健康监控事实，只存结构化安全摘要，不存业务 payload、日志正文、Secret 明文或参数值。
 - `archive.*` 保存历史 Markdown 解析和归档。
-- Telegram 和飞书共享同一套应用层同步逻辑；飞书先转换为 Telegram 形态的中间消息。
+- Telegram 和飞书共享同一套应用层同步逻辑；两个来源都直接生成来源无关消息，不再互相伪装平台事件。
 - 图片只有通过 schema、置信度、日期和业务校验后才会写入 `core.*`。
 - `/分析` 只读取快照并回发，不写入训练事实。

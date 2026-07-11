@@ -143,7 +143,7 @@ test('training maintenance inspect reports a read-only database permission audit
               }],
             };
           }
-          if (/from ingest\.telegram_recognition/i.test(sql)) {
+          if (/from ingest\.recognition_run/i.test(sql)) {
             return {
               rows: [{
                 recognition_fallback_count: 0,
@@ -210,7 +210,7 @@ test('training maintenance inspect uses the default pending summary without clai
         assert.doesNotMatch(sql, /\bupdate\b/i);
         assert.doesNotMatch(sql, /for update/i);
 
-        if (/from ingest\.telegram_pending_batch/i.test(sql)) {
+        if (/from ingest\.pending_task/i.test(sql)) {
           return {
             rows: [{
               batch_id: 'pending-old',
@@ -240,7 +240,7 @@ test('training maintenance inspect uses the default pending summary without clai
             }],
           };
         }
-        if (/from ingest\.telegram_recognition/i.test(sql)) {
+        if (/from ingest\.recognition_run/i.test(sql)) {
           return {
             rows: [{
               recognition_fallback_count: 0,
@@ -298,7 +298,7 @@ test('training maintenance inspect reports AI monitoring source from database lo
         assert.doesNotMatch(sql, /\bupdate\b/i);
         assert.doesNotMatch(sql, /for update/i);
 
-        if (/from ingest\.telegram_pending_batch/i.test(sql)) {
+        if (/from ingest\.pending_task/i.test(sql)) {
           return { rows: [] };
         }
         if (/from ingest\.ai_call_log/i.test(sql)) {
@@ -319,7 +319,7 @@ test('training maintenance inspect reports AI monitoring source from database lo
             ],
           };
         }
-        if (/from ingest\.telegram_recognition/i.test(sql)) {
+        if (/from ingest\.recognition_run/i.test(sql)) {
           return {
             rows: [
               { recognition_fallback_count: 2, recognition_total_count: 4 },
@@ -348,7 +348,7 @@ test('training maintenance inspect reports AI monitoring source from database lo
   assert.equal(result.data.aiMonitoringTotalCostUsd, 0.123456);
   assert.deepEqual(result.data.aiMonitoringSources, [
     'ingest.ai_call_log',
-    'ingest.telegram_recognition.recognition_json.aiAttemptKind',
+    'ingest.recognition_run.raw_result_json.aiAttemptKind',
   ]);
   assert.deepEqual(result.data.aiMonitoringAlertReasons, [
     'ai_fallback_rate_gt_30pct',
@@ -478,7 +478,7 @@ test('readTrainingBatchAuditClient traces recognition json and core target dates
   const client = {
     async query(sql, params) {
       calls.push({ sql, params });
-      if (/from ingest\.telegram_batch/i.test(sql)) {
+      if (/from ingest\.source_batch/i.test(sql)) {
         return {
           rows: [
             {
@@ -492,11 +492,11 @@ test('readTrainingBatchAuditClient traces recognition json and core target dates
           ],
         };
       }
-      if (/from ingest\.telegram_recognition/i.test(sql)) {
+      if (/from ingest\.recognition_run/i.test(sql)) {
         return {
           rows: [
             {
-              message_id: '6102',
+              recognition_id: 'recognition-6102',
               source_channel: 'telegram',
               source_chat_id: '1001',
               source_message_id: '6102',
