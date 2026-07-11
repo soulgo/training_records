@@ -77,6 +77,15 @@ test('legacy ingest cleanup is guarded and drops old tables only after count che
   assert.match(sql, /drop table if exists ingest\.telegram_pending_batch/i);
   assert.match(sql, /drop table if exists ingest\.telegram_batch/i);
   assert.match(sql, /不可逆|备份/);
+
+  const executableSql = sql.replace(/^\s*--.*$/gm, '').trimStart();
+  assert.match(executableSql, /^do\s+\$\$/i, 'cleanup file must enter the guarded block before any executable setup');
+  assert.doesNotMatch(executableSql, /\\i\s+sql\/cleanup_phase2_legacy_ingest\.sql/i);
+  assert.doesNotMatch(
+    executableSql,
+    /set\s+local\s+training_records\.allow_legacy_ingest_drop\s*=\s*'on'/i,
+    'cleanup file must not enable its own destructive gate',
+  );
 });
 
 function extractCreateTable(sql, schema, table) {

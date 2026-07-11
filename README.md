@@ -90,6 +90,8 @@ flowchart TD
 - `runtime/`：待补偿队列和归档失败日志。
 - `docs/`：维护文档入口。
 
+根目录 Markdown 只保留标准项目入口和运行链路固定文件：`README.md`、`CHANGELOG.md`、`训练记录.md`、`训练数据解析.md`。架构分析、阶段目标、实施方案、TDD 记录和验收报告统一放在 `docs/03_历史重构记录/重构历史/`，避免把历史过程资料误当成当前操作手册。
+
 ## 快速开始
 
 环境要求：
@@ -258,6 +260,7 @@ PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`
 - [问题与排查](docs/04_问题与排查/README.md)：PostgreSQL、OSS、Telegram、飞书、AI、Action 日志、部署和资源问题
 - [日常规则](docs/05_日常规则/README.md)：dev/main 合并、后续规划落地和文档同步规则
 - [历史重构记录](docs/03_历史重构记录/README.md)：旧文档入口和历史方案归档
+- [系统代码终极重构历史资料](docs/03_历史重构记录/重构历史/系统代码终极重构/README.md)：本轮分析、目标、方案、TDD 和最终验收报告
 
 ## FAQ
 

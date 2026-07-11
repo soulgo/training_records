@@ -9,7 +9,8 @@
 --   set local training_records.allow_legacy_ingest_drop = 'on';
 --   \i sql/cleanup_phase2_legacy_ingest.sql
 --
--- 本文件自身会提交事务；如果通过其他客户端执行，请先在同一事务/连接设置上述开关。
+-- 本文件自身会提交事务；如果通过其他客户端执行，请在同一连接开启事务并设置上述开关，
+-- 然后只执行本文件从 DO $$ 开始的清理正文。不要把 psql 的 \i 元命令粘贴到普通 SQL 客户端。
 
 do $$
 declare

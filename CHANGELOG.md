@@ -21,6 +21,8 @@
 
 ### Changed
 
+- 收敛根目录 Markdown：保留 `README.md`、`CHANGELOG.md` 和运行链路固定的 `训练记录.md`、`训练数据解析.md`；将系统代码重构分析、目标、方案、TDD 与最终报告统一归档到 `docs/03_历史重构记录/重构历史/系统代码终极重构/`，并更新文档导航和交叉链接。
+- 修正站点首页对数据来源的描述：线上看板以 PostgreSQL `core.*` 为业务事实源，`训练记录.md` 是数据库派生备份和受保护恢复入口。
 - Telegram 与飞书现在直接转换为共享来源消息契约；识别缓存、Telegram offset、一致性检查、AI monitoring、batch audit、睡眠修复和 pending replay 全部切换到通用 ingest 表，不再以 Telegram 表名或飞书数字代理 ID 作为主路径身份。
 - dev 同步改为只读取 `DEV_AI_*`、`DEV_TELEGRAM_*`、`DEV_FEISHU_*` 和对应识别配置，不再回退 main 的 AI、聊天白名单或飞书凭据；main/dev OCR 继续通过各自 Variables 独立控制。
 - Telegram 与飞书 Worker 在进入 Durable Object 缓冲或触发 GitHub Actions 前执行聊天白名单检查；Dashboard、Monitor 与 Action Monitor 的 EJS JSON 数据改为脚本上下文安全转义。

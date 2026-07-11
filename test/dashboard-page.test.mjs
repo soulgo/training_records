@@ -211,7 +211,8 @@ test('homepage keeps the introduction at the bottom and uses a smaller header na
   assert.ok(noteIndex > dailyIndex, 'expected note to be below the daily section');
   assert.ok(noteIndex > heroIndex, 'expected note to be below the metrics section');
   assert.match(homepage, /<div class="dashboard-note">/);
-  assert.match(homepage, /这里展示的是基于仓库中/);
+  assert.match(homepage, /这里展示的是由 PostgreSQL <code>core\.\*<\/code> 业务事实生成/);
+  assert.match(homepage, /不是线上页面的主写入来源/);
   assert.match(homepage, /<div id="nav">[\s\S]*<a href="\/">训练记录<\/a>/);
   assert.match(homepage, /<div id="nav">[\s\S]*<a href="\/action-monitor\/">action 监控<\/a>/);
 });

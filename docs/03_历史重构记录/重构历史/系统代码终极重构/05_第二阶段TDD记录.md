@@ -1,4 +1,4 @@
-# Hai TDD: 通用 Ingest 与来源身份收口
+# Hai TDD: 通用 Ingest 与来源身份收口（历史验证记录）
 
 ## Target Behavior
 Telegram 与飞书消息、资源、识别结果和 pending 任务使用来源无关的数据库表；旧 numeric ID 只能作为迁移核对字段，不能作为 generic 主键或缓存身份。
