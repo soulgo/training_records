@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildDashboardViewModel } from '../tools/dashboard-view.mjs';
+import { buildDashboardViewModel } from '../src/site/dashboard-view.mjs';
 import {
   readFixtureFile,
   restoreFixtureFile,

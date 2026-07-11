@@ -10,7 +10,7 @@ import {
   isUnavailableDatabaseSnapshotError,
 } from '../../domain/training/training-snapshot.mjs';
 import { buildTrainingAnalysisPrompt } from '../../core/ai/training-prompt.mjs';
-import { createAiProvider, isAiSchedulerEnabled } from '../../ai/provider.mjs';
+import { createAiProvider, isAiSchedulerEnabled } from '../../adapters/ai/ai-provider.factory.mjs';
 import { normalizeAiUsage } from '../../core/ai/schema-validator.mjs';
 import { resolveTrainingCoreConfig } from '../../db/training/config.mjs';
 import { getAnalysisPromptMetadata } from '../../core/ai/prompt-generator.mjs';

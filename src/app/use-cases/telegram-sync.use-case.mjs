@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createAiProvider, isAiSchedulerEnabled } from '../../ai/provider.mjs';
+import { createAiProvider, isAiSchedulerEnabled } from '../../adapters/ai/ai-provider.factory.mjs';
 import { groupTelegramUpdates } from '../../adapters/telegram/sync-batch.adapter.mjs';
 import {
   appendPendingRecognitionBatch as appendPendingRecognitionBatchToDatabase,
@@ -13,7 +13,7 @@ import { getLastProcessedTelegramUpdateId } from '../../db/training/read.mjs';
 import {
   backfillCoreSleepFromIngestBatches as backfillCoreSleepFromIngestBatchesToDatabase,
   persistNormalizedBatch as persistNormalizedBatchToDatabase,
-} from '../../adapters/postgres/training-write.facade.mjs';
+} from '../../db/training/write.mjs';
 import {
   generateTrainingAnalysisResult,
   splitTelegramMessage,
@@ -269,7 +269,7 @@ export async function runMessageSync(options = {}) {
   const grouped = measureSyncStageSync(timings, 'groupUpdates', () =>
     groupUpdates(updates, { knownThoughtMessageKeys }),
   );
-  const batchResults = [];
+  const batches = [];
   let changed = replayStoredAny;
 
   const pendingRecognitionEntries = await measureSyncStage(timings, 'readPendingRecognition', () =>
@@ -290,20 +290,20 @@ export async function runMessageSync(options = {}) {
     }),
   );
   changed ||= replayRecognitionResults.changed;
-  storedSleepAny ||= replayRecognitionResults.batchResults.some((batch) =>
+  storedSleepAny ||= replayRecognitionResults.batches.some((batch) =>
     batch.persistenceStatus === 'stored' && hasSleepBatchPayload(batch)
   );
-  for (const batch of replayRecognitionResults.batchResults) {
+  for (const batch of replayRecognitionResults.batches) {
     if (batch.persistenceStatus === 'stored' && hasSleepBatchPayload(batch)) {
       addArchivedDate(storedSleepArchivedDates, batch.archivedDate);
     }
   }
-  batchResults.push(...replayRecognitionResults.batchResults);
+  batches.push(...replayRecognitionResults.batches);
 
   for (const batch of grouped) {
     const isAllowed = batch.messages.every((message) => env.allowedChatIds.has(message.chatId));
     if (!isAllowed) {
-      batchResults.push({
+      batches.push({
         kind: batch.kind ?? 'image',
         batchId: batch.batchId,
         status: 'ignored',
@@ -331,7 +331,7 @@ export async function runMessageSync(options = {}) {
     );
 
     if (persistedBatch.status !== 'ready') {
-      batchResults.push(persistedBatch);
+      batches.push(persistedBatch);
       continue;
     }
 
@@ -342,7 +342,7 @@ export async function runMessageSync(options = {}) {
           sendMessage,
         }),
       );
-      batchResults.push({
+      batches.push({
         ...persistedBatch,
         helpReplyStatus: helpResult.status,
         helpReplyError: helpResult.error ?? null,
@@ -358,7 +358,7 @@ export async function runMessageSync(options = {}) {
           sendMessage,
         }),
       );
-      batchResults.push({
+      batches.push({
         ...persistedBatch,
         analysisReplyStatus: analysisResult.status,
         analysisReplyError: analysisResult.error ?? null,
@@ -394,7 +394,7 @@ export async function runMessageSync(options = {}) {
         }),
       );
       changed ||= thoughtResult.changed;
-      batchResults.push(thoughtResult.batchResult);
+      batches.push(thoughtResult.batchResult);
       continue;
     }
 
@@ -425,7 +425,7 @@ export async function runMessageSync(options = {}) {
         addArchivedDate(storedSleepArchivedDates, persistResult.archivedDate ?? persistedBatch.archivedDate);
       }
       const persistenceResult = buildPersistenceSummary(persistResult);
-      batchResults.push({
+      batches.push({
         ...persistedBatch,
         persistenceStatus: persistResult.status,
         ...(persistenceResult ? { persistenceResult } : {}),
@@ -442,7 +442,7 @@ export async function runMessageSync(options = {}) {
         });
         if (failureCategory === 'user_input') {
           const persistenceResult = withPendingStatus(buildPersistenceSummary(error.persistenceResult), null);
-          batchResults.push({
+          batches.push({
             ...persistedBatch,
             persistenceStatus: 'manual_intervention',
             persistenceError: errorMessage,
@@ -464,7 +464,7 @@ export async function runMessageSync(options = {}) {
           `[telegram-sync] queued database replay for ${persistedBatch.batchId} (${persistedBatch.archivedDate ?? 'unknown date'}): ${errorMessage}\n`,
         );
         const persistenceResult = withPendingStatus(buildPersistenceSummary(error.persistenceResult), 'queued');
-        batchResults.push({
+        batches.push({
           ...persistedBatch,
           persistenceStatus: 'pending_replay',
           persistenceError: errorMessage,
@@ -503,9 +503,8 @@ export async function runMessageSync(options = {}) {
     fallbackUsed: false,
     updatesFetched: updates.length,
     lastProcessedUpdateId: nextLastProcessedUpdateId,
-    readyBatches: batchResults.filter((batch) => batch.status === 'ready').length,
-    batchResults,
-    tasks: buildMessageSyncTasks(batchResults, { channel: sourceChannel }),
+    readyBatches: batches.filter((batch) => batch.status === 'ready').length,
+    batches,
     timingsMs: timings.timingsMs,
   };
   finalizeSyncTimings(timings, result);
@@ -514,7 +513,7 @@ export async function runMessageSync(options = {}) {
   if (shouldNotifyImmediately) {
     await measureSyncStage(timings, 'notify', () =>
       notifyTelegramSyncResult({
-        batchResults,
+        batches,
         sendMessage,
         env: rawEnv,
       }),
@@ -900,35 +899,6 @@ function normalizeAiConcurrency(value, options = {}) {
       ? Math.floor(configured)
       : defaultValue;
   return Math.min(normalized, limit);
-}
-
-function buildMessageSyncTasks(batchResults, { channel }) {
-  return (batchResults ?? []).map((batch) => {
-    const kind = batch.kind ?? 'image';
-    const messages = Array.isArray(batch.messages) ? batch.messages : [];
-    const chatIds = [
-      ...new Set(messages
-        .map((message) => message?.sourceChatId ?? message?.chatId)
-        .filter((value) => value !== null && value !== undefined && value !== '')),
-    ];
-    const sourceMessageIds = messages
-      .map((message) => message?.sourceMessageId ?? message?.messageId)
-      .filter((value) => value !== null && value !== undefined);
-
-    return {
-      taskId: `${channel}:${kind}:${batch.batchId ?? 'unknown'}`,
-      channel,
-      kind,
-      batchId: batch.batchId ?? null,
-      taskStatus: batch.taskStatus ?? batch.status ?? 'queued',
-      persistenceStatus: batch.persistenceStatus ?? null,
-      failureCategory: batch.failureCategory ?? null,
-      failureReason: batch.failureReason ?? batch.reason ?? null,
-      archivedDate: batch.archivedDate ?? null,
-      chatIds,
-      sourceMessageIds,
-    };
-  });
 }
 
 function parseAllowedChatIds(value) {

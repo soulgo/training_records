@@ -47,7 +47,6 @@ main 环境对应：
 | `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` | main 监控 API base URL | 可选 | `Report Action Status` 在没有可用生产 PostgreSQL 连接时的 HTTP 兜底上报地址。 |
 | `GITHUB_ACTION_MONITOR_REPORT_URL` | 共享监控 API base URL | 可选 | main/dev 专用 URL 未配置时的共享兜底地址。 |
 | `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` | dev 监控 API base URL | 可选 | 所有 workflow 都注入该变量；main 分支不会优先使用它。 |
-| `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED` | `false` | 可选 | 过渡期 DDL preflight 开关；默认关闭，日常业务账号不应启用。 |
 | `TRAINING_SNAPSHOT_SOURCE` | `database` | 建议填 | 构建站点时从数据库还是 Markdown 生成快照。 |
 | `AI_PROVIDER` | `openai-compatible` | 建议填 | 当前代码支持 OpenAI-compatible provider。 |
 | `AI_BASE_URL` | `https://.../v1` | 必填 | Chat Completions base URL。 |
@@ -170,7 +169,6 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 | `TRAINING_DB_ENABLED` | 自定义 | 生产建议为 `true`。 |
 | `TRAINING_DB_TIMEOUT_MS` | 自定义 | 连接超时，放 GitHub Variables。 |
 | `TRAINING_DB_APP_NAME` | 自定义 | DB 连接名，便于排查。 |
-| `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED` | 自定义 | 默认 `false`；只有显式迁移兜底时才临时打开。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 生产建议使用 `database`。 |
 
 数据库 schema 以 `sql/pgsql17.sql` 和当前显式建表脚本为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `TRAINING_DB_URL` 默认路径。Action 监控当前在同一个生产 PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，参数健康 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。

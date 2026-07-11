@@ -29,7 +29,7 @@
 3. 查识别请求：`src/app/use-cases/image-recognition.use-case.mjs:199`。
 4. 查 response format fallback：`src/app/use-cases/image-recognition.use-case.mjs:409`。
 5. 查 schema：`src/core/ai/telegram-recognition-schema.mjs`。
-6. 查分析：`tools/training-analysis.mjs:47`。
+6. 查分析：`src/app/use-cases/training-analysis.impl.mjs`。
 
 ## 解决方案
 

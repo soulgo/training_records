@@ -1,8 +1,8 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { notifyTelegramSyncResultFromFile } from './telegram-sync.mjs';
-import { sendTelegramMessage } from './telegram-transport.mjs';
+import { sendTelegramMessage } from '../src/adapters/telegram/telegram-api.mjs';
+import { notifyTelegramSyncResultFromFile } from '../src/app/use-cases/telegram-sync/status.mjs';
 
 export async function main() {
   const result = await notifyTelegramSyncFromEnv({ env: process.env });

@@ -1,10 +1,10 @@
 import { Buffer } from 'node:buffer';
 
-import { recognizeTelegramImageMessage } from '../../../ai/recognition-service.mjs';
+import { recognizeTelegramImageMessage } from '../image-recognition.use-case.mjs';
 import { analyzeTelegramBatch, mapWithConcurrency } from '../../../adapters/telegram/sync-batch.adapter.mjs';
 import { resolveTelegramFileUrl } from '../../../adapters/telegram/index.mjs';
 import { getRecognitionPromptMetadata, stripPromptMetadataHeader } from '../../../core/ai/prompt-generator.mjs';
-import { createAiProvider } from '../../../ai/provider.mjs';
+import { createAiProvider } from '../../../adapters/ai/ai-provider.factory.mjs';
 import { shouldQueueRecognitionFailure } from '../../../db/training/pending-recognition.mjs';
 import {
   classifyFailureCategory,
@@ -544,7 +544,7 @@ export async function replayPendingRecognitionBatches({
   now,
   env,
 }) {
-  const batchResults = [];
+  const batches = [];
   let changed = false;
   let replayStoredImageAny = false;
 
@@ -561,7 +561,7 @@ export async function replayPendingRecognitionBatches({
         });
         changed ||= persistResult.status === 'stored';
         replayStoredImageAny ||= persistResult.status === 'stored';
-        batchResults.push({
+        batches.push({
           ...pendingPersistenceBatch,
           pendingReplay: true,
           persistenceStatus: persistResult.status,
@@ -576,7 +576,7 @@ export async function replayPendingRecognitionBatches({
           failedAt: now.toISOString(),
           nextRetryAt: new Date(now.getTime() + 10 * 60 * 1000),
         });
-        batchResults.push({
+        batches.push({
           ...pendingPersistenceBatch,
           pendingReplay: true,
           persistenceStatus: 'pending_replay',
@@ -609,7 +609,7 @@ export async function replayPendingRecognitionBatches({
         immediateRetry: false,
         nextRetryAt: new Date(now.getTime() + 10 * 60 * 1000),
       });
-      batchResults.push(persistedBatch);
+      batches.push(persistedBatch);
       continue;
     }
 
@@ -620,7 +620,7 @@ export async function replayPendingRecognitionBatches({
     const resolvedResult = await markPendingRecognitionResolved({ batchId: persistedBatch.batchId });
     changed ||= persistResult.status === 'stored';
     replayStoredImageAny ||= persistResult.status === 'stored';
-    batchResults.push({
+    batches.push({
       ...persistedBatch,
       persistenceStatus: persistResult.status,
       recognitionPendingStatus: resolvedResult.status,
@@ -630,7 +630,7 @@ export async function replayPendingRecognitionBatches({
   return {
     changed,
     replayStoredImageAny,
-    batchResults,
+    batches,
   };
 }
 

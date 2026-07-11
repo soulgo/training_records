@@ -532,7 +532,7 @@ export async function processTelegramUpdates({
   previousLastProcessedUpdateId = 0,
 }) {
   const grouped = groupTelegramUpdates(updates);
-  const batchResults = [];
+  const batches = [];
   const inboxEntries = [];
   let nextMarkdown = markdown;
   let changed = false;
@@ -544,7 +544,7 @@ export async function processTelegramUpdates({
   for (const batch of grouped) {
     const isAllowed = batch.messages.every((message) => allowedChatIds.has(message.chatId));
     if (!isAllowed) {
-      batchResults.push({
+      batches.push({
         kind: batch.kind ?? 'image',
         batchId: batch.batchId,
         status: 'ignored',
@@ -556,7 +556,7 @@ export async function processTelegramUpdates({
 
     const recognitions = batch.kind === 'image' ? await recognizeBatch(batch) : [];
     const analyzed = analyzeTelegramBatch(batch, recognitions, { minConfidence });
-    batchResults.push({
+    batches.push({
       kind: batch.kind ?? analyzed.kind ?? 'image',
       ...analyzed,
       updateIds: batch.messages.map((message) => message.updateId),
@@ -583,7 +583,7 @@ export async function processTelegramUpdates({
     changed,
     markdown: nextMarkdown,
     lastProcessedUpdateId,
-    batchResults,
+    batches,
     inboxEntries,
   };
 }

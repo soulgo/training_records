@@ -4,28 +4,9 @@ import assert from 'node:assert/strict';
 import {
   buildTelegramWebhookConfig,
   fetchTelegramUpdates,
-  HexoGeneratorPort,
-  resolveConfig,
   sendTelegramMessage,
   setTelegramWebhook,
-  TelegramBotPort,
-} from '../src/infra/app-factory.mjs';
-
-test('app factory exports adapter ports and unified config without requiring runtime secrets', () => {
-  assert.equal(typeof TelegramBotPort, 'function');
-  assert.equal(typeof HexoGeneratorPort, 'function');
-
-  const config = resolveConfig({
-    TRAINING_DB_ENABLED: 'true',
-    TRAINING_DB_URL: ' postgres://example ',
-    AI_PROVIDER: 'openai-compatible',
-    TELEGRAM_TRANSPORT: 'webhook',
-  });
-
-  assert.equal(config.database.url, 'postgres://example');
-  assert.equal(config.ai.provider, 'openai-compatible');
-  assert.equal(config.telegram.transport, 'webhook');
-});
+} from '../src/adapters/telegram/index.mjs';
 
 test('telegram transport adapter exposes polling and webhook functions from src', async () => {
   const updates = await fetchTelegramUpdates({

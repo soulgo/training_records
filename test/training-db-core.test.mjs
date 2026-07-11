@@ -4,20 +4,25 @@ import { createHash } from 'node:crypto';
 
 import {
   appendPendingRecognitionBatch,
-  backfillCoreFromLatestArchiveSnapshot,
-  backfillCoreSleepFromIngestBatchesClient,
-  exportTrainingMarkdown,
-  getLastProcessedTelegramUpdateId,
-  importTrainingMarkdownToDatabase,
   markPendingRecognitionResolved,
-  persistNormalizedBatch,
-  persistTrainingSnapshotToCore,
   readPendingRecognitionBatches,
   readPendingRecognitionSummary,
+  writeStartedRecognitionAiCallLog,
+} from '../src/db/training/pending-recognition.mjs';
+import {
   readArchiveTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabase,
-} from '../tools/training-db-core.mjs';
+  getLastProcessedTelegramUpdateId,
+} from '../src/db/training/read.mjs';
+import {
+  backfillCoreFromLatestArchiveSnapshot,
+  backfillCoreSleepFromIngestBatchesClient,
+  importTrainingMarkdownToDatabase,
+  persistNormalizedBatch,
+  persistTrainingSnapshotToCore,
+} from '../src/db/training/write.mjs';
+import { exportTrainingMarkdown } from '../src/domain/training/training-exporter.mjs';
 import { parseTrainingRecord } from '../src/domain/training/training-parser.mjs';
 import {
   shouldQueueRecognitionFailure,
@@ -642,46 +647,6 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(calls.at(-1)[0], 'end');
 });
 
-test('persistNormalizedBatch runs schema preflight only when explicitly enabled', async () => {
-  const calls = [];
-  const fakeClient = {
-    async connect() {
-      calls.push(['connect']);
-    },
-    async query(sql, params) {
-      calls.push([sql, params]);
-      if (/insert into ingest\.telegram_batch/i.test(sql)) {
-        return { rows: [], rowCount: 0 };
-      }
-      return { rows: [] };
-    },
-    async end() {
-      calls.push(['end']);
-    },
-  };
-
-  const result = await persistNormalizedBatch({
-    batch: normalizedBatch,
-    env: {
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-      TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED: 'true',
-    },
-    createClient() {
-      return fakeClient;
-    },
-    ensureCoreSchema: async (client) => {
-      await client.query('alter table core.sleep add column if not exists total_sleep_minutes integer null');
-    },
-    processedAt: new Date('2026-05-13T00:00:00.000Z'),
-  });
-
-  assert.equal(result.status, 'unchanged');
-  assert.ok(calls.some(([sql]) => /alter table core\.sleep/i.test(sql)));
-  assert.equal(calls[2][0], 'BEGIN');
-  assert.equal(calls.at(-1)[0], 'end');
-});
-
 test('persistNormalizedBatch returns safe persistence summary with row counts and slow queries', async () => {
   const fakeClient = {
     async connect() {},
@@ -945,8 +910,7 @@ test('persistNormalizedBatch writes recognition AI call log after business commi
 });
 
 test('writeStartedRecognitionAiCallLog writes started AI call log best-effort', async () => {
-  const dbCore = await import('../tools/training-db-core.mjs');
-  assert.equal(typeof dbCore.writeStartedRecognitionAiCallLog, 'function');
+  assert.equal(typeof writeStartedRecognitionAiCallLog, 'function');
 
   const calls = [];
   const fakeClient = {
@@ -963,7 +927,7 @@ test('writeStartedRecognitionAiCallLog writes started AI call log best-effort', 
   };
   const occurredAt = new Date('2026-06-15T00:00:01.000Z');
 
-  const result = await dbCore.writeStartedRecognitionAiCallLog({
+  const result = await writeStartedRecognitionAiCallLog({
     env: {
       TRAINING_DB_ENABLED: 'true',
       TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
@@ -1004,7 +968,6 @@ test('writeStartedRecognitionAiCallLog writes started AI call log best-effort', 
 });
 
 test('started and succeeded recognition AI call logs use the same call id', async () => {
-  const dbCore = await import('../tools/training-db-core.mjs');
   const calls = [];
   const fakeClient = {
     async connect() {
@@ -1023,7 +986,7 @@ test('started and succeeded recognition AI call logs use the same call id', asyn
   };
   const idempotencyKey = 'recognition:telegram_training_image:v2:2026-05-24:gpt-primary:u-abc:abc123';
 
-  const started = await dbCore.writeStartedRecognitionAiCallLog({
+  const started = await writeStartedRecognitionAiCallLog({
     env: {
       TRAINING_DB_ENABLED: 'true',
       TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',

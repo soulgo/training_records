@@ -9,9 +9,9 @@ import {
   groupFeishuUpdates,
   normalizeFeishuMessage,
 } from '../src/adapters/feishu/index.mjs';
-import { recognizeBatch } from '../tools/telegram-sync-image-processing.mjs';
+import { recognizeBatch } from '../src/app/use-cases/telegram-sync/image-processing.mjs';
 import { notifyFeishuActionFailure } from '../tools/feishu-action-monitor.mjs';
-import { buildFeishuSyncReport, notifyFeishuSyncResultFromFile, runFeishuSync } from '../tools/feishu-sync.mjs';
+import { buildFeishuSyncReport, notifyFeishuSyncResultFromFile, runFeishuSync } from '../src/app/use-cases/feishu-sync.use-case.mjs';
 
 test('normalizeFeishuMessage keeps Feishu source ids while exposing Telegram-compatible fields', () => {
   const normalized = normalizeFeishuMessage(createFeishuImageEvent({
@@ -463,7 +463,7 @@ test('recognizeBatch keeps empty inline image data distinct from unsupported con
 
 test('buildFeishuSyncReport keeps Feishu image download failure reasons distinct', () => {
   const report = buildFeishuSyncReport({
-    batchResults: [
+    batches: [
       {
         kind: 'image',
         sourceChannel: 'feishu',
@@ -669,14 +669,14 @@ test('runFeishuSync handles image and thought batches through the shared sync pi
   assert.equal(persisted.length, 2);
   assert.deepEqual(persisted.map((entry) => entry.sourceChannel), ['feishu', 'feishu']);
   assert.deepEqual(persisted.map((entry) => entry.batch.kind), ['image', 'thought']);
-  assert.equal(result.batchResults[0].sourceChannel, 'feishu');
-  assert.equal(result.batchResults[1].sourceChannel, 'feishu');
-  assert.equal(result.batchResults[0].syncStages.ai_schema.status, 'succeeded');
-  assert.equal(result.batchResults[0].syncStages.db_persist.status, 'succeeded');
-  assert.equal(Number.isFinite(result.batchResults[0].syncStages.ai_schema.durationMs), true);
-  assert.equal(Number.isFinite(result.batchResults[0].syncStages.db_persist.durationMs), true);
+  assert.equal(result.batches[0].sourceChannel, 'feishu');
+  assert.equal(result.batches[1].sourceChannel, 'feishu');
+  assert.equal(result.batches[0].syncStages.ai_schema.status, 'succeeded');
+  assert.equal(result.batches[0].syncStages.db_persist.status, 'succeeded');
+  assert.equal(Number.isFinite(result.batches[0].syncStages.ai_schema.durationMs), true);
+  assert.equal(Number.isFinite(result.batches[0].syncStages.db_persist.durationMs), true);
 
-  const thoughtBatch = result.batchResults.find((batch) => batch.kind === 'thought');
+  const thoughtBatch = result.batches.find((batch) => batch.kind === 'thought');
   assert.equal(thoughtBatch.thought.sourceChannel, 'feishu');
   assert.equal(thoughtBatch.thought.telegramMessageId, thoughtBatch.messages[0].messageId);
   assert.equal(thoughtBatch.messages[0].sourceMessageId, 'om_thought_1');
@@ -689,33 +689,8 @@ test('runFeishuSync handles image and thought batches through the shared sync pi
   const report = buildFeishuSyncReport(result);
   assert.deepEqual(report.batches.map((batch) => batch.chatIds), [['oc_chat_1'], ['oc_chat_1']]);
   assert.match(report.batches[0].sourceId, /^feishu:chat:oc_chat_1:/);
-  assert.match(report.batchResults[0].sourceId, /^feishu:chat:oc_chat_1:/);
-  assert.deepEqual(Object.keys(result.tasks[0]).sort(), [
-    'archivedDate',
-    'batchId',
-    'channel',
-    'chatIds',
-    'failureCategory',
-    'failureReason',
-    'kind',
-    'persistenceStatus',
-    'sourceMessageIds',
-    'taskId',
-    'taskStatus',
-  ].sort());
-  assert.equal(result.tasks[0].channel, 'feishu');
-  assert.equal(result.tasks[0].kind, 'image');
-  assert.deepEqual(result.tasks[0].chatIds, ['oc_chat_1']);
-  assert.deepEqual(result.tasks[0].sourceMessageIds, ['om_feishu_1']);
-  assert.match(result.tasks[0].taskId, /^feishu:image:/);
-  assert.equal(result.tasks[1].channel, 'feishu');
-  assert.equal(result.tasks[1].kind, 'thought');
-  assert.deepEqual(result.tasks[1].chatIds, ['oc_chat_1']);
-  assert.deepEqual(result.tasks[1].sourceMessageIds, ['om_thought_1']);
-  assert.equal(report.tasks[0].channel, 'feishu');
-  assert.match(report.tasks[0].taskId, /^feishu:image:/);
-  assert.deepEqual(report.tasks[0].chatIds, ['oc_chat_1']);
-  assert.deepEqual(report.tasks[0].sourceMessageIds, ['om_feishu_1']);
+  assert.match(report.batches[0].taskId, /^feishu:image:/);
+  assert.match(report.batches[1].taskId, /^feishu:thought:/);
 });
 
 test('runFeishuSync stores COS image URLs from shared image storage in thought metadata', async () => {
@@ -774,9 +749,9 @@ test('runFeishuSync stores COS image URLs from shared image storage in thought m
     backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
   });
 
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'images_written');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'images_written');
   assert.deepEqual(persisted.map((entry) => entry.sourceChannel), ['feishu']);
   assert.deepEqual(persisted[0].batch.thought.storage.photoPaths, [cosUrl]);
   assert.equal(uploadedItems.length, 1);
@@ -784,7 +759,7 @@ test('runFeishuSync stores COS image URLs from shared image storage in thought m
   assert.equal(uploadedItems[0].index, 1);
   assert.equal(uploadedItems[0].extension, '.jpg');
   assert.equal(persisted[0].batch.thought.storage.imageUploadStats?.provider, 'tencent_cos');
-  assert.equal(result.batchResults[0].thought.storage.imageUploadStats?.provider, 'tencent_cos');
+  assert.equal(result.batches[0].thought.storage.imageUploadStats?.provider, 'tencent_cos');
 });
 
 test('buildFeishuSyncReport preserves image archive date confidence for summary gates', () => {
@@ -794,7 +769,7 @@ test('buildFeishuSyncReport preserves image archive date confidence for summary 
     updatesFetched: 1,
     lastProcessedUpdateId: null,
     readyBatches: 1,
-    batchResults: [
+    batches: [
       {
         kind: 'image',
         sourceChannel: 'feishu',
@@ -871,7 +846,7 @@ test('runFeishuSync preserves the recommended Feishu AI_CONCURRENCY limit', asyn
     backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
   });
 
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.deepEqual(observedConcurrency, [2]);
 });
 
@@ -906,10 +881,10 @@ test('runFeishuSync queues Feishu thought database failures for pending replay',
     backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
   });
 
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].persistenceStatus, 'pending_replay');
-  assert.equal(result.batchResults[0].failureCategory, 'database');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought');
+  assert.equal(result.batches[0].persistenceStatus, 'pending_replay');
+  assert.equal(result.batches[0].failureCategory, 'database');
   assert.equal(queued.length, 1);
   assert.equal(queued[0].batch.kind, 'thought');
   assert.equal(queued[0].batch.sourceChannel, 'feishu');
@@ -1134,9 +1109,9 @@ test('runFeishuSync consumes queued workflow dispatch payloads in webhook mode',
   });
 
   assert.equal(result.updatesFetched, 1);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persisted.length, 1);
   assert.equal(persisted[0].sourceChannel, 'feishu');
 });
@@ -1180,8 +1155,8 @@ test('runFeishuSync consumes queued dispatch payloads when event name is unavail
   });
 
   assert.equal(result.updatesFetched, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persisted.length, 1);
 });
 
@@ -1219,8 +1194,8 @@ test('runFeishuSync consumes inline queued dispatch payloads without event path'
   });
 
   assert.equal(result.updatesFetched, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persisted.length, 1);
 });
 
@@ -1256,14 +1231,12 @@ test('runFeishuSync does not require Telegram placeholder env for Feishu payload
     backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
   });
 
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].sourceChannel, 'feishu');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_database_only');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
-  assert.equal(result.batchResults[0].persistedThoughtMessageId, result.batchResults[0].thought.telegramMessageId);
-  assert.equal(result.tasks.length, 1);
-  assert.equal(result.tasks[0].channel, 'feishu');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought');
+  assert.equal(result.batches[0].sourceChannel, 'feishu');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_database_only');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].persistedThoughtMessageId, result.batches[0].thought.telegramMessageId);
   assert.equal(persisted.length, 1);
   assert.deepEqual(persisted.map((entry) => entry.sourceChannel), ['feishu']);
 });
@@ -1337,13 +1310,13 @@ test('runFeishuSync handles /analysis reply and AI call log through the shared p
 
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].text, '数据结论：飞书分析路径完成。');
-  assert.equal(result.batchResults[0].kind, 'analysis');
-  assert.equal(result.batchResults[0].analysisReplyStatus, 'sent');
-  assert.equal(result.batchResults[0].analysisAttemptKind, 'primary');
-  assert.equal(result.batchResults[0].analysisModel, 'gpt-analysis-primary');
-  assert.equal(result.batchResults[0].analysisSnapshotSource, 'database');
+  assert.equal(result.batches[0].kind, 'analysis');
+  assert.equal(result.batches[0].analysisReplyStatus, 'sent');
+  assert.equal(result.batches[0].analysisAttemptKind, 'primary');
+  assert.equal(result.batches[0].analysisModel, 'gpt-analysis-primary');
+  assert.equal(result.batches[0].analysisSnapshotSource, 'database');
   assert.ok(aiLogCall);
-  assert.equal(aiLogCall[1][1], result.batchResults[0].batchId);
+  assert.equal(aiLogCall[1][1], result.batches[0].batchId);
   assert.equal(aiLogCall[1][2], 'analysis');
   assert.equal(aiLogCall[1][4], 'gpt-analysis-primary');
 });
@@ -1377,11 +1350,11 @@ test('runFeishuSync persists explicit Feishu thought edit module updates through
   });
 
   assert.equal(result.updatesFetched, 1);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].status, 'ready');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_edit_database_only');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].status, 'ready');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_edit_database_only');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persisted.length, 1);
   assert.equal(persisted[0].sourceChannel, 'feishu');
   assert.equal(persisted[0].batch.kind, 'thought_edit');
@@ -1440,18 +1413,18 @@ test('runFeishuSync processes two Feishu thought edit messages from one buffered
   });
 
   assert.equal(result.updatesFetched, 2);
-  assert.equal(result.batchResults.length, 2);
-  assert.deepEqual(result.batchResults.map((batch) => batch.kind), ['thought_edit', 'thought_edit']);
+  assert.equal(result.batches.length, 2);
+  assert.deepEqual(result.batches.map((batch) => batch.kind), ['thought_edit', 'thought_edit']);
   assert.deepEqual(
-    result.batchResults.map((batch) => batch.thoughtEdit.targetMessageId),
+    result.batches.map((batch) => batch.thoughtEdit.targetMessageId),
     [600, 601],
   );
   assert.deepEqual(
-    result.batchResults.map((batch) => batch.thoughtEdit.thoughtModule),
+    result.batches.map((batch) => batch.thoughtEdit.thoughtModule),
     ['body_feedback', 'misc'],
   );
   assert.deepEqual(
-    result.batchResults.map((batch) => batch.persistenceStatus),
+    result.batches.map((batch) => batch.persistenceStatus),
     ['stored', 'stored'],
   );
   assert.equal(persisted.length, 2);
@@ -1493,12 +1466,12 @@ test('runFeishuSync skips ambiguous /随想 id module body messages without pers
   assert.equal(result.updatesFetched, 1);
   assert.equal(persisted.length, 0);
   assert.equal(result.changed, false);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].status, 'skipped');
-  assert.equal(result.batchResults[0].persistenceStatus ?? null, null);
-  assert.match(result.batchResults[0].reason, /疑似编辑命令/);
-  assert.doesNotMatch(result.batchResults[0].reason, /写入成功/);
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought');
+  assert.equal(result.batches[0].status, 'skipped');
+  assert.equal(result.batches[0].persistenceStatus ?? null, null);
+  assert.match(result.batches[0].reason, /疑似编辑命令/);
+  assert.doesNotMatch(result.batches[0].reason, /写入成功/);
 });
 
 test('Feishu sync notifier reports skipped ambiguous thoughts as failures', async () => {
@@ -1509,7 +1482,7 @@ test('Feishu sync notifier reports skipped ambiguous thoughts as failures', asyn
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought',
           status: 'skipped',
@@ -1555,7 +1528,7 @@ test('buildFeishuSyncReport gates pending replay and manual intervention as busi
     updatesFetched: 2,
     lastProcessedUpdateId: null,
     readyBatches: 0,
-    batchResults: [
+    batches: [
       {
         kind: 'thought',
         sourceChannel: 'feishu',
@@ -1638,12 +1611,12 @@ test('runFeishuSync handles reply-based Feishu thought delete batches through th
   });
 
   assert.equal(result.updatesFetched, 1);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_delete');
-  assert.equal(result.batchResults[0].status, 'ready');
-  assert.equal(result.batchResults[0].thoughtDelete.targetMessageId, targetMessageId);
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_delete_database_only');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought_delete');
+  assert.equal(result.batches[0].status, 'ready');
+  assert.equal(result.batches[0].thoughtDelete.targetMessageId, targetMessageId);
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_delete_database_only');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persisted.length, 1);
   assert.equal(persisted[0].sourceChannel, 'feishu');
   assert.equal(persisted[0].batch.kind, 'thought_delete');

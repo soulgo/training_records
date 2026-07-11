@@ -31,7 +31,7 @@
 1. 核对 workflow env：`sync.yml` / `sync-dev.yml` 中 `TRAINING_DB_*`，确认日常 workflow 没有注入 `TRAINING_DB_MIGRATION_URL`。
 2. 核对代码读取：`src/db/training/config.mjs`。
 3. 核对写入入口：`src/db/training/write.mjs:21`。
-4. 核对 schema：`sql/pgsql17.sql`、`sql/training_records/migrations/` 与 `src/adapters/postgres/schema-preflight.pg.mjs`。
+4. 核对 schema：`sql/pgsql17.sql` 与 `sql/training_records/migrations/`。
 5. 先运行 `npm run maintenance:migrate -- --dry-run` 查看 migration 状态；需要写入时再配置 `TRAINING_DB_MIGRATION_URL` 并使用 `--confirm`。
 6. 运行 `npm run maintenance:inspect`，检查 `database.permissionAudit` 中的 superuser、migrator-like 和 schema `CREATE` 权限摘要。
 7. 运行 `npm run check:data-consistency`。
@@ -45,8 +45,8 @@
 
 ## 预防措施
 
-- 改 SQL 时同步 repository、preflight 和测试。
+- 改 SQL 时同步 repository、migration 和测试。
 - main/dev 使用独立数据库连接串。
 - 日常同步账号只做业务 DML；DDL 只通过 `maintenance:migrate` 和 migration URL 执行。
-- `TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED` 默认保持关闭，不能当作长期迁移机制。
+- 不在日常业务路径中恢复运行时 DDL 或 schema preflight。
 - 不把 Markdown fallback 成功误判为 database 成功。

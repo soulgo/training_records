@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseTrainingRecord } from '../tools/training-parser.mjs';
+import { parseTrainingRecord } from '../src/domain/training/training-parser.mjs';
 import { parseWeightKg } from '../src/domain/training/training-domain.mjs';
 import {
   importTelegramCommandRegistry,
@@ -1825,9 +1825,9 @@ test('processes only allowed chats and advances state to the highest processed u
 
   assert.equal(result.changed, true);
   assert.equal(result.lastProcessedUpdateId, 303);
-  assert.equal(result.batchResults.length, 2);
-  assert.equal(result.batchResults[0].status, 'ignored');
-  assert.equal(result.batchResults[1].status, 'ready');
+  assert.equal(result.batches.length, 2);
+  assert.equal(result.batches[0].status, 'ignored');
+  assert.equal(result.batches[1].status, 'ready');
   assert.equal(result.inboxEntries.length, 1);
   assert.match(result.markdown, /2026-05-09 饮食截图记录/);
   assert.match(result.markdown, /19:12 力量训练/);
@@ -1849,7 +1849,7 @@ test('processTelegramUpdates preserves the previous offset when updates are empt
 
   assert.equal(result.changed, false);
   assert.equal(result.lastProcessedUpdateId, 520905341);
-  assert.deepEqual(result.batchResults, []);
+  assert.deepEqual(result.batches, []);
   assert.deepEqual(result.inboxEntries, []);
   assert.equal(result.markdown, '### 2026-05-08\n');
 });

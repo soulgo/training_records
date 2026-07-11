@@ -18,6 +18,15 @@
 - 将 `/action-monitor/` 的系统参数监控从“有效期推断”升级为“参数健康探测”：新增 `config/parameter-health/<env>.json` registry、`tools/check-parameter-health.mjs`、`Parameter Health Audit` workflow、主动只读 probes 和参数健康视图，健康状态改为 `healthy`、`present`、`invalid`、`missing`、`not_configured`、`unreachable`、`unsupported`、`unknown`，到期时间仅作为有真实证据时的附加信息。
 - 同步参数健康监控的数据库与文档入口：`monitor.system_config_parameters/checks` 新增 `health_probe_key`、`health_check_type`、`check_type`、`latency_ms`、`failure_kind`、`observed_expires_at`、`last_healthy` 查询索引和健康状态约束，当前事实文档与排查文档改为指向参数健康模型。
 - 按后续规划落地文档同步规则完成参数有效时间监控规划归档：将已实现规划从 `docs/03_历史重构记录/后续规划_未实现/参数有效时间/` 移入 `docs/03_历史重构记录/重构历史/参数有效时间监控/`，并把当前 registry、audit workflow、monitor 表、页面展示和排查方式写回 `01_系统配置`、`02_系统核心逻辑`、`04_问题与排查` 及相关 README。
+- 将 dev 页面里的 Action 日志监控从首页拆出为独立页面模块 `/action-monitor/`，新增导航入口、独立 layout、样式与历史分页脚本，首页不再嵌入该监控模块。
+- 收敛应用与同步边界：生产代码、测试和 workflow 直接引用真实 use case、adapter、domain 与数据库 owner；飞书直接进入共享 `runMessageSync`，同步报告统一只输出 `batches`，不改变 Telegram/飞书处理、通知和数据库写入行为。
+- 数据库 schema 演进统一由 `maintenance:migrate` 和显式 migration 承担；日常同步与 Markdown 导出不再包含运行时 schema preflight。SQL 分片同时移除重复睡眠日期索引定义，并校准 `core.thought.telegram_message_id` 的 legacy alias 注释。
+
+### Removed
+
+- 删除未进入生产链路的 `src/jobs`、`src/infra` 架构壳、无消费者 barrel、`src/ai`/PostgreSQL facade，以及 `tools` 下的纯 re-export 兼容入口；保留真实 CLI 和承载业务复杂度的模块。
+- 删除旧 schema preflight 实现、环境开关与重试代码；删除已为空且不再消费的 runtime NDJSON pending 文件、fallback inspect 工具和重复文件队列实现，pending 恢复仅保留 PostgreSQL `ingest.telegram_pending_batch`。
+- 删除同步结果中的 `batchResults` 别名和无生产消费者的 `tasks` 派生集合，所有内部消费者统一读取 `batches`。
 
 ### Fixed
 

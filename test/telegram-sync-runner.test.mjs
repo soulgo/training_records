@@ -14,17 +14,30 @@ import {
   runMessageSync,
   runTelegramSync,
   shouldPersistTelegramArtifacts,
-} from '../tools/telegram-sync.mjs';
+} from '../src/app/use-cases/telegram-sync.use-case.mjs';
 import {
   recognizeBatch,
   resolveRecognitionImageInputMode,
-} from '../tools/telegram-sync-image-processing.mjs';
+} from '../src/app/use-cases/telegram-sync/image-processing.mjs';
 import { notifyTelegramActionFailure } from '../tools/telegram-action-monitor.mjs';
-import { buildRecognitionCacheKey, isRecognitionCacheEnabled } from '../src/ai/recognition-service.mjs';
+import { buildRecognitionCacheKey, isRecognitionCacheEnabled } from '../src/app/use-cases/image-recognition.use-case.mjs';
 import { emptyTrainingCharts, telegramSyncEnv } from './helpers/telegram-sync-runner-fixtures.mjs';
 
+test('sync reports expose batches as the only collection contract', () => {
+  const report = buildTelegramSyncReport({
+    changed: false,
+    updatesFetched: 0,
+    readyBatches: 0,
+    batches: [],
+  });
+
+  assert.deepEqual(report.batches, []);
+  assert.equal(Object.hasOwn(report, 'batchResults'), false);
+  assert.equal(Object.hasOwn(report, 'tasks'), false);
+});
+
 test('telegram sync entrypoint exits cleanly in webhook mode without queued work', () => {
-  const stdout = execFileSync(process.execPath, ['tools/telegram-sync.mjs'], {
+  const stdout = execFileSync(process.execPath, ['src/app/use-cases/telegram-sync.use-case.mjs'], {
     cwd: process.cwd(),
     encoding: 'utf8',
     env: {
@@ -49,7 +62,7 @@ test('telegram sync entrypoint ignores empty repository dispatch payloads in web
   const dispatchPath = path.join(tempRoot, 'dispatch-event.json');
   await writeFile(dispatchPath, JSON.stringify({ client_payload: {} }), 'utf8');
 
-  const stdout = execFileSync(process.execPath, ['tools/telegram-sync.mjs'], {
+  const stdout = execFileSync(process.execPath, ['src/app/use-cases/telegram-sync.use-case.mjs'], {
     cwd: process.cwd(),
     encoding: 'utf8',
     env: {
@@ -78,7 +91,7 @@ test('safe sync report excludes source ids, chat ids, raw messages, and SQL deta
     lastProcessedUpdateId: 902,
     readyBatches: 1,
     timingsMs: { total: 12, persist: 3 },
-    batchResults: [
+    batches: [
       {
         kind: 'image',
         batchId: 'batch-sensitive',
@@ -175,9 +188,9 @@ test('telegram sync entrypoint consumes queued workflow dispatch payloads in web
   });
 
   assert.equal(result.updatesFetched, 1);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
 });
 
 test('telegram sync entrypoint consumes queued payloads from a custom dispatch event path', async () => {
@@ -233,8 +246,8 @@ test('telegram sync entrypoint consumes queued payloads from a custom dispatch e
   });
 
   assert.equal(result.updatesFetched, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
 });
 
 test('telegram sync entrypoint consumes queued dispatch payloads when event name is unavailable', async () => {
@@ -279,8 +292,8 @@ test('telegram sync entrypoint consumes queued dispatch payloads when event name
   });
 
   assert.equal(result.updatesFetched, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
 });
 
 test('telegram sync entrypoint consumes inline queued dispatch payloads without event path', async () => {
@@ -320,11 +333,11 @@ test('telegram sync entrypoint consumes inline queued dispatch payloads without 
   });
 
   assert.equal(result.updatesFetched, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
 });
 
-test('runMessageSync keeps Telegram behavior while exposing task results', async () => {
+test('runMessageSync keeps Telegram behavior while exposing batch results', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'message-sync-telegram-'));
   const persisted = [];
 
@@ -351,34 +364,7 @@ test('runMessageSync keeps Telegram behavior while exposing task results', async
     backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
   });
 
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.tasks.length, 1);
-  assert.deepEqual(Object.keys(result.tasks[0]).sort(), [
-    'archivedDate',
-    'batchId',
-    'channel',
-    'chatIds',
-    'failureCategory',
-    'failureReason',
-    'kind',
-    'persistenceStatus',
-    'sourceMessageIds',
-    'taskId',
-    'taskStatus',
-  ].sort());
-  assert.deepEqual(result.tasks[0], {
-    taskId: `telegram:thought:${result.batchResults[0].batchId}`,
-    channel: 'telegram',
-    kind: 'thought',
-    batchId: result.batchResults[0].batchId,
-    taskStatus: 'ready',
-    persistenceStatus: 'stored',
-    failureCategory: null,
-    failureReason: null,
-    archivedDate: null,
-    chatIds: [42],
-    sourceMessageIds: [71],
-  });
+  assert.equal(result.batches.length, 1);
   assert.deepEqual(persisted.map((entry) => entry.sourceChannel), ['telegram']);
 });
 
@@ -430,7 +416,7 @@ test('runMessageSync clamps oversized AI_CONCURRENCY before image recognition', 
     backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
   });
 
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.deepEqual(observedConcurrency, [5]);
 });
 
@@ -483,7 +469,7 @@ test('runMessageSync respects AI_CONCURRENCY_MAX when clamping image recognition
     backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
   });
 
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.deepEqual(observedConcurrency, [2]);
 });
 
@@ -848,10 +834,10 @@ test('runTelegramSync persists ready image batches to the database without writi
 
   assert.equal(result.changed, true);
   assert.equal(persistedBatches.length, 1);
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
-  assert.deepEqual(result.batchResults[0].persistenceResult, {
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
+  assert.deepEqual(result.batches[0].persistenceResult, {
     status: 'stored',
-    batchId: result.batchResults[0].batchId,
+    batchId: result.batches[0].batchId,
     transactionId: 'dbtx_1234567890abcdef',
     sourceChannel: 'telegram',
     rowCounts: { ingestBatch: 1, ingestMessage: 1, ingestRecognition: 1, coreMeal: 1 },
@@ -860,7 +846,7 @@ test('runTelegramSync persists ready image batches to the database without writi
     pendingStatus: null,
     rollbackStatus: null,
   });
-  assert.doesNotMatch(JSON.stringify(result.batchResults[0].persistenceResult), /insert into|\$1/i);
+  assert.doesNotMatch(JSON.stringify(result.batches[0].persistenceResult), /insert into|\$1/i);
   assert.equal(persistedBatches[0].archivedDate, '2026-05-09');
   assert.equal(persistedBatches[0].nutrition.meals[0].name, '晚餐');
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
@@ -929,7 +915,7 @@ test('runTelegramSync leaves existing markdown untouched after storing an image 
 
   assert.equal(result.changed, true);
   assert.equal(result.fallbackUsed, false);
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(
     await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'),
     '# 训练记录\n\n### 2026-05-09\n\n#### 当日运动截图记录\n\n##### 当日活动总览\n\n- 活动热量：643千卡\n',
@@ -992,7 +978,7 @@ test('runTelegramSync stores image batches even when markdown contains stale dat
 
   assert.equal(result.changed, true);
   assert.equal(result.fallbackUsed, false);
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(
     await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'),
     '# 训练记录\n\n### 2026-05-14\n\n#### 2026-05-14 饮食截图记录\n\n##### 餐次汇总\n\n- 午餐：420千卡，建议范围620–1033千卡\n',
@@ -1069,7 +1055,7 @@ test('runTelegramSync stores sleep image batches without writing markdown', asyn
 
   assert.equal(result.changed, true);
   assert.equal(result.fallbackUsed, false);
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), '# 训练记录\n');
 });
 
@@ -1424,8 +1410,8 @@ test('runTelegramSync queues database replay when image persistence fails', asyn
 
   assert.equal(result.changed, false);
   assert.equal(result.fallbackUsed, false);
-  assert.equal(result.batchResults[0].persistenceStatus, 'pending_replay');
-  assert.equal(result.batchResults[0].persistenceError, 'database unavailable');
+  assert.equal(result.batches[0].persistenceStatus, 'pending_replay');
+  assert.equal(result.batches[0].persistenceError, 'database unavailable');
   assert.equal(queuedPersistenceFailures.length, 1);
   assert.equal(queuedPersistenceFailures[0].batch.batchId, 'album-1');
   assert.equal(queuedPersistenceFailures[0].batch.archivedDate, '2026-05-09');
@@ -1541,8 +1527,8 @@ test('runTelegramSync replays a ready batch from pending after database recovery
     },
   });
 
-  assert.equal(firstRun.batchResults[0].persistenceStatus, 'pending_replay');
-  assert.equal(firstRun.batchResults[0].failureCategory, 'database');
+  assert.equal(firstRun.batches[0].persistenceStatus, 'pending_replay');
+  assert.equal(firstRun.batches[0].failureCategory, 'database');
   assert.equal(pendingRows.length, 1);
   assert.equal(pendingRows[0].batch.batchId, 'album-1');
   assert.equal(pendingRows[0].batch.nutrition.totalCalories, 1593);
@@ -1578,9 +1564,9 @@ test('runTelegramSync replays a ready batch from pending after database recovery
 
   assert.deepEqual(persistedBatchIds, ['album-1']);
   assert.deepEqual(resolved, ['album-1']);
-  assert.equal(secondRun.batchResults[0].pendingReplay, true);
-  assert.equal(secondRun.batchResults[0].persistenceStatus, 'stored');
-  assert.equal(secondRun.batchResults[0].recognitionPendingStatus, 'resolved');
+  assert.equal(secondRun.batches[0].pendingReplay, true);
+  assert.equal(secondRun.batches[0].persistenceStatus, 'stored');
+  assert.equal(secondRun.batches[0].recognitionPendingStatus, 'resolved');
   assert.equal(buildTelegramSyncReport(secondRun).batches[0].retryState, 'resolved');
 });
 
@@ -1678,7 +1664,7 @@ test('runTelegramSync skips undated batches without persisting fallback or markd
   assert.equal(result.changed, false);
   assert.equal(result.fallbackUsed, false);
   assert.deepEqual(persistedBatches, []);
-  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batches[0].status, 'skipped');
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'));
   await assert.rejects(readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'), /ENOENT/);
 });
@@ -1838,10 +1824,10 @@ test('runTelegramSync skips conflicting-date batches and continues processing re
   assert.equal(result.changed, true);
   assert.deepEqual(persistedBatches, ['album-ready']);
   assert.deepEqual(queuedRecognitionBatches, []);
-  assert.equal(result.batchResults[0].status, 'skipped');
-  assert.equal(result.batchResults[0].failureCategory, 'user_input');
-  assert.match(result.batchResults[0].failureReason, /conflicting detected dates/);
-  assert.equal(result.batchResults[1].status, 'ready');
+  assert.equal(result.batches[0].status, 'skipped');
+  assert.equal(result.batches[0].failureCategory, 'user_input');
+  assert.match(result.batches[0].failureReason, /conflicting detected dates/);
+  assert.equal(result.batches[1].status, 'ready');
   await assert.rejects(readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /ENOENT/);
   await assert.rejects(readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'), /ENOENT/);
 });
@@ -1853,7 +1839,7 @@ test('buildTelegramSyncReport exposes pending replay and archived date details f
     updatesFetched: 1,
     lastProcessedUpdateId: 520905402,
     readyBatches: 1,
-    batchResults: [
+    batches: [
       {
         batchId: 'album-1',
         status: 'ready',
@@ -1925,22 +1911,8 @@ test('buildTelegramSyncReport exposes pending replay and archived date details f
     ],
     },
   );
-  assert.deepEqual(report.batchResults, report.batches);
-  assert.deepEqual(report.tasks, [
-    {
-      taskId: 'telegram:image:album-1',
-      channel: 'telegram',
-      kind: 'image',
-      batchId: 'album-1',
-      taskStatus: 'deferred',
-      persistenceStatus: 'pending_replay',
-      failureCategory: null,
-      failureReason: null,
-      archivedDate: '2026-04-06',
-      chatIds: [],
-      sourceMessageIds: [],
-    },
-  ]);
+  assert.equal(report.batches[0].taskId, 'telegram:image:album-1');
+  assert.equal(report.batches[0].taskStatus, 'deferred');
 });
 
 test('buildTelegramSyncReport exposes safe AI and database summaries for action logs', () => {
@@ -1950,7 +1922,7 @@ test('buildTelegramSyncReport exposes safe AI and database summaries for action 
     updatesFetched: 1,
     lastProcessedUpdateId: 701,
     readyBatches: 1,
-    batchResults: [
+    batches: [
       {
         kind: 'image',
         batchId: 'single-701',
@@ -2028,7 +2000,7 @@ test('buildTelegramSyncReport marks abandoned pending batches for manual handlin
     updatesFetched: 0,
     lastProcessedUpdateId: 520905402,
     readyBatches: 0,
-    batchResults: [
+    batches: [
       {
         kind: 'image',
         batchId: 'single-abandoned',
@@ -2045,9 +2017,9 @@ test('buildTelegramSyncReport marks abandoned pending batches for manual handlin
   assert.equal(report.batches[0].taskStatus, 'failed');
   assert.equal(report.batches[0].retryState, 'abandoned');
   assert.equal(report.batches[0].failureDisposition, 'manual_intervention');
-  assert.equal(report.tasks[0].persistenceStatus, 'abandoned');
-  assert.equal(report.tasks[0].failureCategory, 'ai_service');
-  assert.equal(report.tasks[0].failureReason, 'pending retry limit exceeded');
+  assert.equal(report.batches[0].persistenceStatus, 'abandoned');
+  assert.equal(report.batches[0].failureCategory, 'ai_service');
+  assert.equal(report.batches[0].failureReason, 'pending retry limit exceeded');
 });
 
 test('buildTelegramSyncReport includes optional sync stage timings', () => {
@@ -2065,7 +2037,7 @@ test('buildTelegramSyncReport includes optional sync stage timings', () => {
       skippedNegative: -1,
       skippedText: 'slow',
     },
-    batchResults: [],
+    batches: [],
   });
 
   assert.deepEqual(report.timingsMs, {
@@ -2083,7 +2055,7 @@ test('buildTelegramSyncReport preserves image archive date confidence for summar
     updatesFetched: 1,
     lastProcessedUpdateId: 960,
     readyBatches: 1,
-    batchResults: [
+    batches: [
       {
         kind: 'image',
         batchId: 'album-date-confidence',
@@ -2110,7 +2082,7 @@ test('buildTelegramSyncReport preserves image archive date confidence for summar
   assert.deepEqual(report.batches[0].dateSources.map((item) => item.source), ['image', 'sleep_bedtime', 'no_date']);
   assert.equal(report.batches[0].dateStages.date_confidence_gate.result, 'uncertain');
   assert.equal(report.batches[0].dateStages.sleep_bedtime_shift.status, 'succeeded');
-  assert.equal(report.batchResults[0].dateConfidence, 'uncertain');
+  assert.equal(report.batches[0].dateConfidence, 'uncertain');
 });
 
 test('buildTelegramSyncReport omits timings when unavailable for compatibility', () => {
@@ -2120,7 +2092,7 @@ test('buildTelegramSyncReport omits timings when unavailable for compatibility',
     updatesFetched: 0,
     lastProcessedUpdateId: 520905501,
     readyBatches: 0,
-    batchResults: [],
+    batches: [],
   });
 
   assert.equal(Object.hasOwn(report, 'timingsMs'), false);
@@ -2133,7 +2105,7 @@ test('buildTelegramSyncReport exposes normalized task status and identifiers for
     updatesFetched: 1,
     lastProcessedUpdateId: 930,
     readyBatches: 1,
-    batchResults: [
+    batches: [
       {
         kind: 'image',
         batchId: 'album-audit',
@@ -2161,22 +2133,7 @@ test('buildTelegramSyncReport exposes normalized task status and identifiers for
   assert.equal(report.batches[0].retryCount, 1);
   assert.deepEqual(report.batches[0].messageIds, [501, 502]);
   assert.deepEqual(report.batches[0].updateIds, [931, 932]);
-  assert.equal(report.batchResults.length, 1);
-  assert.deepEqual(report.tasks, [
-    {
-      taskId: 'telegram:image:album-audit',
-      channel: 'telegram',
-      kind: 'image',
-      batchId: 'album-audit',
-      taskStatus: 'resolved',
-      persistenceStatus: 'stored',
-      failureCategory: null,
-      failureReason: null,
-      archivedDate: '2026-05-31',
-      chatIds: [42],
-      sourceMessageIds: [501, 502],
-    },
-  ]);
+  assert.equal(report.batches.length, 1);
 });
 
 test('buildTelegramSyncReport keeps partial failure visible when failed images are queued', () => {
@@ -2186,7 +2143,7 @@ test('buildTelegramSyncReport keeps partial failure visible when failed images a
     updatesFetched: 1,
     lastProcessedUpdateId: 940,
     readyBatches: 1,
-    batchResults: [
+    batches: [
       {
         kind: 'image',
         batchId: 'album-partial-audit',
@@ -2212,7 +2169,7 @@ test('buildTelegramSyncReport exposes failure disposition for retry and manual h
     updatesFetched: 3,
     lastProcessedUpdateId: 950,
     readyBatches: 0,
-    batchResults: [
+    batches: [
       {
         kind: 'image',
         batchId: 'ai-retry',
@@ -2248,7 +2205,7 @@ test('buildTelegramSyncReport classifies AI aborts and fallback failures as auto
     updatesFetched: 2,
     lastProcessedUpdateId: 960,
     readyBatches: 0,
-    batchResults: [
+    batches: [
       {
         kind: 'image',
         batchId: 'ai-abort',
@@ -2276,7 +2233,7 @@ test('buildTelegramSyncReport exposes the canonical sync task statuses', () => {
     previousLastProcessedUpdateId: 1,
     nextLastProcessedUpdateId: 1,
     updatesFetched: 0,
-    batchResults: [
+    batches: [
       { batchId: 'queued' },
       { batchId: 'processing', status: 'processing' },
       { batchId: 'ready', status: 'ready' },
@@ -2302,268 +2259,6 @@ test('buildTelegramSyncReport exposes the canonical sync task statuses', () => {
       'resolved',
       'failed',
     ],
-  );
-});
-
-test('runTelegramSync skips runtime NDJSON pending by default after DB-only pending is enabled', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-replay-'));
-  const runtimeDir = path.join(tempRoot, 'runtime');
-  await import('node:fs/promises').then(({ mkdir, writeFile }) =>
-    mkdir(runtimeDir, { recursive: true }).then(() =>
-      writeFile(
-        path.join(runtimeDir, 'telegram-sync-pending.ndjson'),
-        `${JSON.stringify({
-          batch: {
-            batchId: 'pending-batch',
-            status: 'ready',
-            archivedDate: '2026-05-08',
-            measurement: null,
-            activities: [],
-            workoutDailySummary: null,
-            nutrition: {
-              meals: [{ name: '晚餐', calories: 800, recommendedMin: 300, recommendedMax: 700 }],
-              totalCalories: 800,
-              details: ['旧待同步晚餐 800 千卡'],
-            },
-            warnings: [],
-            issues: [],
-            confidence: 0.9,
-            updateIds: [899],
-            recognitions: [],
-            messages: [],
-          },
-          failedAt: '2026-05-13T00:00:00.000Z',
-        })}\n`,
-        'utf8',
-      ),
-    ),
-  );
-
-  const persistedBatchIds = [];
-  const backfillCalls = [];
-
-  const result = await runTelegramSync({
-    rootDir: tempRoot,
-    env: telegramSyncEnv(),
-    getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [],
-    persistNormalizedBatch: async ({ batch }) => {
-      persistedBatchIds.push(batch.batchId);
-      return { status: 'stored', archivedDate: batch.archivedDate };
-    },
-    buildTrainingSnapshot: async () => {
-      throw new Error('buildTrainingSnapshot should not run when legacy NDJSON pending is skipped');
-    },
-    exportTrainingMarkdown: () => {
-      throw new Error('exportTrainingMarkdown should not run when legacy NDJSON pending is skipped');
-    },
-    backfillCoreSleepFromIngestBatches: async () => {
-      throw new Error('sleep backfill should not run when legacy NDJSON pending is skipped');
-    },
-  });
-
-  assert.equal(result.changed, false);
-  assert.deepEqual(persistedBatchIds, []);
-  assert.equal(
-    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    `${JSON.stringify({
-      batch: {
-        batchId: 'pending-batch',
-        status: 'ready',
-        archivedDate: '2026-05-08',
-        measurement: null,
-        activities: [],
-        workoutDailySummary: null,
-        nutrition: {
-          meals: [{ name: '晚餐', calories: 800, recommendedMin: 300, recommendedMax: 700 }],
-          totalCalories: 800,
-          details: ['旧待同步晚餐 800 千卡'],
-        },
-        warnings: [],
-        issues: [],
-        confidence: 0.9,
-        updateIds: [899],
-        recognitions: [],
-        messages: [],
-      },
-      failedAt: '2026-05-13T00:00:00.000Z',
-    })}\n`,
-  );
-});
-
-test('runTelegramSync no longer replays runtime NDJSON pending batches from the sync path', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-replay-legacy-'));
-  const runtimeDir = path.join(tempRoot, 'runtime');
-  const originalPendingContent = `${JSON.stringify({
-    batch: {
-      batchId: 'pending-batch',
-      status: 'ready',
-      archivedDate: '2026-05-08',
-      measurement: null,
-      activities: [],
-      workoutDailySummary: null,
-      nutrition: {
-        meals: [{ name: '晚餐', calories: 800, recommendedMin: 300, recommendedMax: 700 }],
-        totalCalories: 800,
-        details: ['旧待同步晚餐 800 千卡'],
-      },
-      warnings: [],
-      issues: [],
-      confidence: 0.9,
-      updateIds: [899],
-      recognitions: [],
-      messages: [],
-    },
-    failedAt: '2026-05-13T00:00:00.000Z',
-  })}\n`;
-  await import('node:fs/promises').then(({ mkdir, writeFile }) =>
-    mkdir(runtimeDir, { recursive: true }).then(() =>
-      writeFile(
-        path.join(runtimeDir, 'telegram-sync-pending.ndjson'),
-        originalPendingContent,
-        'utf8',
-      ),
-    ),
-  );
-
-  const persistedBatchIds = [];
-
-  const result = await runTelegramSync({
-    rootDir: tempRoot,
-    now: new Date('2026-05-14T08:09:10.011Z'),
-    env: telegramSyncEnv(),
-    getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [],
-    persistNormalizedBatch: async ({ batch }) => {
-      persistedBatchIds.push(batch.batchId);
-      return { status: 'stored', archivedDate: batch.archivedDate };
-    },
-    buildTrainingSnapshot: async () => {
-      throw new Error('buildTrainingSnapshot should not run for removed NDJSON sync replay');
-    },
-    exportTrainingMarkdown: () => {
-      throw new Error('exportTrainingMarkdown should not run for removed NDJSON sync replay');
-    },
-  });
-
-  assert.equal(result.changed, false);
-  assert.deepEqual(persistedBatchIds, []);
-  assert.equal(
-    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    originalPendingContent,
-  );
-  const runtimeFiles = await readdir(runtimeDir);
-  const backupFiles = runtimeFiles.filter((file) =>
-    file.startsWith('telegram-sync-pending.ndjson.backup-')
-  );
-  assert.deepEqual(backupFiles, []);
-});
-
-test('runTelegramSync reads database pending queues before new updates without auto-consuming runtime NDJSON', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-dual-pending-'));
-  const runtimeDir = path.join(tempRoot, 'runtime');
-  await mkdir(runtimeDir, { recursive: true });
-  await writeFile(
-    path.join(runtimeDir, 'telegram-sync-pending.ndjson'),
-    `${JSON.stringify({
-      batch: {
-        kind: 'image',
-        batchId: 'ndjson-pending',
-        status: 'ready',
-        archivedDate: '2026-05-08',
-        measurement: null,
-        activities: [],
-        workoutDailySummary: null,
-        nutrition: {
-          meals: [{ name: '晚餐', calories: 800, recommendedMin: 300, recommendedMax: 700 }],
-          totalCalories: 800,
-          details: ['旧待同步晚餐 800 千卡'],
-        },
-        warnings: [],
-        issues: [],
-        confidence: 0.9,
-        updateIds: [899],
-        recognitions: [],
-        messages: [],
-      },
-      failedAt: '2026-05-13T00:00:00.000Z',
-    })}\n`,
-    'utf8',
-  );
-
-  const persistedBatchIds = [];
-  const resolved = [];
-
-  const result = await runTelegramSync({
-    rootDir: tempRoot,
-    env: telegramSyncEnv(),
-    getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [],
-    readPendingRecognitionBatches: async () => [
-      {
-        batchId: 'db-pending',
-        batch: {
-          kind: 'image',
-          batchId: 'db-pending',
-          messages: [
-            {
-              messageId: 383,
-              updateId: 901,
-              mediaGroupId: null,
-              caption: '',
-              text: '',
-              chatId: 42,
-              dateUnix: Math.floor(new Date('2026-05-31T03:00:00Z').getTime() / 1000),
-              photos: [{ fileId: 'file-food-383', fileUniqueId: 'uniq-food-383', source: 'photo' }],
-            },
-          ],
-        },
-      },
-    ],
-    recognizeBatch: async () => ({
-      recognitions: [
-        {
-          messageId: 383,
-          imageType: 'nutrition',
-          detectedDate: '2026-05-31',
-          dateEvidence: 'image header',
-          confidence: 0.97,
-          warnings: [],
-          records: {
-            measurement: null,
-            activities: [],
-            meals: [{ name: '晚餐', calories: 868, recommendedMin: 310, recommendedMax: 723 }],
-            totalCalories: 868,
-            details: ['晚餐 868 千卡'],
-            dailyWorkoutSummary: null,
-          },
-        },
-      ],
-      recognitionErrors: [],
-    }),
-    persistNormalizedBatch: async ({ batch }) => {
-      persistedBatchIds.push(batch.batchId);
-      return { status: 'stored', archivedDate: batch.archivedDate };
-    },
-    markPendingRecognitionResolved: async ({ batchId }) => {
-      resolved.push(batchId);
-      return { status: 'resolved', batchId };
-    },
-    backfillCoreSleepFromIngestBatches: async () => ({ status: 'synced' }),
-  });
-
-  assert.equal(result.updatesFetched, 0);
-  assert.deepEqual(persistedBatchIds, ['db-pending']);
-  assert.deepEqual(resolved, ['db-pending']);
-  assert.deepEqual(
-    result.batchResults.map((batch) => [batch.batchId, batch.persistenceStatus, batch.pendingReplay ?? false]),
-    [
-      ['db-pending', 'stored', true],
-    ],
-  );
-  assert.match(
-    await readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'),
-    /ndjson-pending/,
   );
 });
 
@@ -2859,7 +2554,7 @@ test('runTelegramSync uses document filename date when recognition has no image 
   assert.equal(result.changed, true);
   assert.equal(persistedBatches[0].archivedDate, '2026-05-12');
   assert.equal(persistedBatches[0].messages[0].photos[0].fileName, '饮食记录 2026-05-12.jpg');
-  assert.equal(result.batchResults[0].status, 'ready');
+  assert.equal(result.batches[0].status, 'ready');
 });
 
 test('runTelegramSync skips an undated single nutrition screenshot without a filename date', async () => {
@@ -2929,9 +2624,9 @@ test('runTelegramSync skips an undated single nutrition screenshot without a fil
 
   assert.equal(result.changed, false);
   assert.equal(persistedBatches.length, 0);
-  assert.equal(result.batchResults[0].status, 'skipped');
-  assert.match(result.batchResults[0].reason, /no reliable image or filename date/i);
-  assert.match(result.batchResults[0].warnings.join('\n'), /photo 形式发送/);
+  assert.equal(result.batches[0].status, 'skipped');
+  assert.match(result.batches[0].reason, /no reliable image or filename date/i);
+  assert.match(result.batches[0].warnings.join('\n'), /photo 形式发送/);
   assert.equal(buildTelegramSyncReport(result).batches[0].failureDisposition, 'manual_intervention');
   assert.doesNotMatch(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /晚餐：465千卡/);
 });
@@ -3006,10 +2701,10 @@ test('runTelegramSync stores a /thought telegram message in core without writing
 
   assert.equal(result.changed, true);
   assert.equal(result.fallbackUsed, false);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_database_only');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_database_only');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].kind, 'thought');
   assert.equal(persistedBatches[0].thought.thoughtModule, 'workout');
@@ -3071,10 +2766,10 @@ test('runTelegramSync stores markdown document content as the thought body', asy
 
   assert.equal(recognized, false);
   assert.deepEqual(downloadedFileIds, ['markdown-file-503']);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_database_only');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_database_only');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].thought.body, '# Markdown 标题\n\n- 动作更稳');
 });
@@ -3117,7 +2812,7 @@ test('runTelegramSync accepts markdown thought attachments larger than 1MB up to
     },
   });
 
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches.length, 1);
   assert.equal(Buffer.byteLength(persistedBatches[0].thought.body, 'utf8') > 1024 * 1024, true);
   assert.equal(persistedBatches[0].thought.body.startsWith('# 大随想'), true);
@@ -3160,7 +2855,7 @@ test('runTelegramSync allows module-only captions when a markdown document suppl
     },
   });
 
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].thought.thoughtModule, 'body_feedback');
   assert.equal(persistedBatches[0].thought.body, '## 腰背反馈\n\n今天硬拉后右侧腰背有点刺痛');
 });
@@ -3203,9 +2898,9 @@ test('runTelegramSync rejects empty markdown thought attachments before persiste
   });
 
   assert.equal(persisted, false);
-  assert.equal(result.batchResults[0].status, 'skipped');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'failed');
-  assert.match(result.batchResults[0].failureReason, /empty markdown attachment/i);
+  assert.equal(result.batches[0].status, 'skipped');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'failed');
+  assert.match(result.batches[0].failureReason, /empty markdown attachment/i);
 });
 
 test('runTelegramSync rejects oversized markdown thought attachments before download', async () => {
@@ -3251,9 +2946,9 @@ test('runTelegramSync rejects oversized markdown thought attachments before down
 
   assert.equal(downloaded, false);
   assert.equal(persisted, false);
-  assert.equal(result.batchResults[0].status, 'skipped');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'failed');
-  assert.match(result.batchResults[0].failureReason, /markdown attachment too large/i);
+  assert.equal(result.batches[0].status, 'skipped');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'failed');
+  assert.match(result.batches[0].failureReason, /markdown attachment too large/i);
 });
 
 test('runTelegramSync reports markdown thought attachment download failures', async () => {
@@ -3292,9 +2987,9 @@ test('runTelegramSync reports markdown thought attachment download failures', as
   });
 
   assert.equal(persisted, false);
-  assert.equal(result.batchResults[0].status, 'skipped');
-  assert.equal(result.batchResults[0].failureCategory, 'telegram_api');
-  assert.match(result.batchResults[0].failureReason, /Telegram file download failed/i);
+  assert.equal(result.batches[0].status, 'skipped');
+  assert.equal(result.batches[0].failureCategory, 'telegram_api');
+  assert.match(result.batches[0].failureReason, /Telegram file download failed/i);
 });
 
 test('runTelegramSync writes /随想 image artifacts and stores core thought metadata', async () => {
@@ -3369,9 +3064,9 @@ test('runTelegramSync writes /随想 image artifacts and stores core thought met
   );
 
   assert.equal(result.changed, true);
-  assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].thought.command, '/随想');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'images_written');
+  assert.equal(result.batches[0].kind, 'thought');
+  assert.equal(result.batches[0].thought.command, '/随想');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'images_written');
   assert.equal(recognized, false);
   assert.deepEqual(downloadedFileIds, ['photo-large']);
   assert.equal(persistedBatches.length, 1);
@@ -3440,7 +3135,7 @@ test('runTelegramSync stores COS image URLs from injected image storage in core 
   });
 
   assert.equal(result.changed, true);
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'images_written');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'images_written');
   assert.deepEqual(persistedBatches[0].thought.storage.photoPaths, [cosUrl]);
   assert.equal(uploadedItems.length, 1);
   assert.deepEqual(
@@ -3470,7 +3165,7 @@ test('runTelegramSync stores COS image URLs from injected image storage in core 
     maxSingleUploadMs: 12,
     firstUrlHost: 'training-images-dev-1250000000.cos.ap-shanghai.myqcloud.com',
   });
-  assert.equal(result.batchResults[0].thought.storage.imageUploadStats?.provider, 'tencent_cos');
+  assert.equal(result.batches[0].thought.storage.imageUploadStats?.provider, 'tencent_cos');
 });
 
 test('runTelegramSync does not persist thought metadata when image storage upload fails', async () => {
@@ -3869,8 +3564,8 @@ test('runTelegramSync stores module-scoped /随想 metadata in core payload', as
     },
   });
 
-  assert.equal(result.batchResults[0].thought.thoughtModule, 'misc');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'images_written');
+  assert.equal(result.batches[0].thought.thoughtModule, 'misc');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'images_written');
   assert.equal(persistedBatches[0].thought.thoughtModule, 'misc');
   assert.deepEqual(persistedBatches[0].thought.tags, ['杂七杂八', '随想', 'Telegram']);
   await assert.rejects(readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-503.md'), 'utf8'), /ENOENT/);
@@ -3910,8 +3605,8 @@ test('runTelegramSync stores body feedback /随想 metadata in core payload', as
     },
   });
 
-  assert.equal(result.batchResults[0].thought.thoughtModule, 'body_feedback');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_database_only');
+  assert.equal(result.batches[0].thought.thoughtModule, 'body_feedback');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_database_only');
   assert.equal(persistedBatches[0].thought.thoughtModule, 'body_feedback');
   assert.deepEqual(persistedBatches[0].thought.tags, ['身体反馈', '随想', 'Telegram']);
   assert.match(persistedBatches[0].thought.body, /今天硬拉后右侧腰背有点刺痛/);
@@ -3966,12 +3661,12 @@ test('runTelegramSync writes /thought album images as artifacts only', async () 
     },
   });
 
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].batchId, 'thought-601');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'images_written');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought');
+  assert.equal(result.batches[0].batchId, 'thought-601');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'images_written');
   assert.deepEqual(downloadedFileIds, ['album-photo-a', 'album-photo-b']);
-  assert.deepEqual(result.batchResults[0].thought.storage.photoPaths, [
+  assert.deepEqual(result.batches[0].thought.storage.photoPaths, [
     '/images/thoughts/2026/05/2026-05-14-telegram-thought-601-1.png',
     '/images/thoughts/2026/05/2026-05-14-telegram-thought-601-2.png',
   ]);
@@ -4024,7 +3719,7 @@ test('runTelegramSync ignores existing markdown posts when storing new core thou
   });
 
   assert.equal(result.changed, true);
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_database_only');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_database_only');
   assert.equal(
     await readFile(path.join(postsDir, '2026-05-14-telegram-thought-501.md'), 'utf8'),
     'original thought content\n',
@@ -4094,11 +3789,11 @@ telegram_chat_id: 42
     'utf8',
   );
 
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_edit_database_only');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
-  assert.equal(result.batchResults[0].persistedThoughtModule, 'misc');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_edit_database_only');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].persistedThoughtModule, 'misc');
   assert.equal(persistedBatches[0].kind, 'thought_edit');
   assert.equal(persistedBatches[0].thoughtEdit.storage.markdownPath, null);
   assert.equal(persistedBatches[0].thoughtEdit.storage.photoPaths, null);
@@ -4197,8 +3892,8 @@ tags:
     'utf8',
   );
 
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_edit_database_only');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_edit_database_only');
   assert.equal(persistedBatches[0].thoughtEdit.storage.markdownPath, null);
   assert.match(persistedBatches[0].thoughtEdit.body, /正确 chat 的新正文/);
   assert.match(otherPostContent, /别的 chat 的旧正文/);
@@ -4266,10 +3961,10 @@ telegram_chat_id: 42
     'utf8',
   );
 
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_edit_database_only');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_edit_database_only');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].kind, 'thought_edit');
   assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, null);
   assert.equal(persistedBatches[0].thoughtEdit.tags, undefined);
@@ -4356,9 +4051,9 @@ photos:
     'utf8',
   );
 
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'images_written');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'images_written');
   assert.equal(persistedBatches[0].thoughtEdit.replacePhotos, true);
   assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, 'misc');
   assert.deepEqual(persistedBatches[0].thoughtEdit.tags, ['杂七杂八', '随想', 'Telegram']);
@@ -4420,10 +4115,10 @@ test('runTelegramSync uses markdown document content as an explicit thought edit
   });
 
   assert.deepEqual(downloadedFileIds, ['markdown-edit-file-136']);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_edit_database_only');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_edit_database_only');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].kind, 'thought_edit');
   assert.equal(persistedBatches[0].thoughtEdit.targetMessageId, 126);
@@ -4468,12 +4163,12 @@ test('runTelegramSync reports missing database thought edit targets without mark
   assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, 'misc');
   assert.equal(persistedBatches[0].thoughtEdit.body, '编辑并移动后的正文');
   assert.equal(result.changed, false);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].status, 'skipped');
-  assert.equal(result.batchResults[0].persistenceStatus, 'not_found');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'not_found');
-  assert.match(result.batchResults[0].reason, /target thought 501 not found/i);
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].status, 'skipped');
+  assert.equal(result.batches[0].persistenceStatus, 'not_found');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'not_found');
+  assert.match(result.batches[0].reason, /target thought 501 not found/i);
 });
 
 test('runTelegramSync allows module-only explicit thought edit captions when markdown supplies the body', async () => {
@@ -4519,7 +4214,7 @@ test('runTelegramSync allows module-only explicit thought edit captions when mar
     },
   });
 
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].thoughtEdit.thoughtModule, 'body_feedback');
   assert.deepEqual(persistedBatches[0].thoughtEdit.tags, ['身体反馈', '随想', 'Telegram']);
   assert.equal(persistedBatches[0].thoughtEdit.body, '## 腰背反馈\n\n今天右侧腰背恢复正常');
@@ -4569,10 +4264,10 @@ test('runTelegramSync rejects empty markdown explicit thought edit attachments b
   });
 
   assert.equal(persisted, false);
-  assert.equal(result.batchResults[0].status, 'skipped');
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'failed');
-  assert.match(result.batchResults[0].failureReason, /empty markdown attachment/i);
+  assert.equal(result.batches[0].status, 'skipped');
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'failed');
+  assert.match(result.batches[0].failureReason, /empty markdown attachment/i);
 });
 
 test('runTelegramSync rejects oversized markdown explicit thought edit attachments before download', async () => {
@@ -4624,10 +4319,10 @@ test('runTelegramSync rejects oversized markdown explicit thought edit attachmen
 
   assert.equal(downloaded, false);
   assert.equal(persisted, false);
-  assert.equal(result.batchResults[0].status, 'skipped');
-  assert.equal(result.batchResults[0].kind, 'thought_edit');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'failed');
-  assert.match(result.batchResults[0].failureReason, /markdown attachment too large/i);
+  assert.equal(result.batches[0].status, 'skipped');
+  assert.equal(result.batches[0].kind, 'thought_edit');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'failed');
+  assert.match(result.batches[0].failureReason, /markdown attachment too large/i);
 });
 
 test('runTelegramSync deletes a telegram thought and its photos when receiving a reply delete command', async () => {
@@ -4698,10 +4393,10 @@ photos:
     },
   });
 
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_delete');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_delete_database_only');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought_delete');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_delete_database_only');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].kind, 'thought_delete');
   assert.equal(persistedBatches[0].thoughtDelete.storage.markdownPath, null);
   assert.deepEqual(persistedBatches[0].thoughtDelete.storage.deletedPhotoPaths, []);
@@ -4767,10 +4462,10 @@ telegram_chat_id: 42
     'utf8',
   );
 
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'thought_move');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_move_database_only');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'thought_move');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_move_database_only');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].kind, 'thought_move');
   assert.equal(persistedBatches[0].thoughtMove.thoughtModule, 'misc');
   assert.equal(persistedBatches[0].thoughtMove.storage.markdownPath, null);
@@ -4834,9 +4529,9 @@ telegram_chat_id: 42
     'utf8',
   );
 
-  assert.equal(result.batchResults[0].kind, 'thought_move');
+  assert.equal(result.batches[0].kind, 'thought_move');
   assert.equal(persistedBatches[0].thoughtMove.thoughtModule, 'workout');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_move_database_only');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_move_database_only');
   assert.match(postContent, /thought_module: misc/);
   assert.match(postContent, /tags:\n  - 杂七杂八\n  - 随想\n  - Telegram/);
   assert.match(postContent, /应该回到锻炼随想的正文/);
@@ -4873,9 +4568,9 @@ test('runTelegramSync does not require AI provider config for pure thought move 
     },
   });
 
-  assert.equal(result.batchResults[0].kind, 'thought_move');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_move_database_only');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].kind, 'thought_move');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_move_database_only');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(persistedBatches[0].thoughtMove.targetMessageId, 374);
   assert.equal(persistedBatches[0].thoughtMove.thoughtModule, 'body_feedback');
 });
@@ -4932,8 +4627,8 @@ photos:
     },
   });
 
-  assert.equal(result.batchResults[0].kind, 'thought_move');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_move_database_only');
+  assert.equal(result.batches[0].kind, 'thought_move');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_move_database_only');
   assert.equal(persistedBatches[0].thoughtMove.thoughtModule, 'body_feedback');
   assert.equal(persistedBatches[0].thoughtMove.storage.photoPaths, null);
 });
@@ -4989,8 +4684,8 @@ telegram_chat_id: 42
     'utf8',
   );
 
-  assert.equal(result.batchResults[0].kind, 'thought_move');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_move_database_only');
+  assert.equal(result.batches[0].kind, 'thought_move');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_move_database_only');
   assert.match(targetContent, /thought_module: workout/);
   assert.match(targetContent, /tags:\n  - 训练\n  - 随想\n  - Telegram/);
   assert.match(targetContent, /利用欲望让自己努力/);
@@ -5036,7 +4731,7 @@ test('runTelegramSync keeps thought posts when database persistence fails and qu
 
   assert.equal(result.changed, false);
   assert.equal(result.fallbackUsed, false);
-  assert.equal(result.batchResults[0].persistenceStatus, 'pending_replay');
+  assert.equal(result.batches[0].persistenceStatus, 'pending_replay');
   await assert.rejects(
     readFile(path.join(tempRoot, 'source', '_posts', '2026-05-14-telegram-thought-701.md'), 'utf8'),
     /ENOENT/,
@@ -5164,10 +4859,10 @@ test('runTelegramSync replies to /analysis without image recognition or file wri
 
   assert.equal(result.changed, false);
   assert.equal(result.fallbackUsed, false);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'analysis');
-  assert.equal(result.batchResults[0].analysisReplyStatus, 'sent');
-  assert.equal(result.batchResults[0].analysisReplyParts, 1);
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'analysis');
+  assert.equal(result.batches[0].analysisReplyStatus, 'sent');
+  assert.equal(result.batches[0].analysisReplyParts, 1);
   assert.equal(recognized, false);
   assert.equal(persisted, false);
   assert.equal(sentMessages.length, 1);
@@ -5217,10 +4912,10 @@ test('runTelegramSync keeps analysis reply text unchanged while reporting AI att
 
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].text, '数据结论：最近训练稳定。');
-  assert.equal(result.batchResults[0].analysisReplyStatus, 'sent');
-  assert.equal(result.batchResults[0].analysisAttemptKind, 'fallback');
-  assert.equal(result.batchResults[0].analysisModel, 'gpt-analysis-fallback');
-  assert.equal(result.batchResults[0].analysisSnapshotSource, 'database');
+  assert.equal(result.batches[0].analysisReplyStatus, 'sent');
+  assert.equal(result.batches[0].analysisAttemptKind, 'fallback');
+  assert.equal(result.batches[0].analysisModel, 'gpt-analysis-fallback');
+  assert.equal(result.batches[0].analysisSnapshotSource, 'database');
   assert.equal(report.batches[0].analysisAttemptKind, 'fallback');
   assert.equal(report.batches[0].analysisModel, 'gpt-analysis-fallback');
   assert.equal(report.batches[0].analysisSnapshotSource, 'database');
@@ -5293,9 +4988,9 @@ test('runTelegramSync default analysis path reports primary model metadata witho
   });
 
   assert.equal(sentMessages[0].text, '数据结论：默认分析路径完成。');
-  assert.equal(result.batchResults[0].analysisAttemptKind, 'primary');
-  assert.equal(result.batchResults[0].analysisModel, 'gpt-analysis-primary');
-  assert.equal(result.batchResults[0].analysisSnapshotSource, 'database');
+  assert.equal(result.batches[0].analysisAttemptKind, 'primary');
+  assert.equal(result.batches[0].analysisModel, 'gpt-analysis-primary');
+  assert.equal(result.batches[0].analysisSnapshotSource, 'database');
 
   const aiLogCall = calls.find(([sql]) => /insert into ingest\.ai_call_log/i.test(sql));
   assert.ok(aiLogCall);
@@ -5333,9 +5028,9 @@ test('runTelegramSync replies with a short failure message when analysis generat
   });
 
   assert.equal(result.changed, false);
-  assert.equal(result.batchResults[0].kind, 'analysis');
-  assert.equal(result.batchResults[0].analysisReplyStatus, 'failed');
-  assert.equal(result.batchResults[0].analysisReplyError, 'AI unavailable');
+  assert.equal(result.batches[0].kind, 'analysis');
+  assert.equal(result.batches[0].analysisReplyStatus, 'failed');
+  assert.equal(result.batches[0].analysisReplyError, 'AI unavailable');
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].chatId, 42);
   assert.equal(sentMessages[0].replyToMessageId, 9012);
@@ -5372,10 +5067,10 @@ test('runTelegramSync ignores unauthorized /analysis commands without generating
   });
 
   assert.equal(result.changed, false);
-  assert.equal(result.batchResults.length, 1);
-  assert.equal(result.batchResults[0].kind, 'analysis');
-  assert.equal(result.batchResults[0].status, 'ignored');
-  assert.equal(result.batchResults[0].reason, 'unauthorized chat');
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.batches[0].kind, 'analysis');
+  assert.equal(result.batches[0].status, 'ignored');
+  assert.equal(result.batches[0].reason, 'unauthorized chat');
   const report = buildTelegramSyncReport(result);
   assert.equal(report.batches[0].sourceId, 'telegram:chat:99:message:9013');
   assert.deepEqual(report.batches[0].messageIds, [9013]);
@@ -5712,7 +5407,7 @@ test('runTelegramSync ignores removed /ai assistant commands without side effect
 
   assert.equal(result.changed, false);
   assert.equal(result.fallbackUsed, false);
-  assert.equal(result.batchResults.length, 0);
+  assert.equal(result.batches.length, 0);
   assert.equal(recognized, false);
   assert.equal(persisted, false);
   assert.equal(sentMessages.length, 0);
@@ -5746,7 +5441,7 @@ test('runTelegramSync ignores removed unauthorized /ai commands without replies'
   });
 
   assert.equal(result.changed, false);
-  assert.equal(result.batchResults.length, 0);
+  assert.equal(result.batches.length, 0);
   assert.equal(sent, false);
 });
 
@@ -5802,9 +5497,9 @@ test('runTelegramSync replies to help commands without image recognition or pers
 
   assert.equal(result.changed, false);
   assert.equal(result.fallbackUsed, false);
-  assert.equal(result.batchResults.length, 2);
-  assert.deepEqual(result.batchResults.map((batch) => batch.kind), ['help', 'help']);
-  assert.deepEqual(result.batchResults.map((batch) => batch.helpReplyStatus), ['sent', 'sent']);
+  assert.equal(result.batches.length, 2);
+  assert.deepEqual(result.batches.map((batch) => batch.kind), ['help', 'help']);
+  assert.deepEqual(result.batches.map((batch) => batch.helpReplyStatus), ['sent', 'sent']);
   assert.equal(recognized, false);
   assert.equal(persisted, false);
   assert.equal(sentMessages.length, 2);
@@ -5954,8 +5649,8 @@ test('runTelegramSync retries transient AI recognition failures and continues sy
     });
 
     assert.equal(result.changed, true);
-    assert.equal(result.batchResults[0].status, 'ready');
-    assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+    assert.equal(result.batches[0].status, 'ready');
+    assert.equal(result.batches[0].persistenceStatus, 'stored');
     assert.equal(aiAttempts, 2);
     assert.equal(persistedBatches.length, 1);
   } finally {
@@ -6128,7 +5823,7 @@ test('runTelegramSync falls back to inline image data when AI rejects a Telegram
     });
 
     assert.equal(result.changed, true);
-    assert.equal(result.batchResults[0].status, 'ready');
+    assert.equal(result.batches[0].status, 'ready');
     assert.equal(remoteUrlAttempts, 1);
     assert.equal(inlineUrlAttempts, 1);
     assert.equal(persistedBatches.length, 1);
@@ -6488,8 +6183,8 @@ test('runTelegramSync retries invalid JSON recognition with inline image data an
       exportTrainingMarkdown: () => '### 2026-05-31\n',
     });
 
-    assert.equal(result.batchResults[0].status, 'ready');
-    assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+    assert.equal(result.batches[0].status, 'ready');
+    assert.equal(result.batches[0].persistenceStatus, 'stored');
     assert.equal(foodRemoteAttempts, 2);
     assert.equal(foodInlineAttempts, 1);
     assert.equal(persistedBatches.length, 1);
@@ -6669,8 +6364,8 @@ test('runTelegramSync retries recognition with json_object when json_schema resp
     });
 
     assert.deepEqual(responseFormats, ['json_schema', 'json_object']);
-    assert.equal(result.batchResults[0].status, 'ready');
-    assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+    assert.equal(result.batches[0].status, 'ready');
+    assert.equal(result.batches[0].persistenceStatus, 'stored');
     assert.equal(persistedBatches.length, 1);
     assert.equal(persistedBatches[0].archivedDate, '2026-05-18');
   } finally {
@@ -6791,8 +6486,8 @@ test('runTelegramSync normalizes object recognition details before batch analysi
       exportTrainingMarkdown: () => '### 2026-05-18\n',
     });
 
-    assert.equal(result.batchResults[0].status, 'ready');
-    assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+    assert.equal(result.batches[0].status, 'ready');
+    assert.equal(result.batches[0].persistenceStatus, 'stored');
     assert.equal(persistedBatches.length, 1);
     assert.deepEqual(persistedBatches[0].nutrition.details, ['晚餐 465 千卡']);
   } finally {
@@ -6917,8 +6612,8 @@ test('runTelegramSync normalizes null recognition details without dropping worko
       exportTrainingMarkdown: () => '### 2026-05-24\n',
     });
 
-    assert.equal(result.batchResults[0].status, 'ready');
-    assert.equal(result.batchResults[0].persistenceStatus, 'stored');
+    assert.equal(result.batches[0].status, 'ready');
+    assert.equal(result.batches[0].persistenceStatus, 'stored');
     assert.equal(persistedBatches.length, 1);
     assert.equal(persistedBatches[0].activities.length, 1);
     assert.equal(persistedBatches[0].activities[0].type, 'HIIT');
@@ -7016,8 +6711,8 @@ test('runTelegramSync skips malformed recognition responses after logging the re
       }),
     });
 
-    assert.equal(result.batchResults[0].status, 'skipped');
-    assert.match(result.batchResults[0].reason, /missing recognition/);
+    assert.equal(result.batches[0].status, 'skipped');
+    assert.match(result.batches[0].reason, /missing recognition/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -7087,7 +6782,7 @@ test('runTelegramSync sends Telegram result notification after storing an image 
     },
   });
 
-  assert.equal(result.batchResults[0].status, 'ready');
+  assert.equal(result.batches[0].status, 'ready');
   assert.equal(sentMessages.length, 1);
   assert.deepEqual(sentMessages[0], {
     chatId: 42,
@@ -7131,8 +6826,8 @@ test('runTelegramSync sends Telegram result notification after writing a thought
     },
   });
 
-  assert.equal(result.batchResults[0].kind, 'thought');
-  assert.equal(result.batchResults[0].thoughtWriteStatus, 'thought_database_only');
+  assert.equal(result.batches[0].kind, 'thought');
+  assert.equal(result.batches[0].thoughtWriteStatus, 'thought_database_only');
   assert.equal(sentMessages.length, 1);
   assert.deepEqual(sentMessages[0], {
     chatId: 42,
@@ -7174,13 +6869,13 @@ test('runTelegramSync defers Telegram success notification until the action fini
     persistNormalizedBatch: async () => ({ status: 'stored' }),
   });
 
-  assert.equal(result.batchResults[0].kind, 'thought');
+  assert.equal(result.batches[0].kind, 'thought');
   const savedResult = JSON.parse(await readFile(resultPath, 'utf8'));
-  assert.equal(savedResult.batchResults[0].thoughtWriteStatus, 'thought_database_only');
-  assert.equal(savedResult.batchResults[0].persistenceStatus, 'stored');
+  assert.equal(savedResult.batches[0].thoughtWriteStatus, 'thought_database_only');
+  assert.equal(savedResult.batches[0].persistenceStatus, 'stored');
 
   const notifierMessages = [];
-  const { notifyTelegramSyncResultFromFile } = await import('../tools/telegram-sync.mjs');
+  const { notifyTelegramSyncResultFromFile } = await import('../src/app/use-cases/telegram-sync.use-case.mjs');
   const notifyResult = await notifyTelegramSyncResultFromFile({
     resultPath,
     env: {
@@ -7245,8 +6940,8 @@ test('runTelegramSync explains thought database fallback in Telegram notificatio
     },
   });
 
-  assert.equal(result.batchResults[0].persistenceStatus, 'pending_replay');
-  assert.equal(result.batchResults[0].failureCategory, 'database');
+  assert.equal(result.batches[0].persistenceStatus, 'pending_replay');
+  assert.equal(result.batches[0].failureCategory, 'database');
   assert.equal(queued.length, 1);
   assert.equal(queued[0].batch.kind, 'thought');
   assert.equal(queued[0].batch.batchId, 'thought-904');
@@ -7297,9 +6992,9 @@ test('runTelegramSync preserves image recognition failure reason in report and n
   });
 
   const report = buildTelegramSyncReport(result);
-  assert.equal(result.batchResults[0].status, 'skipped');
-  assert.equal(result.batchResults[0].failureCategory, 'ai_service');
-  assert.match(result.batchResults[0].failureReason, /HTTP 429/);
+  assert.equal(result.batches[0].status, 'skipped');
+  assert.equal(result.batches[0].failureCategory, 'ai_service');
+  assert.match(result.batches[0].failureReason, /HTTP 429/);
   assert.equal(report.batches[0].failureCategory, 'ai_service');
   assert.match(report.batches[0].recognitionErrors[0].error, /rate limit/);
   assert.equal(sentMessages.length, 1);
@@ -7358,7 +7053,7 @@ test('runTelegramSync queues image batches when AI recognition fails before any 
     },
   });
 
-  const batch = result.batchResults[0];
+  const batch = result.batches[0];
   assert.equal(batch.status, 'skipped');
   assert.equal(batch.failureCategory, 'ai_service');
   assert.equal(batch.recognitionPendingStatus, 'queued');
@@ -7438,7 +7133,7 @@ test('runTelegramSync queues image batches when primary and fallback AI provider
   });
 
   assert.deepEqual(providerCalls, ['primary', 'fallback']);
-  const batch = result.batchResults[0];
+  const batch = result.batches[0];
   assert.equal(batch.status, 'skipped');
   assert.equal(batch.failureCategory, 'ai_service');
   assert.equal(batch.recognitionPendingStatus, 'queued');
@@ -7559,9 +7254,9 @@ test('runTelegramSync replays pending recognition batches and marks them resolve
   });
 
   assert.equal(result.changed, true);
-  assert.equal(result.batchResults[0].status, 'ready');
-  assert.equal(result.batchResults[0].persistenceStatus, 'stored');
-  assert.equal(result.batchResults[0].pendingReplay, true);
+  assert.equal(result.batches[0].status, 'ready');
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].pendingReplay, true);
   assert.equal(buildTelegramSyncReport(result).batches[0].pendingReplay, true);
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].nutrition.totalCalories, 868);
@@ -7645,7 +7340,7 @@ test('runTelegramSync uses the normalized runtime env for first-time and replaye
     exportTrainingMarkdown: () => '### 2026-05-31\n',
   });
 
-  assert.equal(result.batchResults.length, 2);
+  assert.equal(result.batches.length, 2);
   assert.deepEqual(
     recognitionEnvArgs.map((call) => call.batchId),
     ['single-383', 'single-384'],
@@ -7702,7 +7397,7 @@ test('runTelegramSync keeps pending recognition batches queued when replay still
     },
   });
 
-  const batch = result.batchResults[0];
+  const batch = result.batches[0];
   assert.equal(batch.status, 'skipped');
   assert.equal(batch.pendingReplay, true);
   assert.equal(batch.failureCategory, 'ai_service');
@@ -7806,7 +7501,7 @@ test('runTelegramSync marks ready image albums with failed photos as partial fai
     },
   });
 
-  const batch = result.batchResults[0];
+  const batch = result.batches[0];
   const report = buildTelegramSyncReport(result);
   assert.equal(batch.status, 'ready');
   assert.equal(batch.persistenceStatus, 'stored');
@@ -7857,7 +7552,7 @@ test('runTelegramSync sends Telegram result notification when an image batch is 
     },
   });
 
-  assert.equal(result.batchResults[0].status, 'skipped');
+  assert.equal(result.batches[0].status, 'skipped');
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].chatId, 42);
   assert.equal(sentMessages[0].replyToMessageId, 902);
@@ -7956,7 +7651,7 @@ test('runTelegramSync queues partial failure ready batches for pending recogniti
     },
   });
 
-  const batch = result.batchResults[0];
+  const batch = result.batches[0];
   assert.equal(batch.status, 'ready');
   assert.equal(batch.partialFailure, true);
   assert.equal(batch.sourceImageCount, 2);
@@ -8057,10 +7752,10 @@ test('runTelegramSync report includes image counts for pending replay batches', 
 
   const report = buildTelegramSyncReport(result);
   assert.equal(result.changed, true);
-  assert.equal(result.batchResults[0].pendingReplay, true);
-  assert.equal(result.batchResults[0].sourceImageCount, 2);
-  assert.equal(result.batchResults[0].recognizedImageCount, 2);
-  assert.equal(result.batchResults[0].failedImageCount, 0);
+  assert.equal(result.batches[0].pendingReplay, true);
+  assert.equal(result.batches[0].sourceImageCount, 2);
+  assert.equal(result.batches[0].recognizedImageCount, 2);
+  assert.equal(result.batches[0].failedImageCount, 0);
   assert.equal(report.batches[0].sourceImageCount, 2);
   assert.equal(report.batches[0].recognizedImageCount, 2);
   assert.equal(report.batches[0].failedImageCount, 0);
@@ -8079,7 +7774,7 @@ test('buildTelegramSyncReport exposes recognition attempt kinds for audit summar
     updatesFetched: 1,
     lastProcessedUpdateId: 901,
     readyBatches: 1,
-    batchResults: [
+    batches: [
       {
         kind: 'image',
         batchId: 'album-recognition-attempts',

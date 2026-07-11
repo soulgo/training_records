@@ -4,12 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { backfillTrainingCoreFromArchive } from './backfill-training-core-from-archive.mjs';
 import { backfillThoughtsToCore } from './backfill-thoughts-to-core.mjs';
 import { reconcileTrainingMarkdownToCore } from './reconcile-training-markdown-to-core.mjs';
+import { resolveTrainingCoreConfig } from '../src/db/training/config.mjs';
 import {
   backfillCoreSleepFromIngestBatchesClient,
   backfillCoreFromLatestArchiveSnapshotClient,
   importTrainingMarkdownToDatabase,
-  resolveTrainingCoreConfig,
-} from './training-db-core.mjs';
+} from '../src/db/training/write.mjs';
 import pg from 'pg';
 
 const { Client } = pg;

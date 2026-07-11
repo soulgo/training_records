@@ -732,7 +732,7 @@ test('main sync workflow passes stored thought edit targets to async deploy veri
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought_edit',
           status: 'ready',
@@ -769,7 +769,7 @@ test('main sync workflow uses persisted thought module when edit command preserv
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought_edit',
           status: 'ready',
@@ -808,7 +808,7 @@ test('main sync workflow sends deleted thought targets as absent deploy checks',
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought_delete',
           status: 'ready',
@@ -949,7 +949,7 @@ test('telegram-sync workflow summary normalizes partial failure task status from
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'image',
           status: 'ready',
@@ -1015,7 +1015,7 @@ test('sync workflow summaries emit image storage stats when batches upload to CO
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought',
           status: 'ready',
@@ -1070,7 +1070,7 @@ test('sync workflow summaries omit image storage section when no COS uploads occ
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'image',
           status: 'ready',
@@ -1104,7 +1104,7 @@ test('sync workflow summaries emit warnings for business-incomplete batches', as
   await writeFile(
     telegramResultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'image',
           status: 'ready',
@@ -1138,7 +1138,7 @@ test('sync workflow summaries emit warnings for business-incomplete batches', as
   await writeFile(
     feishuResultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'image',
           status: 'skipped',

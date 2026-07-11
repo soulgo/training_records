@@ -6,53 +6,6 @@ import path from 'node:path';
 
 import { exportDerivedTrainingMarkdown } from '../tools/export-training-markdown.mjs';
 
-test('exportDerivedTrainingMarkdown still uses database when telegram fallback batches are pending', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
-  const runtimeDir = path.join(tempRoot, 'runtime');
-  const recordPath = path.join(tempRoot, '训练记录.md');
-  const observedSources = [];
-
-  await mkdir(runtimeDir, { recursive: true });
-  await writeFile(
-    path.join(runtimeDir, 'telegram-sync-pending.ndjson'),
-    `${JSON.stringify({ batch: { batchId: 'pending-1' } })}\n`,
-    'utf8',
-  );
-  await writeFile(recordPath, '# 训练记录\n\n### 2026-04-06\n', 'utf8');
-
-  await exportDerivedTrainingMarkdown({
-    rootDir: tempRoot,
-    env: {
-      TRAINING_DB_ENABLED: 'false',
-    },
-    buildTrainingSnapshot: async ({ source }) => {
-      observedSources.push(source);
-      return {
-        generatedAt: '2026-05-13T00:00:00.000Z',
-        latest: {
-          measurement: null,
-          daily: { date: '2026-04-06' },
-        },
-        daily: [],
-        charts: {
-          weightKg: [],
-          bodyFatPct: [],
-          skeletalMuscleKg: [],
-          basalMetabolism: [],
-          visceralFatLevel: [],
-          intakeCalories: [],
-          trainingCalories: [],
-          cyclingDistanceKm: [],
-        },
-      };
-    },
-    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-04-06\n',
-  });
-
-  assert.deepEqual(observedSources, ['database']);
-  assert.match(await readFile(recordPath, 'utf8'), /2026-04-06/);
-});
-
 test('exportDerivedTrainingMarkdown uses database when no telegram fallback batches are pending', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const observedSources = [];
@@ -90,122 +43,6 @@ test('exportDerivedTrainingMarkdown uses database when no telegram fallback batc
 
   assert.deepEqual(observedSources, ['database']);
   assert.deepEqual(observedStrictValues, ['true']);
-});
-
-test('exportDerivedTrainingMarkdown does not run database schema preflight by default', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
-  const calls = [];
-  const fakeClient = {
-    async connect() {
-      calls.push('connect');
-    },
-    async query(sql) {
-      calls.push(sql);
-      return { rows: [] };
-    },
-    async end() {
-      calls.push('end');
-    },
-  };
-
-  await exportDerivedTrainingMarkdown({
-    rootDir: tempRoot,
-    env: {
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
-    createClient() {
-      return fakeClient;
-    },
-    ensureCoreSchema: async (client) => {
-      await client.query('alter table core.training_day add column if not exists sleep_total_minutes integer null');
-    },
-    buildTrainingSnapshot: async () => {
-      calls.push('snapshot');
-      return {
-        generatedAt: '2026-06-12T00:00:00.000Z',
-        latest: {
-          measurement: null,
-          daily: { date: '2026-06-12' },
-        },
-        daily: [],
-        charts: {
-          weightKg: [],
-          bodyFatPct: [],
-          skeletalMuscleKg: [],
-          basalMetabolism: [],
-          visceralFatLevel: [],
-          intakeCalories: [],
-          trainingCalories: [],
-          cyclingDistanceKm: [],
-        },
-      };
-    },
-    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-12\n',
-  });
-
-  assert.deepEqual(calls, ['snapshot']);
-});
-
-test('exportDerivedTrainingMarkdown runs database schema preflight when explicitly enabled', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
-  const calls = [];
-  const fakeClient = {
-    async connect() {
-      calls.push('connect');
-    },
-    async query(sql) {
-      calls.push(sql);
-      return { rows: [] };
-    },
-    async end() {
-      calls.push('end');
-    },
-  };
-
-  await exportDerivedTrainingMarkdown({
-    rootDir: tempRoot,
-    env: {
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-      TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED: 'true',
-    },
-    createClient() {
-      return fakeClient;
-    },
-    ensureCoreSchema: async (client) => {
-      await client.query('alter table core.training_day add column if not exists sleep_total_minutes integer null');
-    },
-    buildTrainingSnapshot: async () => {
-      calls.push('snapshot');
-      return {
-        generatedAt: '2026-06-12T00:00:00.000Z',
-        latest: {
-          measurement: null,
-          daily: { date: '2026-06-12' },
-        },
-        daily: [],
-        charts: {
-          weightKg: [],
-          bodyFatPct: [],
-          skeletalMuscleKg: [],
-          basalMetabolism: [],
-          visceralFatLevel: [],
-          intakeCalories: [],
-          trainingCalories: [],
-          cyclingDistanceKm: [],
-        },
-      };
-    },
-    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-12\n',
-  });
-
-  assert.deepEqual(calls, [
-    'connect',
-    'alter table core.training_day add column if not exists sleep_total_minutes integer null',
-    'end',
-    'snapshot',
-  ]);
 });
 
 test('exportDerivedTrainingMarkdown removes old Telegram and Feishu derived thought posts before export', async () => {
@@ -388,75 +225,6 @@ test('exportDerivedTrainingMarkdown writes Feishu thought posts with source meta
   assert.match(post, /飞书随想正文/);
 });
 
-test('exportDerivedTrainingMarkdown retries transient schema preflight connection timeouts', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
-  const calls = [];
-  let clientCount = 0;
-
-  await exportDerivedTrainingMarkdown({
-    rootDir: tempRoot,
-    env: {
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-      TRAINING_DB_SCHEMA_PREFLIGHT_ENABLED: 'true',
-      TRAINING_DB_PREFLIGHT_RETRY_DELAY_MS: '1',
-    },
-    createClient() {
-      clientCount += 1;
-      const clientId = clientCount;
-      return {
-        async connect() {
-          calls.push(`connect:${clientId}`);
-          if (clientId === 1) {
-            throw new Error('timeout expired');
-          }
-        },
-        async query(sql) {
-          calls.push(`query:${clientId}:${sql}`);
-          return { rows: [] };
-        },
-        async end() {
-          calls.push(`end:${clientId}`);
-        },
-      };
-    },
-    ensureCoreSchema: async (client) => {
-      await client.query('alter table core.training_day add column if not exists sleep_total_minutes integer null');
-    },
-    buildTrainingSnapshot: async () => {
-      calls.push('snapshot');
-      return {
-        generatedAt: '2026-06-12T00:00:00.000Z',
-        latest: {
-          measurement: null,
-          daily: { date: '2026-06-12' },
-        },
-        daily: [],
-        charts: {
-          weightKg: [],
-          bodyFatPct: [],
-          skeletalMuscleKg: [],
-          basalMetabolism: [],
-          visceralFatLevel: [],
-          intakeCalories: [],
-          trainingCalories: [],
-          cyclingDistanceKm: [],
-        },
-      };
-    },
-    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-12\n',
-  });
-
-  assert.deepEqual(calls, [
-    'connect:1',
-    'end:1',
-    'connect:2',
-    'query:2:alter table core.training_day add column if not exists sleep_total_minutes integer null',
-    'end:2',
-    'snapshot',
-  ]);
-});
-
 test('exportDerivedTrainingMarkdown surfaces incomplete database snapshots', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
   const recordPath = path.join(tempRoot, '训练记录.md');
@@ -481,7 +249,6 @@ test('exportDerivedTrainingMarkdown surfaces incomplete database snapshots', asy
       createClient() {
         return fakeClient;
       },
-      ensureCoreSchema: async () => {},
       buildTrainingSnapshot: async ({ source }) => {
         observedSources.push(source);
         throw new Error('database snapshot is empty or missing measurements');
@@ -519,7 +286,6 @@ test('exportDerivedTrainingMarkdown surfaces unavailable database snapshots', as
       createClient() {
         return fakeClient;
       },
-      ensureCoreSchema: async () => {},
       buildTrainingSnapshot: async ({ source }) => {
         observedSources.push(source);
         throw new Error('database snapshot unavailable: timeout expired');
@@ -531,52 +297,6 @@ test('exportDerivedTrainingMarkdown surfaces unavailable database snapshots', as
 
   assert.deepEqual(observedSources, ['database']);
   assert.match(await readFile(recordPath, 'utf8'), /2026-05-14/);
-});
-
-test('exportDerivedTrainingMarkdown does not let disabled schema preflight block markdown export', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'export-training-markdown-'));
-  const recordPath = path.join(tempRoot, '训练记录.md');
-  const calls = [];
-  const fakeClient = {
-    async connect() {
-      calls.push('connect');
-    },
-    async query() {
-      throw new Error('permission denied for schema core');
-    },
-    async end() {
-      calls.push('end');
-    },
-  };
-
-  await writeFile(recordPath, '# 训练记录\n\n### 2026-05-14\n', 'utf8');
-
-  await exportDerivedTrainingMarkdown({
-    rootDir: tempRoot,
-    env: {
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
-    },
-    createClient() {
-      return fakeClient;
-    },
-    ensureCoreSchema: async (client) => {
-      await client.query('alter table core.training_day add column if not exists sleep_total_minutes integer null');
-    },
-    buildTrainingSnapshot: async () => {
-      calls.push('snapshot');
-      return {
-        generatedAt: '2026-06-12T00:00:00.000Z',
-        latest: { measurement: null, daily: { date: '2026-06-12' } },
-        daily: [],
-        charts: {},
-      };
-    },
-    exportTrainingMarkdown: () => '# 训练记录\n\n### 2026-06-12\n',
-  });
-
-  assert.deepEqual(calls, ['snapshot']);
-  assert.match(await readFile(recordPath, 'utf8'), /2026-06-12/);
 });
 
 test('exportDerivedTrainingMarkdown does not hide incomplete database snapshots when database is not configured', async () => {

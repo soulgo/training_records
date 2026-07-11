@@ -255,7 +255,7 @@ PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`
 ## 注意事项
 
 - 不要随意改变 `训练记录.md` 的日期标题、四级标题和字段名，解析器依赖这些结构。
-- 修改 prompt 规则时，改 `prompts/_source/*.json`，再运行 `node tools/prompt-generator.mjs`，不要直接手写运行时 prompt。
+- 修改 prompt 规则时，改 `prompts/_source/*.json`，再运行 `node src/core/ai/prompt-generator.mjs`，不要直接手写运行时 prompt。
 - 更新 Telegram 命令、数据库结构、环境变量或 workflow 时，必须同步更新 `docs/`。
 - 生产环境 Secrets、Variables、Cloudflare Worker 变量和数据库状态无法从仓库文件完全确认，需要在对应平台检查。
 - 纯文档整理不应修改代码、配置逻辑、接口行为或系统功能。

@@ -11,7 +11,7 @@ import {
   loadStructuredSource,
   parsePromptMetadataHeader,
   stripPromptMetadataHeader,
-} from '../tools/prompt-generator.mjs';
+} from '../src/core/ai/prompt-generator.mjs';
 
 test('generateRecognitionPrompt includes all key constraints', async () => {
   const prompt = await generateRecognitionPrompt();

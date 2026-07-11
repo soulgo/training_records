@@ -56,7 +56,7 @@ export async function main(argv = []) {
 
 export function renderSummary({ channel, trace, report }) {
   const title = `${capitalize(channel)} sync result`;
-  const batches = report.batches ?? report.batchResults ?? [];
+  const batches = report.batches ?? [];
   const lines = [`## ${title}`, ''];
   renderRunContext(lines, { channel, trace });
   renderTimings(lines, report.timingsMs ?? {});
@@ -260,7 +260,7 @@ function renderWarnings(lines, { channel, businessIncomplete }) {
 }
 
 function normalizeReport(channel, result) {
-  if (!result?.batchResults) {
+  if (!result?.batches) {
     return result ?? {};
   }
   return channel === 'feishu'

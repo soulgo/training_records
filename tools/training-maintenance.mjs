@@ -5,13 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 import pg from 'pg';
 
+import { resolveTrainingMigrationConfig, resolveTrainingReadonlyConfig } from '../src/db/training/config.mjs';
+import { readPendingRecognitionSummary as readPendingBatchesDefault } from '../src/db/training/pending-recognition.mjs';
 import { exportDerivedTrainingMarkdown as exportDerivedTrainingMarkdownDefault } from './export-training-markdown.mjs';
 import { syncTrainingCore as syncTrainingCoreDefault } from './sync-training-core.mjs';
-import {
-  readPendingRecognitionSummary as readPendingBatchesDefault,
-  resolveTrainingMigrationConfig,
-  resolveTrainingReadonlyConfig,
-} from './training-db-core.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..');

@@ -1090,8 +1090,8 @@ test('current maintenance docs and scripts document inspect sync and migrate com
   assert.match(maintenanceGuide, /aiMonitoringAvgRecognitionLatencyMs/);
   assert.match(maintenanceGuide, /aiMonitoringTotalCostUsd/);
   assert.match(maintenanceGuide, /recoveryTargetDays/);
-  assert.match(maintenanceGuide, /node tools\/telegram-sync-fallback\.mjs inspect/);
-  assert.match(maintenanceGuide, /旧 NDJSON pending 已从同步主链路下线/);
+  assert.doesNotMatch(maintenanceGuide, /telegram-sync-fallback\.mjs/);
+  assert.match(maintenanceGuide, /pending 恢复只有 PostgreSQL/);
   assert.doesNotMatch(maintenanceGuide, /TELEGRAM_SYNC_REPLAY_LEGACY_NDJSON_PENDING/);
 });
 

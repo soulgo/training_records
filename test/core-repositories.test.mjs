@@ -13,7 +13,6 @@ import {
   PostgresThoughtRepository,
   PostgresTrainingRepository,
 } from '../src/adapters/postgres/index.mjs';
-import { ensureCoreSchema } from '../src/adapters/postgres/schema-preflight.pg.mjs';
 
 test('repository ports fail explicitly until implemented by adapters', async () => {
   await assert.rejects(new TrainingRepositoryPort().findByDate('2026-05-09'), /findByDate/);
@@ -137,29 +136,6 @@ test('PostgresTrainingRepository.findByDates reads requested dates in one batche
     assert.deepEqual(params?.[0], requestedDates);
     return true;
   }));
-});
-
-test('ensureCoreSchema adds source identity columns and indexes for thought and ingest tables', async () => {
-  const calls = [];
-  await ensureCoreSchema({
-    async query(sql, params) {
-      calls.push([sql, params]);
-      return { rows: [] };
-    },
-  });
-
-  const preflightSql = calls.map(([sql]) => sql).join('\n');
-  assert.match(preflightSql, /alter table core\.thought add column if not exists source_chat_id/i);
-  assert.match(preflightSql, /create unique index if not exists ux_core_thought_identity/i);
-  assert.match(preflightSql, /alter table ingest\.telegram_message add column if not exists source_message_id/i);
-  assert.match(preflightSql, /create unique index if not exists ux_ingest_telegram_message_source_identity/i);
-  assert.match(preflightSql, /create table if not exists ingest\.ai_call_log/i);
-  assert.match(preflightSql, /ai_call_id text primary key/i);
-  assert.match(preflightSql, /idempotency_key text/i);
-  assert.match(preflightSql, /prompt_tokens integer/i);
-  assert.match(preflightSql, /completion_tokens integer/i);
-  assert.match(preflightSql, /total_tokens integer/i);
-  assert.match(preflightSql, /cost_usd numeric/i);
 });
 
 test('PostgresTelegramBatchRepository persists batch envelope, messages, and recognitions', async () => {

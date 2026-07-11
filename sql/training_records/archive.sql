@@ -372,9 +372,6 @@ ALTER TABLE "archive"."training_parse_snapshot" ADD CONSTRAINT "training_parse_s
 -- ----------------------------
 -- Indexes structure for table training_sleep
 -- ----------------------------
-CREATE INDEX "idx_archive_training_sleep_archived_date" ON "archive"."training_sleep" USING btree (
-  "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
-);
 CREATE INDEX "idx_training_sleep_archived_date" ON "archive"."training_sleep" USING btree (
   "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
 );

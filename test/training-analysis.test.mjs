@@ -9,8 +9,8 @@ import {
   normalizeAnalysisQuestion,
   normalizeTrainingGoal,
   buildTrainingAnalysisSummary,
-} from '../tools/training-analysis.mjs';
-import { stripPromptMetadataHeader } from '../tools/prompt-generator.mjs';
+} from '../src/app/use-cases/training-analysis.impl.mjs';
+import { stripPromptMetadataHeader } from '../src/core/ai/prompt-generator.mjs';
 
 test('inferTrainingAnalysisFocus respects explicit recent-week requests', () => {
   const focus = inferTrainingAnalysisFocus('分析近一周训练及体脂数据，提供快速瘦腹建议。');

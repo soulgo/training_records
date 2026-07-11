@@ -177,13 +177,13 @@ CREATE TABLE "core"."thought" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
-COMMENT ON COLUMN "core"."thought"."telegram_message_id" IS '原 Telegram message_id，也是随想的稳定定位 ID';
+COMMENT ON COLUMN "core"."thought"."telegram_message_id" IS '历史 numeric message id 兼容别名；跨通道稳定身份使用 source_channel、source_chat_id、source_message_id';
 COMMENT ON COLUMN "core"."thought"."source_channel" IS '来源通道，例如 telegram、feishu、markdown_import';
 COMMENT ON COLUMN "core"."thought"."source_chat_id" IS '来源 chat/conversation ID，Telegram 为 chat_id，飞书为 chat_id 原始字符串';
 COMMENT ON COLUMN "core"."thought"."source_message_id" IS '来源消息 ID，Telegram 为 message_id，飞书为 message_id 原始字符串';
 COMMENT ON COLUMN "core"."thought"."body" IS '随想正文文本，不包含图片二进制';
 COMMENT ON COLUMN "core"."thought"."thought_module" IS '随想模块：workout 为锻炼随想，misc 为杂七杂八，body_feedback 为身体反馈；历史缺省按 workout 兼容';
-COMMENT ON COLUMN "core"."thought"."markdown_path" IS '当前 Markdown 兼容层路径，例如 source/_posts/YYYY-MM-DD-telegram-thought-501.md';
+COMMENT ON COLUMN "core"."thought"."markdown_path" IS '派生 Markdown 备份兼容路径，例如 source/_posts/YYYY-MM-DD-telegram-thought-501.md；不是业务事实主身份';
 COMMENT ON COLUMN "core"."thought"."image_refs_json" IS '有序图片引用清单，当前为 /images/thoughts/...，后续可切换为 OSS object key 或 URL';
 COMMENT ON COLUMN "core"."thought"."status" IS 'active 或 deleted；删除命令使用软删除保留迁移线索';
 COMMENT ON TABLE "core"."thought" IS '锻炼随想正文镜像表；图片仍保存在本地目录或后续对象存储，表内只保存引用';

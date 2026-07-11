@@ -29,7 +29,7 @@
 | 数据读取和快照 | `src/domain/training/training-snapshot.mjs`、`src/db/training/read*.mjs` |
 | GitHub Action 监控 | `tools/report-github-action-status.mjs`、`tools/github-action-monitor-server.mjs`、`src/app/use-cases/github-action-monitor.use-case.mjs`、`src/adapters/postgres/github-action-monitor-repository.pg.mjs` |
 | 系统参数健康监控 | `config/parameter-health/<env>.json`、`tools/check-parameter-health.mjs`、`src/app/use-cases/parameter-health-monitor.use-case.mjs`、`src/adapters/postgres/parameter-health-monitor-repository.pg.mjs` |
-| 站点生成 | `tools/generate-training-data.mjs`、`src/site/dashboard-view.mjs`、`themes/cactus/*` |
+| 站点生成 | `src/app/use-cases/generate-training-data.use-case.mjs`、`src/site/dashboard-view.mjs`、`themes/cactus/*` |
 | Worker 入口 | `cloudflare/sync-dispatch-worker.mjs`、`cloudflare/*dispatch-worker.mjs`、`cloudflare/sync-dispatch-queue.mjs` |
 | SQL schema | `sql/pgsql17.sql` |
 

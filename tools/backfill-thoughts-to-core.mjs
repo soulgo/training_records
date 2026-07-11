@@ -10,7 +10,7 @@ import { persistThoughtToCore } from '../src/db/training/write.mjs';
 import {
   getThoughtModuleTags,
   normalizeThoughtModule,
-} from './lib/thought-modules.mjs';
+} from '../src/core/thought-modules.mjs';
 import { readDirRecursive } from './lib/fs-walk.mjs';
 
 const { Client } = pg;

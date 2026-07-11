@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createAiProvider } from '../../ai/provider.mjs';
+import { createAiProvider } from '../../adapters/ai/ai-provider.factory.mjs';
 import {
   fetchFeishuImageResource,
   getFeishuTenantAccessToken,
@@ -13,7 +13,7 @@ import {
   buildTelegramSyncReport,
   buildSafeSyncReport,
   createRecognitionAiProvider,
-  runTelegramSync,
+  runMessageSync,
 } from './telegram-sync.use-case.mjs';
 import {
   writeStartedRecognitionAiCallLog as writeStartedRecognitionAiCallLogToDatabase,
@@ -88,7 +88,7 @@ export async function runFeishuSync(options = {}) {
           })
       : undefined);
 
-  return runTelegramSync({
+  return runMessageSync({
     ...options,
     adapter: {
       channel: 'feishu',
@@ -132,9 +132,7 @@ export function buildFeishuSyncReport(result) {
   const batches = (report.batches ?? []).map(normalizeFeishuReportBatch);
   return {
     ...report,
-    batchResults: (report.batchResults ?? []).map(normalizeFeishuReportBatch),
     batches,
-    tasks: (report.tasks ?? []).map(normalizeFeishuReportTask),
   };
 }
 
@@ -145,14 +143,6 @@ function normalizeFeishuReportBatch(batch) {
     sourceId: String(batch.sourceId ?? '').replace(/^telegram:/, 'feishu:'),
     sourceType: batch.sourceType === 'telegram_update' ? 'feishu_update' : batch.sourceType,
     recognitionErrors: normalizeFeishuRecognitionErrors(batch.recognitionErrors),
-  };
-}
-
-function normalizeFeishuReportTask(task) {
-  return {
-    ...task,
-    taskId: String(task.taskId ?? '').replace(/^telegram:/, 'feishu:'),
-    channel: 'feishu',
   };
 }
 

@@ -10,7 +10,7 @@ import {
 import {
   buildRecognitionSchema,
   RECOGNITION_SCHEMA_VERSION,
-} from '../tools/telegram-recognition-schema.mjs';
+} from '../src/core/ai/telegram-recognition-schema.mjs';
 import { applyRecognitionSemanticWarnings } from '../src/core/ai/recognition-semantic-validator.mjs';
 
 test('recognition schema version is bumped for required records.sleep contract', () => {

@@ -7,8 +7,8 @@ import path from 'node:path';
 import {
   appendTrainingArchiveFailureLog,
   persistTrainingArchive,
-} from '../tools/training-db-archive.mjs';
-import { generateTrainingData, renderTrainingDebugMarkdown } from '../tools/generate-training-data.mjs';
+} from '../src/adapters/postgres/archive-repository.pg.mjs';
+import { generateTrainingData, renderTrainingDebugMarkdown } from '../src/app/use-cases/generate-training-data.impl.mjs';
 
 const sampleMarkdown = `
 ### 2026-05-11

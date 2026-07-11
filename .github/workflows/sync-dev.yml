@@ -204,7 +204,7 @@ jobs:
           let thoughtCheck = null;
           try {
             const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
-            const batches = result.batchResults ?? result.batches ?? [];
+            const batches = result.batches ?? [];
             readyStoredContentBatches = batches.filter((batch) => {
               const kind = batch.kind ?? 'image';
               return ['image', 'thought', 'thought_edit', 'thought_delete', 'thought_move'].includes(kind) &&

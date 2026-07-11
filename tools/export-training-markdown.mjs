@@ -2,18 +2,13 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import pg from 'pg';
-
-import { ensureCoreSchema as ensureCoreSchemaDefault } from '../src/adapters/postgres/schema-preflight.pg.mjs';
-import { resolveTrainingCoreConfig } from '../src/db/training/config.mjs';
-import { exportTrainingMarkdown } from './training-db-core.mjs';
-import { buildTrainingSnapshot } from './training-snapshot.mjs';
-import { getThoughtModuleTags, normalizeThoughtModule } from './lib/thought-modules.mjs';
+import { getThoughtModuleTags, normalizeThoughtModule } from '../src/core/thought-modules.mjs';
+import { exportTrainingMarkdown } from '../src/domain/training/training-exporter.mjs';
+import { buildTrainingSnapshot } from '../src/domain/training/training-snapshot.mjs';
 import { readDirRecursive } from './lib/fs-walk.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
-const { Client } = pg;
 
 export async function exportDerivedTrainingMarkdown(options = {}) {
   const activeRootDir = options.rootDir ?? rootDir;
@@ -30,12 +25,6 @@ export async function exportDerivedTrainingMarkdown(options = {}) {
     createClient: options.createClient,
     now: options.now,
   };
-  await runDatabaseSchemaPreflight({
-    env: snapshotOptions.env,
-    createClient: options.createClient,
-    ensureCoreSchema: options.ensureCoreSchema,
-    stderr: options.stderr,
-  });
   const snapshot = await buildSnapshot(snapshotOptions);
 
   const markdown = (options.exportTrainingMarkdown ?? exportTrainingMarkdown)(snapshot);
@@ -53,77 +42,6 @@ export async function exportDerivedTrainingMarkdown(options = {}) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   await exportDerivedTrainingMarkdown();
-}
-
-async function runDatabaseSchemaPreflight(options = {}) {
-  const config = resolveTrainingCoreConfig(options.env);
-  if (!config.enabled || !config.url || !config.schemaPreflightEnabled) {
-    return;
-  }
-
-  const createClient =
-    options.createClient ??
-    ((dbConfig) =>
-      new Client({
-        connectionString: dbConfig.url,
-        connectionTimeoutMillis: dbConfig.timeoutMs,
-        application_name: dbConfig.appName,
-      }));
-  const ensureCoreSchema = options.ensureCoreSchema ?? ensureCoreSchemaDefault;
-  const maxAttempts = parsePositiveInteger(options.env?.TRAINING_DB_PREFLIGHT_MAX_ATTEMPTS, 3);
-  const retryDelayMs = parseNonNegativeInteger(options.env?.TRAINING_DB_PREFLIGHT_RETRY_DELAY_MS, 500);
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const client = createClient(config);
-    try {
-      await client.connect();
-      await ensureCoreSchema(client);
-      return;
-    } catch (error) {
-      if (attempt >= maxAttempts || !isTransientDatabasePreflightError(error)) {
-        throw error;
-      }
-      options.stderr?.write?.(
-        `[training-db-export] schema preflight failed: ${formatErrorMessage(error)}; retrying (${attempt}/${maxAttempts})\n`,
-      );
-      await delay(retryDelayMs);
-    } finally {
-      await client.end();
-    }
-  }
-}
-
-function isTransientDatabasePreflightError(error) {
-  const code = String(error?.code ?? '').trim();
-  if (['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EPIPE'].includes(code)) {
-    return true;
-  }
-
-  const message = formatErrorMessage(error);
-  return /timeout expired|connect timeout|connection timeout|terminating connection|connection terminated|too many connections|remaining connection slots/i.test(message);
-}
-
-function formatErrorMessage(error) {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function parsePositiveInteger(value, fallback) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
-}
-
-function parseNonNegativeInteger(value, fallback) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback;
-}
-
-function delay(ms) {
-  if (!ms) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }
 
 async function exportThoughtMarkdownBackup({ rootDir, thoughts }) {

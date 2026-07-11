@@ -10,7 +10,7 @@ import {
   AiSchemaError,
 } from '../../core/ai/schema-validator.mjs';
 import { resolveTrainingCoreConfig } from '../../db/training/config.mjs';
-import { isAiSchedulerEnabled } from '../../ai/provider.mjs';
+import { isAiSchedulerEnabled } from '../../adapters/ai/ai-provider.factory.mjs';
 import {
   buildRecognitionSchema,
   RECOGNITION_SCHEMA_NAME,

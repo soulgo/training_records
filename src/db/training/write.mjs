@@ -18,7 +18,6 @@ import {
   replaceCoreDays,
 } from '../../adapters/postgres/index.mjs';
 import { persistTelegramImageBatchIncremental } from '../../adapters/postgres/incremental-write.pg.mjs';
-import { ensureCoreSchema } from '../../adapters/postgres/schema-preflight.pg.mjs';
 
 const { Client } = pg;
 const SLEEP_HEALTH_FIELDS = [
@@ -77,7 +76,6 @@ export async function persistNormalizedBatch(options) {
         connectionTimeoutMillis: dbConfig.timeoutMs,
         application_name: dbConfig.appName,
       }));
-  const ensureCoreSchemaRunner = options.ensureCoreSchema ?? ensureCoreSchema;
   const client = createClient(config);
   const processedAt = options.processedAt ?? new Date();
   let transactionStarted = false;
@@ -97,9 +95,6 @@ export async function persistNormalizedBatch(options) {
 
   try {
     await client.connect();
-    if (config.schemaPreflightEnabled) {
-      await ensureCoreSchemaRunner(observedClient);
-    }
     await observedClient.query('BEGIN');
     transactionStarted = true;
 

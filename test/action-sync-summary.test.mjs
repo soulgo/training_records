@@ -12,7 +12,7 @@ test('action sync summary renders trace AI database image storage and warning se
     resultPath,
     JSON.stringify({
       timingsMs: { fetchUpdates: 7, persist: 12, total: 30 },
-      batchResults: [
+      batches: [
         {
           kind: 'image',
           batchId: 'single-727',
@@ -100,7 +100,7 @@ test('action sync summary renders trace AI database image storage and warning se
 test('action sync summary logs one structured completion event to stderr', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'action-sync-summary-log-'));
   const resultPath = path.join(tempRoot, 'telegram-result.json');
-  await writeFile(resultPath, JSON.stringify({ batchResults: [] }), 'utf8');
+  await writeFile(resultPath, JSON.stringify({ batches: [] }), 'utf8');
 
   let stderr = '';
   execFileSync(
@@ -172,7 +172,7 @@ test('action sync summary redacts Feishu oc ids from source fields', async () =>
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought',
           status: 'ready',

@@ -673,13 +673,13 @@ alter table core.training_day add column if not exists rem_sleep_minutes integer
 alter table core.training_day add column if not exists awake_minutes integer null;
 
 comment on table core.thought is '锻炼随想正文镜像表；图片仍保存在本地目录或后续对象存储，表内只保存引用';
-comment on column core.thought.telegram_message_id is '原 Telegram message_id，也是随想的稳定定位 ID';
+comment on column core.thought.telegram_message_id is '历史 numeric message id 兼容别名；跨通道稳定身份使用 source_channel、source_chat_id、source_message_id';
 comment on column core.thought.source_channel is '来源通道，例如 telegram、feishu、markdown_import';
 comment on column core.thought.source_chat_id is '来源 chat/conversation ID，Telegram 为 chat_id，飞书为 chat_id 原始字符串';
 comment on column core.thought.source_message_id is '来源消息 ID，Telegram 为 message_id，飞书为 message_id 原始字符串';
 comment on column core.thought.body is '随想正文文本，不包含图片二进制';
 comment on column core.thought.thought_module is '随想模块：workout 为锻炼随想，misc 为杂七杂八，body_feedback 为身体反馈；历史缺省按 workout 兼容';
-comment on column core.thought.markdown_path is '当前 Markdown 兼容层路径，例如 source/_posts/YYYY-MM-DD-telegram-thought-501.md';
+comment on column core.thought.markdown_path is '派生 Markdown 备份兼容路径，例如 source/_posts/YYYY-MM-DD-telegram-thought-501.md；不是业务事实主身份';
 comment on column core.thought.image_refs_json is '有序图片引用清单，当前为 /images/thoughts/...，后续可切换为 OSS object key 或 URL';
 comment on column core.thought.status is 'active 或 deleted；删除命令使用软删除保留迁移线索';
 

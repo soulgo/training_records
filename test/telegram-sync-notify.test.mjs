@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { notifyTelegramSyncResultFromFile } from '../tools/telegram-sync.mjs';
+import { notifyTelegramSyncResultFromFile } from '../src/app/use-cases/telegram-sync/status.mjs';
 import { notifyTelegramSyncFromEnv } from '../tools/telegram-sync-notify.mjs';
 
 test('telegram sync notifier reads the result file and sends the deferred success message', async () => {
@@ -15,7 +15,7 @@ test('telegram sync notifier reads the result file and sends the deferred succes
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought',
           status: 'ready',
@@ -64,7 +64,7 @@ test('telegram sync notifier passes the bot token to the transport sender', asyn
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought',
           status: 'ready',
@@ -104,7 +104,7 @@ test('telegram sync notifier reports partial failures instead of success for sto
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'image',
           status: 'ready',
@@ -162,7 +162,7 @@ test('telegram sync notifier reports skipped thought deletes as failures', async
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought_delete',
           status: 'skipped',
@@ -204,7 +204,7 @@ test('telegram sync notifier reports missing thought edit targets as failures', 
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought_edit',
           status: 'skipped',
@@ -249,7 +249,7 @@ test('telegram sync notifier sends one reply for each image business batch in a 
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'image',
           status: 'ready',
@@ -325,7 +325,7 @@ test('telegram sync notifier explains deferred database writes for pending repla
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'image',
           status: 'ready',

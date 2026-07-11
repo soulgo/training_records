@@ -19,20 +19,7 @@ export function shouldPersistTelegramArtifacts({
 }
 
 export function buildTelegramSyncReport(result) {
-  const batches = (result.batchResults ?? []).map((batch) => normalizeSyncReportBatch(batch));
-  const tasks = result.tasks ?? batches.map((batch) => ({
-    taskId: batch.taskId,
-    channel: inferSyncTaskChannel(batch.taskId),
-    kind: batch.kind,
-    batchId: batch.batchId,
-    taskStatus: batch.taskStatus,
-    persistenceStatus: batch.persistenceStatus,
-    failureCategory: batch.failureCategory,
-    failureReason: batch.failureReason,
-    archivedDate: batch.archivedDate,
-    chatIds: batch.chatIds,
-    sourceMessageIds: batch.messageIds,
-  }));
+  const batches = (result.batches ?? []).map((batch) => normalizeSyncReportBatch(batch));
   const normalized = {
     changed: result.changed,
     fallbackUsed: result.fallbackUsed,
@@ -40,12 +27,10 @@ export function buildTelegramSyncReport(result) {
     lastProcessedUpdateId: result.lastProcessedUpdateId,
     readyBatches: result.readyBatches,
     ...(isPlainTimingMap(result.timingsMs) ? { timingsMs: normalizeTimings(result.timingsMs) } : {}),
-    batchResults: batches,
     batches,
-    tasks,
   };
 
-  for (const [index, batch] of (result.batchResults ?? []).entries()) {
+  for (const [index, batch] of (result.batches ?? []).entries()) {
     if ((batch.kind ?? 'image') === 'analysis') {
       normalized.batches[index].analysisReplyStatus = batch.analysisReplyStatus ?? null;
       normalized.batches[index].analysisReplyError = batch.analysisReplyError ?? null;
@@ -300,11 +285,6 @@ function normalizeDateStages(value) {
   );
 }
 
-function inferSyncTaskChannel(taskId) {
-  const channel = String(taskId ?? '').split(':', 1)[0];
-  return channel || 'telegram';
-}
-
 function isPlainTimingMap(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -520,20 +500,20 @@ export async function notifyTelegramSyncResultFromReport({
   sendMessage = sendTelegramMessage,
 }) {
   return notifyTelegramSyncResult({
-    batchResults: report?.batchResults ?? report?.batches ?? [],
+    batches: report?.batches ?? [],
     env,
     sendMessage,
   });
 }
 
-export async function notifyTelegramSyncResult({ batchResults, env = process.env, sendMessage }) {
+export async function notifyTelegramSyncResult({ batches, env = process.env, sendMessage }) {
   const messagesByChat = new Map();
   const shouldNotify = shouldNotifyTelegramSyncResult(env);
   if (!shouldNotify) {
     return { notified: false, reason: 'notification_disabled' };
   }
 
-  for (const batch of batchResults) {
+  for (const batch of batches) {
     if (!shouldNotifyBatch(batch)) {
       continue;
     }
