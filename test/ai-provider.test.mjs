@@ -24,6 +24,31 @@ test('createAiProvider defaults to openai-compatible and trims the base url', ()
   assert.equal(provider.name, 'openai-compatible');
   assert.equal(provider.env.baseUrl, 'https://example.com/v1');
   assert.equal(provider.env.timeoutMs, 45000);
+  assert.deepEqual(provider.capabilities, {
+    vision: true,
+    jsonSchema: true,
+    jsonObject: true,
+    textJson: true,
+  });
+});
+
+test('createAiProvider exposes independently configurable protocol capabilities', () => {
+  const provider = createAiProvider({
+    AI_API_KEY: 'key',
+    AI_BASE_URL: 'https://example.com/v1',
+    AI_MODEL: 'gpt-test',
+    AI_SUPPORTS_VISION: 'false',
+    AI_SUPPORTS_JSON_SCHEMA: 'false',
+    AI_SUPPORTS_JSON_OBJECT: 'true',
+    AI_SUPPORTS_TEXT_JSON: 'false',
+  });
+
+  assert.deepEqual(provider.capabilities, {
+    vision: false,
+    jsonSchema: false,
+    jsonObject: true,
+    textJson: false,
+  });
 });
 
 test('createAiProvider sends the same chat completion shape used by analysis and recognition', async () => {

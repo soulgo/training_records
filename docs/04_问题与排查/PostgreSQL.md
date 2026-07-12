@@ -32,7 +32,7 @@
 2. 核对代码读取：`src/db/training/config.mjs`。
 3. 核对写入入口：`src/db/training/write.mjs:21`。
 4. 核对 schema：`sql/pgsql17.sql`、`sql/training_records/migrations/`、`sql/migration.sql` 与 `sql/migration_phase2_generic_ingest.sql`。
-5. 先运行 `npm run maintenance:migrate -- --dry-run` 查看 migration 状态；需要写入时再配置 `TRAINING_DB_MIGRATION_URL` 并使用 `--confirm`。
+5. 本地先运行 `npm run maintenance:migrate -- --dry-run`；远端先手动运行 `Training Database Migration` 的 `dry-run`。确认 checksum 和 pending 列表后，才执行对应入口的 `confirm`。
 6. 运行 `npm run maintenance:inspect`，检查 `database.permissionAudit` 中的 superuser、migrator-like 和 schema `CREATE` 权限摘要。
 7. 运行 `npm run check:data-consistency`。
 
@@ -40,6 +40,7 @@
 
 - 补齐对应环境的数据库 Secret。
 - 先用迁移账号执行 schema migration，再重跑同步；不要临时给日常业务账号 `CREATE`、migrator 或 superuser 权限。
+- 远端 migration workflow 只能手动触发；禁止把 `DEV_TRAINING_DB_MIGRATION_URL` 或 `TRAINING_DB_MIGRATION_URL` 注入日常 sync/deploy job。
 - 为读取型任务配置 `TRAINING_DB_READONLY_URL` / `DEV_TRAINING_DB_READONLY_URL`。
 - 对 `pending_replay` 批次，修复 DB 后通过同步流程重放。
 - 若报错缺少 `ingest.source_batch`、`source_message`、`source_asset`、`recognition_run` 或 `pending_task`，说明 Phase 2 未执行；先备份并手工执行两阶段迁移，不能通过临时恢复旧 repository 绕过。

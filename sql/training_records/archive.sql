@@ -1,7 +1,7 @@
 /*
- Navicat Premium Dump SQL
+ Navicat Premium Data Transfer
 
- Source Server         : training_records pgsql17
+ Source Server         : pgsql
  Source Server Type    : PostgreSQL
  Source Server Version : 170000 (170000)
  Source Host           : 122.51.66.213:15432
@@ -12,7 +12,7 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 05/06/2026 16:20:32
+ Date: 11/07/2026 21:00:41
 */
 
 
@@ -37,6 +37,7 @@ CREATE TABLE "archive"."training_activity" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
+ALTER TABLE "archive"."training_activity" OWNER TO "training_writer";
 COMMENT ON COLUMN "archive"."training_activity"."activity_hash" IS '活动幂等哈希';
 COMMENT ON COLUMN "archive"."training_activity"."archived_date" IS '归档日期';
 COMMENT ON COLUMN "archive"."training_activity"."source_hash" IS '来源快照哈希';
@@ -81,6 +82,7 @@ CREATE TABLE "archive"."training_day" (
   "awake_minutes" int4
 )
 ;
+ALTER TABLE "archive"."training_day" OWNER TO "training_writer";
 COMMENT ON COLUMN "archive"."training_day"."archived_date" IS '归档日期';
 COMMENT ON COLUMN "archive"."training_day"."source_hash" IS '来源快照哈希';
 COMMENT ON COLUMN "archive"."training_day"."total_activities" IS '当天活动次数';
@@ -119,6 +121,7 @@ CREATE TABLE "archive"."training_meal" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
+ALTER TABLE "archive"."training_meal" OWNER TO "training_writer";
 COMMENT ON COLUMN "archive"."training_meal"."meal_hash" IS '餐次幂等哈希';
 COMMENT ON COLUMN "archive"."training_meal"."archived_date" IS '归档日期';
 COMMENT ON COLUMN "archive"."training_meal"."source_hash" IS '来源快照哈希';
@@ -154,6 +157,7 @@ CREATE TABLE "archive"."training_measurement" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
+ALTER TABLE "archive"."training_measurement" OWNER TO "training_writer";
 COMMENT ON COLUMN "archive"."training_measurement"."measurement_hash" IS '体测幂等哈希';
 COMMENT ON COLUMN "archive"."training_measurement"."archived_date" IS '归档日期';
 COMMENT ON COLUMN "archive"."training_measurement"."source_hash" IS '来源快照哈希';
@@ -192,6 +196,7 @@ CREATE TABLE "archive"."training_parse_run" (
   "db_sync_status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'success'::text
 )
 ;
+ALTER TABLE "archive"."training_parse_run" OWNER TO "training_writer";
 COMMENT ON COLUMN "archive"."training_parse_run"."run_id" IS '本次运行唯一标识UUID';
 COMMENT ON COLUMN "archive"."training_parse_run"."source_hash" IS '关联的训练记录原文哈希，对应快照表主键';
 COMMENT ON COLUMN "archive"."training_parse_run"."trigger_name" IS '触发来源，例如local-build-data、local-build、github-actions-build';
@@ -220,6 +225,7 @@ CREATE TABLE "archive"."training_parse_snapshot" (
   "last_seen_at" timestamptz(6) NOT NULL
 )
 ;
+ALTER TABLE "archive"."training_parse_snapshot" OWNER TO "training_writer";
 COMMENT ON COLUMN "archive"."training_parse_snapshot"."source_hash" IS '训练记录Markdown原文的SHA-256哈希，作为快照主键';
 COMMENT ON COLUMN "archive"."training_parse_snapshot"."payload_version" IS '解析结果结构版本号，便于后续结构升级兼容';
 COMMENT ON COLUMN "archive"."training_parse_snapshot"."payload_json" IS '完整解析结果JSON，内容对应当前parseTrainingRecord输出';
@@ -267,6 +273,7 @@ CREATE TABLE "archive"."training_sleep" (
   "suggestion_text" text COLLATE "pg_catalog"."default"
 )
 ;
+ALTER TABLE "archive"."training_sleep" OWNER TO "training_writer";
 COMMENT ON COLUMN "archive"."training_sleep"."sleep_hash" IS '睡眠记录幂等哈希，用于去重';
 COMMENT ON COLUMN "archive"."training_sleep"."archived_date" IS '归档日期';
 COMMENT ON COLUMN "archive"."training_sleep"."source_hash" IS '来源快照哈希';
@@ -372,6 +379,9 @@ ALTER TABLE "archive"."training_parse_snapshot" ADD CONSTRAINT "training_parse_s
 -- ----------------------------
 -- Indexes structure for table training_sleep
 -- ----------------------------
+CREATE INDEX "idx_archive_training_sleep_archived_date" ON "archive"."training_sleep" USING btree (
+  "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
+);
 CREATE INDEX "idx_training_sleep_archived_date" ON "archive"."training_sleep" USING btree (
   "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
 );

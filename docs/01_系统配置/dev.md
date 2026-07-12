@@ -159,12 +159,14 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.dev.toml
 | --- | --- | --- |
 | `DEV_TRAINING_DB_URL` | PostgreSQL 服务商 | dev 数据库连接串，放 GitHub Secrets。 |
 | `DEV_TRAINING_DB_READONLY_URL` | PostgreSQL 服务商 | 可选只读连接串，放 GitHub Secrets；workflow 映射为运行时 `TRAINING_DB_READONLY_URL`，读取快照、巡检和一致性检查优先使用。 |
-| `DEV_TRAINING_DB_MIGRATION_URL` | PostgreSQL 服务商 | 显式迁移连接串，放受控 Secret 或本地 `.env`；执行迁移前手动映射为 `TRAINING_DB_MIGRATION_URL`。 |
+| `DEV_TRAINING_DB_MIGRATION_URL` | PostgreSQL 服务商 | 显式迁移连接串，放受控 Secret；通过手动 `Training Database Migration` workflow 或本地映射后的 maintenance 命令使用。 |
 | `TRAINING_DB_TIMEOUT_MS` | 自定义 | 连接超时，放 GitHub Variables。 |
 | `DEV_TRAINING_DB_APP_NAME` | 自定义 | DB 连接名，便于排查。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 建议 dev 使用 `database`。 |
 
 数据库 schema 以 `sql/pgsql17.sql` 和当前显式建表脚本为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `DEV_TRAINING_DB_URL` 映射后的默认路径。Action 监控当前在同一个 dev PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，参数健康 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
+
+远端迁移只通过手动 `Training Database Migration` workflow 执行：先选择 `dev + dry-run` 检查 pending/checksum，再选择 `dev + confirm`。该 workflow 不响应 push、schedule 或消息 dispatch，日常 sync 不注入 migration Secret。
 
 通用 ingest 的 `sql/migration.sql` 与 `sql/migration_phase2_generic_ingest.sql` 已于 2026-07-11 在 dev 数据库手工执行。`sql/cleanup_phase2_legacy_ingest.sql` 尚未执行；必须先观察完整同步、pending 重试、备份和维护周期。
 

@@ -1,7 +1,7 @@
 /*
- Navicat Premium Dump SQL
+ Navicat Premium Data Transfer
 
- Source Server         : training_records pgsql17
+ Source Server         : pgsql
  Source Server Type    : PostgreSQL
  Source Server Version : 170000 (170000)
  Source Host           : 122.51.66.213:15432
@@ -12,7 +12,7 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 10/07/2026 14:11:26
+ Date: 11/07/2026 20:59:25
 */
 
 
@@ -26,6 +26,7 @@ MINVALUE  1
 MAXVALUE 9223372036854775807
 START 1
 CACHE 1;
+ALTER SEQUENCE "monitor"."github_action_steps_step_id_seq" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Sequence structure for system_config_parameter_checks_check_id_seq
@@ -37,6 +38,7 @@ MINVALUE  1
 MAXVALUE 9223372036854775807
 START 1
 CACHE 1;
+ALTER SEQUENCE "monitor"."system_config_parameter_checks_check_id_seq" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Table structure for github_action_failures
@@ -58,6 +60,7 @@ CREATE TABLE "monitor"."github_action_failures" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
+ALTER TABLE "monitor"."github_action_failures" OWNER TO "training_writer";
 COMMENT ON COLUMN "monitor"."github_action_failures"."failure_key" IS '失败记录幂等键，由 run_id、job_id、step_number 和失败层级生成';
 COMMENT ON COLUMN "monitor"."github_action_failures"."run_id" IS '所属 GitHub Action Run ID';
 COMMENT ON COLUMN "monitor"."github_action_failures"."job_id" IS '所属 GitHub Action Job ID，run 级失败可为空';
@@ -95,6 +98,7 @@ CREATE TABLE "monitor"."github_action_jobs" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
+ALTER TABLE "monitor"."github_action_jobs" OWNER TO "training_writer";
 COMMENT ON COLUMN "monitor"."github_action_jobs"."job_id" IS 'GitHub Action Job 唯一 ID';
 COMMENT ON COLUMN "monitor"."github_action_jobs"."run_id" IS '所属 GitHub Action Run ID';
 COMMENT ON COLUMN "monitor"."github_action_jobs"."job_name" IS 'Job 名称';
@@ -141,6 +145,7 @@ CREATE TABLE "monitor"."github_action_runs" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
+ALTER TABLE "monitor"."github_action_runs" OWNER TO "training_writer";
 COMMENT ON COLUMN "monitor"."github_action_runs"."run_id" IS 'GitHub Action Run 唯一 ID';
 COMMENT ON COLUMN "monitor"."github_action_runs"."repository_full_name" IS '仓库全名，例如 soulgo/training_records';
 COMMENT ON COLUMN "monitor"."github_action_runs"."workflow_id" IS 'GitHub Workflow ID';
@@ -185,6 +190,7 @@ CREATE TABLE "monitor"."github_action_steps" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
+ALTER TABLE "monitor"."github_action_steps" OWNER TO "training_writer";
 COMMENT ON COLUMN "monitor"."github_action_steps"."step_id" IS '本地 step 自增主键';
 COMMENT ON COLUMN "monitor"."github_action_steps"."job_id" IS '所属 GitHub Action Job ID';
 COMMENT ON COLUMN "monitor"."github_action_steps"."run_id" IS '所属 GitHub Action Run ID';
@@ -222,6 +228,7 @@ CREATE TABLE "monitor"."system_config_parameter_checks" (
   "created_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
+ALTER TABLE "monitor"."system_config_parameter_checks" OWNER TO "training_writer";
 COMMENT ON COLUMN "monitor"."system_config_parameter_checks"."check_id" IS '检查结果自增主键';
 COMMENT ON COLUMN "monitor"."system_config_parameter_checks"."parameter_key" IS '被检查参数主键，关联 monitor.system_config_parameters.parameter_key';
 COMMENT ON COLUMN "monitor"."system_config_parameter_checks"."monitor_environment" IS '本次检查所属监控环境，例如 dev 或 main';
@@ -268,6 +275,7 @@ CREATE TABLE "monitor"."system_config_parameters" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
+ALTER TABLE "monitor"."system_config_parameters" OWNER TO "training_writer";
 COMMENT ON COLUMN "monitor"."system_config_parameters"."parameter_key" IS '参数稳定主键，建议格式为 <env>.<scope>.<name>，例如 dev.github.secret.DEV_TRAINING_DB_URL';
 COMMENT ON COLUMN "monitor"."system_config_parameters"."monitor_environment" IS '监控环境，例如 dev 或 main，用于分库/分支隔离展示';
 COMMENT ON COLUMN "monitor"."system_config_parameters"."parameter_name" IS '参数名称，只保存配置项名称，不保存配置值';
@@ -279,15 +287,15 @@ COMMENT ON COLUMN "monitor"."system_config_parameters"."health_probe_key" IS '�
 COMMENT ON COLUMN "monitor"."system_config_parameters"."health_check_type" IS '健康探测类型快照，例如 postgres_connect、openai_models、telegram_get_me、presence、unsupported';
 COMMENT ON COLUMN "monitor"."system_config_parameters"."validity_mode" IS '可选到期证据维护模式，例如 fixed_expires_at、rotation_cycle、review_after、non_expiring_manual_review、provider_metadata';
 COMMENT ON COLUMN "monitor"."system_config_parameters"."valid_from" IS '参数开始使用时间，可作为轮换周期计算起点';
-COMMENT ON COLUMN "monitor"."system_config_parameters"."expires_at" IS '登记的明确过期时间；仅作为页面到期证据，不代表健康探测结果';
+COMMENT ON COLUMN "monitor"."system_config_parameters"."expires_at" IS '明确过期时间，当前时间超过该值时检查状态应为 expired';
 COMMENT ON COLUMN "monitor"."system_config_parameters"."review_after_at" IS '复核时间；适用于没有真实过期时间但需要定期确认仍有效的配置';
-COMMENT ON COLUMN "monitor"."system_config_parameters"."rotation_cycle_days" IS '轮换周期天数；配合 valid_from 或 provider metadata updated_at 计算下一次复核时间';
-COMMENT ON COLUMN "monitor"."system_config_parameters"."warning_days" IS '到期或复核前预警天数，默认 30 天';
-COMMENT ON COLUMN "monitor"."system_config_parameters"."critical_days" IS '到期或复核前高危提醒天数，默认 7 天';
+COMMENT ON COLUMN "monitor"."system_config_parameters"."rotation_cycle_days" IS '轮换周期天数；配合 valid_from 或 provider metadata updated_at 计算下一次到期时间';
+COMMENT ON COLUMN "monitor"."system_config_parameters"."warning_days" IS '到期前预警天数，默认 30 天';
+COMMENT ON COLUMN "monitor"."system_config_parameters"."critical_days" IS '到期前高危提醒天数，默认 7 天';
 COMMENT ON COLUMN "monitor"."system_config_parameters"."owner" IS '参数维护责任方或责任人标识';
 COMMENT ON COLUMN "monitor"."system_config_parameters"."source_doc" IS '参数来源文档路径，例如 docs/01_系统配置/dev.md';
 COMMENT ON COLUMN "monitor"."system_config_parameters"."source_code_json" IS '读取或注入该参数的代码、workflow 或配置文件路径 JSON 数组';
-COMMENT ON COLUMN "monitor"."system_config_parameters"."metadata_json" IS '非敏感补充元数据，例如维护说明、Provider 非敏感元数据等，不保存参数值';
+COMMENT ON COLUMN "monitor"."system_config_parameters"."metadata_json" IS '非敏感补充元数据，例如 provider updated_at、visibility、metadata_read_status 等，不保存参数值';
 COMMENT ON COLUMN "monitor"."system_config_parameters"."created_at" IS '监控参数记录创建时间';
 COMMENT ON COLUMN "monitor"."system_config_parameters"."updated_at" IS '监控参数记录更新时间';
 COMMENT ON TABLE "monitor"."system_config_parameters" IS '系统配置参数健康主表，记录每个需监控参数的健康探测、可选到期证据和维护来源，不保存参数值';
@@ -297,7 +305,7 @@ COMMENT ON TABLE "monitor"."system_config_parameters" IS '系统配置参数健�
 -- ----------------------------
 ALTER SEQUENCE "monitor"."github_action_steps_step_id_seq"
 OWNED BY "monitor"."github_action_steps"."step_id";
-SELECT setval('"monitor"."github_action_steps_step_id_seq"', 539, true);
+SELECT setval('"monitor"."github_action_steps_step_id_seq"', 788, true);
 
 -- ----------------------------
 -- Alter sequences owned by

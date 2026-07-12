@@ -312,13 +312,20 @@ export async function enqueueSyncDispatchTask({ env, payload }) {
   if (!namespace) {
     return null;
   }
-  const stubId = namespace.idFromName(DEFAULT_QUEUE_NAME);
+  const stubId = namespace.idFromName(await buildQueueShardName(payload));
   const stub = namespace.get(stubId);
   return stub.fetch(new Request('https://sync-dispatch-queue.internal/enqueue', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
   }));
+}
+
+async function buildQueueShardName(payload) {
+  const channel = String(payload?.source?.channel ?? payload?.notification?.channel ?? 'sync').trim() || 'sync';
+  const chatId = String(payload?.notification?.chatId ?? 'unknown');
+  const shardHash = (await sha256Hex(`${channel}:${chatId}`)).slice(0, PAYLOAD_HASH_LENGTH);
+  return `${DEFAULT_QUEUE_NAME}:${channel}:${shardHash}`;
 }
 
 export function buildTelegramDispatchPayload({ env, updates }) {
@@ -479,6 +486,7 @@ function buildWorkflowDispatchPayload({ task, ref }) {
       queue_task_id: task.id,
       dispatch_payload: JSON.stringify({
         action: task.eventType,
+        notification: task.notification ?? null,
         client_payload: clientPayload,
       }),
     },

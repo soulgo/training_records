@@ -51,12 +51,17 @@ export async function evaluateRecognitionFixtures({
     schemaFailures,
     invalidSilentStore: schemaFailures,
     semanticWarningCount,
-    fieldAccuracy: {
-      overall: ratio(passedFields, totalFields),
-      byType: Object.fromEntries(
-        [...typeStats.entries()].map(([type, stats]) => [type, ratio(stats.passed, stats.total)]),
-      ),
+    fixtureContract: {
+      fieldMatchRate: {
+        overall: ratio(passedFields, totalFields),
+        byType: Object.fromEntries(
+          [...typeStats.entries()].map(([type, stats]) => [type, ratio(stats.passed, stats.total)]),
+        ),
+      },
     },
+    accuracy: { status: 'not_measured', reason: 'no_natural_samples' },
+    tokens: { status: 'not_measured', reason: 'no_provider_run' },
+    latency: { status: 'not_measured', reason: 'no_provider_run' },
   };
 }
 
@@ -83,6 +88,8 @@ if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] ?? '')) {
   if (process.argv.includes('--json')) {
     process.stdout.write(`${JSON.stringify(report)}\n`);
   } else {
-    process.stdout.write(`recognition eval: ${report.sampleCount} samples, accuracy ${report.fieldAccuracy.overall}\n`);
+    process.stdout.write(
+      `recognition fixture contract: ${report.sampleCount} samples, field match ${report.fixtureContract.fieldMatchRate.overall}; accuracy ${report.accuracy.status}\n`,
+    );
   }
 }

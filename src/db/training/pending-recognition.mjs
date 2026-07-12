@@ -19,6 +19,7 @@ export async function readPendingRecognitionBatches(options = {}) {
   const client = createTrainingClient(config, options.createClient);
   const limit = normalizeLimit(options.limit);
   const retryLimit = normalizeRetryLimit(options.retryLimit);
+  const sourceChannel = normalizeSourceChannel(options.sourceChannel);
   const now = options.now ?? new Date();
   const claimUntil = options.claimUntil ?? new Date(now.getTime() + normalizeClaimMinutes(options.claimMinutes) * 60 * 1000);
 
@@ -32,6 +33,7 @@ export async function readPendingRecognitionBatches(options = {}) {
           set status = 'abandoned',
               updated_at = $1
           where status = 'pending'
+            and source_channel = $5
             and attempt_count > $4
           returning pending_id
         ),
@@ -39,6 +41,7 @@ export async function readPendingRecognitionBatches(options = {}) {
           select pending_id
           from ingest.pending_task
           where status = 'pending'
+            and source_channel = $5
             and next_retry_at <= $1
           order by next_retry_at asc, pending_id asc
           limit $2
@@ -59,7 +62,7 @@ export async function readPendingRecognitionBatches(options = {}) {
           next_retry_at,
           last_failed_at
       `,
-      [now.toISOString(), limit, claimUntil.toISOString(), retryLimit],
+      [now.toISOString(), limit, claimUntil.toISOString(), retryLimit, sourceChannel],
     );
     await client.query('COMMIT');
 
@@ -83,6 +86,14 @@ export async function readPendingRecognitionBatches(options = {}) {
   } finally {
     await client.end();
   }
+}
+
+function normalizeSourceChannel(value) {
+  const normalized = String(value ?? 'telegram').trim().toLowerCase();
+  if (!/^[a-z][a-z0-9_-]*$/u.test(normalized)) {
+    throw new Error('sourceChannel must be a lowercase channel key');
+  }
+  return normalized;
 }
 
 export async function readPendingRecognitionSummary(options = {}) {

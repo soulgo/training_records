@@ -13,6 +13,7 @@ telegram/process-log.ndjson
 telegram/inbox/
 .claude*
 .tmp*
+.env*.local
 logs*
 runtime/*
 AGENTS.md

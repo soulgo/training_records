@@ -12,7 +12,7 @@ export async function reportGitHubActionStatus(options = {}) {
   const env = options.env ?? process.env;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
-  const branch = firstNonEmpty([env.GITHUB_REF_NAME, env.BRANCH]);
+  const branch = firstNonEmpty([env.GITHUB_ACTION_TARGET_BRANCH, env.GITHUB_REF_NAME, env.BRANCH]);
   const explicitAllowedBranches = splitCsv(env.GITHUB_ACTION_MONITOR_ALLOWED_BRANCH);
   const allowedBranches = explicitAllowedBranches.length ? explicitAllowedBranches : (isMonitoredBranch(branch) ? [branch] : []);
 
@@ -37,7 +37,7 @@ export async function reportGitHubActionStatus(options = {}) {
   }
 
   const { owner, repo } = resolveRepository(env);
-  const runId = normalizeRunId(env.GITHUB_RUN_ID);
+  const runId = normalizeRunId(firstNonEmpty([env.GITHUB_ACTION_TARGET_RUN_ID, env.GITHUB_RUN_ID]));
   const monitorEnvironment = firstNonEmpty([env.GITHUB_ACTION_MONITOR_ENVIRONMENT, branch, allowedBranches[0]]);
   const createClient = options.createClient ?? ((config) => new Client(config));
   const createRepository = options.createRepository ?? ((client) => new PostgresGitHubActionMonitorRepository(client));
@@ -65,7 +65,9 @@ export async function reportGitHubActionStatus(options = {}) {
       token,
       allowedBranches,
       monitorEnvironment,
-      currentRunConclusion: normalizeGitHubJobStatus(env.GITHUB_ACTION_MONITOR_JOB_STATUS),
+      currentRunConclusion: env.GITHUB_ACTION_TARGET_RUN_ID
+        ? ''
+        : normalizeGitHubJobStatus(env.GITHUB_ACTION_MONITOR_JOB_STATUS),
       reportedAt: new Date(),
       repository,
       fetchImpl: options.fetchImpl ?? fetch,

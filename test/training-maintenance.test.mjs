@@ -749,7 +749,7 @@ test('training maintenance migrate supports dry-run without running sync', async
   assert.ok(result.plan.some((entry) => entry.id === '001_runtime_schema_preflight_backfill'));
   assert.deepEqual(
     result.plan.map((entry) => entry.status),
-    ['pending'],
+    ['pending', 'pending'],
   );
   assert.match(result.plan[0].file, /sql\/training_records\/migrations\/001_runtime_schema_preflight_backfill\.sql$/);
 });
@@ -792,7 +792,7 @@ test('training maintenance migrate dry-run reads applied migration status when m
 
   assert.equal(result.status, 'planned');
   assert.equal(result.migrationHistory.status, 'read');
-  assert.deepEqual(result.plan.map((entry) => entry.status), ['applied']);
+  assert.deepEqual(result.plan.map((entry) => entry.status), ['applied', 'pending']);
   assert.equal(queries.some((sql) => /alter table core\.sleep/i.test(sql)), false);
 });
 
@@ -833,7 +833,7 @@ test('training maintenance migrate dry-run reports checksum drift for changed mi
 
   assert.equal(result.status, 'planned');
   assert.equal(result.migrationHistory.checksumMismatchCount, 1);
-  assert.deepEqual(result.plan.map((entry) => entry.status), ['checksum_mismatch']);
+  assert.deepEqual(result.plan.map((entry) => entry.status), ['checksum_mismatch', 'pending']);
   assert.equal(queries.some((sql) => /alter table core\.sleep/i.test(sql)), false);
 });
 
@@ -917,15 +917,22 @@ test('training maintenance migrate confirm executes explicit migration sql', asy
     'postgresql://training_migrator:secret@example.com:5432/training_records',
   ]);
   assert.ok(queries.some((sql) => /alter table core\.sleep add column if not exists total_sleep_minutes/i.test(sql)));
+  const concurrentIndexQueries = queries.filter((sql) => /create index concurrently/i.test(sql));
+  assert.equal(concurrentIndexQueries.length, 2);
+  assert.ok(concurrentIndexQueries.every((sql) => !/\bbegin\s*;/i.test(sql)));
   assert.equal(result.mode, 'migrate');
   assert.equal(result.status, 'applied');
   assert.equal(result.confirmed, true);
-  assert.deepEqual(result.appliedMigrations.map((entry) => entry.id), ['001_runtime_schema_preflight_backfill']);
+  assert.deepEqual(result.appliedMigrations.map((entry) => entry.id), [
+    '001_runtime_schema_preflight_backfill',
+    '002_observation_records',
+  ]);
 });
 
 test('training maintenance migrate confirm skips migration sql already recorded in history', async () => {
   const queries = [];
   const checksum = await readMigrationChecksum('sql/training_records/migrations/001_runtime_schema_preflight_backfill.sql');
+  const observationChecksum = await readMigrationChecksum('sql/training_records/migrations/002_observation_records.sql');
   const result = await runTrainingMaintenance({
     argv: ['migrate', '--confirm'],
     env: {
@@ -943,10 +950,16 @@ test('training maintenance migrate confirm skips migration sql already recorded 
           }
           if (/select migration_id/i.test(sql)) {
             return {
-              rows: [{
-                migration_id: '001_runtime_schema_preflight_backfill',
-                checksum_sha256: checksum,
-              }],
+              rows: [
+                {
+                  migration_id: '001_runtime_schema_preflight_backfill',
+                  checksum_sha256: checksum,
+                },
+                {
+                  migration_id: '002_observation_records',
+                  checksum_sha256: observationChecksum,
+                },
+              ],
             };
           }
           return { rows: [], rowCount: 0 };
@@ -961,7 +974,10 @@ test('training maintenance migrate confirm skips migration sql already recorded 
 
   assert.equal(result.status, 'unchanged');
   assert.deepEqual(result.appliedMigrations, []);
-  assert.deepEqual(result.skippedMigrations.map((entry) => entry.id), ['001_runtime_schema_preflight_backfill']);
+  assert.deepEqual(result.skippedMigrations.map((entry) => entry.id), [
+    '001_runtime_schema_preflight_backfill',
+    '002_observation_records',
+  ]);
   assert.equal(queries.some((sql) => /alter table core\.sleep/i.test(sql)), false);
 });
 
@@ -1002,7 +1018,7 @@ test('training maintenance migrate confirm blocks when applied migration checksu
 
   assert.equal(result.status, 'blocked');
   assert.equal(result.error, 'applied migration checksum mismatch');
-  assert.deepEqual(result.plan.map((entry) => entry.status), ['checksum_mismatch']);
+  assert.deepEqual(result.plan.map((entry) => entry.status), ['checksum_mismatch', 'pending']);
   assert.equal(queries.some((sql) => /alter table core\.sleep/i.test(sql)), false);
 });
 

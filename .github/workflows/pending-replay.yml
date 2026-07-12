@@ -1,0 +1,68 @@
+name: Pending Replay (Dev)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/10 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pending-replay-dev-${{ matrix.channel }}
+  cancel-in-progress: false
+
+jobs:
+  replay:
+    strategy:
+      fail-fast: false
+      matrix:
+        channel:
+          - telegram
+          - feishu
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout dev branch
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Replay due pending tasks
+        env:
+          SYNC_REPLAY_MODE: scheduled
+          TRAINING_DB_ENABLED: 'true'
+          TRAINING_DB_URL: ${{ secrets.DEV_TRAINING_DB_URL }}
+          TRAINING_DB_APP_NAME: pending-replay-dev-${{ matrix.channel }}
+          TELEGRAM_SYNC_TRANSPORT: webhook
+          TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALLOWED_CHAT_IDS: ${{ secrets.DEV_TELEGRAM_ALLOWED_CHAT_IDS || secrets.TELEGRAM_ALLOWED_CHAT_IDS }}
+          FEISHU_SYNC_TRANSPORT: webhook
+          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET }}
+          FEISHU_ALLOWED_CHAT_IDS: ${{ secrets.DEV_FEISHU_ALLOWED_CHAT_IDS }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openai-compatible' }}
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
+          AI_TIMEOUT_MS: ${{ vars.AI_TIMEOUT_MS }}
+          AI_CONCURRENCY: ${{ vars.AI_CONCURRENCY }}
+          TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline
+          FEISHU_RECOGNITION_IMAGE_INPUT_MODE: inline
+          COS_ENABLED: ${{ vars.DEV_COS_ENABLED }}
+          COS_PROVIDER: ${{ vars.DEV_COS_PROVIDER || 'tencent_cos' }}
+          COS_SECRET_ID: ${{ secrets.DEV_COS_SECRET_ID }}
+          COS_SECRET_KEY: ${{ secrets.DEV_COS_SECRET_KEY }}
+          COS_BUCKET: ${{ secrets.DEV_COS_BUCKET }}
+          COS_REGION: ${{ vars.DEV_COS_REGION }}
+          COS_DOMAIN: ${{ secrets.DEV_COS_DOMAIN }}
+          COS_PATH_PREFIX: ${{ secrets.DEV_COS_PATH_PREFIX }}
+        run: npm run sync:${{ matrix.channel }}

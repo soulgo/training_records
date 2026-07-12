@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { notifyTelegramSyncResultFromFile } from '../src/app/use-cases/telegram-sync/status.mjs';
+import { notifyMessageSyncResultFromFile } from '../src/app/use-cases/telegram-sync/status.mjs';
 import { notifyTelegramSyncFromEnv } from '../tools/telegram-sync-notify.mjs';
 
 test('telegram sync notifier reads the result file and sends the deferred success message', async () => {
@@ -34,7 +34,7 @@ test('telegram sync notifier reads the result file and sends the deferred succes
     'utf8',
   );
 
-  const result = await notifyTelegramSyncResultFromFile({
+  const result = await notifyMessageSyncResultFromFile({
     resultPath,
     env: {
       TELEGRAM_BOT_TOKEN: 'token',
@@ -132,7 +132,7 @@ test('telegram sync notifier reports partial failures instead of success for sto
     'utf8',
   );
 
-  const result = await notifyTelegramSyncResultFromFile({
+  const result = await notifyMessageSyncResultFromFile({
     resultPath,
     env: {
       TELEGRAM_BOT_TOKEN: 'token',
@@ -175,7 +175,7 @@ test('telegram sync notifier reports skipped thought deletes as failures', async
     'utf8',
   );
 
-  const result = await notifyTelegramSyncResultFromFile({
+  const result = await notifyMessageSyncResultFromFile({
     resultPath,
     env: {
       TELEGRAM_BOT_TOKEN: 'token',
@@ -219,7 +219,7 @@ test('telegram sync notifier reports missing thought edit targets as failures', 
     'utf8',
   );
 
-  const result = await notifyTelegramSyncResultFromFile({
+  const result = await notifyMessageSyncResultFromFile({
     resultPath,
     env: {
       TELEGRAM_BOT_TOKEN: 'token',
@@ -292,7 +292,7 @@ test('telegram sync notifier sends one reply for each image business batch in a 
     'utf8',
   );
 
-  const result = await notifyTelegramSyncResultFromFile({
+  const result = await notifyMessageSyncResultFromFile({
     resultPath,
     env: {
       TELEGRAM_BOT_TOKEN: 'token',
@@ -343,7 +343,7 @@ test('telegram sync notifier explains deferred database writes for pending repla
     'utf8',
   );
 
-  const result = await notifyTelegramSyncResultFromFile({
+  const result = await notifyMessageSyncResultFromFile({
     resultPath,
     env: {
       TELEGRAM_BOT_TOKEN: 'token',

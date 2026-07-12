@@ -182,17 +182,23 @@ test('PostgresSourceBatchRepository persists generic batch, message, asset, and 
   assert.match(calls[0][0], /insert into ingest\.source_batch/i);
   assert.deepEqual(calls[0][1].slice(0, 2), ['telegram', 'batch-1']);
   assert.match(calls[1][0], /insert into ingest\.source_message/i);
-  assert.deepEqual(calls[1][1].slice(0, 4), ['telegram', '123', '10', 'batch-1']);
+  const [messageRow] = JSON.parse(calls[1][1][0]);
+  assert.deepEqual(
+    [messageRow.source_channel, messageRow.source_chat_id, messageRow.source_message_id, messageRow.batch_id],
+    ['telegram', '123', '10', 'batch-1'],
+  );
   assert.match(calls[2][0], /insert into ingest\.source_asset/i);
-  assert.equal(calls[2][1][3], 'file-unique-id');
+  const [assetRow] = JSON.parse(calls[2][1][0]);
+  assert.equal(assetRow.source_asset_id, 'file-unique-id');
   assert.match(calls[3][0], /insert into ingest\.recognition_run/i);
   assert.doesNotMatch(calls[3][0], /\n\s+message_id\s*,/i);
-  assert.equal(calls[3][1][7], 'Apple Health');
-  assert.equal(calls[3][1][8], 'sleep');
-  assert.deepEqual(JSON.parse(calls[3][1][9]), { sleep: { totalSleepMinutes: 450 } });
-  assert.equal(calls[3][1][10], 0.94);
-  assert.deepEqual(JSON.parse(calls[3][1][12]), { text: 'Sleep 7 hr 30 min', blocks: [] });
-  assert.deepEqual(JSON.parse(calls[3][1][13]), { format: 'png', width: 1170, height: 2532 });
+  const [recognitionRow] = JSON.parse(calls[3][1][0]);
+  assert.equal(recognitionRow.source_app, 'Apple Health');
+  assert.equal(recognitionRow.data_type, 'sleep');
+  assert.deepEqual(recognitionRow.fields_json, { sleep: { totalSleepMinutes: 450 } });
+  assert.equal(recognitionRow.confidence, 0.94);
+  assert.deepEqual(recognitionRow.ocr_json, { text: 'Sleep 7 hr 30 min', blocks: [] });
+  assert.deepEqual(recognitionRow.image_metadata_json, { format: 'png', width: 1170, height: 2532 });
 });
 
 test('PostgresSourceBatchRepository stores Feishu source ids without numeric chat conversion', async () => {
@@ -219,8 +225,9 @@ test('PostgresSourceBatchRepository stores Feishu source ids without numeric cha
   }, processedAt);
 
   assert.match(calls[0][0], /insert into ingest\.source_message/i);
-  assert.equal(calls[0][1][0], 'feishu');
-  assert.equal(calls[0][1][1], 'oc_chat_1');
+  const [messageRow] = JSON.parse(calls[0][1][0]);
+  assert.equal(messageRow.source_channel, 'feishu');
+  assert.equal(messageRow.source_chat_id, 'oc_chat_1');
 });
 
 test('PostgresSourceBatchRepository keys messages by source channel, chat, and message id', async () => {
@@ -265,10 +272,45 @@ test('PostgresSourceBatchRepository keys messages by source channel, chat, and m
   assert.match(messageInsert[0], /source_chat_id/i);
   assert.match(messageInsert[0], /source_message_id/i);
   assert.match(messageInsert[0], /on conflict\s*\(\s*source_channel\s*,\s*source_chat_id\s*,\s*source_message_id\s*\)/i);
-  assert.equal(calls[0][1][0], 'feishu');
-  assert.equal(calls[0][1][1], 'oc_chat_1');
-  assert.equal(calls[0][1][2], 'om_message_1');
-  assert.equal(calls[1][1][1], 'oc_chat_2');
+  const messageRows = JSON.parse(messageInsert[1][0]);
+  assert.deepEqual(
+    messageRows.map((row) => [row.source_channel, row.source_chat_id, row.source_message_id]),
+    [
+      ['feishu', 'oc_chat_1', 'om_message_1'],
+      ['feishu', 'oc_chat_2', 'om_message_1'],
+    ],
+  );
+});
+
+test('PostgresSourceBatchRepository stores sanitized fields separately from the semantic raw result', async () => {
+  const calls = [];
+  const repository = new PostgresSourceBatchRepository({
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [], rowCount: 1 };
+    },
+  });
+  const rawResult = { imageType: 'measurement', records: { measurement: { weightKg: 1000 } } };
+
+  await repository.upsertRecognitions({
+    sourceChannel: 'telegram',
+    batchId: 'semantic-audit',
+    messages: [{ messageId: 10, chatId: 42 }],
+    recognitions: [{
+      messageId: 10,
+      imageType: 'measurement',
+      records: { measurement: { weightKg: null } },
+      semanticGate: {
+        status: 'sanitized',
+        decisions: [{ action: 'sanitize', path: 'measurement.weightKg', reason: 'outside_supported_range' }],
+        rawResult,
+      },
+    }],
+  }, new Date('2026-07-12T00:00:00.000Z'));
+
+  const [row] = JSON.parse(calls[0][1][0]);
+  assert.deepEqual(row.fields_json, { measurement: { weightKg: null } });
+  assert.deepEqual(row.raw_result_json, rawResult);
 });
 
 test('PostgresThoughtRepository persists thought mirror batches through core.thought SQL', async () => {

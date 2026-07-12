@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 import { buildFeishuSyncReport } from '../src/app/use-cases/feishu-sync.use-case.mjs';
-import { buildTelegramSyncReport } from '../src/app/use-cases/telegram-sync.use-case.mjs';
+import { buildMessageSyncReport } from '../src/app/use-cases/telegram-sync.use-case.mjs';
 import {
   buildTraceContext,
   formatActionLogEvent,
@@ -265,7 +265,7 @@ function normalizeReport(channel, result) {
   }
   return channel === 'feishu'
     ? buildFeishuSyncReport(result)
-    : buildTelegramSyncReport(result);
+    : buildMessageSyncReport(result);
 }
 
 async function readResult(resultPath) {

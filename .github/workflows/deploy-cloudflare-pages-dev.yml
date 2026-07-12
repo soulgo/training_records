@@ -24,6 +24,22 @@ on:
         options:
           - 'true'
           - 'false'
+      queue_task_id:
+        description: Optional originating sync queue task id for audit correlation.
+        required: false
+        default: ''
+      source_channel:
+        description: Optional originating channel for deploy failure notification.
+        required: false
+        default: ''
+      notification_chat_id:
+        description: Optional originating chat id for deploy failure notification.
+        required: false
+        default: ''
+      notification_message_id:
+        description: Optional Telegram message id to reply to on deploy failure.
+        required: false
+        default: ''
       target_thought_id:
         description: Optional thought id to verify on the deployed module page.
         required: false
@@ -256,6 +272,26 @@ jobs:
 
           echo "::error title=Thought page verification failed::Thought #${TARGET_THOUGHT_ID} expected ${expected} on ${target_url}, found=${found}."
           exit 1
+
+      - name: Notify Telegram deploy failure
+        if: failure() && github.event_name == 'workflow_dispatch' && inputs.source_channel == 'telegram' && inputs.notification_chat_id != ''
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}
+          NOTIFICATION_CHAT_ID: ${{ inputs.notification_chat_id }}
+          NOTIFICATION_MESSAGE_ID: ${{ inputs.notification_message_id }}
+          STEP_DEPLOY_OUTCOME: failure
+        run: node tools/telegram-action-monitor.mjs
+
+      - name: Notify Feishu deploy failure
+        if: failure() && github.event_name == 'workflow_dispatch' && inputs.source_channel == 'feishu' && inputs.notification_chat_id != ''
+        continue-on-error: true
+        env:
+          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET }}
+          NOTIFICATION_CHAT_ID: ${{ inputs.notification_chat_id }}
+          STEP_DEPLOY_OUTCOME: failure
+        run: node tools/feishu-action-monitor.mjs
 
       - name: Report Action Status
         if: always()

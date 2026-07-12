@@ -13,6 +13,7 @@ import { buildTrainingAnalysisPrompt } from '../../core/ai/training-prompt.mjs';
 import { createAiProvider, isAiSchedulerEnabled } from '../../adapters/ai/ai-provider.factory.mjs';
 import { normalizeAiUsage } from '../../core/ai/schema-validator.mjs';
 import { resolveTrainingCoreConfig } from '../../db/training/config.mjs';
+import { loadTrainingAnalysisContext as loadTrainingAnalysisContextFromDatabase } from '../../adapters/postgres/training-analysis-repository.pg.mjs';
 import { getAnalysisPromptMetadata } from '../../core/ai/prompt-generator.mjs';
 import {
   inferTrainingAnalysisFocus,
@@ -389,12 +390,24 @@ function normalizeInteger(value) {
 }
 
 async function loadSnapshotForAnalysis(options) {
-  const buildTrainingSnapshot = options.buildTrainingSnapshot ?? buildTrainingSnapshotFromSource;
   const snapshotOptions = {
     rootDir: options.rootDir ?? rootDir,
     env: options.env ?? process.env,
     now: options.now,
   };
+  const databaseMode = String(snapshotOptions.env?.TRAINING_SNAPSHOT_SOURCE ?? '').trim().toLowerCase() === 'database';
+
+  if (databaseMode && (options.loadTrainingAnalysisContext || !options.buildTrainingSnapshot)) {
+    const loadTrainingAnalysisContext =
+      options.loadTrainingAnalysisContext ?? loadTrainingAnalysisContextFromDatabase;
+    return loadTrainingAnalysisContext({
+      env: snapshotOptions.env,
+      asOf: snapshotOptions.now ?? new Date(),
+      createClient: options.createClient,
+    });
+  }
+
+  const buildTrainingSnapshot = options.buildTrainingSnapshot ?? buildTrainingSnapshotFromSource;
 
   try {
     const snapshot = await buildTrainingSnapshot(snapshotOptions);

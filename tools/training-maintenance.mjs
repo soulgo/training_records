@@ -927,7 +927,7 @@ async function applyMigrationPlan({ rootDir, migrationPlan, config, createClient
         continue;
       }
       const sql = await readFile(path.join(rootDir, migration.file), 'utf8');
-      await client.query(sql);
+      await executeMigrationSql(client, sql);
       await recordAppliedMigration(client, migration, sql);
       migration.status = 'applied';
       migrationState.appliedIds.add(migration.id);
@@ -950,6 +950,16 @@ async function applyMigrationPlan({ rootDir, migrationPlan, config, createClient
     };
   } finally {
     await client.end?.();
+  }
+}
+
+async function executeMigrationSql(client, sql) {
+  const statements = String(sql)
+    .split(/^-- migrate:non-transactional\s*$/gmu)
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+  for (const statement of statements) {
+    await client.query(statement);
   }
 }
 

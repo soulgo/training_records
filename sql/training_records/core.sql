@@ -1,7 +1,7 @@
 /*
- Navicat Premium Dump SQL
+ Navicat Premium Data Transfer
 
- Source Server         : training_records pgsql17
+ Source Server         : pgsql
  Source Server Type    : PostgreSQL
  Source Server Version : 170000 (170000)
  Source Host           : 122.51.66.213:15432
@@ -12,7 +12,7 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 05/06/2026 16:20:52
+ Date: 11/07/2026 20:57:57
 */
 
 
@@ -38,6 +38,7 @@ CREATE TABLE "core"."activity" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
+ALTER TABLE "core"."activity" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Table structure for meal
@@ -55,6 +56,7 @@ CREATE TABLE "core"."meal" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
+ALTER TABLE "core"."meal" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Table structure for measurement
@@ -82,6 +84,7 @@ CREATE TABLE "core"."measurement" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
+ALTER TABLE "core"."measurement" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Table structure for sleep
@@ -121,6 +124,7 @@ CREATE TABLE "core"."sleep" (
   "suggestion_text" text COLLATE "pg_catalog"."default"
 )
 ;
+ALTER TABLE "core"."sleep" OWNER TO "training_writer";
 COMMENT ON COLUMN "core"."sleep"."sleep_key" IS '睡眠记录幂等键，按归档日期、睡眠类型、入睡时间、醒来时间和总睡眠分钟数生成';
 COMMENT ON COLUMN "core"."sleep"."archived_date" IS '归档日期，关联 core.training_day.archived_date';
 COMMENT ON COLUMN "core"."sleep"."source_channel" IS '来源通道，例如 telegram、markdown_import、archive_backfill 或 ingest_sleep_backfill';
@@ -162,9 +166,6 @@ CREATE TABLE "core"."thought" (
   "telegram_message_id" int8 NOT NULL,
   "telegram_chat_id" int8,
   "source_batch_id" text COLLATE "pg_catalog"."default",
-  "source_channel" text COLLATE "pg_catalog"."default",
-  "source_chat_id" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'legacy-chat'::text,
-  "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL,
   "command" text COLLATE "pg_catalog"."default" NOT NULL,
   "body" text COLLATE "pg_catalog"."default" NOT NULL,
   "thought_module" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'workout'::text,
@@ -174,18 +175,22 @@ CREATE TABLE "core"."thought" (
   "image_refs_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
   "status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'active'::text,
   "deleted_at" timestamptz(6),
-  "updated_at" timestamptz(6) NOT NULL
+  "updated_at" timestamptz(6) NOT NULL,
+  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'telegram'::text,
+  "source_chat_id" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'legacy-chat'::text,
+  "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL
 )
 ;
-COMMENT ON COLUMN "core"."thought"."telegram_message_id" IS '历史 numeric message id 兼容别名；跨通道稳定身份使用 source_channel、source_chat_id、source_message_id';
+ALTER TABLE "core"."thought" OWNER TO "training_writer";
+COMMENT ON COLUMN "core"."thought"."telegram_message_id" IS '原 Telegram message_id，也是随想的稳定定位 ID';
+COMMENT ON COLUMN "core"."thought"."body" IS '随想正文文本，不包含图片二进制';
+COMMENT ON COLUMN "core"."thought"."thought_module" IS '随想模块：workout 为锻炼随想，misc 为杂七杂八，body_feedback 为身体反馈；历史缺省按 workout 兼容';
+COMMENT ON COLUMN "core"."thought"."markdown_path" IS '当前 Markdown 兼容层路径，例如 source/_posts/YYYY-MM-DD-telegram-thought-501.md';
+COMMENT ON COLUMN "core"."thought"."image_refs_json" IS '有序图片引用清单，当前为 /images/thoughts/...，后续可切换为 OSS object key 或 URL';
+COMMENT ON COLUMN "core"."thought"."status" IS 'active 或 deleted；删除命令使用软删除保留迁移线索';
 COMMENT ON COLUMN "core"."thought"."source_channel" IS '来源通道，例如 telegram、feishu、markdown_import';
 COMMENT ON COLUMN "core"."thought"."source_chat_id" IS '来源 chat/conversation ID，Telegram 为 chat_id，飞书为 chat_id 原始字符串';
 COMMENT ON COLUMN "core"."thought"."source_message_id" IS '来源消息 ID，Telegram 为 message_id，飞书为 message_id 原始字符串';
-COMMENT ON COLUMN "core"."thought"."body" IS '随想正文文本，不包含图片二进制';
-COMMENT ON COLUMN "core"."thought"."thought_module" IS '随想模块：workout 为锻炼随想，misc 为杂七杂八，body_feedback 为身体反馈；历史缺省按 workout 兼容';
-COMMENT ON COLUMN "core"."thought"."markdown_path" IS '派生 Markdown 备份兼容路径，例如 source/_posts/YYYY-MM-DD-telegram-thought-501.md；不是业务事实主身份';
-COMMENT ON COLUMN "core"."thought"."image_refs_json" IS '有序图片引用清单，当前为 /images/thoughts/...，后续可切换为 OSS object key 或 URL';
-COMMENT ON COLUMN "core"."thought"."status" IS 'active 或 deleted；删除命令使用软删除保留迁移线索';
 COMMENT ON TABLE "core"."thought" IS '锻炼随想正文镜像表；图片仍保存在本地目录或后续对象存储，表内只保存引用';
 
 -- ----------------------------
@@ -203,6 +208,8 @@ CREATE TABLE "core"."training_day" (
   "active_hours" int4,
   "cycling_distance_km" numeric(10,2),
   "intake_calories" int4,
+  "nutrition_details_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "updated_at" timestamptz(6) NOT NULL,
   "sleep_total_minutes" int4,
   "night_sleep_minutes" int4,
   "nap_minutes" int4,
@@ -211,20 +218,10 @@ CREATE TABLE "core"."training_day" (
   "deep_sleep_minutes" int4,
   "light_sleep_minutes" int4,
   "rem_sleep_minutes" int4,
-  "awake_minutes" int4,
-  "nutrition_details_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
-  "updated_at" timestamptz(6) NOT NULL
+  "awake_minutes" int4
 )
 ;
-COMMENT ON COLUMN "core"."training_day"."sleep_total_minutes" IS '当天总睡眠分钟数，从 core.sleep 聚合刷新';
-COMMENT ON COLUMN "core"."training_day"."night_sleep_minutes" IS '当天夜间睡眠分钟数，从 core.sleep 聚合刷新';
-COMMENT ON COLUMN "core"."training_day"."nap_minutes" IS '当天午睡或零星小睡分钟数，从 core.sleep 聚合刷新';
-COMMENT ON COLUMN "core"."training_day"."sleep_start_time" IS '当天最早入睡时间文本，从 core.sleep 聚合刷新';
-COMMENT ON COLUMN "core"."training_day"."sleep_end_time" IS '当天最晚醒来时间文本，从 core.sleep 聚合刷新';
-COMMENT ON COLUMN "core"."training_day"."deep_sleep_minutes" IS '当天深睡分钟数，从 core.sleep 聚合刷新';
-COMMENT ON COLUMN "core"."training_day"."light_sleep_minutes" IS '当天浅睡分钟数，从 core.sleep 聚合刷新';
-COMMENT ON COLUMN "core"."training_day"."rem_sleep_minutes" IS '当天 REM 睡眠分钟数，从 core.sleep 聚合刷新';
-COMMENT ON COLUMN "core"."training_day"."awake_minutes" IS '当天睡眠期间清醒分钟数，从 core.sleep 聚合刷新';
+ALTER TABLE "core"."training_day" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Indexes structure for table activity
@@ -232,6 +229,8 @@ COMMENT ON COLUMN "core"."training_day"."awake_minutes" IS '当天睡眠期间�
 CREATE INDEX "idx_core_activity_archived_date" ON "core"."activity" USING btree (
   "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
 );
+
+ALTER TABLE "core"."activity" ADD CONSTRAINT "ck_core_activity_nonnegative" CHECK ((calories IS NULL OR calories >= 0) AND (distance_km IS NULL OR distance_km >= 0) AND (duration_seconds IS NULL OR duration_seconds >= 0) AND (heart_rate IS NULL OR heart_rate >= 25 AND heart_rate <= 250));
 
 -- ----------------------------
 -- Primary Key structure for table activity
@@ -245,6 +244,8 @@ CREATE INDEX "idx_core_meal_archived_date" ON "core"."meal" USING btree (
   "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
 );
 
+ALTER TABLE "core"."meal" ADD CONSTRAINT "ck_core_meal_ranges" CHECK ((calories IS NULL OR calories >= 0) AND (recommended_min IS NULL OR recommended_min >= 0) AND (recommended_max IS NULL OR recommended_max >= 0) AND (recommended_min IS NULL OR recommended_max IS NULL OR recommended_min <= recommended_max));
+
 -- ----------------------------
 -- Primary Key structure for table meal
 -- ----------------------------
@@ -256,6 +257,8 @@ ALTER TABLE "core"."meal" ADD CONSTRAINT "meal_pkey" PRIMARY KEY ("meal_key");
 CREATE INDEX "idx_core_measurement_archived_date" ON "core"."measurement" USING btree (
   "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
 );
+
+ALTER TABLE "core"."measurement" ADD CONSTRAINT "ck_core_measurement_physical_ranges" CHECK ((weight_kg IS NULL OR weight_kg >= 20 AND weight_kg <= 300) AND (bmi IS NULL OR bmi >= 8 AND bmi <= 80) AND (body_fat_pct IS NULL OR body_fat_pct >= 2 AND body_fat_pct <= 75) AND (body_water_pct IS NULL OR body_water_pct >= 20 AND body_water_pct <= 85) AND (protein_pct IS NULL OR protein_pct >= 5 AND protein_pct <= 35) AND (bone_mass_kg IS NULL OR bone_mass_kg >= 0.5 AND bone_mass_kg <= 8) AND (basal_metabolism_kcal IS NULL OR basal_metabolism_kcal >= 500 AND basal_metabolism_kcal <= 3500) AND (fat_free_mass_kg IS NULL OR weight_kg IS NULL OR fat_free_mass_kg <= weight_kg));
 
 -- ----------------------------
 -- Primary Key structure for table measurement
@@ -269,6 +272,8 @@ CREATE INDEX "idx_core_sleep_archived_date" ON "core"."sleep" USING btree (
   "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
 );
 
+ALTER TABLE "core"."sleep" ADD CONSTRAINT "ck_core_sleep_ranges" CHECK ((total_sleep_minutes IS NULL OR total_sleep_minutes >= 0 AND total_sleep_minutes <= 1440) AND (night_sleep_minutes IS NULL OR night_sleep_minutes >= 0 AND night_sleep_minutes <= 960) AND (nap_minutes IS NULL OR nap_minutes >= 0 AND nap_minutes <= 480) AND (deep_sleep_ratio_pct IS NULL OR deep_sleep_ratio_pct >= 0 AND deep_sleep_ratio_pct <= 100) AND (light_sleep_ratio_pct IS NULL OR light_sleep_ratio_pct >= 0 AND light_sleep_ratio_pct <= 100) AND (rem_sleep_ratio_pct IS NULL OR rem_sleep_ratio_pct >= 0 AND rem_sleep_ratio_pct <= 100) AND (average_spo2_pct IS NULL OR average_spo2_pct >= 50 AND average_spo2_pct <= 100));
+
 -- ----------------------------
 -- Primary Key structure for table sleep
 -- ----------------------------
@@ -281,11 +286,11 @@ CREATE INDEX "idx_core_thought_module_updated_at" ON "core"."thought" USING btre
   "thought_module" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
   "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
 );
-CREATE INDEX "idx_core_thought_updated_at" ON "core"."thought" USING btree (
-  "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
-);
 CREATE INDEX "idx_core_thought_legacy_message_id" ON "core"."thought" USING btree (
   "telegram_message_id" "pg_catalog"."int8_ops" ASC NULLS LAST
+);
+CREATE INDEX "idx_core_thought_updated_at" ON "core"."thought" USING btree (
+  "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
 );
 CREATE UNIQUE INDEX "ux_core_thought_identity" ON "core"."thought" USING btree (
   "source_channel" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,

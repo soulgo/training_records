@@ -7,7 +7,7 @@ import path from 'node:path';
 
 import {
   buildSafeSyncReport,
-  buildTelegramSyncReport,
+  buildMessageSyncReport,
   createImageStorage,
   createRecognitionAiProvider,
   loadRecognitionSystemPrompt,
@@ -24,7 +24,7 @@ import { buildRecognitionCacheKey, isRecognitionCacheEnabled } from '../src/app/
 import { emptyTrainingCharts, telegramSyncEnv } from './helpers/telegram-sync-runner-fixtures.mjs';
 
 test('sync reports expose batches as the only collection contract', () => {
-  const report = buildTelegramSyncReport({
+  const report = buildMessageSyncReport({
     changed: false,
     updatesFetched: 0,
     readyBatches: 0,
@@ -530,8 +530,9 @@ test('recognition cache key changes with prompt schema and model versions', () =
       promptVersion: '2026-05-24',
       schemaVersion: 'v1',
       model: 'gpt-test',
+      capabilityMode: 'strict_schema',
     }),
-    'telegram:file_unique_id:uniq-a:prompt:2026-05-24:schema:v1:model:gpt-test',
+    'telegram:file_unique_id:uniq-a:prompt:2026-05-24:schema:v1:model:gpt-test:capability:strict_schema',
   );
   assert.equal(buildRecognitionCacheKey({ fileUniqueId: 'uniq-a' }), null);
   assert.equal(isRecognitionCacheEnabled({ TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true' }), true);
@@ -1235,6 +1236,7 @@ test('runTelegramSync runs sleep backfill when pending recognition replay stores
     rootDir: tempRoot,
     env: telegramSyncEnv({
       GITHUB_EVENT_NAME: 'repository_dispatch',
+      SYNC_REPLAY_MODE: 'scheduled',
     }),
     repositoryDispatchEvent: { client_payload: {} },
     getLastProcessedUpdateId: async () => 900,
@@ -1305,6 +1307,7 @@ test('runTelegramSync does not run sleep backfill when pending recognition repla
     rootDir: tempRoot,
     env: telegramSyncEnv({
       GITHUB_EVENT_NAME: 'repository_dispatch',
+      SYNC_REPLAY_MODE: 'scheduled',
     }),
     repositoryDispatchEvent: { client_payload: {} },
     getLastProcessedUpdateId: async () => 900,
@@ -1468,7 +1471,7 @@ test('runTelegramSync treats DB-rejected invalid image archive dates as manual i
     },
   });
 
-  const report = buildTelegramSyncReport(result);
+  const report = buildMessageSyncReport(result);
   const [batch] = report.batches;
   assert.equal(batch.persistenceStatus, 'manual_intervention');
   assert.equal(batch.failureCategory, 'user_input');
@@ -1535,7 +1538,7 @@ test('runTelegramSync replays a ready batch from pending after database recovery
 
   const secondRun = await runTelegramSync({
     rootDir: tempRoot,
-    env: telegramSyncEnv(),
+    env: { ...telegramSyncEnv(), SYNC_REPLAY_MODE: 'scheduled' },
     getLastProcessedUpdateId: async () => 901,
     fetchTelegramUpdates: async () => [],
     readPendingRecognitionBatches: async () =>
@@ -1567,7 +1570,7 @@ test('runTelegramSync replays a ready batch from pending after database recovery
   assert.equal(secondRun.batches[0].pendingReplay, true);
   assert.equal(secondRun.batches[0].persistenceStatus, 'stored');
   assert.equal(secondRun.batches[0].recognitionPendingStatus, 'resolved');
-  assert.equal(buildTelegramSyncReport(secondRun).batches[0].retryState, 'resolved');
+  assert.equal(buildMessageSyncReport(secondRun).batches[0].retryState, 'resolved');
 });
 
 test('runTelegramSync skips undated batches without persisting fallback or markdown writes', async () => {
@@ -1832,8 +1835,8 @@ test('runTelegramSync skips conflicting-date batches and continues processing re
   await assert.rejects(readFile(path.join(tempRoot, 'runtime', 'telegram-sync-pending.ndjson'), 'utf8'), /ENOENT/);
 });
 
-test('buildTelegramSyncReport exposes pending replay and archived date details for logs', () => {
-  const report = buildTelegramSyncReport({
+test('buildMessageSyncReport exposes pending replay and archived date details for logs', () => {
+  const report = buildMessageSyncReport({
     changed: true,
     fallbackUsed: false,
     updatesFetched: 1,
@@ -1915,8 +1918,8 @@ test('buildTelegramSyncReport exposes pending replay and archived date details f
   assert.equal(report.batches[0].taskStatus, 'deferred');
 });
 
-test('buildTelegramSyncReport exposes safe AI and database summaries for action logs', () => {
-  const report = buildTelegramSyncReport({
+test('buildMessageSyncReport exposes safe AI and database summaries for action logs', () => {
+  const report = buildMessageSyncReport({
     changed: true,
     fallbackUsed: false,
     updatesFetched: 1,
@@ -1958,7 +1961,8 @@ test('buildTelegramSyncReport exposes safe AI and database summaries for action 
           sourceChannel: 'telegram',
           rowCounts: { ingestBatch: 1, ingestMessage: 1, ingestRecognition: 2, coreMeasurement: 1 },
           durationMs: 87,
-          slowQueries: [{ operation: 'persist.batch', table: 'core.measurement', durationMs: 1500, thresholdMs: 1000 }],
+          slowQueries: [{ queryOrdinal: 7, operation: 'persist.batch', table: 'core.measurement', durationMs: 1500, thresholdMs: 1000 }],
+          dbTimingsMs: { connect: 12, begin: 3, query: 41, commit: 4, aiCallLog: 6, secret: 999 },
           pendingStatus: null,
           rollbackStatus: null,
           sql: 'insert into core.measurement values ($1)',
@@ -1986,15 +1990,16 @@ test('buildTelegramSyncReport exposes safe AI and database summaries for action 
     sourceChannel: 'telegram',
     rowCounts: { ingestBatch: 1, ingestMessage: 1, ingestRecognition: 2, coreMeasurement: 1 },
     durationMs: 87,
-    slowQueries: [{ operation: 'persist.batch', table: 'core.measurement', durationMs: 1500, thresholdMs: 1000 }],
+    slowQueries: [{ queryOrdinal: 7, operation: 'persist.batch', table: 'core.measurement', durationMs: 1500, thresholdMs: 1000 }],
+    dbTimingsMs: { connect: 12, begin: 3, query: 41, commit: 4, aiCallLog: 6 },
     pendingStatus: null,
     rollbackStatus: null,
   });
   assert.doesNotMatch(JSON.stringify(batch.persistenceResult), /insert into|secret|\$1/i);
 });
 
-test('buildTelegramSyncReport marks abandoned pending batches for manual handling', () => {
-  const report = buildTelegramSyncReport({
+test('buildMessageSyncReport marks abandoned pending batches for manual handling', () => {
+  const report = buildMessageSyncReport({
     changed: false,
     fallbackUsed: false,
     updatesFetched: 0,
@@ -2022,8 +2027,8 @@ test('buildTelegramSyncReport marks abandoned pending batches for manual handlin
   assert.equal(report.batches[0].failureReason, 'pending retry limit exceeded');
 });
 
-test('buildTelegramSyncReport includes optional sync stage timings', () => {
-  const report = buildTelegramSyncReport({
+test('buildMessageSyncReport includes optional sync stage timings', () => {
+  const report = buildMessageSyncReport({
     changed: true,
     fallbackUsed: false,
     updatesFetched: 1,
@@ -2048,8 +2053,8 @@ test('buildTelegramSyncReport includes optional sync stage timings', () => {
   });
 });
 
-test('buildTelegramSyncReport preserves image archive date confidence for summary gates', () => {
-  const report = buildTelegramSyncReport({
+test('buildMessageSyncReport preserves image archive date confidence for summary gates', () => {
+  const report = buildMessageSyncReport({
     changed: true,
     fallbackUsed: false,
     updatesFetched: 1,
@@ -2085,8 +2090,8 @@ test('buildTelegramSyncReport preserves image archive date confidence for summar
   assert.equal(report.batches[0].dateConfidence, 'uncertain');
 });
 
-test('buildTelegramSyncReport omits timings when unavailable for compatibility', () => {
-  const report = buildTelegramSyncReport({
+test('buildMessageSyncReport omits timings when unavailable for compatibility', () => {
+  const report = buildMessageSyncReport({
     changed: false,
     fallbackUsed: false,
     updatesFetched: 0,
@@ -2098,8 +2103,8 @@ test('buildTelegramSyncReport omits timings when unavailable for compatibility',
   assert.equal(Object.hasOwn(report, 'timingsMs'), false);
 });
 
-test('buildTelegramSyncReport exposes normalized task status and identifiers for audit', () => {
-  const report = buildTelegramSyncReport({
+test('buildMessageSyncReport exposes normalized task status and identifiers for audit', () => {
+  const report = buildMessageSyncReport({
     changed: true,
     fallbackUsed: false,
     updatesFetched: 1,
@@ -2136,8 +2141,8 @@ test('buildTelegramSyncReport exposes normalized task status and identifiers for
   assert.equal(report.batches.length, 1);
 });
 
-test('buildTelegramSyncReport keeps partial failure visible when failed images are queued', () => {
-  const report = buildTelegramSyncReport({
+test('buildMessageSyncReport keeps partial failure visible when failed images are queued', () => {
+  const report = buildMessageSyncReport({
     changed: true,
     fallbackUsed: false,
     updatesFetched: 1,
@@ -2162,8 +2167,8 @@ test('buildTelegramSyncReport keeps partial failure visible when failed images a
   assert.equal(report.batches[0].retryState, 'queued');
 });
 
-test('buildTelegramSyncReport exposes failure disposition for retry and manual handling', () => {
-  const report = buildTelegramSyncReport({
+test('buildMessageSyncReport exposes failure disposition for retry and manual handling', () => {
+  const report = buildMessageSyncReport({
     changed: false,
     fallbackUsed: false,
     updatesFetched: 3,
@@ -2198,8 +2203,8 @@ test('buildTelegramSyncReport exposes failure disposition for retry and manual h
   assert.equal(report.batches[2].failureDisposition, 'skip');
 });
 
-test('buildTelegramSyncReport classifies AI aborts and fallback failures as auto retry', () => {
-  const report = buildTelegramSyncReport({
+test('buildMessageSyncReport classifies AI aborts and fallback failures as auto retry', () => {
+  const report = buildMessageSyncReport({
     changed: false,
     fallbackUsed: true,
     updatesFetched: 2,
@@ -2227,8 +2232,8 @@ test('buildTelegramSyncReport classifies AI aborts and fallback failures as auto
   assert.equal(report.batches[1].failureDisposition, 'auto_retry');
 });
 
-test('buildTelegramSyncReport exposes the canonical sync task statuses', () => {
-  const report = buildTelegramSyncReport({
+test('buildMessageSyncReport exposes the canonical sync task statuses', () => {
+  const report = buildMessageSyncReport({
     changed: false,
     previousLastProcessedUpdateId: 1,
     nextLastProcessedUpdateId: 1,
@@ -2265,6 +2270,8 @@ test('buildTelegramSyncReport exposes the canonical sync task statuses', () => {
 test('runTelegramSync processes updates from repository dispatch payload without polling Telegram', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-dispatch-'));
   let fetchCalled = false;
+  let offsetRead = false;
+  let pendingRead = false;
   const persistedBatches = [];
 
   const result = await runTelegramSync({
@@ -2280,7 +2287,14 @@ test('runTelegramSync processes updates from repository dispatch payload without
       GITHUB_EVENT_NAME: 'repository_dispatch',
       GITHUB_EVENT_PATH: path.join(tempRoot, 'dispatch-event.json'),
     },
-    getLastProcessedUpdateId: async () => 900,
+    getLastProcessedUpdateId: async () => {
+      offsetRead = true;
+      throw new Error('webhook dispatch must not read polling offset');
+    },
+    readPendingRecognitionBatches: async () => {
+      pendingRead = true;
+      throw new Error('new webhook messages must not claim pending work');
+    },
     fetchTelegramUpdates: async () => {
       fetchCalled = true;
       return [];
@@ -2356,6 +2370,8 @@ test('runTelegramSync processes updates from repository dispatch payload without
   });
 
   assert.equal(fetchCalled, false);
+  assert.equal(offsetRead, false);
+  assert.equal(pendingRead, false);
   assert.equal(result.changed, true);
   assert.equal(result.updatesFetched, 1);
   assert.equal(result.lastProcessedUpdateId, 901);
@@ -2627,13 +2643,14 @@ test('runTelegramSync skips an undated single nutrition screenshot without a fil
   assert.equal(result.batches[0].status, 'skipped');
   assert.match(result.batches[0].reason, /no reliable image or filename date/i);
   assert.match(result.batches[0].warnings.join('\n'), /photo 形式发送/);
-  assert.equal(buildTelegramSyncReport(result).batches[0].failureDisposition, 'manual_intervention');
+  assert.equal(buildMessageSyncReport(result).batches[0].failureDisposition, 'manual_intervention');
   assert.doesNotMatch(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /晚餐：465千卡/);
 });
 
 test('runTelegramSync skips polling when webhook mode is enabled without dispatch payload', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-webhook-mode-'));
   let fetchCalled = false;
+  let offsetRead = false;
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
@@ -2647,7 +2664,10 @@ test('runTelegramSync skips polling when webhook mode is enabled without dispatc
       TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       TELEGRAM_SYNC_TRANSPORT: 'webhook',
     },
-    getLastProcessedUpdateId: async () => 900,
+    getLastProcessedUpdateId: async () => {
+      offsetRead = true;
+      return 900;
+    },
     fetchTelegramUpdates: async () => {
       fetchCalled = true;
       return [];
@@ -2661,9 +2681,11 @@ test('runTelegramSync skips polling when webhook mode is enabled without dispatc
   });
 
   assert.equal(fetchCalled, false);
+  assert.equal(offsetRead, false);
   assert.equal(result.changed, false);
   assert.equal(result.updatesFetched, 0);
-  assert.equal(result.lastProcessedUpdateId, 900);
+  assert.equal(result.lastProcessedUpdateId, 0);
+  assert.equal(result.timingsMs.readOffset, 0);
 });
 
 test('runTelegramSync stores a /thought telegram message in core without writing a post', async () => {
@@ -4784,6 +4806,7 @@ test('runTelegramSync replays pending thought batches without rewriting training
     rootDir: tempRoot,
     env: {
       ...telegramSyncEnv(),
+      SYNC_REPLAY_MODE: 'scheduled',
     },
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
@@ -4908,7 +4931,7 @@ test('runTelegramSync keeps analysis reply text unchanged while reporting AI att
     },
   });
 
-  const report = buildTelegramSyncReport(result);
+  const report = buildMessageSyncReport(result);
 
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].text, '数据结论：最近训练稳定。');
@@ -5071,7 +5094,7 @@ test('runTelegramSync ignores unauthorized /analysis commands without generating
   assert.equal(result.batches[0].kind, 'analysis');
   assert.equal(result.batches[0].status, 'ignored');
   assert.equal(result.batches[0].reason, 'unauthorized chat');
-  const report = buildTelegramSyncReport(result);
+  const report = buildMessageSyncReport(result);
   assert.equal(report.batches[0].sourceId, 'telegram:chat:99:message:9013');
   assert.deepEqual(report.batches[0].messageIds, [9013]);
   assert.deepEqual(report.batches[0].updateIds, [901]);
@@ -5935,7 +5958,7 @@ test('runTelegramSync keeps inline image download failures visible in the summar
       exportTrainingMarkdown: () => '### 2026-05-18\n',
     });
 
-    const report = buildTelegramSyncReport(result);
+    const report = buildMessageSyncReport(result);
     const [batch] = report.batches;
     assert.equal(remoteUrlAttempts, 1);
     assert.equal(batch.failureCategory, 'image_download');
@@ -6875,8 +6898,8 @@ test('runTelegramSync defers Telegram success notification until the action fini
   assert.equal(savedResult.batches[0].persistenceStatus, 'stored');
 
   const notifierMessages = [];
-  const { notifyTelegramSyncResultFromFile } = await import('../src/app/use-cases/telegram-sync.use-case.mjs');
-  const notifyResult = await notifyTelegramSyncResultFromFile({
+  const { notifyMessageSyncResultFromFile } = await import('../src/app/use-cases/telegram-sync.use-case.mjs');
+  const notifyResult = await notifyMessageSyncResultFromFile({
     resultPath,
     env: {
       TELEGRAM_BOT_TOKEN: 'token',
@@ -6991,7 +7014,7 @@ test('runTelegramSync preserves image recognition failure reason in report and n
     },
   });
 
-  const report = buildTelegramSyncReport(result);
+  const report = buildMessageSyncReport(result);
   assert.equal(result.batches[0].status, 'skipped');
   assert.equal(result.batches[0].failureCategory, 'ai_service');
   assert.match(result.batches[0].failureReason, /HTTP 429/);
@@ -7063,7 +7086,7 @@ test('runTelegramSync queues image batches when AI recognition fails before any 
   assert.equal(queued[0].batch.messages[0].photos[0].fileId, 'file-food-383');
   assert.match(queued[0].error, /invalid JSON/);
   assert.equal(queued[0].nextRetryAt.toISOString(), now.toISOString());
-  const report = buildTelegramSyncReport(result);
+  const report = buildMessageSyncReport(result);
   assert.equal(report.batches[0].recognitionPendingStatus, 'queued');
   assert.equal(report.batches[0].aiCallLogStatus, 'written');
   assert.equal(report.batches[0].recognitionPendingError, null);
@@ -7149,7 +7172,7 @@ test('runTelegramSync queues image batches when primary and fallback AI provider
   );
   assert.match(queued[0].error, /fallback provider timed out/);
   assert.equal(queued[0].nextRetryAt.toISOString(), now.toISOString());
-  const report = buildTelegramSyncReport(result);
+  const report = buildMessageSyncReport(result);
   assert.equal(report.batches[0].taskStatus, 'deferred');
   assert.equal(report.batches[0].aiCallLogStatus, 'written');
   assert.equal(report.batches[0].retryState, 'queued');
@@ -7166,7 +7189,7 @@ test('runTelegramSync replays pending recognition batches and marks them resolve
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: telegramSyncEnv(),
+    env: telegramSyncEnv({ SYNC_REPLAY_MODE: 'scheduled' }),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
     readPendingRecognitionBatches: async () => [
@@ -7257,7 +7280,7 @@ test('runTelegramSync replays pending recognition batches and marks them resolve
   assert.equal(result.batches[0].status, 'ready');
   assert.equal(result.batches[0].persistenceStatus, 'stored');
   assert.equal(result.batches[0].pendingReplay, true);
-  assert.equal(buildTelegramSyncReport(result).batches[0].pendingReplay, true);
+  assert.equal(buildMessageSyncReport(result).batches[0].pendingReplay, true);
   assert.equal(persistedBatches.length, 1);
   assert.equal(persistedBatches[0].nutrition.totalCalories, 868);
   assert.deepEqual(resolved, ['single-383']);
@@ -7270,7 +7293,7 @@ test('runTelegramSync uses the normalized runtime env for first-time and replaye
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: telegramSyncEnv(),
+    env: { ...telegramSyncEnv(), SYNC_REPLAY_MODE: 'scheduled' },
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [
       {
@@ -7360,7 +7383,7 @@ test('runTelegramSync keeps pending recognition batches queued when replay still
   const result = await runTelegramSync({
     rootDir: tempRoot,
     now,
-    env: telegramSyncEnv(),
+    env: telegramSyncEnv({ SYNC_REPLAY_MODE: 'scheduled' }),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
     readPendingRecognitionBatches: async () => [
@@ -7407,7 +7430,7 @@ test('runTelegramSync keeps pending recognition batches queued when replay still
   assert.match(queued[0].error, /invalid JSON/);
   assert.ok(queued[0].nextRetryAt > now);
   assert.deepEqual(resolved, []);
-  const report = buildTelegramSyncReport(result);
+  const report = buildMessageSyncReport(result);
   assert.equal(report.batches[0].pendingReplay, true);
   assert.equal(report.batches[0].recognitionPendingStatus, 'queued');
 });
@@ -7502,7 +7525,7 @@ test('runTelegramSync marks ready image albums with failed photos as partial fai
   });
 
   const batch = result.batches[0];
-  const report = buildTelegramSyncReport(result);
+  const report = buildMessageSyncReport(result);
   assert.equal(batch.status, 'ready');
   assert.equal(batch.persistenceStatus, 'stored');
   assert.equal(batch.partialFailure, true);
@@ -7674,7 +7697,7 @@ test('runTelegramSync report includes image counts for pending replay batches', 
 
   const result = await runTelegramSync({
     rootDir: tempRoot,
-    env: telegramSyncEnv(),
+    env: telegramSyncEnv({ SYNC_REPLAY_MODE: 'scheduled' }),
     getLastProcessedUpdateId: async () => 900,
     fetchTelegramUpdates: async () => [],
     readPendingRecognitionBatches: async () => [
@@ -7750,7 +7773,7 @@ test('runTelegramSync report includes image counts for pending replay batches', 
     exportTrainingMarkdown: () => '### 2026-05-31\n',
   });
 
-  const report = buildTelegramSyncReport(result);
+  const report = buildMessageSyncReport(result);
   assert.equal(result.changed, true);
   assert.equal(result.batches[0].pendingReplay, true);
   assert.equal(result.batches[0].sourceImageCount, 2);
@@ -7767,8 +7790,8 @@ test('runTelegramSync report includes image counts for pending replay batches', 
   assert.deepEqual(resolved, ['album-replay-counts']);
 });
 
-test('buildTelegramSyncReport exposes recognition attempt kinds for audit summaries', () => {
-  const report = buildTelegramSyncReport({
+test('buildMessageSyncReport exposes recognition attempt kinds for audit summaries', () => {
+  const report = buildMessageSyncReport({
     changed: true,
     fallbackUsed: false,
     updatesFetched: 1,

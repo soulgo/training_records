@@ -15,12 +15,19 @@
 
 ### Added
 
+- 新增异步 Action monitor、独立 pending replay、手动数据库 migration workflow，以及 `/分析` 单连接单 SQL 的只读 PostgreSQL repository；migration workflow 默认 dry-run，只有显式 confirm 才使用迁移账号。
+- 新增 `002_observation_records` 与精确 rollback，补齐 `ingest.extracted_record`、记录级日期决策、review 状态、识别日期候选和 core 物理范围约束；canonical SQL 与 migration history/checksum 合同同步更新。
+- 新增 DateAlignmentService、RecordGrouper、SemanticGate 和 Provider capability negotiation，覆盖完整日期、月日补年、睡眠归档、单锚点传播、多日期隔离、越界清洗、review 决策及 strict/json_object/text_json/vision 能力组合。
 - 新增来源无关的通用截图识别链路：图片先经 Sharp 自动旋转、尺寸/像素限制、增强和压缩，可选提取带归一化坐标的 OCR 证据，再由视觉模型完成语义识别并输出稳定的 `NormalizedRecognition` 外层契约。
 - 新增通用 ingest 数据模型 `ingest.source_batch`、`source_message`、`source_asset`、`recognition_run`、`pending_task`，以及对应的 `PostgresSourceBatchRepository`；提供 Phase 1/Phase 2 可执行迁移和默认拒绝执行的旧表清理脚本。
 - 新增 Docker 多阶段构建、Nginx 静态运行配置、Compose 启动入口和无密钥 `.env.example`，支持脱离 GitHub Pages / Cloudflare Pages 部署静态站点。
 
 ### Changed
 
+- 同步主路径不再等待站点部署或同步拉取 Action jobs；deploy 与 monitor 独立通知失败，会话队列按稳定哈希分片，webhook 跳过 polling offset，新消息不再顺带消费 pending 队列。
+- PostgreSQL ingest messages/assets/recognitions 改为集合式 upsert，数据库观测新增安全 `queryOrdinal` 与 connect/BEGIN/query/COMMIT/AI log 分段耗时；识别缓存键新增 capability mode。
+- Telegram/飞书共享报告与结果通知入口统一为 MessageSync 命名，飞书不再导入 Telegram 命名的共享函数或执行 `telegram:` 字符串替换。
+- 静态 recognition fixture 评测改称 contract field-match；没有脱敏自然样本和受控 provider run 时，accuracy、tokens、latency 明确标记为 `not_measured`。
 - 收敛根目录 Markdown：保留 `README.md`、`CHANGELOG.md` 和运行链路固定的 `训练记录.md`、`训练数据解析.md`；将系统代码重构分析、目标、方案、TDD 与最终报告统一归档到 `docs/03_历史重构记录/重构历史/系统代码终极重构/`，并更新文档导航和交叉链接。
 - 修正站点首页对数据来源的描述：线上看板以 PostgreSQL `core.*` 为业务事实源，`训练记录.md` 是数据库派生备份和受保护恢复入口。
 - Telegram 与飞书现在直接转换为共享来源消息契约；识别缓存、Telegram offset、一致性检查、AI monitoring、batch audit、睡眠修复和 pending replay 全部切换到通用 ingest 表，不再以 Telegram 表名或飞书数字代理 ID 作为主路径身份。
@@ -43,6 +50,8 @@
 
 ### Fixed
 
+- 修复 sleep backfill 查询错误引用不存在的 `batch_payload_json` 别名，改为读取真实 `source_batch.payload_json` 字段，并保持目标日期幂等回填。
+- 修复最新 canonical SQL 缺失 source identity、健康探测、Observation 审计字段和迁移/回滚入口的问题，使导出表结构与现行代码契约一致。
 - 修复 dev Telegram 同步读取不存在的 `DEV_TELEGRAM_ALLOWED_CHAT_IDS` Variable，导致图片任务在启动阶段报白名单缺失的问题；workflow 现在优先读取同名 dev Secret，并在未配置时回退现有通用白名单。
 - 修复飞书图片已经识别并入库后不返回结果的问题；通知 CLI 现在直接引用 canonical 飞书同步 use case，不再导入重构中已删除的 `tools/feishu-sync.mjs`。
 - 修复 canonical ingest SQL 将标准化识别字段错误放入 `telegram_message` 的 schema 漂移；识别元数据现归属 recognition 记录，并在 generic migration 中回填到 `ingest.recognition_run`。

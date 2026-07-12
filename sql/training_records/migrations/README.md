@@ -98,3 +98,34 @@ select to_regclass('core.ux_core_thought_identity') as thought_identity_index;
 select to_regclass('ingest.ux_ingest_telegram_message_source_identity') as message_identity_index;
 select to_regclass('ingest.ux_ingest_telegram_recognition_source_identity') as recognition_identity_index;
 ```
+
+## 002_observation_records
+
+### Purpose
+
+Add record-level Observation v4 storage, date-resolution audit fields, and review-queue indexes without changing existing recognition or core rows.
+
+### Execute and Rollback
+
+Run `002_observation_records.sql` through the maintenance migration command. Its partial indexes are created concurrently after the DDL transaction commits. For dev rollback, run `../rollback_observation_records.sql`; it removes only this migration's additive table, columns, constraint, and indexes.
+
+### Acceptance SQL
+
+```sql
+select to_regclass('ingest.extracted_record') as extracted_record_table;
+
+select column_name, data_type
+from information_schema.columns
+where table_schema = 'ingest'
+  and (
+    (table_name = 'source_batch' and column_name = 'date_resolution_status')
+    or (table_name = 'recognition_run' and column_name = 'date_candidates_json')
+  )
+order by table_name, column_name;
+
+select indexname
+from pg_indexes
+where schemaname = 'ingest'
+  and indexname in ('idx_extracted_record_date_type', 'idx_extracted_record_review')
+order by indexname;
+```

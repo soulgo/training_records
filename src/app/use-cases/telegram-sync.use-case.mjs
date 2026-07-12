@@ -37,14 +37,14 @@ import {
 } from '../../core/thought-modules.mjs';
 import { TELEGRAM_HELP_TEXT } from '../../telegram/help.mjs';
 import {
-  buildTelegramSyncReport,
+  buildMessageSyncReport,
   buildSafeSyncReport,
   classifyFailureCategory,
   isTrainingDataBatchKind,
-  maybePersistTelegramSyncResult,
+  maybePersistMessageSyncResult,
   notifyTelegramSyncResult,
-  notifyTelegramSyncResultFromFile,
-  notifyTelegramSyncResultFromReport,
+  notifyMessageSyncResultFromFile,
+  notifyMessageSyncResultFromReport,
   resolveTelegramSyncNotificationStage,
   resolveTelegramSyncResultPath,
   shouldNotifyTelegramSyncResult,
@@ -64,11 +64,11 @@ import { buildPersistenceSummary } from './telegram-sync/persistence-summary.mjs
 
 export {
   buildSafeSyncReport,
-  buildTelegramSyncReport,
+  buildMessageSyncReport,
   createImageStorage,
   loadRecognitionSystemPrompt,
-  notifyTelegramSyncResultFromFile,
-  notifyTelegramSyncResultFromReport,
+  notifyMessageSyncResultFromFile,
+  notifyMessageSyncResultFromReport,
   shouldPersistTelegramArtifacts,
 };
 
@@ -180,6 +180,7 @@ export async function runMessageSync(options = {}) {
           readPendingRecognitionBatchesFromDatabase({
             env: options.env ?? process.env,
             now,
+            sourceChannel,
           })
       : async () => []);
   const appendPendingRecognitionBatch =
@@ -243,13 +244,18 @@ export async function runMessageSync(options = {}) {
       dispatchPayload: env.dispatchPayload,
     }),
   );
-  const previousLastProcessedUpdateId = await measureSyncStage(timings, 'readOffset', () =>
-    readLastProcessedUpdateIdForRun({
-      readLastProcessedUpdateId,
-      dispatchUpdates,
-      allowFallback: Boolean(dispatchUpdates) || env.githubEventName === 'repository_dispatch',
-    }),
-  );
+  let previousLastProcessedUpdateId = 0;
+  if (dispatchUpdates || env.syncTransport === 'webhook') {
+    addTiming(timings, 'readOffset', 0);
+  } else {
+    previousLastProcessedUpdateId = await measureSyncStage(timings, 'readOffset', () =>
+      readLastProcessedUpdateIdForRun({
+        readLastProcessedUpdateId,
+        dispatchUpdates: null,
+        allowFallback: false,
+      }),
+    );
+  }
   let replayStoredAny = false;
   let storedSleepAny = false;
   const storedSleepArchivedDates = new Set();
@@ -272,12 +278,17 @@ export async function runMessageSync(options = {}) {
   const batches = [];
   let changed = replayStoredAny;
 
-  const pendingRecognitionEntries = await measureSyncStage(timings, 'readPendingRecognition', () =>
-    readPendingRecognitionBatchesForRun({
-      readPendingRecognitionBatches,
-      allowFallback: Boolean(dispatchUpdates) || env.githubEventName === 'repository_dispatch',
-    }),
-  );
+  let pendingRecognitionEntries = [];
+  if (env.replayMode === 'scheduled') {
+    pendingRecognitionEntries = await measureSyncStage(timings, 'readPendingRecognition', () =>
+      readPendingRecognitionBatchesForRun({
+        readPendingRecognitionBatches,
+        allowFallback: false,
+      }),
+    );
+  } else {
+    addTiming(timings, 'readPendingRecognition', 0);
+  }
   const replayRecognitionResults = await measureSyncStage(timings, 'replayRecognition', () =>
     replayPendingRecognitionBatches({
       entries: pendingRecognitionEntries,
@@ -511,7 +522,7 @@ export async function runMessageSync(options = {}) {
     timingsMs: timings.timingsMs,
   };
   finalizeSyncTimings(timings, result);
-  await maybePersistTelegramSyncResult(resultPath, result);
+  await maybePersistMessageSyncResult(resultPath, result);
 
   if (shouldNotifyImmediately) {
     await measureSyncStage(timings, 'notify', () =>
@@ -522,7 +533,7 @@ export async function runMessageSync(options = {}) {
       }),
     );
     finalizeSyncTimings(timings, result);
-    await maybePersistTelegramSyncResult(resultPath, result);
+    await maybePersistMessageSyncResult(resultPath, result);
   }
 
   logSyncTimings(result.timingsMs);
@@ -886,6 +897,7 @@ function loadRequiredEnv(env = process.env, options = {}) {
     githubEventName: env.GITHUB_EVENT_NAME?.trim() || '',
     githubEventPath: env.SYNC_DISPATCH_EVENT_PATH?.trim() || env.GITHUB_EVENT_PATH?.trim() || '',
     dispatchPayload: env.SYNC_DISPATCH_PAYLOAD ?? env.DISPATCH_PAYLOAD ?? '',
+    replayMode: String(env.SYNC_REPLAY_MODE ?? '').toLowerCase() === 'scheduled' ? 'scheduled' : 'disabled',
     pollLimit: Number.isFinite(pollLimit) && pollLimit > 0 ? pollLimit : 20,
     aiConcurrency,
     allowedChatIds: parseAllowedChatIds(allowedChatIdsRaw),

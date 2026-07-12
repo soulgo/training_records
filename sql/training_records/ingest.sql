@@ -1,7 +1,7 @@
 /*
- Navicat Premium Dump SQL
+ Navicat Premium Data Transfer
 
- Source Server         : training_records pgsql17
+ Source Server         : pgsql
  Source Server Type    : PostgreSQL
  Source Server Version : 170000 (170000)
  Source Host           : 122.51.66.213:15432
@@ -12,128 +12,33 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 04/06/2026 16:13:02
+ Date: 11/07/2026 20:58:34
 */
 
 
 -- ----------------------------
--- Sequence structure for telegram_pending_batch_pending_id_seq
+-- Sequence structure for pending_task_pending_id_seq
 -- ----------------------------
-DROP SEQUENCE IF EXISTS "ingest"."telegram_pending_batch_pending_id_seq";
-CREATE SEQUENCE "ingest"."telegram_pending_batch_pending_id_seq" 
+DROP SEQUENCE IF EXISTS "ingest"."pending_task_pending_id_seq";
+CREATE SEQUENCE "ingest"."pending_task_pending_id_seq"
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
 START 1
 CACHE 1;
+ALTER SEQUENCE "ingest"."pending_task_pending_id_seq" OWNER TO "training_writer";
 
 -- ----------------------------
--- Table structure for telegram_batch
+-- Sequence structure for telegram_pending_batch_pending_id_seq
 -- ----------------------------
-DROP TABLE IF EXISTS "ingest"."telegram_batch";
-CREATE TABLE "ingest"."telegram_batch" (
-  "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
-  "status" text COLLATE "pg_catalog"."default" NOT NULL,
-  "archived_date" date,
-  "reason" text COLLATE "pg_catalog"."default",
-  "confidence" numeric(10,4),
-  "warnings_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
-  "issues_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
-  "update_ids_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
-  "payload_hash" text COLLATE "pg_catalog"."default" NOT NULL,
-  "batch_payload_json" jsonb NOT NULL,
-  "processed_at" timestamptz(6) NOT NULL,
-  "updated_at" timestamptz(6) NOT NULL
-)
-;
-
--- ----------------------------
--- Table structure for telegram_message
--- ----------------------------
-DROP TABLE IF EXISTS "ingest"."telegram_message";
-CREATE TABLE "ingest"."telegram_message" (
-  "message_id" int8 NOT NULL,
-  "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
-  "update_id" int8 NOT NULL,
-  "media_group_id" text COLLATE "pg_catalog"."default",
-  "chat_id" int8,
-  "caption" text COLLATE "pg_catalog"."default",
-  "text" text COLLATE "pg_catalog"."default",
-  "date_unix" int8,
-  "photo_file_ids_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
-  "photo_file_unique_ids_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
-  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'telegram'::text,
-  "source_chat_id" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'legacy-chat'::text,
-  "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL,
-  "updated_at" timestamptz(6) NOT NULL
-)
-;
-
--- ----------------------------
--- Table structure for telegram_pending_batch
--- ----------------------------
-DROP TABLE IF EXISTS "ingest"."telegram_pending_batch";
-CREATE TABLE "ingest"."telegram_pending_batch" (
-  "pending_id" int8 NOT NULL DEFAULT nextval('"ingest".telegram_pending_batch_pending_id_seq'::regclass),
-  "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
-  "kind" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'image'::text,
-  "status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'pending'::text,
-  "batch_payload_json" jsonb NOT NULL,
-  "failure_category" text COLLATE "pg_catalog"."default",
-  "failure_reason" text COLLATE "pg_catalog"."default",
-  "attempt_count" int4 NOT NULL DEFAULT 0,
-  "next_retry_at" timestamptz(6) NOT NULL DEFAULT now(),
-  "last_failed_at" timestamptz(6) NOT NULL DEFAULT now(),
-  "resolved_at" timestamptz(6),
-  "created_at" timestamptz(6) NOT NULL DEFAULT now(),
-  "updated_at" timestamptz(6) NOT NULL DEFAULT now()
-)
-;
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."pending_id" IS '待重试记录自增主键';
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."batch_id" IS 'Telegram 批次 ID，单图为 single-messageId，相册为 media_group_id';
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."kind" IS '批次类型，当前主要为 image';
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."status" IS '重试状态：pending 待重试，resolved 已成功处理，abandoned 放弃处理';
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."batch_payload_json" IS '完整批次 payload，包含 messageId、updateId、chatId、photo file_id 等重放所需数据';
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."failure_category" IS '最近一次失败分类，例如 ai_service、telegram_api、system_bug';
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."failure_reason" IS '最近一次失败原因摘要';
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."attempt_count" IS '已重试次数';
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."next_retry_at" IS '下次允许重试时间';
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."last_failed_at" IS '最近一次失败时间';
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."resolved_at" IS '成功处理或人工关闭时间';
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."created_at" IS '记录创建时间';
-COMMENT ON COLUMN "ingest"."telegram_pending_batch"."updated_at" IS '记录更新时间';
-COMMENT ON TABLE "ingest"."telegram_pending_batch" IS 'Telegram 同步待重试批次表，用于保存 AI 识别失败但不能丢弃的图片批次';
-
--- ----------------------------
--- Table structure for telegram_recognition
--- ----------------------------
-DROP TABLE IF EXISTS "ingest"."telegram_recognition";
-CREATE TABLE "ingest"."telegram_recognition" (
-  "message_id" int8 NOT NULL,
-  "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
-  "recognition_json" jsonb NOT NULL,
-  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'telegram'::text,
-  "source_chat_id" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'legacy-chat'::text,
-  "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL,
-  "source_app" text COLLATE "pg_catalog"."default",
-  "data_type" text COLLATE "pg_catalog"."default",
-  "fields_json" jsonb,
-  "confidence" numeric(5,4),
-  "pipeline_version" text COLLATE "pg_catalog"."default",
-  "ocr_json" jsonb,
-  "image_json" jsonb,
-  "cache_key" text COLLATE "pg_catalog"."default",
-  "updated_at" timestamptz(6) NOT NULL
-)
-;
-COMMENT ON COLUMN "ingest"."telegram_recognition"."source_app" IS '识别出的来源应用';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."data_type" IS '标准化数据类型';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."fields_json" IS '跨来源标准化业务字段';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."confidence" IS '识别置信度，范围 0 到 1';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."pipeline_version" IS '识别管线版本';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."ocr_json" IS 'OCR 文本与坐标证据';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."image_json" IS '图片处理与质量元数据';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."cache_key" IS '来源范围内的精确识别缓存键';
+DROP SEQUENCE IF EXISTS "ingest"."telegram_pending_batch_pending_id_seq";
+CREATE SEQUENCE "ingest"."telegram_pending_batch_pending_id_seq"
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1;
+ALTER SEQUENCE "ingest"."telegram_pending_batch_pending_id_seq" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Table structure for ai_call_log
@@ -159,11 +64,450 @@ CREATE TABLE "ingest"."ai_call_log" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
+ALTER TABLE "ingest"."ai_call_log" OWNER TO "training_writer";
+
+-- ----------------------------
+-- Table structure for pending_task
+-- ----------------------------
+DROP TABLE IF EXISTS "ingest"."pending_task";
+CREATE TABLE "ingest"."pending_task" (
+  "pending_id" int8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (
+INCREMENT 1
+MINVALUE  1
+MAXVALUE 9223372036854775807
+START 1
+CACHE 1
+),
+  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL,
+  "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "kind" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'image'::text,
+  "status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'pending'::text,
+  "payload_json" jsonb NOT NULL,
+  "failure_category" text COLLATE "pg_catalog"."default",
+  "failure_reason" text COLLATE "pg_catalog"."default",
+  "attempt_count" int4 NOT NULL DEFAULT 0,
+  "next_retry_at" timestamptz(6) NOT NULL DEFAULT now(),
+  "last_failed_at" timestamptz(6) NOT NULL DEFAULT now(),
+  "resolved_at" timestamptz(6),
+  "created_at" timestamptz(6) NOT NULL DEFAULT now(),
+  "updated_at" timestamptz(6) NOT NULL DEFAULT now()
+)
+;
+ALTER TABLE "ingest"."pending_task" OWNER TO "training_writer";
+COMMENT ON COLUMN "ingest"."pending_task"."source_channel" IS '失败任务所属来源渠道';
+COMMENT ON COLUMN "ingest"."pending_task"."payload_json" IS '可重放的来源无关批次快照';
+COMMENT ON TABLE "ingest"."pending_task" IS '来源无关的失败重试任务，不依赖 Telegram 批次命名';
+
+-- ----------------------------
+-- Table structure for recognition_run
+-- ----------------------------
+DROP TABLE IF EXISTS "ingest"."recognition_run";
+CREATE TABLE "ingest"."recognition_run" (
+  "recognition_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL,
+  "source_chat_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "cache_key" text COLLATE "pg_catalog"."default",
+  "status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'succeeded'::text,
+  "source_app" text COLLATE "pg_catalog"."default",
+  "data_type" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'unknown'::text,
+  "fields_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "confidence" numeric(5,4),
+  "warnings_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "ocr_json" jsonb,
+  "image_metadata_json" jsonb,
+  "pipeline_version" text COLLATE "pg_catalog"."default" NOT NULL,
+  "schema_name" text COLLATE "pg_catalog"."default",
+  "schema_version" text COLLATE "pg_catalog"."default",
+  "provider" text COLLATE "pg_catalog"."default",
+  "model" text COLLATE "pg_catalog"."default",
+  "prompt_version" text COLLATE "pg_catalog"."default",
+  "raw_result_json" jsonb NOT NULL,
+  "date_candidates_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "created_at" timestamptz(6) NOT NULL DEFAULT now(),
+  "updated_at" timestamptz(6) NOT NULL DEFAULT now()
+)
+;
+ALTER TABLE "ingest"."recognition_run" OWNER TO "training_writer";
+COMMENT ON COLUMN "ingest"."recognition_run"."recognition_id" IS '应用生成的稳定识别运行 ID 或迁移生成的 legacy ID';
+COMMENT ON COLUMN "ingest"."recognition_run"."cache_key" IS '包含来源资源、prompt、schema 和 model 的缓存键';
+COMMENT ON COLUMN "ingest"."recognition_run"."status" IS '识别状态，例如 succeeded、unmapped、failed';
+COMMENT ON COLUMN "ingest"."recognition_run"."fields_json" IS '来源无关的标准化字段；未知字段保留在 ingest 而不直接写 core';
+COMMENT ON COLUMN "ingest"."recognition_run"."ocr_json" IS 'OCR 全文、文本块、归一化坐标与置信度证据';
+COMMENT ON COLUMN "ingest"."recognition_run"."image_metadata_json" IS '处理前后格式、尺寸、字节数和图片操作，不含原图';
+COMMENT ON COLUMN "ingest"."recognition_run"."raw_result_json" IS 'AI 原始结构化结果，用于审计和重新映射';
+COMMENT ON TABLE "ingest"."recognition_run" IS '通用截图识别运行结果；保存可查询元数据、证据和原始结构化输出';
+
+-- ----------------------------
+-- Table structure for extracted_record
+-- ----------------------------
+DROP TABLE IF EXISTS "ingest"."extracted_record";
+CREATE TABLE "ingest"."extracted_record" (
+  "record_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "recognition_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "record_ordinal" int4 NOT NULL,
+  "record_type" text COLLATE "pg_catalog"."default" NOT NULL,
+  "observed_at_text" text COLLATE "pg_catalog"."default",
+  "occurred_at" timestamptz(6),
+  "archived_date" date,
+  "date_resolution" text COLLATE "pg_catalog"."default" NOT NULL,
+  "date_confidence" numeric(5,4),
+  "fields_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "evidence_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'accepted'::text,
+  "created_at" timestamptz(6) NOT NULL DEFAULT now(),
+  "updated_at" timestamptz(6) NOT NULL DEFAULT now()
+)
+;
+ALTER TABLE "ingest"."extracted_record" OWNER TO "training_writer";
+COMMENT ON TABLE "ingest"."extracted_record" IS '识别结果中的记录级事实、日期决策与语义审核状态';
+
+-- ----------------------------
+-- Table structure for source_asset
+-- ----------------------------
+DROP TABLE IF EXISTS "ingest"."source_asset";
+CREATE TABLE "ingest"."source_asset" (
+  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL,
+  "source_chat_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "source_asset_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "asset_order" int4 NOT NULL DEFAULT 0,
+  "kind" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'image'::text,
+  "mime_type" text COLLATE "pg_catalog"."default",
+  "width" int4,
+  "height" int4,
+  "size_bytes" int8,
+  "payload_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "created_at" timestamptz(6) NOT NULL DEFAULT now(),
+  "updated_at" timestamptz(6) NOT NULL DEFAULT now()
+)
+;
+ALTER TABLE "ingest"."source_asset" OWNER TO "training_writer";
+COMMENT ON COLUMN "ingest"."source_asset"."source_asset_id" IS '平台原始资源稳定 ID；优先使用 file_unique_id 或 image_key';
+COMMENT ON COLUMN "ingest"."source_asset"."asset_order" IS '资源在消息中的零基顺序';
+COMMENT ON COLUMN "ingest"."source_asset"."kind" IS '资源类型，例如 image 或 document';
+COMMENT ON COLUMN "ingest"."source_asset"."payload_json" IS '资源来源元数据，不保存文件二进制和访问密钥';
+COMMENT ON TABLE "ingest"."source_asset" IS '消息携带的图片或文档资源；资源身份不依赖 Telegram file_id 命名';
+
+-- ----------------------------
+-- Table structure for source_batch
+-- ----------------------------
+DROP TABLE IF EXISTS "ingest"."source_batch";
+CREATE TABLE "ingest"."source_batch" (
+  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL,
+  "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "kind" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'image'::text,
+  "status" text COLLATE "pg_catalog"."default" NOT NULL,
+  "archived_date" date,
+  "reason" text COLLATE "pg_catalog"."default",
+  "confidence" numeric(5,4),
+  "warnings_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "issues_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "payload_hash" text COLLATE "pg_catalog"."default" NOT NULL,
+  "payload_json" jsonb NOT NULL,
+  "date_resolution_status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'single_date'::text,
+  "processed_at" timestamptz(6) NOT NULL,
+  "updated_at" timestamptz(6) NOT NULL
+)
+;
+ALTER TABLE "ingest"."source_batch" OWNER TO "training_writer";
+COMMENT ON COLUMN "ingest"."source_batch"."source_channel" IS '来源渠道，例如 telegram、feishu 或未来新增渠道';
+COMMENT ON COLUMN "ingest"."source_batch"."batch_id" IS '来源渠道内稳定的批次标识';
+COMMENT ON COLUMN "ingest"."source_batch"."kind" IS '批次类型，例如 image、thought、analysis';
+COMMENT ON COLUMN "ingest"."source_batch"."status" IS '批次业务处理状态';
+COMMENT ON COLUMN "ingest"."source_batch"."payload_hash" IS '用于幂等判断的批次内容摘要';
+COMMENT ON COLUMN "ingest"."source_batch"."payload_json" IS '来源无关的标准化批次快照';
+COMMENT ON TABLE "ingest"."source_batch" IS '来源无关的消息处理批次；替代以 Telegram 命名的批次主表';
+
+-- ----------------------------
+-- Table structure for source_message
+-- ----------------------------
+DROP TABLE IF EXISTS "ingest"."source_message";
+CREATE TABLE "ingest"."source_message" (
+  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL,
+  "source_chat_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "source_event_id" text COLLATE "pg_catalog"."default",
+  "legacy_message_id" int8,
+  "legacy_update_id" int8,
+  "media_group_id" text COLLATE "pg_catalog"."default",
+  "sent_at" timestamptz(6),
+  "caption" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT ''::text,
+  "message_text" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT ''::text,
+  "payload_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
+  "updated_at" timestamptz(6) NOT NULL
+)
+;
+ALTER TABLE "ingest"."source_message" OWNER TO "training_writer";
+COMMENT ON COLUMN "ingest"."source_message"."source_chat_id" IS '平台原始会话 ID，按 text 保存避免数字代理和精度丢失';
+COMMENT ON COLUMN "ingest"."source_message"."source_message_id" IS '平台原始消息 ID，按 text 保存';
+COMMENT ON COLUMN "ingest"."source_message"."source_event_id" IS '平台事件 ID；消息重投或编辑事件可与消息身份分离';
+COMMENT ON COLUMN "ingest"."source_message"."legacy_message_id" IS '迁移核对用旧数字消息 ID；新代码不得用作主身份';
+COMMENT ON COLUMN "ingest"."source_message"."legacy_update_id" IS '迁移核对用旧 update ID；非 Telegram 来源允许为空';
+COMMENT ON COLUMN "ingest"."source_message"."payload_json" IS '标准化 SourceMessage 快照，不保存密钥';
+COMMENT ON TABLE "ingest"."source_message" IS '来源无关的消息事实；主身份为渠道、会话和来源消息 ID';
+
+-- ----------------------------
+-- Table structure for telegram_batch
+-- ----------------------------
+DROP TABLE IF EXISTS "ingest"."telegram_batch";
+CREATE TABLE "ingest"."telegram_batch" (
+  "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "status" text COLLATE "pg_catalog"."default" NOT NULL,
+  "archived_date" date,
+  "reason" text COLLATE "pg_catalog"."default",
+  "confidence" numeric(10,4),
+  "warnings_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "issues_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "update_ids_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "payload_hash" text COLLATE "pg_catalog"."default" NOT NULL,
+  "batch_payload_json" jsonb NOT NULL,
+  "processed_at" timestamptz(6) NOT NULL,
+  "updated_at" timestamptz(6) NOT NULL
+)
+;
+ALTER TABLE "ingest"."telegram_batch" OWNER TO "training_writer";
+
+-- ----------------------------
+-- Table structure for telegram_message
+-- ----------------------------
+DROP TABLE IF EXISTS "ingest"."telegram_message";
+CREATE TABLE "ingest"."telegram_message" (
+  "message_id" int8 NOT NULL,
+  "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "update_id" int8 NOT NULL,
+  "media_group_id" text COLLATE "pg_catalog"."default",
+  "chat_id" int8,
+  "caption" text COLLATE "pg_catalog"."default",
+  "text" text COLLATE "pg_catalog"."default",
+  "date_unix" int8,
+  "photo_file_ids_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "photo_file_unique_ids_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
+  "updated_at" timestamptz(6) NOT NULL,
+  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'telegram'::text,
+  "source_chat_id" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'legacy-chat'::text,
+  "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL
+)
+;
+ALTER TABLE "ingest"."telegram_message" OWNER TO "training_writer";
+
+-- ----------------------------
+-- Table structure for telegram_pending_batch
+-- ----------------------------
+DROP TABLE IF EXISTS "ingest"."telegram_pending_batch";
+CREATE TABLE "ingest"."telegram_pending_batch" (
+  "pending_id" int8 NOT NULL DEFAULT nextval('"ingest".telegram_pending_batch_pending_id_seq'::regclass),
+  "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "kind" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'image'::text,
+  "status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'pending'::text,
+  "batch_payload_json" jsonb NOT NULL,
+  "failure_category" text COLLATE "pg_catalog"."default",
+  "failure_reason" text COLLATE "pg_catalog"."default",
+  "attempt_count" int4 NOT NULL DEFAULT 0,
+  "next_retry_at" timestamptz(6) NOT NULL DEFAULT now(),
+  "last_failed_at" timestamptz(6) NOT NULL DEFAULT now(),
+  "resolved_at" timestamptz(6),
+  "created_at" timestamptz(6) NOT NULL DEFAULT now(),
+  "updated_at" timestamptz(6) NOT NULL DEFAULT now()
+)
+;
+ALTER TABLE "ingest"."telegram_pending_batch" OWNER TO "training_writer";
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."pending_id" IS '待重试记录自增主键';
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."batch_id" IS 'Telegram 批次 ID，单图为 single-messageId，相册为 media_group_id';
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."kind" IS '批次类型，当前主要为 image';
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."status" IS '重试状态：pending 待重试，resolved 已成功处理，abandoned 放弃处理';
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."batch_payload_json" IS '完整批次 payload，包含 messageId、updateId、chatId、photo file_id 等重放所需数据';
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."failure_category" IS '最近一次失败分类，例如 ai_service、telegram_api、system_bug';
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."failure_reason" IS '最近一次失败原因摘要';
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."attempt_count" IS '已重试次数';
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."next_retry_at" IS '下次允许重试时间';
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."last_failed_at" IS '最近一次失败时间';
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."resolved_at" IS '成功处理或人工关闭时间';
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."created_at" IS '记录创建时间';
+COMMENT ON COLUMN "ingest"."telegram_pending_batch"."updated_at" IS '记录更新时间';
+COMMENT ON TABLE "ingest"."telegram_pending_batch" IS 'Telegram 同步待重试批次表，用于保存 AI 识别失败但不能丢弃的图片批次';
+
+-- ----------------------------
+-- Table structure for telegram_recognition
+-- ----------------------------
+DROP TABLE IF EXISTS "ingest"."telegram_recognition";
+CREATE TABLE "ingest"."telegram_recognition" (
+  "message_id" int8 NOT NULL,
+  "batch_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "recognition_json" jsonb NOT NULL,
+  "updated_at" timestamptz(6) NOT NULL,
+  "source_channel" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'telegram'::text,
+  "source_chat_id" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'legacy-chat'::text,
+  "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "source_app" text COLLATE "pg_catalog"."default",
+  "data_type" text COLLATE "pg_catalog"."default",
+  "fields_json" jsonb,
+  "confidence" numeric(5,4),
+  "pipeline_version" text COLLATE "pg_catalog"."default",
+  "ocr_json" jsonb,
+  "image_json" jsonb,
+  "cache_key" text COLLATE "pg_catalog"."default"
+)
+;
+ALTER TABLE "ingest"."telegram_recognition" OWNER TO "training_writer";
+COMMENT ON COLUMN "ingest"."telegram_recognition"."source_app" IS 'AI 识别出的来源应用名称；为空表示无法可靠判断';
+COMMENT ON COLUMN "ingest"."telegram_recognition"."data_type" IS '标准化数据类型，例如 measurement、workout、nutrition、sleep 或 unknown';
+COMMENT ON COLUMN "ingest"."telegram_recognition"."fields_json" IS '跨来源标准化后的业务字段，不绑定特定 App 页面布局';
+COMMENT ON COLUMN "ingest"."telegram_recognition"."confidence" IS '标准化识别置信度，范围 0 到 1';
+COMMENT ON COLUMN "ingest"."telegram_recognition"."pipeline_version" IS '图片处理、OCR、语义理解与标准化管线版本';
+COMMENT ON COLUMN "ingest"."telegram_recognition"."ocr_json" IS 'OCR 文本、文本块及坐标证据；未启用 OCR 时为空';
+COMMENT ON COLUMN "ingest"."telegram_recognition"."image_json" IS '图片格式、尺寸、压缩与质量处理元数据；不保存密钥或原图内容';
+COMMENT ON COLUMN "ingest"."telegram_recognition"."cache_key" IS '包含来源渠道、文件身份、提示词、Schema 与模型的精确缓存键';
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
-SELECT setval('"ingest"."telegram_pending_batch_pending_id_seq"', 2, true);
+ALTER SEQUENCE "ingest"."pending_task_pending_id_seq"
+OWNED BY "ingest"."pending_task"."pending_id";
+SELECT setval('"ingest"."pending_task_pending_id_seq"', 13, true);
+
+-- ----------------------------
+-- Alter sequences owned by
+-- ----------------------------
+SELECT setval('"ingest"."telegram_pending_batch_pending_id_seq"', 17, true);
+
+-- ----------------------------
+-- Primary Key structure for table ai_call_log
+-- ----------------------------
+ALTER TABLE "ingest"."ai_call_log" ADD CONSTRAINT "ai_call_log_pkey" PRIMARY KEY ("ai_call_id");
+
+-- ----------------------------
+-- Indexes structure for table pending_task
+-- ----------------------------
+CREATE INDEX "idx_pending_task_status_retry" ON "ingest"."pending_task" USING btree (
+  "status" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "next_retry_at" "pg_catalog"."timestamptz_ops" ASC NULLS LAST
+);
+
+-- ----------------------------
+-- Uniques structure for table pending_task
+-- ----------------------------
+ALTER TABLE "ingest"."pending_task" ADD CONSTRAINT "pending_task_source_channel_batch_id_key" UNIQUE ("source_channel", "batch_id");
+
+-- ----------------------------
+-- Primary Key structure for table pending_task
+-- ----------------------------
+ALTER TABLE "ingest"."pending_task" ADD CONSTRAINT "pending_task_pkey" PRIMARY KEY ("pending_id");
+
+-- ----------------------------
+-- Indexes structure for table recognition_run
+-- ----------------------------
+CREATE INDEX "idx_recognition_run_cache_key" ON "ingest"."recognition_run" USING btree (
+  "cache_key" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
+) WHERE cache_key IS NOT NULL;
+CREATE INDEX "idx_recognition_run_source" ON "ingest"."recognition_run" USING btree (
+  "source_channel" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "source_chat_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "source_message_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
+);
+CREATE INDEX "idx_recognition_run_type_updated" ON "ingest"."recognition_run" USING btree (
+  "data_type" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
+);
+
+-- ----------------------------
+-- Checks structure for table recognition_run
+-- ----------------------------
+ALTER TABLE "ingest"."recognition_run" ADD CONSTRAINT "ck_recognition_run_confidence" CHECK (confidence IS NULL OR confidence >= 0::numeric AND confidence <= 1::numeric);
+
+-- ----------------------------
+-- Primary Key structure for table recognition_run
+-- ----------------------------
+ALTER TABLE "ingest"."recognition_run" ADD CONSTRAINT "recognition_run_pkey" PRIMARY KEY ("recognition_id");
+
+-- ----------------------------
+-- Indexes structure for table extracted_record
+-- ----------------------------
+CREATE INDEX "idx_extracted_record_date_type" ON "ingest"."extracted_record" USING btree (
+  "archived_date" "pg_catalog"."date_ops" DESC NULLS FIRST,
+  "record_type" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
+) WHERE status = 'accepted'::text;
+CREATE INDEX "idx_extracted_record_review" ON "ingest"."extracted_record" USING btree (
+  "updated_at" "pg_catalog"."timestamptz_ops" ASC NULLS LAST
+) WHERE status = 'needs_review'::text;
+
+-- ----------------------------
+-- Checks structure for table extracted_record
+-- ----------------------------
+ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "ck_extracted_record_type" CHECK (record_type = ANY (ARRAY['measurement'::text, 'activity'::text, 'workout_summary'::text, 'meal'::text, 'nutrition_summary'::text, 'sleep'::text]));
+ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "ck_extracted_record_date_resolution" CHECK (date_resolution = ANY (ARRAY['exact_image'::text, 'derived_message_year'::text, 'derived_batch_anchor'::text, 'derived_sleep_start'::text, 'filename_fallback'::text, 'unresolved'::text]));
+ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "ck_extracted_record_status" CHECK (status = ANY (ARRAY['accepted'::text, 'needs_review'::text, 'rejected'::text]));
+ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "ck_extracted_record_date_confidence" CHECK (date_confidence IS NULL OR date_confidence >= 0::numeric AND date_confidence <= 1::numeric);
+
+-- ----------------------------
+-- Uniques structure for table extracted_record
+-- ----------------------------
+ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "ux_extracted_record_run_ordinal" UNIQUE ("recognition_id", "record_ordinal");
+
+-- ----------------------------
+-- Primary Key structure for table extracted_record
+-- ----------------------------
+ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "extracted_record_pkey" PRIMARY KEY ("record_id");
+
+-- ----------------------------
+-- Indexes structure for table source_asset
+-- ----------------------------
+CREATE INDEX "idx_source_asset_message_order" ON "ingest"."source_asset" USING btree (
+  "source_channel" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "source_chat_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "source_message_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "asset_order" "pg_catalog"."int4_ops" ASC NULLS LAST
+);
+
+-- ----------------------------
+-- Checks structure for table source_asset
+-- ----------------------------
+ALTER TABLE "ingest"."source_asset" ADD CONSTRAINT "ck_source_asset_dimensions" CHECK ((width IS NULL OR width > 0) AND (height IS NULL OR height > 0) AND (size_bytes IS NULL OR size_bytes >= 0));
+
+-- ----------------------------
+-- Primary Key structure for table source_asset
+-- ----------------------------
+ALTER TABLE "ingest"."source_asset" ADD CONSTRAINT "source_asset_pkey" PRIMARY KEY ("source_channel", "source_chat_id", "source_message_id", "source_asset_id");
+
+-- ----------------------------
+-- Indexes structure for table source_batch
+-- ----------------------------
+CREATE INDEX "idx_source_batch_updated" ON "ingest"."source_batch" USING btree (
+  "source_channel" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
+);
+
+-- ----------------------------
+-- Checks structure for table source_batch
+-- ----------------------------
+ALTER TABLE "ingest"."source_batch" ADD CONSTRAINT "ck_source_batch_confidence" CHECK (confidence IS NULL OR confidence >= 0::numeric AND confidence <= 1::numeric);
+ALTER TABLE "ingest"."source_batch" ADD CONSTRAINT "ck_source_batch_date_resolution_status" CHECK (date_resolution_status = ANY (ARRAY['single_date'::text, 'multi_date'::text, 'needs_review'::text, 'not_applicable'::text]));
+
+-- ----------------------------
+-- Primary Key structure for table source_batch
+-- ----------------------------
+ALTER TABLE "ingest"."source_batch" ADD CONSTRAINT "source_batch_pkey" PRIMARY KEY ("source_channel", "batch_id");
+
+-- ----------------------------
+-- Indexes structure for table source_message
+-- ----------------------------
+CREATE INDEX "idx_source_message_batch" ON "ingest"."source_message" USING btree (
+  "source_channel" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "batch_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
+);
+CREATE INDEX "idx_source_message_legacy_message" ON "ingest"."source_message" USING btree (
+  "legacy_message_id" "pg_catalog"."int8_ops" ASC NULLS LAST
+) WHERE legacy_message_id IS NOT NULL;
+
+-- ----------------------------
+-- Primary Key structure for table source_message
+-- ----------------------------
+ALTER TABLE "ingest"."source_message" ADD CONSTRAINT "source_message_pkey" PRIMARY KEY ("source_channel", "source_chat_id", "source_message_id");
 
 -- ----------------------------
 -- Primary Key structure for table telegram_batch
@@ -176,9 +520,6 @@ ALTER TABLE "ingest"."telegram_batch" ADD CONSTRAINT "telegram_batch_pkey" PRIMA
 CREATE INDEX "idx_ingest_telegram_message_update_id" ON "ingest"."telegram_message" USING btree (
   "update_id" "pg_catalog"."int8_ops" DESC NULLS FIRST
 );
-CREATE INDEX "idx_ingest_telegram_message_legacy_message_id" ON "ingest"."telegram_message" USING btree (
-  "message_id" "pg_catalog"."int8_ops" ASC NULLS LAST
-);
 CREATE UNIQUE INDEX "ux_ingest_telegram_message_source_identity" ON "ingest"."telegram_message" USING btree (
   "source_channel" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
   "source_chat_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
@@ -188,7 +529,7 @@ CREATE UNIQUE INDEX "ux_ingest_telegram_message_source_identity" ON "ingest"."te
 -- ----------------------------
 -- Primary Key structure for table telegram_message
 -- ----------------------------
-ALTER TABLE "ingest"."telegram_message" ADD CONSTRAINT "telegram_message_pkey" PRIMARY KEY ("source_channel", "source_chat_id", "source_message_id");
+ALTER TABLE "ingest"."telegram_message" ADD CONSTRAINT "telegram_message_pkey" PRIMARY KEY ("message_id");
 
 -- ----------------------------
 -- Indexes structure for table telegram_pending_batch
@@ -212,14 +553,15 @@ ALTER TABLE "ingest"."telegram_pending_batch" ADD CONSTRAINT "telegram_pending_b
 ALTER TABLE "ingest"."telegram_pending_batch" ADD CONSTRAINT "telegram_pending_batch_pkey" PRIMARY KEY ("pending_id");
 
 -- ----------------------------
--- Primary Key structure for table telegram_recognition
+-- Indexes structure for table telegram_recognition
 -- ----------------------------
-CREATE INDEX "idx_ingest_telegram_recognition_legacy_message_id" ON "ingest"."telegram_recognition" USING btree (
-  "message_id" "pg_catalog"."int8_ops" ASC NULLS LAST
-);
 CREATE INDEX "idx_ingest_telegram_recognition_cache_key" ON "ingest"."telegram_recognition" USING btree (
   "cache_key" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
-) WHERE "cache_key" IS NOT NULL;
+) WHERE cache_key IS NOT NULL;
+CREATE INDEX "idx_ingest_telegram_recognition_source_app_updated" ON "ingest"."telegram_recognition" USING btree (
+  "source_app" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
+  "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
+) WHERE source_app IS NOT NULL;
 CREATE INDEX "idx_ingest_telegram_recognition_type_updated" ON "ingest"."telegram_recognition" USING btree (
   "data_type" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
   "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
@@ -229,12 +571,37 @@ CREATE UNIQUE INDEX "ux_ingest_telegram_recognition_source_identity" ON "ingest"
   "source_chat_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
   "source_message_id" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
 );
-ALTER TABLE "ingest"."telegram_recognition" ADD CONSTRAINT "telegram_recognition_pkey" PRIMARY KEY ("source_channel", "source_chat_id", "source_message_id");
 
 -- ----------------------------
--- Primary Key structure for table ai_call_log
+-- Checks structure for table telegram_recognition
 -- ----------------------------
-ALTER TABLE "ingest"."ai_call_log" ADD CONSTRAINT "ai_call_log_pkey" PRIMARY KEY ("ai_call_id");
+ALTER TABLE "ingest"."telegram_recognition" ADD CONSTRAINT "ck_ingest_telegram_recognition_confidence" CHECK (confidence IS NULL OR confidence >= 0::numeric AND confidence <= 1::numeric);
+
+-- ----------------------------
+-- Primary Key structure for table telegram_recognition
+-- ----------------------------
+ALTER TABLE "ingest"."telegram_recognition" ADD CONSTRAINT "telegram_recognition_pkey" PRIMARY KEY ("message_id");
+
+-- ----------------------------
+-- Foreign Keys structure for table recognition_run
+-- ----------------------------
+ALTER TABLE "ingest"."recognition_run" ADD CONSTRAINT "recognition_run_batch_fkey" FOREIGN KEY ("source_channel", "batch_id") REFERENCES "ingest"."source_batch" ("source_channel", "batch_id") ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE "ingest"."recognition_run" ADD CONSTRAINT "recognition_run_message_fkey" FOREIGN KEY ("source_channel", "source_chat_id", "source_message_id") REFERENCES "ingest"."source_message" ("source_channel", "source_chat_id", "source_message_id") ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- ----------------------------
+-- Foreign Keys structure for table extracted_record
+-- ----------------------------
+ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "extracted_record_recognition_fkey" FOREIGN KEY ("recognition_id") REFERENCES "ingest"."recognition_run" ("recognition_id") ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- ----------------------------
+-- Foreign Keys structure for table source_asset
+-- ----------------------------
+ALTER TABLE "ingest"."source_asset" ADD CONSTRAINT "source_asset_message_fkey" FOREIGN KEY ("source_channel", "source_chat_id", "source_message_id") REFERENCES "ingest"."source_message" ("source_channel", "source_chat_id", "source_message_id") ON DELETE CASCADE ON UPDATE NO ACTION;
+
+-- ----------------------------
+-- Foreign Keys structure for table source_message
+-- ----------------------------
+ALTER TABLE "ingest"."source_message" ADD CONSTRAINT "source_message_batch_fkey" FOREIGN KEY ("source_channel", "batch_id") REFERENCES "ingest"."source_batch" ("source_channel", "batch_id") ON DELETE CASCADE ON UPDATE NO ACTION;
 
 -- ----------------------------
 -- Foreign Keys structure for table telegram_message
@@ -245,132 +612,4 @@ ALTER TABLE "ingest"."telegram_message" ADD CONSTRAINT "telegram_message_batch_i
 -- Foreign Keys structure for table telegram_recognition
 -- ----------------------------
 ALTER TABLE "ingest"."telegram_recognition" ADD CONSTRAINT "telegram_recognition_batch_id_fkey" FOREIGN KEY ("batch_id") REFERENCES "ingest"."telegram_batch" ("batch_id") ON DELETE CASCADE ON UPDATE NO ACTION;
-
--- ----------------------------
--- Generic ingest tables (Phase 2)
--- ----------------------------
-create table if not exists ingest.source_batch (
-  source_channel text not null,
-  batch_id text not null,
-  kind text not null default 'image',
-  status text not null,
-  archived_date date null,
-  reason text null,
-  confidence numeric(5,4) null check (confidence is null or (confidence >= 0 and confidence <= 1)),
-  warnings_json jsonb not null default '[]'::jsonb,
-  issues_json jsonb not null default '[]'::jsonb,
-  payload_hash text not null,
-  payload_json jsonb not null,
-  processed_at timestamptz not null,
-  updated_at timestamptz not null,
-  primary key (source_channel, batch_id)
-);
-
-create table if not exists ingest.source_message (
-  source_channel text not null,
-  source_chat_id text not null,
-  source_message_id text not null,
-  batch_id text not null,
-  source_event_id text null,
-  legacy_message_id bigint null,
-  legacy_update_id bigint null,
-  media_group_id text null,
-  sent_at timestamptz null,
-  caption text not null default '',
-  message_text text not null default '',
-  payload_json jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null,
-  primary key (source_channel, source_chat_id, source_message_id),
-  foreign key (source_channel, batch_id)
-    references ingest.source_batch(source_channel, batch_id) on delete cascade
-);
-
-create table if not exists ingest.source_asset (
-  source_channel text not null,
-  source_chat_id text not null,
-  source_message_id text not null,
-  source_asset_id text not null,
-  asset_order integer not null default 0,
-  kind text not null default 'image',
-  mime_type text null,
-  width integer null,
-  height integer null,
-  size_bytes bigint null,
-  payload_json jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  primary key (source_channel, source_chat_id, source_message_id, source_asset_id),
-  foreign key (source_channel, source_chat_id, source_message_id)
-    references ingest.source_message(source_channel, source_chat_id, source_message_id) on delete cascade
-);
-
-create table if not exists ingest.recognition_run (
-  recognition_id text primary key,
-  source_channel text not null,
-  source_chat_id text not null,
-  source_message_id text not null,
-  batch_id text not null,
-  cache_key text null,
-  status text not null default 'succeeded',
-  source_app text null,
-  data_type text not null default 'unknown',
-  fields_json jsonb not null default '{}'::jsonb,
-  confidence numeric(5,4) null check (confidence is null or (confidence >= 0 and confidence <= 1)),
-  warnings_json jsonb not null default '[]'::jsonb,
-  ocr_json jsonb null,
-  image_metadata_json jsonb null,
-  pipeline_version text not null,
-  schema_name text null,
-  schema_version text null,
-  provider text null,
-  model text null,
-  prompt_version text null,
-  raw_result_json jsonb not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  foreign key (source_channel, source_chat_id, source_message_id)
-    references ingest.source_message(source_channel, source_chat_id, source_message_id) on delete cascade,
-  foreign key (source_channel, batch_id)
-    references ingest.source_batch(source_channel, batch_id) on delete cascade
-);
-
-comment on table ingest.source_batch is '来源无关的消息处理批次';
-comment on table ingest.source_message is '来源无关的消息事实，使用平台原始字符串身份';
-comment on table ingest.source_asset is '消息携带的图片或文档资源';
-comment on table ingest.recognition_run is '通用 AI 截图识别运行结果';
-
-create table if not exists ingest.pending_task (
-  pending_id bigint generated by default as identity primary key,
-  source_channel text not null,
-  batch_id text not null,
-  kind text not null default 'image',
-  status text not null default 'pending',
-  payload_json jsonb not null,
-  failure_category text null,
-  failure_reason text null,
-  attempt_count integer not null default 0,
-  next_retry_at timestamptz not null default now(),
-  last_failed_at timestamptz not null default now(),
-  resolved_at timestamptz null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (source_channel, batch_id)
-);
-
-comment on table ingest.pending_task is '来源无关的失败重试任务，不依赖 Telegram 批次命名';
-comment on column ingest.pending_task.source_channel is '失败任务所属来源渠道';
-comment on column ingest.pending_task.payload_json is '可重放的来源无关批次快照';
-create index if not exists idx_pending_task_status_retry
-on ingest.pending_task(status, next_retry_at);
-
-
-create index if not exists idx_source_batch_updated
-on ingest.source_batch(source_channel, updated_at desc);
-create index if not exists idx_source_message_batch
-on ingest.source_message(source_channel, batch_id, updated_at desc);
-create index if not exists idx_source_asset_message_order
-on ingest.source_asset(source_channel, source_chat_id, source_message_id, asset_order);
-create index if not exists idx_recognition_run_cache_key
-on ingest.recognition_run(cache_key, updated_at desc) where cache_key is not null;
-create index if not exists idx_recognition_run_source
-on ingest.recognition_run(source_channel, source_chat_id, source_message_id, updated_at desc);
+ALTER TABLE "ingest"."telegram_recognition" ADD CONSTRAINT "telegram_recognition_message_id_fkey" FOREIGN KEY ("message_id") REFERENCES "ingest"."telegram_message" ("message_id") ON DELETE CASCADE ON UPDATE NO ACTION;

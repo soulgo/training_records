@@ -26,22 +26,36 @@ const SLEEP_RANGES = {
   averageRespiratoryRate: [4, 60],
 };
 
-export function applyRecognitionSemanticWarnings(payload) {
+export function applyRecognitionSemanticGate(payload) {
   if (!isPlainObject(payload)) {
     return payload;
   }
 
-  const warnings = new Set(Array.isArray(payload.warnings) ? payload.warnings : []);
-  addMeasurementWarnings(payload.records?.measurement, warnings);
-  addSleepWarnings(payload.records?.sleep, warnings);
+  const gated = structuredClone(payload);
+  const warnings = new Set(Array.isArray(gated.warnings) ? gated.warnings : []);
+  const decisions = [];
+  sanitizeRanges(payload.records?.measurement, gated.records?.measurement, MEASUREMENT_RANGES, 'measurement', warnings, decisions);
+  sanitizeRanges(payload.records?.sleep, gated.records?.sleep, SLEEP_RANGES, 'sleep', warnings, decisions);
+  addMeasurementReviews(payload.records?.measurement, warnings, decisions);
+  addSleepReviews(payload.records?.sleep, warnings, decisions);
 
-  return {
-    ...payload,
+  const result = {
+    ...gated,
     warnings: [...warnings],
+  };
+  return decisions.length === 0 ? result : {
+    ...result,
+    semanticGate: {
+      status: decisions.some((decision) => decision.action === 'review')
+        ? 'needs_review'
+        : decisions.some((decision) => decision.action === 'sanitize') ? 'sanitized' : 'accepted',
+      decisions,
+      rawResult: structuredClone(payload),
+    },
   };
 }
 
-function addMeasurementWarnings(measurement, warnings) {
+function addMeasurementReviews(measurement, warnings, decisions) {
   if (!isPlainObject(measurement)) {
     return;
   }
@@ -58,18 +72,13 @@ function addMeasurementWarnings(measurement, warnings) {
     measurement.fatFreeMassKg > measurement.weightKg
   ) {
     warnings.add('semantic:measurement.fatFreeMassKg exceeds weightKg');
+    decisions.push({ action: 'review', path: 'measurement.fatFreeMassKg', reason: 'exceeds_weight' });
   }
 }
 
-function addSleepWarnings(sleep, warnings) {
+function addSleepReviews(sleep, warnings, decisions) {
   if (!isPlainObject(sleep)) {
     return;
-  }
-
-  for (const [field, [min, max]] of Object.entries(SLEEP_RANGES)) {
-    if (isOutsideRange(sleep[field], min, max)) {
-      warnings.add(`semantic:sleep.${field} outside supported range`);
-    }
   }
 
   const total = sleep.totalSleepMinutes;
@@ -79,6 +88,7 @@ function addSleepWarnings(sleep, warnings) {
     const componentTotal = (isFiniteNumber(night) ? night : 0) + (isFiniteNumber(nap) ? nap : 0);
     if (Math.abs(total - componentTotal) > 30) {
       warnings.add('semantic:sleep.totalSleepMinutes conflicts with component sleep minutes');
+      decisions.push({ action: 'review', path: 'sleep.totalSleepMinutes', reason: 'component_conflict' });
     }
   }
 
@@ -88,6 +98,17 @@ function addSleepWarnings(sleep, warnings) {
     .reduce((sum, value) => sum + value, 0);
   if (isFiniteNumber(total) && stageTotal > total + 30) {
     warnings.add('semantic:sleep.stageMinutes exceed totalSleepMinutes');
+    decisions.push({ action: 'review', path: 'sleep.stageMinutes', reason: 'exceeds_total' });
+  }
+}
+
+function sanitizeRanges(original, target, ranges, namespace, warnings, decisions) {
+  if (!isPlainObject(original) || !isPlainObject(target)) return;
+  for (const [field, [min, max]] of Object.entries(ranges)) {
+    if (!isOutsideRange(original[field], min, max)) continue;
+    target[field] = null;
+    warnings.add(`semantic:${namespace}.${field} outside supported range`);
+    decisions.push({ action: 'sanitize', path: `${namespace}.${field}`, reason: 'outside_supported_range' });
   }
 }
 

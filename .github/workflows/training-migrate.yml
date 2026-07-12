@@ -1,0 +1,85 @@
+name: Training Database Migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Database environment to migrate.
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - main
+      mode:
+        description: Use confirm only after reviewing a successful dry-run.
+        required: true
+        type: choice
+        default: dry-run
+        options:
+          - dry-run
+          - confirm
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Dry-run migrations
+        if: ${{ inputs.mode == 'dry-run' }}
+        env:
+          TRAINING_DB_MIGRATION_URL: ${{ inputs.environment == 'dev' && secrets.DEV_TRAINING_DB_MIGRATION_URL || secrets.TRAINING_DB_MIGRATION_URL }}
+        run: npm run maintenance:migrate -- --dry-run
+
+      - name: Confirm migrations
+        if: ${{ inputs.mode == 'confirm' }}
+        env:
+          TRAINING_DB_MIGRATION_URL: ${{ inputs.environment == 'dev' && secrets.DEV_TRAINING_DB_MIGRATION_URL || secrets.TRAINING_DB_MIGRATION_URL }}
+        run: npm run maintenance:migrate -- --confirm
+
+      - name: Report Action Status
+        if: always()
+        continue-on-error: true
+        env:
+          GITHUB_ACTION_MONITOR_REPORT_URL: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL }}
+          GITHUB_ACTION_MONITOR_REPORT_URL_DEV: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL_DEV }}
+          GITHUB_ACTION_MONITOR_REPORT_URL_MAIN: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL_MAIN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_ACTION_MONITOR_JOB_STATUS: ${{ job.status }}
+          TRAINING_DB_URL: ${{ github.ref_name == 'dev' && secrets.DEV_TRAINING_DB_URL || github.ref_name == 'main' && secrets.TRAINING_DB_URL || '' }}
+          TRAINING_DB_APP_NAME: ${{ github.ref_name == 'dev' && vars.DEV_TRAINING_DB_APP_NAME || github.ref_name == 'main' && vars.TRAINING_DB_APP_NAME || '' }}
+        run: |
+          report_url="${GITHUB_ACTION_MONITOR_REPORT_URL:-}"
+          if [ "${GITHUB_REF_NAME}" = "dev" ] && [ -n "${GITHUB_ACTION_MONITOR_REPORT_URL_DEV:-}" ]; then
+            report_url="${GITHUB_ACTION_MONITOR_REPORT_URL_DEV}"
+          elif [ "${GITHUB_REF_NAME}" = "main" ] && [ -n "${GITHUB_ACTION_MONITOR_REPORT_URL_MAIN:-}" ]; then
+            report_url="${GITHUB_ACTION_MONITOR_REPORT_URL_MAIN}"
+          elif [ "${GITHUB_REF_NAME}" != "dev" ] && [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "Branch ${GITHUB_REF_NAME} is not monitored by the Action monitor; skipping."
+            exit 0
+          fi
+          if [ -n "${TRAINING_DB_URL:-}" ]; then
+            echo "Using local PostgreSQL Action monitor reporter."
+            node tools/report-github-action-status.mjs
+            exit 0
+          fi
+          if [ -z "${report_url:-}" ]; then
+            exit 0
+          fi
+          curl -fsS -X POST "${report_url%/}/api/github/actions/report" \
+            -H "Content-Type: application/json" \
+            -d "{\"run_id\":\"${{ github.run_id }}\"}"

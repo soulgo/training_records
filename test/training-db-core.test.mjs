@@ -30,6 +30,7 @@ import {
 import {
   persistTelegramImageBatchIncremental,
 } from '../src/adapters/postgres/incremental-write.pg.mjs';
+import { PostgresSourceBatchRepository } from '../src/adapters/postgres/source-batch-repository.pg.mjs';
 import {
   assertSequentialUnnestParameters,
   buildCoreTestDay,
@@ -599,6 +600,63 @@ test('readArchiveTrainingSnapshotFromDatabaseClient reads schema-defined archive
   assert.ok(queries.some((sql) => /from archive\.training_sleep/i.test(sql)));
 });
 
+test('source batch repository writes each ingest collection with one set-based query', async () => {
+  const calls = [];
+  const repository = new PostgresSourceBatchRepository({
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [], rowCount: 2 };
+    },
+  });
+  const batch = {
+    sourceChannel: 'telegram',
+    batchId: 'album-set-based',
+    messages: [1, 2].map((messageId) => ({
+      messageId,
+      updateId: 100 + messageId,
+      chatId: 42,
+      dateUnix: 1_768_435_200 + messageId,
+      photos: [
+        { fileUniqueId: `asset-${messageId}-a`, width: 100, height: 200 },
+        { fileUniqueId: `asset-${messageId}-b`, width: 300, height: 400 },
+      ],
+    })),
+    recognitions: [1, 2].map((messageId) => ({
+      messageId,
+      imageType: 'nutrition',
+      confidence: 0.9,
+      records: { totalCalories: 500 + messageId },
+    })),
+    extractedRecords: [
+      {
+        recognitionId: 'recognition-a', recordOrdinal: 0, recordType: 'activity',
+        archivedDate: '2026-07-12', dateResolution: 'exact_image', dateConfidence: 0.9,
+        fields: { activityType: 'run' }, evidence: { source: 'visible_full_date' }, status: 'accepted',
+      },
+      {
+        recognitionId: 'recognition-a', recordOrdinal: 1, recordType: 'meal',
+        archivedDate: null, dateResolution: 'unresolved', dateConfidence: null,
+        fields: { name: 'dinner' }, evidence: { source: 'none' }, status: 'needs_review',
+      },
+    ],
+  };
+
+  await repository.upsertMessages(batch, new Date('2026-07-12T00:00:00.000Z'));
+  await repository.upsertAssets(batch, new Date('2026-07-12T00:00:00.000Z'));
+  await repository.upsertRecognitions(batch, new Date('2026-07-12T00:00:00.000Z'));
+  await repository.upsertExtractedRecords(batch, new Date('2026-07-12T00:00:00.000Z'));
+
+  assert.equal(calls.length, 4);
+  assert.match(calls[0][0], /on conflict \(source_channel, source_chat_id, source_message_id\)/i);
+  assert.match(calls[1][0], /on conflict \(source_channel, source_chat_id, source_message_id, source_asset_id\)/i);
+  assert.match(calls[2][0], /on conflict \(recognition_id\)/i);
+  assert.match(calls[3][0], /on conflict \(record_id\)/i);
+  assert.equal(JSON.parse(calls[0][1][0]).length, 2);
+  assert.equal(JSON.parse(calls[1][1][0]).length, 4);
+  assert.equal(JSON.parse(calls[2][1][0]).length, 2);
+  assert.equal(JSON.parse(calls[3][1][0]).length, 2);
+});
+
 test('persistNormalizedBatch writes ingest and core records in one transaction', async () => {
   const calls = [];
   const fakeClient = {
@@ -637,7 +695,7 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.ok(calls.some(([sql]) => /insert into ingest\.source_message/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into ingest\.source_asset/i.test(sql)));
   const recognitionCall = calls.find(([sql]) => /insert into ingest\.recognition_run/i.test(sql));
-  const recognitionJson = JSON.parse(recognitionCall[1][20]);
+  const recognitionJson = JSON.parse(recognitionCall[1][0])[0].raw_result_json;
   assert.equal(recognitionJson.detectedApp, '华为健康');
   assert.equal(recognitionJson.aiAttemptKind, 'normal');
   assert.ok(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)));
@@ -702,6 +760,7 @@ test('persistNormalizedBatch returns safe persistence summary with row counts an
     ingestBatch: 1,
     ingestMessage: 1,
     ingestRecognition: 1,
+    ingestExtractedRecord: 0,
     aiCallLog: 0,
     coreTrainingDay: 2,
     coreMeasurement: 1,
@@ -712,7 +771,16 @@ test('persistNormalizedBatch returns safe persistence summary with row counts an
   });
   assert.equal(typeof result.durationMs, 'number');
   assert.ok(result.slowQueries.length > 0);
-  assert.ok(result.slowQueries.every((query) => query.operation && query.table && Number.isFinite(query.durationMs)));
+  assert.ok(result.slowQueries.every((query, index) =>
+    query.queryOrdinal === index + 1
+      && query.operation
+      && query.table
+      && Number.isFinite(query.durationMs)));
+  assert.equal(typeof result.dbTimingsMs.connect, 'number');
+  assert.equal(typeof result.dbTimingsMs.begin, 'number');
+  assert.equal(typeof result.dbTimingsMs.query, 'number');
+  assert.equal(typeof result.dbTimingsMs.commit, 'number');
+  assert.equal(typeof result.dbTimingsMs.aiCallLog, 'number');
   assert.doesNotMatch(JSON.stringify(result.slowQueries), /postgresql:\/\/|training_writer|secret|select|insert|\$/i);
   assert.deepEqual(result.persistenceResult, {
     status: 'stored',
@@ -723,6 +791,7 @@ test('persistNormalizedBatch returns safe persistence summary with row counts an
     rowCounts: result.rowCounts,
     durationMs: result.durationMs,
     slowQueries: result.slowQueries,
+    dbTimingsMs: result.dbTimingsMs,
     pendingStatus: null,
     rollbackStatus: null,
   });
@@ -771,7 +840,7 @@ test('persistNormalizedBatch preserves fallback AI audit fields in recognition j
   });
 
   const recognitionCall = calls.find(([sql]) => /insert into ingest\.recognition_run/i.test(sql));
-  const recognitionJson = JSON.parse(recognitionCall[1][20]);
+  const recognitionJson = JSON.parse(recognitionCall[1][0])[0].raw_result_json;
 
   assert.equal(result.status, 'stored');
   assert.equal(recognitionJson.aiAttemptKind, 'fallback');
@@ -826,7 +895,7 @@ test('persistNormalizedBatch preserves strict JSON retry AI audit fields in reco
   });
 
   const recognitionCall = calls.find(([sql]) => /insert into ingest\.recognition_run/i.test(sql));
-  const recognitionJson = JSON.parse(recognitionCall[1][20]);
+  const recognitionJson = JSON.parse(recognitionCall[1][0])[0].raw_result_json;
 
   assert.equal(result.status, 'stored');
   assert.equal(recognitionJson.aiAttemptKind, 'strict_json_retry');
@@ -1215,8 +1284,9 @@ test('persistNormalizedBatch stores Feishu image batches with nullable legacy ch
   );
 
   assert.equal(result.status, 'stored');
-  assert.equal(messageInsert[1][0], 'feishu');
-  assert.equal(messageInsert[1][1], 'oc_chat_1');
+  const [messageRow] = JSON.parse(messageInsert[1][0]);
+  assert.equal(messageRow.source_channel, 'feishu');
+  assert.equal(messageRow.source_chat_id, 'oc_chat_1');
   assert.equal(summaryInsert[1][2], 'feishu');
 });
 
@@ -2024,6 +2094,22 @@ test('backfillCoreSleepFromIngestBatchesClient repairs stored sleep batches miss
   assert.deepEqual(sleepInsert[1][10], [145]);
 });
 
+test('backfillCoreSleepFromIngestBatchesClient filters the persisted payload_json column', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [] };
+    },
+  };
+
+  await backfillCoreSleepFromIngestBatchesClient(client);
+
+  const [candidateSql] = calls[0];
+  assert.match(candidateSql, /b\.payload_json->'sleep' is not null/i);
+  assert.doesNotMatch(candidateSql, /b\.batch_payload_json/i);
+});
+
 test('backfillCoreSleepFromIngestBatchesClient limits ingest and archive candidates to target dates', async () => {
   const calls = [];
   const fakeClient = {
@@ -2654,6 +2740,9 @@ test('readPendingRecognitionBatches abandons retry rows over the attempt limit b
     now,
     retryLimit: 25,
   });
+  const claimCall = calls.find(([sql]) => /for update skip locked/i.test(sql));
+  assert.match(claimCall[0], /source_channel\s*=\s*\$5/i);
+  assert.equal(claimCall[1][4], 'telegram');
 
   assert.deepEqual(pending.map((entry) => entry.batchId), ['single-claimable']);
   assert.equal(rows[0].status, 'abandoned');

@@ -24,6 +24,7 @@ export function buildTrainingAnalysisSummary(snapshot, now = new Date()) {
   return {
     generatedAt: toIsoString(now),
     dataSource: source,
+    traineeProfile: normalizeTraineeProfile(snapshot?.traineeProfile),
     totalDays: daily.length,
     coverage,
     latestDate: latestDay?.date ?? null,
@@ -61,6 +62,24 @@ export function buildTrainingAnalysisSummary(snapshot, now = new Date()) {
       hasHighIntensity: hasHighIntensityTraining(day),
       nutritionComplete: hasNutritionRecord(day),
     })),
+  };
+}
+
+function normalizeTraineeProfile(profile) {
+  if (!profile || typeof profile !== 'object') {
+    return null;
+  }
+  return {
+    traineeId: profile.traineeId ?? null,
+    profileVersion: toNumberOrNull(profile.profileVersion),
+    timezone: profile.timezone ?? null,
+    age: toNumberOrNull(profile.age),
+    sexAtBirth: profile.sexAtBirth ?? null,
+    heightCm: toNumberOrNull(profile.heightCm),
+    experienceLevel: profile.experienceLevel ?? null,
+    goalText: profile.goalText ?? null,
+    weeklyTrainingDaysTarget: toNumberOrNull(profile.weeklyTrainingDaysTarget),
+    profile: profile.profile && typeof profile.profile === 'object' ? profile.profile : {},
   };
 }
 

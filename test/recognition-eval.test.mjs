@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 const rootDir = new URL('../', import.meta.url);
 const rootPath = fileURLToPath(rootDir);
 
-test('eval:recognition script reports field accuracy and schema warning statistics', async () => {
+test('eval:recognition reports fixture contracts without claiming natural-sample accuracy', async () => {
   const packageJson = JSON.parse(await readFile(new URL('package.json', rootDir), 'utf8'));
 
   assert.equal(packageJson.scripts['eval:recognition'], 'node tools/eval-recognition.mjs');
@@ -22,7 +22,11 @@ test('eval:recognition script reports field accuracy and schema warning statisti
   assert.deepEqual(report.imageTypes.sort(), ['measurement', 'nutrition', 'sleep', 'workout']);
   assert.equal(report.schemaFailures, 0);
   assert.equal(report.invalidSilentStore, 0);
-  assert.ok(report.fieldAccuracy.overall >= 0.95);
-  assert.ok(report.fieldAccuracy.byType.sleep >= 0.9);
+  assert.ok(report.fixtureContract.fieldMatchRate.overall >= 0.95);
+  assert.ok(report.fixtureContract.fieldMatchRate.byType.sleep >= 0.9);
+  assert.equal(report.accuracy.status, 'not_measured');
+  assert.equal(report.accuracy.reason, 'no_natural_samples');
+  assert.equal(report.tokens.status, 'not_measured');
+  assert.equal(report.latency.status, 'not_measured');
   assert.equal(typeof report.semanticWarningCount, 'number');
 });

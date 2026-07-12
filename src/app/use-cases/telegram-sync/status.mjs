@@ -18,7 +18,7 @@ export function shouldPersistTelegramArtifacts({
   );
 }
 
-export function buildTelegramSyncReport(result) {
+export function buildMessageSyncReport(result) {
   const batches = (result.batches ?? []).map((batch) => normalizeSyncReportBatch(batch));
   const normalized = {
     changed: result.changed,
@@ -49,7 +49,7 @@ export function buildTelegramSyncReport(result) {
 }
 
 export function buildSafeSyncReport(result) {
-  const report = buildTelegramSyncReport(result);
+  const report = buildMessageSyncReport(result);
   return {
     changed: report.changed,
     updatesFetched: report.updatesFetched,
@@ -312,11 +312,12 @@ function buildSyncTaskAuditFields(batch) {
   const updateIds = messages
     .map((message) => message?.updateId)
     .filter((updateId) => updateId !== null && updateId !== undefined);
+  const sourceChannel = String(batch.sourceChannel ?? messages.find(Boolean)?.sourceChannel ?? 'telegram');
 
   return {
-    taskId: `telegram:${kind}:${batchId}`,
-    sourceType: normalizeSyncTaskSourceType(batch),
-    sourceId: buildSyncTaskSourceId({ batchId, messages }),
+    taskId: `${sourceChannel}:${kind}:${batchId}`,
+    sourceType: normalizeSyncTaskSourceType(batch, sourceChannel),
+    sourceId: buildSyncTaskSourceId({ batchId, messages, sourceChannel }),
     taskStatus: normalizeSyncTaskStatus(batch),
     retryState: normalizeSyncRetryState(batch),
     retryCount: normalizeSyncRetryCount(batch),
@@ -326,24 +327,24 @@ function buildSyncTaskAuditFields(batch) {
   };
 }
 
-function normalizeSyncTaskSourceType(batch) {
+function normalizeSyncTaskSourceType(batch, sourceChannel) {
   if (batch.pendingReplay === true) {
     return 'pending_replay';
   }
-  return 'telegram_update';
+  return `${sourceChannel}_update`;
 }
 
-function buildSyncTaskSourceId({ batchId, messages }) {
+function buildSyncTaskSourceId({ batchId, messages, sourceChannel }) {
   const firstMessage = messages.find(Boolean);
   const chatId = firstMessage?.chatId;
   const mediaGroupId = firstMessage?.mediaGroupId;
   if (chatId !== null && chatId !== undefined && mediaGroupId) {
-    return `telegram:chat:${chatId}:media_group:${mediaGroupId}`;
+    return `${sourceChannel}:chat:${chatId}:media_group:${mediaGroupId}`;
   }
   if (chatId !== null && chatId !== undefined && firstMessage?.messageId !== null && firstMessage?.messageId !== undefined) {
-    return `telegram:chat:${chatId}:message:${firstMessage.messageId}`;
+    return `${sourceChannel}:chat:${chatId}:message:${firstMessage.messageId}`;
   }
-  return `telegram:batch:${batchId}`;
+  return `${sourceChannel}:batch:${batchId}`;
 }
 
 function normalizeSyncTaskStatus(batch) {
@@ -471,7 +472,7 @@ export function resolveTelegramSyncResultPath(rawEnv, activeRootDir, explicitPat
   return '';
 }
 
-export async function maybePersistTelegramSyncResult(resultPath, result) {
+export async function maybePersistMessageSyncResult(resultPath, result) {
   if (!resultPath) {
     return;
   }
@@ -480,7 +481,7 @@ export async function maybePersistTelegramSyncResult(resultPath, result) {
   await writeFile(resultPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
 }
 
-export async function notifyTelegramSyncResultFromFile({
+export async function notifyMessageSyncResultFromFile({
   resultPath,
   env = process.env,
   sendMessage = sendTelegramMessage,
@@ -491,10 +492,10 @@ export async function notifyTelegramSyncResultFromFile({
 
   const raw = await readFile(resultPath, 'utf8');
   const report = JSON.parse(raw);
-  return notifyTelegramSyncResultFromReport({ report, env, sendMessage });
+  return notifyMessageSyncResultFromReport({ report, env, sendMessage });
 }
 
-export async function notifyTelegramSyncResultFromReport({
+export async function notifyMessageSyncResultFromReport({
   report,
   env = process.env,
   sendMessage = sendTelegramMessage,

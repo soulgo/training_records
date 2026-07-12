@@ -16,7 +16,7 @@ import {
   RECOGNITION_SCHEMA_NAME,
   RECOGNITION_SCHEMA_VERSION,
 } from '../../core/ai/telegram-recognition-schema.mjs';
-import { applyRecognitionSemanticWarnings } from '../../core/ai/recognition-semantic-validator.mjs';
+import { applyRecognitionSemanticGate } from '../../core/ai/recognition-semantic-validator.mjs';
 import { buildNormalizedRecognition } from '../../core/ai/normalized-recognition.mjs';
 
 const { Client } = pg;
@@ -35,6 +35,7 @@ export function buildRecognitionCacheKey({
   promptVersion,
   schemaVersion,
   model,
+  capabilityMode = 'strict_schema',
 }) {
   if (!fileUniqueId || !promptVersion || !schemaVersion || !model) {
     return null;
@@ -49,7 +50,17 @@ export function buildRecognitionCacheKey({
     schemaVersion,
     'model',
     model,
+    'capability',
+    capabilityMode,
   ].join(':');
+}
+
+export function resolveRecognitionCapabilityMode(capabilities = {}) {
+  if (capabilities.vision === false) return 'unsupported_vision';
+  if (capabilities.jsonSchema !== false) return 'strict_schema';
+  if (capabilities.jsonObject !== false) return 'json_object';
+  if (capabilities.textJson !== false) return 'text_json';
+  return 'unsupported_json';
 }
 
 function normalizeRecognitionCacheChannel(value) {
@@ -76,6 +87,7 @@ export async function recognizeTelegramImageMessage({
   const model = aiProvider?.env?.model ?? env.AI_MODEL ?? '';
   const fileUniqueId = message.photos?.at(-1)?.fileUniqueId ?? null;
   const sourceChannel = message.sourceChannel ?? 'telegram';
+  const capabilityMode = resolveRecognitionCapabilityMode(aiProvider?.capabilities);
   const cacheKey = buildRecognitionCacheKey({
     sourceChannel,
     fileUniqueId,
@@ -171,7 +183,8 @@ export async function recognizeTelegramImageMessage({
   });
   const parsed = recognitionResult.value;
   const usedModel = recognitionResult.aiProvider?.env?.model ?? model;
-  const effectiveCacheKey = usedModel === model
+  const usedCapabilityMode = resolveRecognitionCapabilityMode(recognitionResult.aiProvider?.capabilities);
+  const effectiveCacheKey = usedModel === model && usedCapabilityMode === capabilityMode
     ? cacheKey
     : buildRecognitionCacheKey({
         sourceChannel,
@@ -179,6 +192,7 @@ export async function recognizeTelegramImageMessage({
         promptVersion,
         schemaVersion,
         model: usedModel,
+        capabilityMode: usedCapabilityMode,
       });
   const cacheStatus = cacheKey && isRecognitionCacheEnabled(env) ? 'miss' : 'disabled';
   const provider = recognitionResult.aiProvider?.name ?? 'openai-compatible';
@@ -551,7 +565,7 @@ function parseRecognitionContent(content, { schemaName, schemaVersion }) {
     allowAdditionalProperties: true,
   });
 
-  return applyRecognitionSemanticWarnings(normalized);
+  return applyRecognitionSemanticGate(normalized);
 }
 
 function parseAiJsonContentToValue(content, { schemaName, schemaVersion }) {
@@ -831,34 +845,38 @@ async function requestRecognitionWithFormatFallback({
   requestInput,
   schemaName,
 }) {
-  const strictResponse = await aiProvider.requestChatCompletion({
-    ...requestInput,
-    responseFormat: buildStrictRecognitionResponseFormat(schemaName),
-  });
-  if (strictResponse.ok) {
-    return strictResponse;
+  const capabilities = aiProvider?.capabilities ?? {};
+  if (capabilities.vision === false) {
+    throw new AiProviderError('AI provider does not support vision input');
   }
 
-  const strictDetails = await summarizeRecognitionFailure(strictResponse);
-  if (!shouldRetryWithJsonObjectFormat(strictResponse.status, strictDetails)) {
-    throwRecognitionHttpError(strictResponse.status, strictDetails);
+  if (capabilities.jsonSchema !== false) {
+    const strictResponse = await aiProvider.requestChatCompletion({
+      ...requestInput,
+      responseFormat: buildStrictRecognitionResponseFormat(schemaName),
+    });
+    if (strictResponse.ok) return strictResponse;
+    const strictDetails = await summarizeRecognitionFailure(strictResponse);
+    if (capabilities.jsonObject === false || !shouldRetryWithJsonObjectFormat(strictResponse.status, strictDetails)) {
+      throwRecognitionHttpError(strictResponse.status, strictDetails);
+    }
   }
 
-  const jsonObjectResponse = await aiProvider.requestChatCompletion({
-    ...requestInput,
-    responseFormat: {
-      type: 'json_object',
-    },
-  });
-  if (jsonObjectResponse.ok) {
-    return jsonObjectResponse;
+  if (capabilities.jsonObject !== false) {
+    const jsonObjectResponse = await aiProvider.requestChatCompletion({
+      ...requestInput,
+      responseFormat: { type: 'json_object' },
+    });
+    if (jsonObjectResponse.ok) return jsonObjectResponse;
+    const jsonObjectDetails = await summarizeRecognitionFailure(jsonObjectResponse);
+    if (capabilities.textJson === false || !shouldRetryWithoutResponseFormat(jsonObjectResponse.status, jsonObjectDetails)) {
+      throwRecognitionHttpError(jsonObjectResponse.status, jsonObjectDetails);
+    }
   }
 
-  const jsonObjectDetails = await summarizeRecognitionFailure(jsonObjectResponse);
-  if (!shouldRetryWithoutResponseFormat(jsonObjectResponse.status, jsonObjectDetails)) {
-    throwRecognitionHttpError(jsonObjectResponse.status, jsonObjectDetails);
+  if (capabilities.textJson === false) {
+    throw new AiProviderError('AI provider does not support a JSON response mode');
   }
-
   return aiProvider.requestChatCompletion(requestInput);
 }
 

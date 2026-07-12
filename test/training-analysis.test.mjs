@@ -501,6 +501,49 @@ test('generateTrainingAnalysisResult exposes database snapshot source', async ()
   assert.equal(result.reply, '数据结论：数据库快照分析完成。');
 });
 
+test('generateTrainingAnalysisResult loads the bounded database analysis context instead of the full snapshot reader', async () => {
+  const requests = [];
+  const snapshot = {
+    ...buildSyntheticSnapshot(),
+    source: 'database',
+    traineeProfile: {
+      traineeId: 'default',
+      profileVersion: 3,
+      goalText: '提升力量并控制体脂',
+    },
+  };
+
+  const result = await generateTrainingAnalysisResult({
+    env: {
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      TRAINING_SNAPSHOT_SOURCE: 'database',
+    },
+    question: '分析最近7天训练',
+    now: new Date('2026-05-16T00:00:00.000Z'),
+    loadTrainingAnalysisContext: async () => snapshot,
+    buildTrainingSnapshot: async () => {
+      throw new Error('full snapshot reader must not run in database analysis mode');
+    },
+    fetchImpl: async (_url, init) => {
+      requests.push(JSON.parse(init.body));
+      return {
+        ok: true,
+        async json() {
+          return { choices: [{ message: { content: '分析完成。' } }] };
+        },
+      };
+    },
+  });
+
+  assert.equal(result.snapshotSource, 'database');
+  const userMessage = requests[0].messages.find((message) => message.role === 'user');
+  const analysisContext = JSON.parse(userMessage.content.split('\ndata: ')[1]);
+  assert.equal(analysisContext.traineeProfile.traineeId, 'default');
+  assert.equal(analysisContext.traineeProfile.profileVersion, 3);
+});
+
 test('generateTrainingAnalysisResult uses configured analysis fallback without changing reply text', async () => {
   const requestedModels = [];
 

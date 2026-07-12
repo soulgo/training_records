@@ -29,7 +29,7 @@ test('recognition cache key includes file id, prompt version, schema version, an
     model: 'gpt-test',
   });
 
-  assert.equal(key, 'telegram:file_unique_id:file-1:prompt:2026-05-24:schema:v1:model:gpt-test');
+  assert.equal(key, 'telegram:file_unique_id:file-1:prompt:2026-05-24:schema:v1:model:gpt-test:capability:strict_schema');
   assert.equal(
     buildRecognitionCacheKey({
       sourceChannel: 'feishu',
@@ -38,7 +38,7 @@ test('recognition cache key includes file id, prompt version, schema version, an
       schemaVersion: 'v1',
       model: 'gpt-test',
     }),
-    'feishu:file_unique_id:file-1:prompt:2026-05-24:schema:v1:model:gpt-test',
+    'feishu:file_unique_id:file-1:prompt:2026-05-24:schema:v1:model:gpt-test:capability:strict_schema',
   );
   assert.equal(buildRecognitionCacheKey({ fileUniqueId: '', promptVersion: '1', schemaVersion: 'v1', model: 'm' }), null);
 });
@@ -47,6 +47,103 @@ test('recognition cache is opt-in by default', () => {
   assert.equal(isRecognitionCacheEnabled({ TELEGRAM_RECOGNITION_CACHE_ENABLED: '' }), false);
   assert.equal(isRecognitionCacheEnabled({ TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true' }), true);
 });
+
+test('recognizeTelegramImageMessage starts at json_object when strict schema is unsupported', async () => {
+  const formats = [];
+  await recognizeTelegramImageMessage({
+    aiProvider: {
+      name: 'openai-compatible',
+      env: { model: 'gpt-test' },
+      capabilities: { vision: true, jsonSchema: false, jsonObject: true, textJson: true },
+      async requestChatCompletion(input) {
+        formats.push(input.responseFormat?.type ?? 'text_json');
+        return {
+          ok: true,
+          async json() {
+            return { choices: [{ message: { content: JSON.stringify(validRecognitionPayload()) } }] };
+          },
+        };
+      },
+    },
+    message: { messageId: 1, photos: [{ fileUniqueId: 'capability-json-object' }] },
+    imageUrl: 'data:image/png;base64,AA==',
+    systemPrompt: 'extract',
+    promptMetadata,
+    env: {},
+  });
+
+  assert.deepEqual(formats, ['json_object']);
+});
+
+test('recognizeTelegramImageMessage rejects providers without vision before sending a request', async () => {
+  let requested = false;
+  await assert.rejects(
+    recognizeTelegramImageMessage({
+      aiProvider: {
+        name: 'openai-compatible',
+        env: { model: 'text-only' },
+        capabilities: { vision: false, jsonSchema: true, jsonObject: true, textJson: true },
+        async requestChatCompletion() {
+          requested = true;
+        },
+      },
+      message: { messageId: 2, photos: [{ fileUniqueId: 'capability-no-vision' }] },
+      imageUrl: 'data:image/png;base64,AA==',
+      systemPrompt: 'extract',
+      promptMetadata,
+      env: {},
+    }),
+    /does not support vision input/,
+  );
+  assert.equal(requested, false);
+});
+
+test('recognizeTelegramImageMessage uses text JSON without response_format when it is the only supported mode', async () => {
+  const formats = [];
+  await recognizeTelegramImageMessage({
+    aiProvider: {
+      name: 'openai-compatible',
+      env: { model: 'gpt-text-json' },
+      capabilities: { vision: true, jsonSchema: false, jsonObject: false, textJson: true },
+      async requestChatCompletion(input) {
+        formats.push(input.responseFormat?.type ?? 'text_json');
+        return {
+          ok: true,
+          async json() {
+            return { choices: [{ message: { content: JSON.stringify(validRecognitionPayload()) } }] };
+          },
+        };
+      },
+    },
+    message: { messageId: 3, photos: [{ fileUniqueId: 'capability-text-json' }] },
+    imageUrl: 'data:image/png;base64,AA==',
+    systemPrompt: 'extract',
+    promptMetadata,
+    env: {},
+  });
+
+  assert.deepEqual(formats, ['text_json']);
+});
+
+function validRecognitionPayload() {
+  return {
+    imageType: 'workout',
+    detectedApp: null,
+    detectedDate: '2026-05-24',
+    dateEvidence: 'image header',
+    confidence: 0.9,
+    warnings: [],
+    records: {
+      measurement: null,
+      activities: [],
+      meals: [],
+      totalCalories: null,
+      details: [],
+      dailyWorkoutSummary: null,
+      sleep: null,
+    },
+  };
+}
 
 test('recognizeTelegramImageMessage skips cache when disabled and keeps runtime metadata out of payload', async () => {
   let requestCount = 0;
@@ -490,7 +587,7 @@ test('recognizeTelegramImageMessage preserves detectedApp and visible non-Huawei
       provider: 'openai-compatible',
       model: 'gpt-test',
       promptVersion: '2026-05-24',
-      cacheKey: 'telegram:file_unique_id:apple-health-sleep-file:prompt:2026-05-24:schema:v2:model:gpt-test',
+      cacheKey: 'telegram:file_unique_id:apple-health-sleep-file:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema',
       cacheStatus: 'disabled',
     },
   });
@@ -610,7 +707,7 @@ test('recognizeTelegramImageMessage hits cache when versioned metadata matches',
       TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true',
     },
     readRecognitionCache: async ({ cacheKey, promptVersion, schemaVersion, model }) => {
-      assert.equal(cacheKey, 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:model:gpt-test');
+      assert.equal(cacheKey, 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema');
       assert.equal(promptVersion, '2026-05-24');
       assert.equal(schemaVersion, 'v2');
       assert.equal(model, 'gpt-test');
@@ -620,7 +717,7 @@ test('recognizeTelegramImageMessage hits cache when versioned metadata matches',
 
   assert.equal(requestCount, 0);
   assert.equal(result.cacheStatus, 'hit');
-  assert.equal(result.cacheKey, 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:model:gpt-test');
+  assert.equal(result.cacheKey, 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema');
   assert.equal(result.imageType, 'measurement');
   assert.equal(result.detectedApp, '华为健康');
   assert.equal(result.messageId, 78);
@@ -644,7 +741,7 @@ test('recognizeTelegramImageMessage hits cache when versioned metadata matches',
       provider: 'openai-compatible',
       model: 'gpt-test',
       promptVersion: '2026-05-24',
-      cacheKey: 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:model:gpt-test',
+      cacheKey: 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema',
       cacheStatus: 'hit',
     },
   });
@@ -711,7 +808,7 @@ test('recognizeTelegramImageMessage keeps Feishu recognition cache keys channel-
   });
 
   assert.equal(requestCount, 1);
-  assert.equal(observedCacheKey, 'feishu:file_unique_id:shared-image-id:prompt:2026-05-24:schema:v2:model:gpt-test');
+  assert.equal(observedCacheKey, 'feishu:file_unique_id:shared-image-id:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema');
   assert.equal(result.cacheKey, observedCacheKey);
   assert.equal(result.cacheStatus, 'miss');
 });
@@ -727,7 +824,7 @@ test('readRecognitionFromDatabaseCache reads by the exact source-scoped cache ke
   };
 
   const result = await readRecognitionFromDatabaseCache({
-    cacheKey: 'feishu:file_unique_id:file-legacy-cache:prompt:2026-05-24:schema:v2:model:gpt-test',
+    cacheKey: 'feishu:file_unique_id:file-legacy-cache:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema',
     fileUniqueId: 'file-legacy-cache',
     promptVersion: '2026-05-24',
     schemaVersion: 'v2',
@@ -760,7 +857,7 @@ test('readRecognitionFromDatabaseCache reads by the exact source-scoped cache ke
   assert.match(cacheQuery[0], /r\.cache_key = \$1/i);
   assert.doesNotMatch(cacheQuery[0], /recognition_json->>'cacheKey'/i);
   assert.deepEqual(cacheQuery[1], [
-    'feishu:file_unique_id:file-legacy-cache:prompt:2026-05-24:schema:v2:model:gpt-test',
+    'feishu:file_unique_id:file-legacy-cache:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema',
   ]);
 });
 
@@ -1297,7 +1394,7 @@ test('recognizeTelegramImageMessage labels successful recognition attempts for c
   assert.equal(strictJsonRetry.aiAttemptKind, 'strict_json_retry');
   assert.equal(fallback.aiAttemptKind, 'fallback');
   assert.equal(fallback.model, 'gpt-fallback');
-  assert.match(fallback.cacheKey, /model:gpt-fallback$/);
+  assert.match(fallback.cacheKey, /model:gpt-fallback:capability:strict_schema$/);
 });
 
 test('recognizeTelegramImageMessage parses SSE-style data response bodies', async () => {

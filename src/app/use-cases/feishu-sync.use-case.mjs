@@ -10,7 +10,7 @@ import {
   sendFeishuMessage,
 } from '../../adapters/feishu/index.mjs';
 import {
-  buildTelegramSyncReport,
+  buildMessageSyncReport,
   buildSafeSyncReport,
   createRecognitionAiProvider,
   runMessageSync,
@@ -20,8 +20,8 @@ import {
 } from '../../db/training/pending-recognition.mjs';
 import { recognizeBatch } from './telegram-sync/image-processing.mjs';
 import {
-  notifyTelegramSyncResultFromFile,
-  notifyTelegramSyncResultFromReport,
+  notifyMessageSyncResultFromFile,
+  notifyMessageSyncResultFromReport,
 } from './telegram-sync/status.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -128,7 +128,7 @@ export async function runFeishuSync(options = {}) {
 }
 
 export function buildFeishuSyncReport(result) {
-  const report = buildTelegramSyncReport(result);
+  const report = buildMessageSyncReport(result);
   const batches = (report.batches ?? []).map(normalizeFeishuReportBatch);
   return {
     ...report,
@@ -139,9 +139,6 @@ export function buildFeishuSyncReport(result) {
 function normalizeFeishuReportBatch(batch) {
   return {
     ...batch,
-    taskId: String(batch.taskId ?? '').replace(/^telegram:/, 'feishu:'),
-    sourceId: String(batch.sourceId ?? '').replace(/^telegram:/, 'feishu:'),
-    sourceType: batch.sourceType === 'telegram_update' ? 'feishu_update' : batch.sourceType,
     recognitionErrors: normalizeFeishuRecognitionErrors(batch.recognitionErrors),
   };
 }
@@ -177,7 +174,7 @@ export async function notifyFeishuSyncResultFromFile({
 } = {}) {
   const sharedEnv = buildSharedSyncEnv(env);
   const sender = sendMessage ?? createFeishuMessageSender(env, fetchImpl);
-  return notifyTelegramSyncResultFromFile({
+  return notifyMessageSyncResultFromFile({
     resultPath,
     env: sharedEnv,
     sendMessage: sender,
@@ -192,7 +189,7 @@ export async function notifyFeishuSyncResultFromReport({
 } = {}) {
   const sharedEnv = buildSharedSyncEnv(env);
   const sender = sendMessage ?? createFeishuMessageSender(env, fetchImpl);
-  return notifyTelegramSyncResultFromReport({
+  return notifyMessageSyncResultFromReport({
     report,
     env: sharedEnv,
     sendMessage: sender,

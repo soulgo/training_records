@@ -6,7 +6,7 @@ import {
   TelegramAlbumBuffer,
   handleTelegramWebhook,
 } from '../cloudflare/sync-dispatch-worker.mjs';
-import { buildTelegramDispatchPayload } from '../cloudflare/sync-dispatch-queue.mjs';
+import { buildTelegramDispatchPayload, enqueueSyncDispatchTask } from '../cloudflare/sync-dispatch-queue.mjs';
 import { TELEGRAM_HELP_TEXT } from '../src/telegram/help.mjs';
 
 function createEnv() {
@@ -235,6 +235,71 @@ test('buildTelegramDispatchPayload uses the original message for Telegram task-s
     chatId: 42,
     replyToMessageId: 10,
   });
+});
+
+test('enqueueSyncDispatchTask shards by channel and chat without exposing the raw chat id', async () => {
+  const shardNames = [];
+  const namespace = {
+    idFromName(name) {
+      shardNames.push(name);
+      return { name };
+    },
+    get() {
+      return { fetch: async () => Response.json({ ok: true }, { status: 202 }) };
+    },
+  };
+  const payload = (chatId) => ({
+    event_type: 'telegram_update_dev',
+    client_payload: { telegram_updates: [{ update_id: chatId }] },
+    source: { channel: 'telegram', sortKey: chatId },
+    notification: { channel: 'telegram', chatId, replyToMessageId: 1 },
+  });
+
+  await enqueueSyncDispatchTask({ env: { SYNC_DISPATCH_QUEUE: namespace }, payload: payload(520905856) });
+  await enqueueSyncDispatchTask({ env: { SYNC_DISPATCH_QUEUE: namespace }, payload: payload(520905856) });
+  await enqueueSyncDispatchTask({ env: { SYNC_DISPATCH_QUEUE: namespace }, payload: payload(99887766) });
+
+  assert.equal(shardNames[0], shardNames[1]);
+  assert.notEqual(shardNames[0], shardNames[2]);
+  assert.match(shardNames[0], /^sync-dispatch:telegram:[a-f0-9]{16}$/);
+  assert.doesNotMatch(shardNames.join('\n'), /520905856|99887766/);
+});
+
+test('enqueueSyncDispatchTask lets different chat shards enter concurrently', async () => {
+  const entered = [];
+  const releases = new Map();
+  const namespace = {
+    idFromName(name) {
+      return { name };
+    },
+    get(id) {
+      return {
+        async fetch() {
+          entered.push(id.name);
+          await new Promise((resolve) => releases.set(id.name, resolve));
+          return Response.json({ ok: true }, { status: 202 });
+        },
+      };
+    },
+  };
+  const enqueue = (chatId) => enqueueSyncDispatchTask({
+    env: { SYNC_DISPATCH_QUEUE: namespace },
+    payload: {
+      event_type: 'telegram_update_dev',
+      client_payload: { telegram_updates: [{ update_id: chatId }] },
+      source: { channel: 'telegram', sortKey: chatId },
+      notification: { channel: 'telegram', chatId, replyToMessageId: 1 },
+    },
+  });
+
+  const first = enqueue(42);
+  const second = enqueue(43);
+  await waitUntil(() => entered.length === 2);
+  assert.notEqual(entered[0], entered[1]);
+  for (const release of releases.values()) {
+    release();
+  }
+  await Promise.all([first, second]);
 });
 
 test('handleTelegramWebhook notifies Telegram when the GitHub token is missing', async () => {
@@ -640,6 +705,7 @@ test('SyncDispatchQueue dispatches workflow_dispatch payloads to the configured 
     event_type: 'telegram_update_dev',
     client_payload: { telegram_updates: [{ update_id: 1 }] },
     source: { channel: 'telegram', sortKey: 1 },
+    notification: { channel: 'telegram', chatId: 42, replyToMessageId: 701 },
   }))).status, 202);
 
   await queue.alarm();
@@ -653,6 +719,7 @@ test('SyncDispatchQueue dispatches workflow_dispatch payloads to the configured 
       queue_task_id: taskId,
       dispatch_payload: JSON.stringify({
         action: 'telegram_update_dev',
+        notification: { channel: 'telegram', chatId: 42, replyToMessageId: 701 },
         client_payload: {
           telegram_updates: [{ update_id: 1 }],
           queue_task_id: taskId,
@@ -1617,6 +1684,16 @@ function createSyncDispatchQueueNamespace(enqueued) {
       };
     },
   };
+}
+
+async function waitUntil(predicate) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  assert.fail('condition was not reached');
 }
 
 function createAlbumBufferNamespace(baseEnv, options = {}) {
