@@ -11,20 +11,6 @@ const rootDir = new URL('../', import.meta.url);
 
 const readRepoFile = (relativePath) => readFile(new URL(relativePath, rootDir), 'utf8');
 
-test('training migration workflow is manual-only and requires explicit confirmation for writes', async () => {
-  const workflow = await readRepoFile('.github/workflows/training-migrate.yml');
-  const migrationSteps = workflow.slice(0, workflow.indexOf('- name: Report Action Status'));
-
-  assert.match(workflow, /workflow_dispatch:/);
-  assert.doesNotMatch(workflow, /\bpush:|\bschedule:|repository_dispatch:/);
-  assert.match(workflow, /mode:[\s\S]*default:\s*dry-run/);
-  assert.match(workflow, /mode == 'confirm'/);
-  assert.match(workflow, /DEV_TRAINING_DB_MIGRATION_URL/);
-  assert.match(workflow, /npm run maintenance:migrate -- --dry-run/);
-  assert.match(workflow, /npm run maintenance:migrate -- --confirm/);
-  assert.doesNotMatch(migrationSteps, /TRAINING_DB_URL:/);
-});
-
 test('all GitHub workflows report action status with minimal run id payload', async () => {
   const workflowDir = new URL('.github/workflows/', rootDir);
   const workflowFiles = (await readdir(workflowDir))

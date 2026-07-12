@@ -23,7 +23,6 @@ main 环境对应：
 | --- | --- | --- |
 | `TRAINING_DB_URL` | 必填 | 生产 PostgreSQL 连接串，同步、构建、Markdown 备份都读这个库。 |
 | `TRAINING_DB_READONLY_URL` | 可选 | 生产只读 PostgreSQL 连接串；站点构建、数据库快照读取、Markdown 导出、巡检和一致性检查优先使用，未配置时回退 `TRAINING_DB_URL`。 |
-| `TRAINING_DB_MIGRATION_URL` | 手动迁移时必填 | 生产迁移 PostgreSQL 连接串；只用于本地或显式维护环境执行 `npm run maintenance:migrate -- --confirm`，不注入日常同步 workflow。 |
 | `AI_API_KEY` | 必填 | AI 服务鉴权。 |
 | `TELEGRAM_BOT_TOKEN` | 必填 | 生产 Telegram Bot token，用于拉取消息、下载图片、通知结果、刷新 webhook。 |
 | `TELEGRAM_SECRET_TOKEN` | 必填 | 生产 Telegram webhook secret。必须和 Cloudflare Worker Secret `TELEGRAM_SECRET_TOKEN` 的值一致。 |
@@ -167,15 +166,12 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 | --- | --- | --- |
 | `TRAINING_DB_URL` | PostgreSQL 服务商 | 生产数据库连接串，放 GitHub Secrets。 |
 | `TRAINING_DB_READONLY_URL` | PostgreSQL 服务商 | 可选只读连接串，放 GitHub Secrets；读取快照、巡检和一致性检查优先使用。 |
-| `TRAINING_DB_MIGRATION_URL` | PostgreSQL 服务商 | 显式迁移连接串，放受控 Secret 或本地 `.env`；只在执行 `maintenance:migrate -- --confirm` 时注入。 |
 | `TRAINING_DB_ENABLED` | 自定义 | 生产建议为 `true`。 |
 | `TRAINING_DB_TIMEOUT_MS` | 自定义 | 连接超时，放 GitHub Variables。 |
 | `TRAINING_DB_APP_NAME` | 自定义 | DB 连接名，便于排查。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 生产建议使用 `database`。 |
 
-数据库 schema 以 `sql/pgsql17.sql` 和当前显式建表脚本为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `TRAINING_DB_URL` 默认路径。Action 监控当前在同一个生产 PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，参数健康 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
-
-当前 main 数据库尚未执行通用 ingest 的 `sql/migration.sql` 与 `sql/migration_phase2_generic_ingest.sql`。部署包含 `PostgresSourceBatchRepository` 的当前代码前，必须先备份、按顺序手工执行两个文件并运行文件末尾验收查询。`sql/cleanup_phase2_legacy_ingest.sql` 不属于本次上线前置步骤，观察期内禁止执行。
+main 数据库 schema 事实源是 `sql/main-sql/`。合并 dev 代码前必须先完整备份 main 数据库，手工执行 `sql/main-sql/align_to_dev.sql`，并逐条运行文件末尾验收查询。Action 监控当前在同一个生产 PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，参数健康 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
 
 `Report Action Status` step 会使用运行时 `TRAINING_DB_URL`、`TRAINING_DB_APP_NAME` 和 `github.token` 读取 GitHub Actions run/jobs/steps 后直写 `monitor.*`。只有当生产 DB URL 不可用时，才使用 `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` / `GITHUB_ACTION_MONITOR_REPORT_URL` 走 HTTP 兜底。
 
@@ -228,7 +224,7 @@ main 只有在 `COS_ENABLED=true` 时才需要配置 COS。
 5. 给生产 Telegram bot 或生产飞书应用发测试消息，确认 `Sync (Main)` 被触发。
 6. 检查 GitHub Actions summary：同步结果、数据库写入、图片上传、站点部署、缓存清理都应成功。
 7. 如启用备份，手动运行一次 `Markdown Backup`，确认能从生产 DB 导出 Markdown。
-8. 先在 main 数据库手工执行 `sql/training_records/migrate_parameter_health_monitor.sql`，再运行 `Parameter Health Audit` 并选择 `main`，确认 Step Summary 出现 main 健康状态计数并触发生产 Pages 刷新。
+8. 运行 `Parameter Health Audit` 并选择 `main`，确认 Step Summary 出现 main 健康状态计数并触发生产 Pages 刷新。
 9. 打开生产站点 `/action-monitor/`，确认新 run 出现在 Action 日志里，且“系统参数健康”展示 main registry 中的真实探测状态；如果只有顶层 run 没有 job/step 明细，先回看该 run 的 `Report Action Status` step 是否成功写入 `monitor.*`。
 
 ## 5. 可选 Docker 运行

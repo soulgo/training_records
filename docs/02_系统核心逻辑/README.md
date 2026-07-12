@@ -31,7 +31,7 @@
 | 系统参数健康监控 | `config/parameter-health/<env>.json`、`tools/check-parameter-health.mjs`、`src/app/use-cases/parameter-health-monitor.use-case.mjs`、`src/adapters/postgres/parameter-health-monitor-repository.pg.mjs` |
 | 站点生成 | `src/app/use-cases/generate-training-data.use-case.mjs`、`src/site/dashboard-view.mjs`、`themes/cactus/*` |
 | Worker 入口 | `cloudflare/sync-dispatch-worker.mjs`、`cloudflare/*dispatch-worker.mjs`、`cloudflare/sync-dispatch-queue.mjs` |
-| SQL schema | `sql/pgsql17.sql` |
+| SQL schema | `sql/dev-sql/`、`sql/main-sql/` |
 
 ## 不变量
 

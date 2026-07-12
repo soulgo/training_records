@@ -103,7 +103,7 @@ test('checkTrainingDataConsistencyClient reports failed row count checks', async
 });
 
 test('core schema defines training_day sleep summary columns', async () => {
-  const sql = await readFile(new URL('../sql/training_records/core.sql', import.meta.url), 'utf8');
+  const sql = await readFile(new URL('../sql/dev-sql/core.sql', import.meta.url), 'utf8');
 
   assert.match(sql, /CREATE TABLE "core"\."training_day"[\s\S]*"sleep_total_minutes" int4/i);
   assert.match(sql, /CREATE TABLE "core"\."training_day"[\s\S]*"night_sleep_minutes" int4/i);

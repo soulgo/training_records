@@ -175,7 +175,6 @@ flowchart LR
 | `npm run maintenance:inspect` | 只读巡检 pending 队列、归档失败、AI monitoring 来源和 DB 账号权限摘要。 |
 | `npm run maintenance:inspect -- --batch-id <batchId>` | 只读审计单个批次的识别 JSON、core 目标和 `recoveryTargetDays`。 |
 | `npm run maintenance:sync` | 显式运行维护同步入口。 |
-| `npm run maintenance:migrate` | 迁移入口，写入前必须 dry-run 或显式 confirm。 |
 | `npm run sync:db` | 安全数据库修复入口。 |
 | `npm run import:markdown` | 显式 Markdown 导入数据库。 |
 | `npm run export:markdown` | 数据库导出 Markdown 备份，stdout 默认只输出 compact summary。 |

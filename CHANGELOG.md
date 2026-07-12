@@ -15,8 +15,8 @@
 
 ### Added
 
-- 新增异步 Action monitor、独立 pending replay、手动数据库 migration workflow，以及 `/分析` 单连接单 SQL 的只读 PostgreSQL repository；migration workflow 默认 dry-run，只有显式 confirm 才使用迁移账号。
-- 新增 `002_observation_records` 与精确 rollback，补齐 `ingest.extracted_record`、记录级日期决策、review 状态、识别日期候选和 core 物理范围约束；canonical SQL 与 migration history/checksum 合同同步更新。
+- 新增 `sql/main-sql/align_to_dev.sql`，将 main 当前导出结构一次性对齐到 dev：补齐旧识别结构化字段、通用 ingest 五表及回填、archive 睡眠汇总字段和缺失外键，并附人工验收查询。
+- 新增异步 Action monitor、独立 pending replay，以及 `/分析` 单连接单 SQL 的只读 PostgreSQL repository。
 - 新增 DateAlignmentService、RecordGrouper、SemanticGate 和 Provider capability negotiation，覆盖完整日期、月日补年、睡眠归档、单锚点传播、多日期隔离、越界清洗、review 决策及 strict/json_object/text_json/vision 能力组合。
 - 新增来源无关的通用截图识别链路：图片先经 Sharp 自动旋转、尺寸/像素限制、增强和压缩，可选提取带归一化坐标的 OCR 证据，再由视觉模型完成语义识别并输出稳定的 `NormalizedRecognition` 外层契约。
 - 新增通用 ingest 数据模型 `ingest.source_batch`、`source_message`、`source_asset`、`recognition_run`、`pending_task`，以及对应的 `PostgresSourceBatchRepository`；提供 Phase 1/Phase 2 可执行迁移和默认拒绝执行的旧表清理脚本。
@@ -43,6 +43,7 @@
 
 ### Removed
 
+- SQL 事实源收敛为 `sql/dev-sql/` 与 `sql/main-sql/`；删除重复 canonical dump、分散 migration/rollback/cleanup 文件，以及已无迁移目录可消费的自动 migration workflow、CLI 分支和测试。
 - 删除无生产调用的空仓储端口、`training-snapshot-service` 占位服务和旧 `PostgresTelegramBatchRepository`；生产代码不再访问 `ingest.telegram_batch`、`telegram_message`、`telegram_recognition` 或 `telegram_pending_batch`。
 - 删除未进入生产链路的 `src/jobs`、`src/infra` 架构壳、无消费者 barrel、`src/ai`/PostgreSQL facade，以及 `tools` 下的纯 re-export 兼容入口；保留真实 CLI 和承载业务复杂度的模块。
 - 删除旧 schema preflight 实现、环境开关与重试代码；删除已为空且不再消费的 runtime NDJSON pending 文件、fallback inspect 工具和重复文件队列实现，pending 恢复仅保留 PostgreSQL `ingest.pending_task`。

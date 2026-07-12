@@ -16,7 +16,6 @@
     "sync:db": "node tools/training-maintenance.mjs sync",
     "maintenance:inspect": "node tools/training-maintenance.mjs inspect",
     "maintenance:sync": "node tools/training-maintenance.mjs sync",
-    "maintenance:migrate": "node tools/training-maintenance.mjs migrate",
     "check:data-consistency": "node tools/check-training-data-consistency.mjs",
     "build:site": "node tools/run-hexo-command.mjs generate",
     "build": "npm run build:data && npm run build:site",

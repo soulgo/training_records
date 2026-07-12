@@ -17,17 +17,6 @@ export function resolveTrainingReadonlyConfig(env = process.env) {
   };
 }
 
-export function resolveTrainingMigrationConfig(env = process.env) {
-  const config = resolveTrainingCoreConfig(env);
-  const migrationUrl = env.TRAINING_DB_MIGRATION_URL?.trim() || '';
-  return {
-    ...config,
-    enabled: Boolean(migrationUrl),
-    url: migrationUrl,
-    appName: env.TRAINING_DB_MIGRATION_APP_NAME?.trim() || `${config.appName}-migration`,
-  };
-}
-
 function parsePositiveInteger(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;

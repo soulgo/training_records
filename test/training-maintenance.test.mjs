@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,11 +11,6 @@ import {
 } from '../tools/training-maintenance.mjs';
 
 const readRepoFile = (relativePath) => readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
-
-const readMigrationChecksum = async (relativePath) => {
-  const sql = await readRepoFile(relativePath);
-  return createHash('sha256').update(sql, 'utf8').digest('hex');
-};
 
 const readMaintenanceGuide = async () => [
   await readRepoFile('docs/02_系统核心逻辑/系统总览.md'),
@@ -714,314 +708,6 @@ test('training maintenance export rejects debug json in GitHub Actions before re
   assert.match(result.error, /debug-json/i);
 });
 
-test('training maintenance migrate requires dry-run or confirm before write-capable work', async () => {
-  let syncCalled = false;
-  const result = await runTrainingMaintenance({
-    argv: ['migrate'],
-    syncTrainingCore: async () => {
-      syncCalled = true;
-      return { status: 'stored' };
-    },
-    stdout: { write() {} },
-  });
-
-  assert.equal(syncCalled, false);
-  assert.equal(result.mode, 'migrate');
-  assert.equal(result.status, 'blocked');
-  assert.equal(result.requiresConfirm, true);
-});
-
-test('training maintenance migrate supports dry-run without running sync', async () => {
-  let syncCalled = false;
-  const result = await runTrainingMaintenance({
-    argv: ['migrate', '--dry-run'],
-    syncTrainingCore: async () => {
-      syncCalled = true;
-      return { status: 'stored' };
-    },
-    stdout: { write() {} },
-  });
-
-  assert.equal(syncCalled, false);
-  assert.equal(result.mode, 'migrate');
-  assert.equal(result.status, 'planned');
-  assert.equal(result.dryRun, true);
-  assert.ok(result.plan.some((entry) => entry.id === '001_runtime_schema_preflight_backfill'));
-  assert.deepEqual(
-    result.plan.map((entry) => entry.status),
-    ['pending', 'pending'],
-  );
-  assert.match(result.plan[0].file, /sql\/training_records\/migrations\/001_runtime_schema_preflight_backfill\.sql$/);
-});
-
-test('training maintenance migrate dry-run reads applied migration status when migration url is configured', async () => {
-  const queries = [];
-  const checksum = await readMigrationChecksum('sql/training_records/migrations/001_runtime_schema_preflight_backfill.sql');
-  const result = await runTrainingMaintenance({
-    argv: ['migrate', '--dry-run'],
-    env: {
-      TRAINING_DB_MIGRATION_URL: 'postgresql://training_migrator:secret@example.com:5432/training_records',
-    },
-    createClient() {
-      return {
-        async connect() {
-          queries.push('connect');
-        },
-        async query(sql) {
-          queries.push(sql);
-          if (/to_regclass\('maintenance\.schema_migration'\)/i.test(sql)) {
-            return { rows: [{ table_name: 'maintenance.schema_migration' }] };
-          }
-          if (/select migration_id/i.test(sql)) {
-            return {
-              rows: [{
-                migration_id: '001_runtime_schema_preflight_backfill',
-                checksum_sha256: checksum,
-              }],
-            };
-          }
-          throw new Error(`Unexpected SQL: ${sql}`);
-        },
-        async end() {
-          queries.push('end');
-        },
-      };
-    },
-    stdout: { write() {} },
-  });
-
-  assert.equal(result.status, 'planned');
-  assert.equal(result.migrationHistory.status, 'read');
-  assert.deepEqual(result.plan.map((entry) => entry.status), ['applied', 'pending']);
-  assert.equal(queries.some((sql) => /alter table core\.sleep/i.test(sql)), false);
-});
-
-test('training maintenance migrate dry-run reports checksum drift for changed migration sql', async () => {
-  const queries = [];
-  const result = await runTrainingMaintenance({
-    argv: ['migrate', '--dry-run'],
-    env: {
-      TRAINING_DB_MIGRATION_URL: 'postgresql://training_migrator:secret@example.com:5432/training_records',
-    },
-    createClient() {
-      return {
-        async connect() {
-          queries.push('connect');
-        },
-        async query(sql) {
-          queries.push(sql);
-          if (/to_regclass\('maintenance\.schema_migration'\)/i.test(sql)) {
-            return { rows: [{ table_name: 'maintenance.schema_migration' }] };
-          }
-          if (/select migration_id/i.test(sql)) {
-            return {
-              rows: [{
-                migration_id: '001_runtime_schema_preflight_backfill',
-                checksum_sha256: 'old-checksum',
-              }],
-            };
-          }
-          throw new Error(`Unexpected SQL: ${sql}`);
-        },
-        async end() {
-          queries.push('end');
-        },
-      };
-    },
-    stdout: { write() {} },
-  });
-
-  assert.equal(result.status, 'planned');
-  assert.equal(result.migrationHistory.checksumMismatchCount, 1);
-  assert.deepEqual(result.plan.map((entry) => entry.status), ['checksum_mismatch', 'pending']);
-  assert.equal(queries.some((sql) => /alter table core\.sleep/i.test(sql)), false);
-});
-
-test('training maintenance migrate dry-run redacts migration history errors', async () => {
-  const result = await runTrainingMaintenance({
-    argv: ['migrate', '--dry-run'],
-    env: {
-      TRAINING_DB_MIGRATION_URL: 'postgresql://training_migrator:secret@example.com:5432/training_records',
-    },
-    createClient() {
-      return {
-        async connect() {
-          throw new Error(
-            'connect failed for postgresql://training_migrator:secret@example.com:5432/training_records',
-          );
-        },
-        async end() {},
-      };
-    },
-    stdout: { write() {} },
-  });
-
-  assert.equal(result.status, 'planned');
-  assert.equal(result.migrationHistory.status, 'unavailable');
-  assert.match(result.migrationHistory.error, /\[redacted-db-url\]/);
-  assert.doesNotMatch(JSON.stringify(result), /training_migrator|secret|postgresql:\/\//i);
-});
-
-test('training maintenance migrate confirm requires migration database url', async () => {
-  let syncCalled = false;
-  const result = await runTrainingMaintenance({
-    argv: ['migrate', '--confirm'],
-    syncTrainingCore: async () => {
-      syncCalled = true;
-      return { status: 'stored' };
-    },
-    stdout: { write() {} },
-  });
-
-  assert.equal(syncCalled, false);
-  assert.equal(result.mode, 'migrate');
-  assert.equal(result.status, 'blocked');
-  assert.match(result.error, /TRAINING_DB_MIGRATION_URL/);
-});
-
-test('training maintenance migrate confirm executes explicit migration sql', async () => {
-  const queries = [];
-  const observedUrls = [];
-  let syncCalled = false;
-  const result = await runTrainingMaintenance({
-    argv: ['migrate', '--confirm'],
-    env: {
-      TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_app:secret@example.com:5432/training_records',
-      TRAINING_DB_MIGRATION_URL: 'postgresql://training_migrator:secret@example.com:5432/training_records',
-    },
-    syncTrainingCore: async () => {
-      syncCalled = true;
-      return { status: 'stored' };
-    },
-    createClient(config) {
-      observedUrls.push(config.url);
-      return {
-        async connect() {
-          queries.push('connect');
-        },
-        async query(sql) {
-          queries.push(sql);
-          return { rows: [], rowCount: 0 };
-        },
-        async end() {
-          queries.push('end');
-        },
-      };
-    },
-    stdout: { write() {} },
-  });
-
-  assert.equal(syncCalled, false);
-  assert.deepEqual([...new Set(observedUrls)], [
-    'postgresql://training_migrator:secret@example.com:5432/training_records',
-  ]);
-  assert.ok(queries.some((sql) => /alter table core\.sleep add column if not exists total_sleep_minutes/i.test(sql)));
-  const concurrentIndexQueries = queries.filter((sql) => /create index concurrently/i.test(sql));
-  assert.equal(concurrentIndexQueries.length, 2);
-  assert.ok(concurrentIndexQueries.every((sql) => !/\bbegin\s*;/i.test(sql)));
-  assert.equal(result.mode, 'migrate');
-  assert.equal(result.status, 'applied');
-  assert.equal(result.confirmed, true);
-  assert.deepEqual(result.appliedMigrations.map((entry) => entry.id), [
-    '001_runtime_schema_preflight_backfill',
-    '002_observation_records',
-  ]);
-});
-
-test('training maintenance migrate confirm skips migration sql already recorded in history', async () => {
-  const queries = [];
-  const checksum = await readMigrationChecksum('sql/training_records/migrations/001_runtime_schema_preflight_backfill.sql');
-  const observationChecksum = await readMigrationChecksum('sql/training_records/migrations/002_observation_records.sql');
-  const result = await runTrainingMaintenance({
-    argv: ['migrate', '--confirm'],
-    env: {
-      TRAINING_DB_MIGRATION_URL: 'postgresql://training_migrator:secret@example.com:5432/training_records',
-    },
-    createClient() {
-      return {
-        async connect() {
-          queries.push('connect');
-        },
-        async query(sql) {
-          queries.push(sql);
-          if (/to_regclass\('maintenance\.schema_migration'\)/i.test(sql)) {
-            return { rows: [{ table_name: 'maintenance.schema_migration' }] };
-          }
-          if (/select migration_id/i.test(sql)) {
-            return {
-              rows: [
-                {
-                  migration_id: '001_runtime_schema_preflight_backfill',
-                  checksum_sha256: checksum,
-                },
-                {
-                  migration_id: '002_observation_records',
-                  checksum_sha256: observationChecksum,
-                },
-              ],
-            };
-          }
-          return { rows: [], rowCount: 0 };
-        },
-        async end() {
-          queries.push('end');
-        },
-      };
-    },
-    stdout: { write() {} },
-  });
-
-  assert.equal(result.status, 'unchanged');
-  assert.deepEqual(result.appliedMigrations, []);
-  assert.deepEqual(result.skippedMigrations.map((entry) => entry.id), [
-    '001_runtime_schema_preflight_backfill',
-    '002_observation_records',
-  ]);
-  assert.equal(queries.some((sql) => /alter table core\.sleep/i.test(sql)), false);
-});
-
-test('training maintenance migrate confirm blocks when applied migration checksum changed', async () => {
-  const queries = [];
-  const result = await runTrainingMaintenance({
-    argv: ['migrate', '--confirm'],
-    env: {
-      TRAINING_DB_MIGRATION_URL: 'postgresql://training_migrator:secret@example.com:5432/training_records',
-    },
-    createClient() {
-      return {
-        async connect() {
-          queries.push('connect');
-        },
-        async query(sql) {
-          queries.push(sql);
-          if (/to_regclass\('maintenance\.schema_migration'\)/i.test(sql)) {
-            return { rows: [{ table_name: 'maintenance.schema_migration' }] };
-          }
-          if (/select migration_id/i.test(sql)) {
-            return {
-              rows: [{
-                migration_id: '001_runtime_schema_preflight_backfill',
-                checksum_sha256: 'old-checksum',
-              }],
-            };
-          }
-          return { rows: [], rowCount: 0 };
-        },
-        async end() {
-          queries.push('end');
-        },
-      };
-    },
-    stdout: { write() {} },
-  });
-
-  assert.equal(result.status, 'blocked');
-  assert.equal(result.error, 'applied migration checksum mismatch');
-  assert.deepEqual(result.plan.map((entry) => entry.status), ['checksum_mismatch', 'pending']);
-  assert.equal(queries.some((sql) => /alter table core\.sleep/i.test(sql)), false);
-});
-
 test('package exposes explicit maintenance command boundaries', async () => {
   const packageJson = JSON.parse(
     await readFile(new URL('../package.json', import.meta.url), 'utf8'),
@@ -1029,7 +715,7 @@ test('package exposes explicit maintenance command boundaries', async () => {
 
   assert.equal(packageJson.scripts['maintenance:inspect'], 'node tools/training-maintenance.mjs inspect');
   assert.equal(packageJson.scripts['maintenance:sync'], 'node tools/training-maintenance.mjs sync');
-  assert.equal(packageJson.scripts['maintenance:migrate'], 'node tools/training-maintenance.mjs migrate');
+  assert.equal(packageJson.scripts['maintenance:migrate'], undefined);
   assert.equal(packageJson.scripts['backfill:core'], 'node tools/training-maintenance.mjs sync --phase archive');
   assert.equal(packageJson.scripts['backfill:thoughts'], 'node tools/training-maintenance.mjs sync --phase thoughts');
   assert.equal(packageJson.scripts['import:markdown'], 'node tools/training-maintenance.mjs sync --phase markdown');
@@ -1082,7 +768,7 @@ test('training maintenance can dry-run markdown import before replacement', asyn
   assert.deepEqual(result.result.markdown.affectedDays, ['2026-04-06']);
 });
 
-test('current maintenance docs and scripts document inspect sync and migrate commands', async () => {
+test('current maintenance docs and scripts document inspect sync and export commands', async () => {
   const packageJson = JSON.parse(
     await readFile(new URL('../package.json', import.meta.url), 'utf8'),
   );
@@ -1090,7 +776,7 @@ test('current maintenance docs and scripts document inspect sync and migrate com
 
   assert.equal(packageJson.scripts['maintenance:inspect'], 'node tools/training-maintenance.mjs inspect');
   assert.equal(packageJson.scripts['maintenance:sync'], 'node tools/training-maintenance.mjs sync');
-  assert.equal(packageJson.scripts['maintenance:migrate'], 'node tools/training-maintenance.mjs migrate');
+  assert.equal(packageJson.scripts['maintenance:migrate'], undefined);
   assert.match(maintenanceGuide, /npm run sync:db/);
   assert.match(maintenanceGuide, /npm run import:markdown/);
   assert.match(maintenanceGuide, /npm run export:markdown/);

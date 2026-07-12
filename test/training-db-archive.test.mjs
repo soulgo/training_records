@@ -949,16 +949,12 @@ test('appendTrainingArchiveFailureLog writes ndjson entries to the configured ru
   assert.equal(entry.latestArchivedDate, '2026-05-11');
 });
 
-test('pgsql init schema lives under sql directory', async () => {
-  const initSqlPath = path.resolve(process.cwd(), 'sql', 'pgsql17.sql');
-  await access(initSqlPath);
-});
-
 test('sleep health metric columns are present in canonical SQL schema files', async () => {
   for (const relativePath of [
-    'sql/pgsql17.sql',
-    'sql/training_records/core.sql',
-    'sql/training_records/archive.sql',
+    'sql/dev-sql/core.sql',
+    'sql/dev-sql/archive.sql',
+    'sql/main-sql/core.sql',
+    'sql/main-sql/archive.sql',
   ]) {
     const sql = await readFile(path.resolve(process.cwd(), relativePath), 'utf8');
     assert.match(sql, /sleep_score/i, `${relativePath} should define sleep_score`);
@@ -969,50 +965,36 @@ test('sleep health metric columns are present in canonical SQL schema files', as
 });
 
 test('canonical SQL schemas use source identity for cross-channel message and thought keys', async () => {
-  const pgsql = await readFile(path.resolve(process.cwd(), 'sql/pgsql17.sql'), 'utf8');
-  const ingest = await readFile(path.resolve(process.cwd(), 'sql/training_records/ingest.sql'), 'utf8');
-  const core = await readFile(path.resolve(process.cwd(), 'sql/training_records/core.sql'), 'utf8');
-
-  for (const [relativePath, sql] of [
-    ['sql/pgsql17.sql', pgsql],
-    ['sql/training_records/ingest.sql', ingest],
-  ]) {
-    assert.match(sql, /source_channel/i, `${relativePath} should store source_channel`);
-    assert.match(sql, /source_chat_id/i, `${relativePath} should store source_chat_id`);
-    assert.match(sql, /source_message_id/i, `${relativePath} should store source_message_id`);
+  for (const environment of ['dev-sql', 'main-sql']) {
+    const ingest = await readFile(path.resolve(process.cwd(), `sql/${environment}/ingest.sql`), 'utf8');
+    const core = await readFile(path.resolve(process.cwd(), `sql/${environment}/core.sql`), 'utf8');
+    const relativePath = `sql/${environment}/ingest.sql`;
+    assert.match(ingest, /source_channel/i, `${relativePath} should store source_channel`);
+    assert.match(ingest, /source_chat_id/i, `${relativePath} should store source_chat_id`);
+    assert.match(ingest, /source_message_id/i, `${relativePath} should store source_message_id`);
     assert.match(
-      sql,
+      ingest,
       /ux_ingest_telegram_message_source_identity[\s\S]*source_channel[\s\S]*source_chat_id[\s\S]*source_message_id/i,
       `${relativePath} should uniquely key ingest messages by source identity`,
     );
     assert.doesNotMatch(
-      sql,
+      ingest,
       /telegram_message[\s\S]{0,120}message_id\s+bigint\s+primary\s+key/i,
       `${relativePath} should not use global message_id as the only ingest message key`,
     );
-  }
-
-  for (const [relativePath, sql] of [
-    ['sql/pgsql17.sql', pgsql],
-    ['sql/training_records/core.sql', core],
-  ]) {
+    const corePath = `sql/${environment}/core.sql`;
     assert.match(
-      sql,
+      core,
       /ux_core_thought_identity[\s\S]*source_channel[\s\S]*source_chat_id[\s\S]*source_message_id/i,
-      `${relativePath} should uniquely key thoughts by source identity`,
-    );
-    assert.match(
-      sql,
-      /idx_core_thought_legacy_message_id/i,
-      `${relativePath} should keep legacy telegram_message_id lookup indexed`,
+      `${corePath} should uniquely key thoughts by source identity`,
     );
   }
 });
 
 test('canonical SQL schemas define ingest ai call log for AI audit', async () => {
   for (const relativePath of [
-    'sql/pgsql17.sql',
-    'sql/training_records/ingest.sql',
+    'sql/dev-sql/ingest.sql',
+    'sql/main-sql/ingest.sql',
   ]) {
     const sql = await readFile(path.resolve(process.cwd(), relativePath), 'utf8');
     assert.match(sql, /ai_call_log/i, `${relativePath} should define ingest.ai_call_log`);
@@ -1024,43 +1006,6 @@ test('canonical SQL schemas define ingest ai call log for AI audit', async () =>
     assert.match(sql, /cost_usd/i, `${relativePath} should store nullable AI cost`);
     assert.match(sql, /failure_category/i, `${relativePath} should store failure_category`);
   }
-});
-
-test('pgsql init schema defines least-privilege database roles', async () => {
-  const sql = await readFile(path.resolve(process.cwd(), 'sql/pgsql17.sql'), 'utf8');
-
-  for (const role of ['training_migrator', 'training_app', 'training_maintenance', 'training_readonly']) {
-    assert.match(sql, new RegExp(`create role\\s+${role}\\b`, 'i'), `pgsql17.sql should define ${role}`);
-  }
-
-  assert.match(sql, /create database training_records\s+owner training_migrator/i);
-  assert.match(sql, /create schema if not exists maintenance authorization training_migrator/i);
-  assert.match(sql, /create table if not exists maintenance\.schema_migration/i);
-  assert.match(sql, /create schema if not exists archive authorization training_migrator/i);
-  assert.match(sql, /create schema if not exists ingest authorization training_migrator/i);
-  assert.match(sql, /create schema if not exists core authorization training_migrator/i);
-
-  assert.match(sql, /grant usage on schema core,\s*ingest,\s*archive to training_app,\s*training_maintenance,\s*training_readonly/i);
-  assert.match(sql, /grant select on all tables in schema core,\s*ingest,\s*archive to training_readonly/i);
-  assert.match(sql, /grant select,\s*insert,\s*update on all tables in schema ingest to training_app/i);
-  assert.match(sql, /grant select,\s*insert,\s*update on all tables in schema core to training_app/i);
-  assert.match(sql, /grant delete on core\.measurement,\s*core\.activity,\s*core\.meal,\s*core\.sleep to training_app/i);
-  assert.match(sql, /grant select,\s*insert,\s*update on archive\.training_parse_snapshot,\s*archive\.training_sleep to training_app/i);
-  assert.match(sql, /grant select on maintenance\.schema_migration to training_maintenance,\s*training_readonly/i);
-  assert.doesNotMatch(sql, /grant .*maintenance\.schema_migration.*training_app/i);
-  assert.doesNotMatch(sql, /grant select,\s*insert,\s*update,\s*delete on all tables in schema archive to training_app/i);
-  assert.doesNotMatch(sql, /grant select,\s*insert,\s*update,\s*delete on all tables in schema (?:ingest|core) to training_app/i);
-});
-
-test('database rollback SQL preserves legacy ingest and core data tables', async () => {
-  const relativePath = 'sql/training_records/rollback_core_code_optimization_01.sql';
-  const sql = await readFile(path.resolve(process.cwd(), relativePath), 'utf8');
-
-  assert.match(sql, /drop table if exists ingest\.ai_call_log/i);
-  assert.match(sql, /drop index (?:if exists )?ux_ingest_telegram_message_source_identity/i);
-  assert.match(sql, /drop index (?:if exists )?ux_core_thought_identity/i);
-  assert.doesNotMatch(sql, /drop table\s+(?:if exists\s+)?ingest\.telegram_/i);
-  assert.doesNotMatch(sql, /drop table\s+(?:if exists\s+)?core\.(?:measurement|activity|meal|sleep|thought|training_day)/i);
 });
 
 function jsonResponse(payload, status = 200) {

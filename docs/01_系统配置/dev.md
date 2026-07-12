@@ -22,7 +22,6 @@ dev 环境对应：
 | --- | --- | --- |
 | `DEV_TRAINING_DB_URL` | 必填 | dev PostgreSQL 连接串，同步、构建、导出都读这个库。 |
 | `DEV_TRAINING_DB_READONLY_URL` | 可选 | dev 只读 PostgreSQL 连接串；workflow 映射为运行时 `TRAINING_DB_READONLY_URL`，站点构建、数据库快照读取、Markdown 导出、巡检和一致性检查优先使用，未配置时回退 `DEV_TRAINING_DB_URL` 映射后的运行时 `TRAINING_DB_URL`。 |
-| `DEV_TRAINING_DB_MIGRATION_URL` | 手动迁移时必填 | dev 迁移 PostgreSQL 连接串；执行 `npm run maintenance:migrate -- --confirm` 前手动映射为运行时 `TRAINING_DB_MIGRATION_URL`，不注入日常 dev 同步 workflow。 |
 | `AI_API_KEY` | 必填 | dev 与 main 共用的 AI 服务鉴权；两个同步 workflow 都映射为运行时 `AI_API_KEY`。 |
 | `AI_BASE_URL` | 必填 | dev 与 main 共用的 OpenAI-compatible base URL。 |
 | `DEV_TELEGRAM_BOT_TOKEN` | 必填 | dev Telegram Bot token，用于拉取消息、下载图片、通知结果、刷新 webhook。 |
@@ -159,16 +158,11 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.dev.toml
 | --- | --- | --- |
 | `DEV_TRAINING_DB_URL` | PostgreSQL 服务商 | dev 数据库连接串，放 GitHub Secrets。 |
 | `DEV_TRAINING_DB_READONLY_URL` | PostgreSQL 服务商 | 可选只读连接串，放 GitHub Secrets；workflow 映射为运行时 `TRAINING_DB_READONLY_URL`，读取快照、巡检和一致性检查优先使用。 |
-| `DEV_TRAINING_DB_MIGRATION_URL` | PostgreSQL 服务商 | 显式迁移连接串，放受控 Secret；通过手动 `Training Database Migration` workflow 或本地映射后的 maintenance 命令使用。 |
 | `TRAINING_DB_TIMEOUT_MS` | 自定义 | 连接超时，放 GitHub Variables。 |
 | `DEV_TRAINING_DB_APP_NAME` | 自定义 | DB 连接名，便于排查。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 建议 dev 使用 `database`。 |
 
-数据库 schema 以 `sql/pgsql17.sql` 和当前显式建表脚本为准；增量 DDL 通过 `sql/training_records/migrations/` 显式执行，不走日常 `DEV_TRAINING_DB_URL` 映射后的默认路径。Action 监控当前在同一个 dev PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，参数健康 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
-
-远端迁移只通过手动 `Training Database Migration` workflow 执行：先选择 `dev + dry-run` 检查 pending/checksum，再选择 `dev + confirm`。该 workflow 不响应 push、schedule 或消息 dispatch，日常 sync 不注入 migration Secret。
-
-通用 ingest 的 `sql/migration.sql` 与 `sql/migration_phase2_generic_ingest.sql` 已于 2026-07-11 在 dev 数据库手工执行。`sql/cleanup_phase2_legacy_ingest.sql` 尚未执行；必须先观察完整同步、pending 重试、备份和维护周期。
+dev 数据库 schema 事实源是 `sql/dev-sql/`。Action 监控当前在同一个 dev PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，参数健康 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
 
 `Report Action Status` step 会把 `DEV_TRAINING_DB_URL` 映射为运行时 `TRAINING_DB_URL`，把 `DEV_TRAINING_DB_APP_NAME` 映射为 `TRAINING_DB_APP_NAME`，并使用 `github.token` 读取 GitHub Actions run/jobs/steps 后直写 `monitor.*`。只有当分支 DB URL 不可用时，才使用 `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` / `GITHUB_ACTION_MONITOR_REPORT_URL` 走 HTTP 兜底。
 
@@ -220,7 +214,7 @@ dev workflow 会检查 `DEV_COS_BUCKET` / `DEV_COS_DOMAIN` 不能和 main 的 `C
 4. 运行 `Deploy Cloudflare Pages (Dev)`，确认 dev 站点能构建和部署。
 5. 给 dev Telegram bot 或 dev 飞书应用发测试消息，确认 `Sync (Dev)` 被触发。
 6. 检查 GitHub Actions summary：同步结果、数据库写入、图片上传、站点部署都应成功。
-7. 先在 dev 数据库手工执行 `sql/training_records/migrate_parameter_health_monitor.sql`，再运行 `Parameter Health Audit`，确认 Step Summary 出现 dev 健康状态计数并触发 dev Pages 刷新。
+7. 运行 `Parameter Health Audit`，确认 Step Summary 出现 dev 健康状态计数并触发 dev Pages 刷新。
 8. 打开 dev 站点 `/action-monitor/`，确认新 run 出现在 Action 日志里，且“系统参数健康”展示 dev registry 中的真实探测状态；如果只有顶层 run 没有 job/step 明细，先回看该 run 的 `Report Action Status` step 是否成功写入 `monitor.*`。
 
 ## 5. 可选 Docker 运行

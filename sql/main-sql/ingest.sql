@@ -5,14 +5,14 @@
  Source Server Type    : PostgreSQL
  Source Server Version : 170000 (170000)
  Source Host           : 122.51.66.213:15432
- Source Catalog        : training_records_dev
+ Source Catalog        : training_records
  Source Schema         : ingest
 
  Target Server Type    : PostgreSQL
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 11/07/2026 20:58:34
+ Date: 12/07/2026 22:30:35
 */
 
 
@@ -20,7 +20,7 @@
 -- Sequence structure for pending_task_pending_id_seq
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "ingest"."pending_task_pending_id_seq";
-CREATE SEQUENCE "ingest"."pending_task_pending_id_seq"
+CREATE SEQUENCE "ingest"."pending_task_pending_id_seq" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -32,7 +32,7 @@ ALTER SEQUENCE "ingest"."pending_task_pending_id_seq" OWNER TO "training_writer"
 -- Sequence structure for telegram_pending_batch_pending_id_seq
 -- ----------------------------
 DROP SEQUENCE IF EXISTS "ingest"."telegram_pending_batch_pending_id_seq";
-CREATE SEQUENCE "ingest"."telegram_pending_batch_pending_id_seq"
+CREATE SEQUENCE "ingest"."telegram_pending_batch_pending_id_seq" 
 INCREMENT 1
 MINVALUE  1
 MAXVALUE 9223372036854775807
@@ -124,7 +124,6 @@ CREATE TABLE "ingest"."recognition_run" (
   "model" text COLLATE "pg_catalog"."default",
   "prompt_version" text COLLATE "pg_catalog"."default",
   "raw_result_json" jsonb NOT NULL,
-  "date_candidates_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
   "created_at" timestamptz(6) NOT NULL DEFAULT now(),
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
@@ -138,30 +137,6 @@ COMMENT ON COLUMN "ingest"."recognition_run"."ocr_json" IS 'OCR 全文、文本�
 COMMENT ON COLUMN "ingest"."recognition_run"."image_metadata_json" IS '处理前后格式、尺寸、字节数和图片操作，不含原图';
 COMMENT ON COLUMN "ingest"."recognition_run"."raw_result_json" IS 'AI 原始结构化结果，用于审计和重新映射';
 COMMENT ON TABLE "ingest"."recognition_run" IS '通用截图识别运行结果；保存可查询元数据、证据和原始结构化输出';
-
--- ----------------------------
--- Table structure for extracted_record
--- ----------------------------
-DROP TABLE IF EXISTS "ingest"."extracted_record";
-CREATE TABLE "ingest"."extracted_record" (
-  "record_id" text COLLATE "pg_catalog"."default" NOT NULL,
-  "recognition_id" text COLLATE "pg_catalog"."default" NOT NULL,
-  "record_ordinal" int4 NOT NULL,
-  "record_type" text COLLATE "pg_catalog"."default" NOT NULL,
-  "observed_at_text" text COLLATE "pg_catalog"."default",
-  "occurred_at" timestamptz(6),
-  "archived_date" date,
-  "date_resolution" text COLLATE "pg_catalog"."default" NOT NULL,
-  "date_confidence" numeric(5,4),
-  "fields_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
-  "evidence_json" jsonb NOT NULL DEFAULT '{}'::jsonb,
-  "status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'accepted'::text,
-  "created_at" timestamptz(6) NOT NULL DEFAULT now(),
-  "updated_at" timestamptz(6) NOT NULL DEFAULT now()
-)
-;
-ALTER TABLE "ingest"."extracted_record" OWNER TO "training_writer";
-COMMENT ON TABLE "ingest"."extracted_record" IS '识别结果中的记录级事实、日期决策与语义审核状态';
 
 -- ----------------------------
 -- Table structure for source_asset
@@ -206,7 +181,6 @@ CREATE TABLE "ingest"."source_batch" (
   "issues_json" jsonb NOT NULL DEFAULT '[]'::jsonb,
   "payload_hash" text COLLATE "pg_catalog"."default" NOT NULL,
   "payload_json" jsonb NOT NULL,
-  "date_resolution_status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'single_date'::text,
   "processed_at" timestamptz(6) NOT NULL,
   "updated_at" timestamptz(6) NOT NULL
 )
@@ -352,26 +326,20 @@ CREATE TABLE "ingest"."telegram_recognition" (
 )
 ;
 ALTER TABLE "ingest"."telegram_recognition" OWNER TO "training_writer";
-COMMENT ON COLUMN "ingest"."telegram_recognition"."source_app" IS 'AI 识别出的来源应用名称；为空表示无法可靠判断';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."data_type" IS '标准化数据类型，例如 measurement、workout、nutrition、sleep 或 unknown';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."fields_json" IS '跨来源标准化后的业务字段，不绑定特定 App 页面布局';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."confidence" IS '标准化识别置信度，范围 0 到 1';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."pipeline_version" IS '图片处理、OCR、语义理解与标准化管线版本';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."ocr_json" IS 'OCR 文本、文本块及坐标证据；未启用 OCR 时为空';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."image_json" IS '图片格式、尺寸、压缩与质量处理元数据；不保存密钥或原图内容';
-COMMENT ON COLUMN "ingest"."telegram_recognition"."cache_key" IS '包含来源渠道、文件身份、提示词、Schema 与模型的精确缓存键';
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "ingest"."pending_task_pending_id_seq"
 OWNED BY "ingest"."pending_task"."pending_id";
-SELECT setval('"ingest"."pending_task_pending_id_seq"', 13, true);
+SELECT setval('"ingest"."pending_task_pending_id_seq"', 10, true);
 
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
-SELECT setval('"ingest"."telegram_pending_batch_pending_id_seq"', 17, true);
+ALTER SEQUENCE "ingest"."telegram_pending_batch_pending_id_seq"
+OWNED BY "ingest"."telegram_pending_batch"."pending_id";
+SELECT setval('"ingest"."telegram_pending_batch_pending_id_seq"', 10, true);
 
 -- ----------------------------
 -- Primary Key structure for table ai_call_log
@@ -425,35 +393,6 @@ ALTER TABLE "ingest"."recognition_run" ADD CONSTRAINT "ck_recognition_run_confid
 ALTER TABLE "ingest"."recognition_run" ADD CONSTRAINT "recognition_run_pkey" PRIMARY KEY ("recognition_id");
 
 -- ----------------------------
--- Indexes structure for table extracted_record
--- ----------------------------
-CREATE INDEX "idx_extracted_record_date_type" ON "ingest"."extracted_record" USING btree (
-  "archived_date" "pg_catalog"."date_ops" DESC NULLS FIRST,
-  "record_type" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST
-) WHERE status = 'accepted'::text;
-CREATE INDEX "idx_extracted_record_review" ON "ingest"."extracted_record" USING btree (
-  "updated_at" "pg_catalog"."timestamptz_ops" ASC NULLS LAST
-) WHERE status = 'needs_review'::text;
-
--- ----------------------------
--- Checks structure for table extracted_record
--- ----------------------------
-ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "ck_extracted_record_type" CHECK (record_type = ANY (ARRAY['measurement'::text, 'activity'::text, 'workout_summary'::text, 'meal'::text, 'nutrition_summary'::text, 'sleep'::text]));
-ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "ck_extracted_record_date_resolution" CHECK (date_resolution = ANY (ARRAY['exact_image'::text, 'derived_message_year'::text, 'derived_batch_anchor'::text, 'derived_sleep_start'::text, 'filename_fallback'::text, 'unresolved'::text]));
-ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "ck_extracted_record_status" CHECK (status = ANY (ARRAY['accepted'::text, 'needs_review'::text, 'rejected'::text]));
-ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "ck_extracted_record_date_confidence" CHECK (date_confidence IS NULL OR date_confidence >= 0::numeric AND date_confidence <= 1::numeric);
-
--- ----------------------------
--- Uniques structure for table extracted_record
--- ----------------------------
-ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "ux_extracted_record_run_ordinal" UNIQUE ("recognition_id", "record_ordinal");
-
--- ----------------------------
--- Primary Key structure for table extracted_record
--- ----------------------------
-ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "extracted_record_pkey" PRIMARY KEY ("record_id");
-
--- ----------------------------
 -- Indexes structure for table source_asset
 -- ----------------------------
 CREATE INDEX "idx_source_asset_message_order" ON "ingest"."source_asset" USING btree (
@@ -485,7 +424,6 @@ CREATE INDEX "idx_source_batch_updated" ON "ingest"."source_batch" USING btree (
 -- Checks structure for table source_batch
 -- ----------------------------
 ALTER TABLE "ingest"."source_batch" ADD CONSTRAINT "ck_source_batch_confidence" CHECK (confidence IS NULL OR confidence >= 0::numeric AND confidence <= 1::numeric);
-ALTER TABLE "ingest"."source_batch" ADD CONSTRAINT "ck_source_batch_date_resolution_status" CHECK (date_resolution_status = ANY (ARRAY['single_date'::text, 'multi_date'::text, 'needs_review'::text, 'not_applicable'::text]));
 
 -- ----------------------------
 -- Primary Key structure for table source_batch
@@ -587,11 +525,6 @@ ALTER TABLE "ingest"."telegram_recognition" ADD CONSTRAINT "telegram_recognition
 -- ----------------------------
 ALTER TABLE "ingest"."recognition_run" ADD CONSTRAINT "recognition_run_batch_fkey" FOREIGN KEY ("source_channel", "batch_id") REFERENCES "ingest"."source_batch" ("source_channel", "batch_id") ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE "ingest"."recognition_run" ADD CONSTRAINT "recognition_run_message_fkey" FOREIGN KEY ("source_channel", "source_chat_id", "source_message_id") REFERENCES "ingest"."source_message" ("source_channel", "source_chat_id", "source_message_id") ON DELETE CASCADE ON UPDATE NO ACTION;
-
--- ----------------------------
--- Foreign Keys structure for table extracted_record
--- ----------------------------
-ALTER TABLE "ingest"."extracted_record" ADD CONSTRAINT "extracted_record_recognition_fkey" FOREIGN KEY ("recognition_id") REFERENCES "ingest"."recognition_run" ("recognition_id") ON DELETE CASCADE ON UPDATE NO ACTION;
 
 -- ----------------------------
 -- Foreign Keys structure for table source_asset

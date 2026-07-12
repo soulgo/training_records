@@ -12,7 +12,7 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 11/07/2026 20:57:57
+ Date: 12/07/2026 21:16:37
 */
 
 
@@ -230,8 +230,6 @@ CREATE INDEX "idx_core_activity_archived_date" ON "core"."activity" USING btree 
   "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
 );
 
-ALTER TABLE "core"."activity" ADD CONSTRAINT "ck_core_activity_nonnegative" CHECK ((calories IS NULL OR calories >= 0) AND (distance_km IS NULL OR distance_km >= 0) AND (duration_seconds IS NULL OR duration_seconds >= 0) AND (heart_rate IS NULL OR heart_rate >= 25 AND heart_rate <= 250));
-
 -- ----------------------------
 -- Primary Key structure for table activity
 -- ----------------------------
@@ -243,8 +241,6 @@ ALTER TABLE "core"."activity" ADD CONSTRAINT "activity_pkey" PRIMARY KEY ("activ
 CREATE INDEX "idx_core_meal_archived_date" ON "core"."meal" USING btree (
   "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
 );
-
-ALTER TABLE "core"."meal" ADD CONSTRAINT "ck_core_meal_ranges" CHECK ((calories IS NULL OR calories >= 0) AND (recommended_min IS NULL OR recommended_min >= 0) AND (recommended_max IS NULL OR recommended_max >= 0) AND (recommended_min IS NULL OR recommended_max IS NULL OR recommended_min <= recommended_max));
 
 -- ----------------------------
 -- Primary Key structure for table meal
@@ -258,8 +254,6 @@ CREATE INDEX "idx_core_measurement_archived_date" ON "core"."measurement" USING 
   "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
 );
 
-ALTER TABLE "core"."measurement" ADD CONSTRAINT "ck_core_measurement_physical_ranges" CHECK ((weight_kg IS NULL OR weight_kg >= 20 AND weight_kg <= 300) AND (bmi IS NULL OR bmi >= 8 AND bmi <= 80) AND (body_fat_pct IS NULL OR body_fat_pct >= 2 AND body_fat_pct <= 75) AND (body_water_pct IS NULL OR body_water_pct >= 20 AND body_water_pct <= 85) AND (protein_pct IS NULL OR protein_pct >= 5 AND protein_pct <= 35) AND (bone_mass_kg IS NULL OR bone_mass_kg >= 0.5 AND bone_mass_kg <= 8) AND (basal_metabolism_kcal IS NULL OR basal_metabolism_kcal >= 500 AND basal_metabolism_kcal <= 3500) AND (fat_free_mass_kg IS NULL OR weight_kg IS NULL OR fat_free_mass_kg <= weight_kg));
-
 -- ----------------------------
 -- Primary Key structure for table measurement
 -- ----------------------------
@@ -271,8 +265,6 @@ ALTER TABLE "core"."measurement" ADD CONSTRAINT "measurement_pkey" PRIMARY KEY (
 CREATE INDEX "idx_core_sleep_archived_date" ON "core"."sleep" USING btree (
   "archived_date" "pg_catalog"."date_ops" ASC NULLS LAST
 );
-
-ALTER TABLE "core"."sleep" ADD CONSTRAINT "ck_core_sleep_ranges" CHECK ((total_sleep_minutes IS NULL OR total_sleep_minutes >= 0 AND total_sleep_minutes <= 1440) AND (night_sleep_minutes IS NULL OR night_sleep_minutes >= 0 AND night_sleep_minutes <= 960) AND (nap_minutes IS NULL OR nap_minutes >= 0 AND nap_minutes <= 480) AND (deep_sleep_ratio_pct IS NULL OR deep_sleep_ratio_pct >= 0 AND deep_sleep_ratio_pct <= 100) AND (light_sleep_ratio_pct IS NULL OR light_sleep_ratio_pct >= 0 AND light_sleep_ratio_pct <= 100) AND (rem_sleep_ratio_pct IS NULL OR rem_sleep_ratio_pct >= 0 AND rem_sleep_ratio_pct <= 100) AND (average_spo2_pct IS NULL OR average_spo2_pct >= 50 AND average_spo2_pct <= 100));
 
 -- ----------------------------
 -- Primary Key structure for table sleep
@@ -286,9 +278,6 @@ CREATE INDEX "idx_core_thought_module_updated_at" ON "core"."thought" USING btre
   "thought_module" COLLATE "pg_catalog"."default" "pg_catalog"."text_ops" ASC NULLS LAST,
   "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
 );
-CREATE INDEX "idx_core_thought_legacy_message_id" ON "core"."thought" USING btree (
-  "telegram_message_id" "pg_catalog"."int8_ops" ASC NULLS LAST
-);
 CREATE INDEX "idx_core_thought_updated_at" ON "core"."thought" USING btree (
   "updated_at" "pg_catalog"."timestamptz_ops" DESC NULLS FIRST
 );
@@ -301,7 +290,7 @@ CREATE UNIQUE INDEX "ux_core_thought_identity" ON "core"."thought" USING btree (
 -- ----------------------------
 -- Primary Key structure for table thought
 -- ----------------------------
-ALTER TABLE "core"."thought" ADD CONSTRAINT "thought_pkey" PRIMARY KEY ("source_channel", "source_chat_id", "source_message_id");
+ALTER TABLE "core"."thought" ADD CONSTRAINT "thought_pkey" PRIMARY KEY ("telegram_message_id");
 
 -- ----------------------------
 -- Primary Key structure for table training_day

@@ -178,7 +178,7 @@ npm run server
 
 ## 数据库迁移状态
 
-- dev 数据库已于 2026-07-11 手工执行 `sql/migration.sql` 和 `sql/migration_phase2_generic_ingest.sql`，可部署当前 dev 代码。
+- 数据库结构按环境分别以 `sql/dev-sql/` 和 `sql/main-sql/` 为准；main 合并 dev 前手工执行 `sql/main-sql/align_to_dev.sql` 并完成文件末尾验收查询。
 - main 数据库尚未执行本轮两阶段迁移；必须先备份并按上述顺序执行、运行 SQL 末尾验收查询，再部署当前代码。
 - `sql/cleanup_phase2_legacy_ingest.sql` 尚未执行。至少观察一个完整同步、pending 重试、备份和维护周期，并确认旧表调用为 0 后，才可显式开启清理门禁。
 

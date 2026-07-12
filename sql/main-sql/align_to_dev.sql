@@ -1,9 +1,7 @@
--- 第二阶段：来源无关的 Ingest 数据模型
--- 执行顺序：
---   1. 先执行 sql/migration.sql（为旧 recognition 表补齐标准化列）。
---   2. 再执行本文件。
---   3. 验收通过后部署读取/写入 generic ingest 表的新代码。
--- 本迁移只新增并回填，不删除旧 ingest.telegram_* 表，便于人工核对和回滚。
+-- main 数据库对齐 dev 数据库
+-- 基线：sql/main-sql/*.sql（迁移前） -> sql/dev-sql/*.sql（目标）
+-- 特性：单文件、单事务、可重复执行；只新增/回填，不删除旧 ingest.telegram_* 表。
+-- 执行前：完整备份 main 数据库，并确认当前表结构来自 sql/main-sql/。
 
 begin;
 
@@ -15,14 +13,75 @@ begin
     raise exception '缺少旧 ingest.telegram_* 表，无法执行通用 ingest 回填';
   end if;
 
+end
+$$;
+
+-- 旧识别表补齐 dev 已有的结构化识别字段。
+alter table ingest.telegram_recognition
+  add column if not exists source_app text,
+  add column if not exists data_type text,
+  add column if not exists fields_json jsonb,
+  add column if not exists confidence numeric(5,4),
+  add column if not exists pipeline_version text,
+  add column if not exists ocr_json jsonb,
+  add column if not exists image_json jsonb,
+  add column if not exists cache_key text;
+
+update ingest.telegram_recognition
+set
+  source_app = coalesce(source_app, recognition_json #>> '{normalizedRecognition,sourceApp}', recognition_json->>'detectedApp'),
+  data_type = coalesce(data_type, recognition_json #>> '{normalizedRecognition,dataType}', recognition_json->>'imageType', 'unknown'),
+  fields_json = coalesce(fields_json, recognition_json #> '{normalizedRecognition,fields}', recognition_json->'records'),
+  confidence = coalesce(
+    confidence,
+    case
+      when coalesce(recognition_json #>> '{normalizedRecognition,confidence}', recognition_json->>'confidence')
+        ~ '^(0(?:\\.\\d+)?|1(?:\\.0+)?)$'
+      then coalesce(recognition_json #>> '{normalizedRecognition,confidence}', recognition_json->>'confidence')::numeric
+      else null
+    end
+  ),
+  pipeline_version = coalesce(pipeline_version, recognition_json #>> '{normalizedRecognition,runtime,pipelineVersion}', 'legacy'),
+  ocr_json = coalesce(ocr_json, recognition_json #> '{normalizedRecognition,evidence,ocr}'),
+  image_json = coalesce(image_json, recognition_json #> '{normalizedRecognition,evidence,image}'),
+  cache_key = coalesce(cache_key, recognition_json #>> '{normalizedRecognition,runtime,cacheKey}', recognition_json->>'cacheKey');
+
+alter table ingest.telegram_recognition
+  drop constraint if exists ck_ingest_telegram_recognition_confidence;
+alter table ingest.telegram_recognition
+  add constraint ck_ingest_telegram_recognition_confidence
+  check (confidence is null or (confidence >= 0 and confidence <= 1));
+
+create index if not exists idx_ingest_telegram_recognition_cache_key
+  on ingest.telegram_recognition(cache_key) where cache_key is not null;
+create index if not exists idx_ingest_telegram_recognition_type_updated
+  on ingest.telegram_recognition(data_type, updated_at desc);
+create index if not exists idx_ingest_telegram_recognition_source_app_updated
+  on ingest.telegram_recognition(source_app, updated_at desc) where source_app is not null;
+
+-- archive.training_day 补齐 dev 已有的睡眠汇总列。
+alter table archive.training_day
+  add column if not exists sleep_total_minutes integer,
+  add column if not exists night_sleep_minutes integer,
+  add column if not exists nap_minutes integer,
+  add column if not exists sleep_start_time text,
+  add column if not exists sleep_end_time text,
+  add column if not exists deep_sleep_minutes integer,
+  add column if not exists light_sleep_minutes integer,
+  add column if not exists rem_sleep_minutes integer,
+  add column if not exists awake_minutes integer;
+
+do $$
+begin
   if not exists (
-    select 1
-    from information_schema.columns
-    where table_schema = 'ingest'
-      and table_name = 'telegram_recognition'
-      and column_name = 'cache_key'
+    select 1 from pg_constraint
+    where conname = 'training_sleep_source_hash_fkey'
+      and conrelid = 'archive.training_sleep'::regclass
   ) then
-    raise exception '请先执行 sql/migration.sql，再执行本迁移';
+    alter table archive.training_sleep
+      add constraint training_sleep_source_hash_fkey
+      foreign key (source_hash)
+      references archive.training_parse_snapshot(source_hash);
   end if;
 end
 $$;
@@ -465,9 +524,30 @@ on conflict (source_channel, batch_id) do update set
   resolved_at = excluded.resolved_at,
   updated_at = excluded.updated_at;
 
+alter table ingest.source_batch owner to training_writer;
+alter table ingest.source_message owner to training_writer;
+alter table ingest.source_asset owner to training_writer;
+alter table ingest.recognition_run owner to training_writer;
+alter table ingest.pending_task owner to training_writer;
+
 commit;
 
 -- 验收查询（执行后逐条确认）：
+-- 0. 目标结构差异必须全部为 0 行。
+-- select table_schema, table_name, column_name
+-- from (values
+--   ('archive','training_day','sleep_total_minutes'), ('archive','training_day','night_sleep_minutes'),
+--   ('archive','training_day','nap_minutes'), ('archive','training_day','sleep_start_time'),
+--   ('archive','training_day','sleep_end_time'), ('archive','training_day','deep_sleep_minutes'),
+--   ('archive','training_day','light_sleep_minutes'), ('archive','training_day','rem_sleep_minutes'),
+--   ('archive','training_day','awake_minutes'), ('ingest','telegram_recognition','cache_key')
+-- ) expected(table_schema, table_name, column_name)
+-- where not exists (
+--   select 1 from information_schema.columns c
+--   where c.table_schema = expected.table_schema
+--     and c.table_name = expected.table_name
+--     and c.column_name = expected.column_name
+-- );
 -- 1. 批次数按来源核对。
 -- select source_channel, count(*) from ingest.source_batch group by source_channel order by source_channel;
 -- 2. 消息数与旧表按来源核对。
@@ -483,12 +563,7 @@ commit;
 -- where m.source_message_id is null;
 -- 5. 待重试任务按来源核对。
 -- select source_channel, status, count(*) from ingest.pending_task group by source_channel, status order by 1, 2;
-
--- 回滚说明：仅当新代码尚未部署或已回退到旧表版本时执行。
--- begin;
--- drop table if exists ingest.pending_task;
--- drop table if exists ingest.recognition_run;
--- drop table if exists ingest.source_asset;
--- drop table if exists ingest.source_message;
--- drop table if exists ingest.source_batch;
--- commit;
+-- 6. 结构存在性必须全部为 true。
+-- select to_regclass('ingest.source_batch'), to_regclass('ingest.source_message'),
+--        to_regclass('ingest.source_asset'), to_regclass('ingest.recognition_run'),
+--        to_regclass('ingest.pending_task');
