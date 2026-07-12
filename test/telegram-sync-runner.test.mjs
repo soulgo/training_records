@@ -7168,7 +7168,7 @@ test('runTelegramSync queues image batches when primary and fallback AI provider
   assert.match(queued[0].batch.recognitionErrors[0].promptVersion, /^\d{4}-\d{2}-\d{2}$/);
   assert.match(
     queued[0].batch.recognitionErrors[0].aiIdempotencyKey,
-    new RegExp(`^recognition:telegram_training_image:v3:${queued[0].batch.recognitionErrors[0].promptVersion}:gpt-primary:`),
+    new RegExp(`^recognition:telegram_training_image:v4:${queued[0].batch.recognitionErrors[0].promptVersion}:gpt-primary:`),
   );
   assert.match(queued[0].error, /fallback provider timed out/);
   assert.equal(queued[0].nextRetryAt.toISOString(), now.toISOString());

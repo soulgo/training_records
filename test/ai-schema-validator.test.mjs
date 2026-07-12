@@ -15,7 +15,7 @@ import {
 import { applyRecognitionSemanticGate } from '../src/core/ai/recognition-semantic-validator.mjs';
 
 test('recognition schema version is bumped for required records.sleep contract', () => {
-  assert.equal(RECOGNITION_SCHEMA_VERSION, 'v3');
+  assert.equal(RECOGNITION_SCHEMA_VERSION, 'v4');
   assert.ok(buildRecognitionSchema().properties.records.required.includes('sleep'));
 });
 
@@ -177,6 +177,11 @@ test('parseAiJsonContent returns a valid recognition payload unchanged', () => {
           time: '07:00',
           type: '力量训练',
           detail: '30分钟，消耗180千卡',
+          durationSeconds: 1800,
+          calories: 180,
+          heartRate: null,
+          distanceKm: null,
+          avgSpeedKmh: null,
         },
       ],
       meals: [],

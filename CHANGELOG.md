@@ -24,6 +24,7 @@
 
 ### Changed
 
+- 图片识别 schema 升级到 v4，活动明细直接输出 `durationSeconds`、`calories`、`heartRate`、`distanceKm`、`avgSpeedKmh`；结构化字段优先进入 core，中文 `detail` 正则仅保留为旧结果兼容回退。
 - 同步主路径不再等待站点部署或同步拉取 Action jobs；deploy 与 monitor 独立通知失败，会话队列按稳定哈希分片，webhook 跳过 polling offset，新消息不再顺带消费 pending 队列。
 - PostgreSQL ingest messages/assets/recognitions 改为集合式 upsert，数据库观测新增安全 `queryOrdinal` 与 connect/BEGIN/query/COMMIT/AI log 分段耗时；识别缓存键新增 capability mode。
 - Telegram/飞书共享报告与结果通知入口统一为 MessageSync 命名，飞书不再导入 Telegram 命名的共享函数或执行 `telegram:` 字符串替换。

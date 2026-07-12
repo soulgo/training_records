@@ -98,6 +98,8 @@ export class TrainingRecord {
 export function normalizeBatchActivity(activity) {
   const detail = activity.detail?.trim() ?? '';
   const durationText = activity.durationText ?? detail.match(/\d+分\d+秒|\d{2}:\d{2}:\d{2}/)?.[0] ?? null;
+  const structuredDurationSeconds = normalizeFiniteNumber(activity.durationSeconds);
+  const structuredCalories = normalizeFiniteNumber(activity.calories);
 
   return {
     time: normalizeActivityTime(activity.time),
@@ -105,11 +107,16 @@ export function normalizeBatchActivity(activity) {
     rawType: activity.rawType ?? activity.type,
     detail,
     durationText,
-    durationSeconds: durationText ? parseDurationSeconds(durationText) : 0,
-    calories: (() => { const v = extractNumber(detail, /(?:总)?消耗\s*(\d+(?:\.\d+)?)\s*千卡/); return v != null ? Math.round(v) : null; })(),
-    heartRate: extractNumber(detail, /(?:平均(?:心率)?|记录值|心率)\s*(\d+)\s*次\/分钟/),
-    distanceKm: extractNumber(detail, /(\d+(?:\.\d+)?)\s*公里/),
-    avgSpeedKmh: extractNumber(detail, /(?:均速|平均速度)\s*(\d+(?:\.\d+)?)\s*公里\/小时/),
+    durationSeconds: structuredDurationSeconds ?? (durationText ? parseDurationSeconds(durationText) : 0),
+    calories: structuredCalories !== null
+      ? Math.round(structuredCalories)
+      : (() => { const v = extractNumber(detail, /(?:总)?消耗\s*(\d+(?:\.\d+)?)\s*千卡/); return v != null ? Math.round(v) : null; })(),
+    heartRate: normalizeFiniteNumber(activity.heartRate)
+      ?? extractNumber(detail, /(?:平均(?:心率)?|记录值|心率)\s*(\d+)\s*次\/分钟/),
+    distanceKm: normalizeFiniteNumber(activity.distanceKm)
+      ?? extractNumber(detail, /(\d+(?:\.\d+)?)\s*公里/),
+    avgSpeedKmh: normalizeFiniteNumber(activity.avgSpeedKmh)
+      ?? extractNumber(detail, /(?:均速|平均速度)\s*(\d+(?:\.\d+)?)\s*公里\/小时/),
   };
 }
 
@@ -195,4 +202,12 @@ function pickSleepHealthFields(sleep) {
 function extractNumber(value, regex) {
   const match = value?.match(regex);
   return match ? Number(match[1]) : null;
+}
+
+function normalizeFiniteNumber(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }

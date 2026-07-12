@@ -78,7 +78,7 @@ export async function generateRecognitionPrompt() {
     renderSection(shared.nullConventions),
   ];
 
-  return sections.join('\n') + '\n';
+  return `${sections.join('\n').trimEnd()}\n`;
 }
 
 export async function generateAnalysisPrompt() {
@@ -101,7 +101,7 @@ export async function generateAnalysisPrompt() {
     renderSection(shared.nullConventions),
   ];
 
-  return sections.join('\n') + '\n';
+  return `${sections.join('\n').trimEnd()}\n`;
 }
 
 export async function writePromptFiles() {

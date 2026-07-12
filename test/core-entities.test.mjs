@@ -104,6 +104,33 @@ test('normalizeBatchActivity extracts stable workout metrics from detail text', 
   );
 });
 
+test('normalizeBatchActivity prefers structured workout metrics without localized detail parsing', () => {
+  assert.deepEqual(
+    normalizeBatchActivity({
+      time: '07:30',
+      type: 'outdoor_running',
+      detail: 'Morning Run',
+      durationSeconds: 1875,
+      calories: 286.4,
+      heartRate: 142,
+      distanceKm: 5.12,
+      avgSpeedKmh: 9.83,
+    }),
+    {
+      time: '07:30',
+      type: 'outdoor_running',
+      rawType: 'outdoor_running',
+      detail: 'Morning Run',
+      durationText: null,
+      durationSeconds: 1875,
+      calories: 286,
+      heartRate: 142,
+      distanceKm: 5.12,
+      avgSpeedKmh: 9.83,
+    },
+  );
+});
+
 test('core entity constructors keep raw values explicit and lightweight', () => {
   assert.equal(BodyMetric.fromRaw({ weightKg: 73 }).weightKg, 73);
   assert.equal(Activity.fromRaw({ type: '骑行' }).type, '骑行');

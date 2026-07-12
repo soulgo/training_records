@@ -709,7 +709,7 @@ function normalizeRecognitionPayload(value) {
       : warnings,
     records: {
       measurement: records.measurement ?? null,
-      activities: Array.isArray(records.activities) ? records.activities : [],
+      activities: normalizeRecognitionActivities(records.activities),
       meals: normalizeRecognitionMeals(records.meals),
       totalCalories: normalizeRecognitionNumber(records.totalCalories),
       details: normalizeRecognitionDetails(records.details),
@@ -741,6 +741,22 @@ function normalizeRecognitionMeals(meals) {
       };
     })
     .filter(Boolean);
+}
+
+function normalizeRecognitionActivities(activities) {
+  if (!Array.isArray(activities)) {
+    return [];
+  }
+  return activities
+    .filter(isPlainObject)
+    .map((activity) => ({
+      ...activity,
+      durationSeconds: normalizeRecognitionNumber(activity.durationSeconds),
+      calories: normalizeRecognitionNumber(activity.calories),
+      heartRate: normalizeRecognitionNumber(activity.heartRate),
+      distanceKm: normalizeRecognitionNumber(activity.distanceKm),
+      avgSpeedKmh: normalizeRecognitionNumber(activity.avgSpeedKmh),
+    }));
 }
 
 function normalizeRecognitionNumber(value) {
