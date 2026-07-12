@@ -50,6 +50,7 @@
 
 ### Fixed
 
+- 修复 `Pending Replay (Dev)` 在 workflow 顶层 concurrency 中引用 matrix 导致 GitHub Actions 无法展开 job 的问题；并发分组现归属 replay job，仍按来源渠道隔离。
 - 修复 sleep backfill 查询错误引用不存在的 `batch_payload_json` 别名，改为读取真实 `source_batch.payload_json` 字段，并保持目标日期幂等回填。
 - 修复最新 canonical SQL 缺失 source identity、健康探测、Observation 审计字段和迁移/回滚入口的问题，使导出表结构与现行代码契约一致。
 - 修复 dev Telegram 同步读取不存在的 `DEV_TELEGRAM_ALLOWED_CHAT_IDS` Variable，导致图片任务在启动阶段报白名单缺失的问题；workflow 现在优先读取同名 dev Secret，并在未配置时回退现有通用白名单。

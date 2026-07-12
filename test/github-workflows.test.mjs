@@ -547,6 +547,7 @@ test('action monitor reports completed business workflows asynchronously without
 
 test('pending replay runs independently per source channel with scheduled claim mode', async () => {
   const workflow = await readWorkflow('.github/workflows/pending-replay.yml');
+  const parsedWorkflow = parseYaml(workflow);
   assert.match(workflow, /name:\s*Pending Replay \(Dev\)/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /cron:\s*'\*\/10 \* \* \* \*'/);
@@ -555,6 +556,8 @@ test('pending replay runs independently per source channel with scheduled claim 
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{ secrets\.DEV_TRAINING_DB_URL \}\}/);
   assert.match(workflow, /run:\s*npm run sync:\$\{\{ matrix\.channel \}\}/);
   assert.doesNotMatch(workflow, /repository_dispatch|dispatch_payload|queue_task_id/);
+  assert.equal(parsedWorkflow.concurrency, undefined);
+  assert.equal(parsedWorkflow.jobs.replay.concurrency.group, 'pending-replay-dev-${{ matrix.channel }}');
 });
 
 test('site deploy workflows notify the originating channel on asynchronous failure', async () => {

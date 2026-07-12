@@ -8,12 +8,11 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: pending-replay-dev-${{ matrix.channel }}
-  cancel-in-progress: false
-
 jobs:
   replay:
+    concurrency:
+      group: pending-replay-dev-${{ matrix.channel }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
