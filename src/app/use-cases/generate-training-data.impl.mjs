@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,13 +23,13 @@ import {
 } from '../../adapters/hexo/index.mjs';
 import {
   PostgresGitHubActionMonitorRepository,
-  PostgresParameterValidityMonitorRepository,
+  PostgresParameterHealthMonitorRepository,
 } from '../../adapters/postgres/index.mjs';
 import {
   listGitHubActionRunsForMonitor,
   mergeActionMonitorRows,
 } from './github-action-monitor.use-case.mjs';
-import { runParameterValidityAudit } from './parameter-validity-monitor.use-case.mjs';
+import { runParameterHealthAudit } from './parameter-health-monitor.use-case.mjs';
 import { buildActionMonitorViewModel } from '../../site/action-monitor-view.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -98,7 +99,7 @@ export async function generateTrainingData(options = {}) {
       }),
     ],
     writeJson: async (relativePath, payload) => {
-      await writeFile(path.join(outputDir, relativePath), `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+      await writeJsonFileWithRetry(path.join(outputDir, relativePath), payload);
     },
   });
   await hexoGenerator.generate({
@@ -184,7 +185,7 @@ export async function loadActionMonitorViewFromPostgres(options = {}) {
     environment: config.environment,
     limit: config.limit,
   });
-  const registryParameterRows = await loadParameterValidityRowsFromRegistry({
+  const registryParameterHealthRows = await loadParameterHealthRowsFromRegistry({
     rootDir: options.rootDir ?? defaultRootDir,
     environment: config.environment,
     env,
@@ -197,13 +198,13 @@ export async function loadActionMonitorViewFromPostgres(options = {}) {
       environment: config.environment,
       now,
       limit: config.limit,
-      parameterValidityRows: registryParameterRows,
+      parameterHealthRows: registryParameterHealthRows,
     });
   }
 
   let databaseRows = [];
   let githubRows = [];
-  let parameterValidityRows = [];
+  let parameterHealthRows = [];
 
   if (githubConfig.enabled) {
     try {
@@ -228,7 +229,7 @@ export async function loadActionMonitorViewFromPostgres(options = {}) {
       environment: config.environment,
       now,
       limit: config.limit,
-      parameterValidityRows: registryParameterRows,
+      parameterHealthRows: registryParameterHealthRows,
     });
   }
 
@@ -246,23 +247,23 @@ export async function loadActionMonitorViewFromPostgres(options = {}) {
       limit: config.limit,
     });
     try {
-      const parameterRepository = new PostgresParameterValidityMonitorRepository(client);
-      const databaseParameterRows = await parameterRepository.listLatestParameterChecks({
+      const parameterRepository = new PostgresParameterHealthMonitorRepository(client);
+      const databaseParameterHealthRows = await parameterRepository.listLatestParameterChecks({
         monitorEnvironment: config.environment,
       });
-      parameterValidityRows = mergeParameterValidityRows({
-        registryRows: registryParameterRows,
-        databaseRows: databaseParameterRows,
+      parameterHealthRows = mergeParameterHealthRows({
+        registryRows: registryParameterHealthRows,
+        databaseRows: databaseParameterHealthRows,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      stderr.write(`[parameter-validity-monitor-view] ${message}; using registry parameter validity data\n`);
-      parameterValidityRows = registryParameterRows;
+      stderr.write(`[parameter-health-monitor-view] ${message}; using registry parameter health data\n`);
+      parameterHealthRows = registryParameterHealthRows;
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     stderr.write(`[github-action-monitor-view] ${message}; using GitHub API fallback rows\n`);
-    parameterValidityRows = registryParameterRows;
+    parameterHealthRows = registryParameterHealthRows;
   } finally {
     await client.end().catch(() => {});
   }
@@ -275,32 +276,32 @@ export async function loadActionMonitorViewFromPostgres(options = {}) {
     environment: config.environment,
     now,
     limit: config.limit,
-    parameterValidityRows,
+    parameterHealthRows,
   });
 }
 
-export async function loadParameterValidityRowsFromRegistry(options = {}) {
+export async function loadParameterHealthRowsFromRegistry(options = {}) {
   const rootDir = normalizeRootDir(options.rootDir ?? defaultRootDir);
   const environment = firstNonEmpty([options.environment, 'dev']);
-  const registryPath = path.join(rootDir, 'config', 'parameter-validity', `${environment}.json`);
+  const registryPath = path.join(rootDir, 'config', 'parameter-health', `${environment}.json`);
 
   try {
     const registry = JSON.parse(await readFile(registryPath, 'utf8'));
-    const audit = runParameterValidityAudit({
+    const audit = runParameterHealthAudit({
       registry,
       environment,
       env: options.env ?? {},
       now: options.now ?? new Date(),
     });
-    return mapParameterValidityAuditToRows(audit);
+    return mapParameterHealthAuditToRows(audit);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    options.stderr?.write?.(`[parameter-validity-monitor-view] registry ${registryPath} unavailable: ${message}\n`);
+    options.stderr?.write?.(`[parameter-health-monitor-view] registry ${registryPath} unavailable: ${message}\n`);
     return [];
   }
 }
 
-function mapParameterValidityAuditToRows(audit) {
+function mapParameterHealthAuditToRows(audit) {
   const checksByKey = new Map((audit.checks ?? []).map((check) => [check.parameterKey, check]));
   return (audit.parameters ?? []).map((parameter) => {
     const check = checksByKey.get(parameter.key) ?? {};
@@ -312,6 +313,8 @@ function mapParameterValidityAuditToRows(audit) {
       category: parameter.category,
       required: parameter.required,
       sensitive: parameter.sensitive,
+      healthProbeKey: parameter.healthProbeKey,
+      healthCheckType: parameter.healthCheckType,
       validityMode: parameter.validityMode,
       validFrom: parameter.validFrom,
       expiresAt: parameter.expiresAt,
@@ -325,29 +328,85 @@ function mapParameterValidityAuditToRows(audit) {
       metadata: parameter.metadata,
       checkedAt: check.checkedAt ?? audit.checkedAt,
       status: check.status ?? 'unknown',
+      checkType: check.checkType ?? parameter.healthCheckType,
+      latencyMs: check.latencyMs ?? null,
+      failureKind: check.failureKind ?? null,
+      observedExpiresAt: check.observedExpiresAt ?? null,
+      lastHealthyAt: null,
       daysUntilDue: check.daysUntilDue ?? null,
       evidenceSource: check.evidenceSource ?? 'registry',
-      message: check.message ?? '缺少有效期或复核时间元数据',
+      message: check.message ?? '本次未执行健康探测',
       details: check.details ?? {},
     };
   });
 }
 
-function mergeParameterValidityRows({ registryRows = [], databaseRows = [] } = {}) {
-  const rowsByKey = new Map();
-  for (const row of registryRows) {
+export function mergeParameterHealthRows({ registryRows = [], databaseRows = [] } = {}) {
+  if (!registryRows.length) {
+    return Array.isArray(databaseRows) ? databaseRows : [];
+  }
+
+  const databaseRowsByKey = new Map();
+  for (const row of Array.isArray(databaseRows) ? databaseRows : []) {
     const key = firstNonEmpty([row.parameterKey, row.parameter_key, row.key]);
     if (key) {
-      rowsByKey.set(key, row);
+      databaseRowsByKey.set(key, row);
     }
   }
-  for (const row of databaseRows) {
-    const key = firstNonEmpty([row.parameterKey, row.parameter_key, row.key]);
-    if (key) {
-      rowsByKey.set(key, row);
+
+  return registryRows.map((registryRow) => {
+    const key = firstNonEmpty([registryRow.parameterKey, registryRow.parameter_key, registryRow.key]);
+    const databaseRow = databaseRowsByKey.get(key);
+    if (!databaseRow || !hasSameParameterHealthDefinition(registryRow, databaseRow)) {
+      return registryRow;
     }
+    return {
+      ...registryRow,
+      ...databaseRow,
+      healthProbeKey: registryRow.healthProbeKey,
+      healthCheckType: registryRow.healthCheckType,
+      validityMode: registryRow.validityMode,
+      validFrom: registryRow.validFrom,
+      expiresAt: registryRow.expiresAt,
+      reviewAfterAt: registryRow.reviewAfterAt,
+      rotationCycleDays: registryRow.rotationCycleDays,
+      warningDays: registryRow.warningDays,
+      criticalDays: registryRow.criticalDays,
+    };
+  });
+}
+
+function hasSameParameterHealthDefinition(left, right) {
+  return [
+    ['healthProbeKey', 'health_probe_key', normalizeValidityText],
+    ['healthCheckType', 'health_check_type', normalizeValidityText],
+    ['validityMode', 'validity_mode', normalizeValidityText],
+    ['validFrom', 'valid_from', normalizeValidityDate],
+    ['expiresAt', 'expires_at', normalizeValidityDate],
+    ['reviewAfterAt', 'review_after_at', normalizeValidityDate],
+    ['rotationCycleDays', 'rotation_cycle_days', normalizeValidityNumber],
+    ['warningDays', 'warning_days', normalizeValidityNumber],
+    ['criticalDays', 'critical_days', normalizeValidityNumber],
+  ].every(([camelKey, snakeKey, normalize]) => (
+    normalize(left?.[camelKey] ?? left?.[snakeKey]) === normalize(right?.[camelKey] ?? right?.[snakeKey])
+  ));
+}
+
+function normalizeValidityText(value) {
+  return String(value ?? '').trim();
+}
+
+function normalizeValidityDate(value) {
+  if (!value) {
+    return '';
   }
-  return Array.from(rowsByKey.values());
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value).trim() : date.toISOString();
+}
+
+function normalizeValidityNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function resolveActionMonitorReadConfig(env) {
@@ -553,6 +612,32 @@ function isStrictDatabaseSnapshotMode(env) {
   );
 }
 
+export async function writeJsonFileWithRetry(filePath, payload, options = {}) {
+  const writeFileImpl = options.writeFileImpl ?? writeFile;
+  const maxAttempts = options.maxAttempts ?? 4;
+  const delayMs = options.delayMs ?? 25;
+  const content = `${JSON.stringify(payload, null, 2)}\n`;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await writeFileImpl(filePath, content, 'utf8');
+      return;
+    } catch (error) {
+      if (attempt >= maxAttempts || !isTransientWriteError(error)) {
+        throw error;
+      }
+      if (delayMs > 0) {
+        await delay(delayMs * attempt);
+      }
+    }
+  }
+}
+
+function isTransientWriteError(error) {
+  const code = String(error?.code ?? '').toUpperCase();
+  return code === 'UNKNOWN' || code === 'EBUSY' || code === 'EPERM' || code === 'ETXTBSY';
+}
+
 function resolveBuildArchiveWriteDecision({ env, snapshotSource, strictDatabaseSnapshot }) {
   const mode = normalizeBuildArchiveWriteMode(env.TRAINING_BUILD_ARCHIVE_WRITE);
 
@@ -580,3 +665,4 @@ function normalizeBuildArchiveWriteMode(value) {
   const normalized = String(value ?? 'auto').trim().toLowerCase();
   return ['auto', 'true', 'false'].includes(normalized) ? normalized : 'auto';
 }
+

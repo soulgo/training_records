@@ -11,7 +11,7 @@ import {
   loadStructuredSource,
   parsePromptMetadataHeader,
   stripPromptMetadataHeader,
-} from '../tools/prompt-generator.mjs';
+} from '../src/core/ai/prompt-generator.mjs';
 
 test('generateRecognitionPrompt includes all key constraints', async () => {
   const prompt = await generateRecognitionPrompt();
@@ -19,7 +19,7 @@ test('generateRecognitionPrompt includes all key constraints', async () => {
   assert.match(prompt, /^<!-- prompt-metadata /);
   assert.equal(parsePromptMetadataHeader(prompt).version, '2026-06-30');
   assert.equal(parsePromptMetadataHeader(prompt).schemaName, 'telegram_training_image');
-  assert.equal(parsePromptMetadataHeader(prompt).schemaVersion, 'v3');
+  assert.equal(parsePromptMetadataHeader(prompt).schemaVersion, 'v4');
   assert.match(prompt, /只能输出符合 schema 的 JSON/);
   assert.match(prompt, /## 自适应提取规则/);
   assert.match(prompt, /`detectedApp`/);
@@ -135,7 +135,7 @@ test('generated recognition prompt loads correctly from structured source', asyn
 test('app profiles load as the adaptive recognition memory source', async () => {
   const profiles = await loadStructuredSource('app-profiles');
 
-  assert.equal(profiles.metadata.schemaVersion, 'v3');
+  assert.equal(profiles.metadata.schemaVersion, 'v4');
   assert.ok(Array.isArray(profiles.profiles));
   assert.ok(profiles.profiles.some((profile) => profile.appName === '华为健康'));
   assert.ok(profiles.profiles.some((profile) => profile.appName === 'Apple Health'));

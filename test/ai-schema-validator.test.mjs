@@ -6,16 +6,64 @@ import {
   AiSchemaError,
   extractAiResponseContent,
   parseAiJsonContent,
+  validateAiJsonValue,
 } from '../src/core/ai/schema-validator.mjs';
 import {
   buildRecognitionSchema,
   RECOGNITION_SCHEMA_VERSION,
-} from '../tools/telegram-recognition-schema.mjs';
-import { applyRecognitionSemanticWarnings } from '../src/core/ai/recognition-semantic-validator.mjs';
+} from '../src/core/ai/telegram-recognition-schema.mjs';
+import { applyRecognitionSemanticGate } from '../src/core/ai/recognition-semantic-validator.mjs';
 
 test('recognition schema version is bumped for required records.sleep contract', () => {
-  assert.equal(RECOGNITION_SCHEMA_VERSION, 'v3');
+  assert.equal(RECOGNITION_SCHEMA_VERSION, 'v4');
   assert.ok(buildRecognitionSchema().properties.records.required.includes('sleep'));
+});
+
+test('local schema validator enforces v4 composition and scalar collection bounds', () => {
+  const schema = {
+    type: 'object',
+    required: ['schemaVersion', 'observations'],
+    properties: {
+      schemaVersion: { const: 'v4' },
+      observations: {
+        type: 'array', minItems: 1, maxItems: 2,
+        items: {
+          oneOf: [
+            {
+              type: 'object', required: ['recordType', 'confidence', 'label'],
+              properties: {
+                recordType: { const: 'measurement' },
+                confidence: { type: 'number', minimum: 0, maximum: 1 },
+                label: { type: 'string', minLength: 1, maxLength: 8 },
+              },
+            },
+            {
+              type: 'object', required: ['recordType', 'confidence', 'label'],
+              properties: {
+                recordType: { const: 'activity' },
+                confidence: { type: 'number', minimum: 0, maximum: 1 },
+                label: { type: 'string', minLength: 1, maxLength: 8 },
+              },
+            },
+          ],
+        },
+      },
+    },
+  };
+
+  assert.doesNotThrow(() => validateAiJsonValue({
+    schemaVersion: 'v4',
+    observations: [{ recordType: 'activity', confidence: 0.8, label: 'run' }],
+  }, schema));
+  for (const invalid of [
+    { schemaVersion: 'v3', observations: [{ recordType: 'activity', confidence: 0.8, label: 'run' }] },
+    { schemaVersion: 'v4', observations: [] },
+    { schemaVersion: 'v4', observations: [{ recordType: 'activity', confidence: 1.1, label: 'run' }] },
+    { schemaVersion: 'v4', observations: [{ recordType: 'unknown', confidence: 0.8, label: 'run' }] },
+    { schemaVersion: 'v4', observations: [{ recordType: 'activity', confidence: 0.8, label: '' }] },
+  ]) {
+    assert.throws(() => validateAiJsonValue(invalid, schema), AiSchemaError);
+  }
 });
 
 test('extractAiResponseContent throws AiProviderError when content is empty', () => {
@@ -129,6 +177,11 @@ test('parseAiJsonContent returns a valid recognition payload unchanged', () => {
           time: '07:00',
           type: '力量训练',
           detail: '30分钟，消耗180千卡',
+          durationSeconds: 1800,
+          calories: 180,
+          heartRate: null,
+          distanceKm: null,
+          avgSpeedKmh: null,
         },
       ],
       meals: [],
@@ -209,7 +262,7 @@ test('parseAiJsonContent requires records.sleep to be explicit even for non-slee
   );
 });
 
-test('recognition semantic validator adds safe warnings for impossible measurement and sleep fields', () => {
+test('recognition semantic gate sanitizes impossible fields and marks relational conflicts for review', () => {
   const payload = {
     imageType: 'sleep',
     detectedApp: 'Health',
@@ -270,9 +323,15 @@ test('recognition semantic validator adds safe warnings for impossible measureme
     },
   };
 
-  const validated = applyRecognitionSemanticWarnings(payload);
+  const validated = applyRecognitionSemanticGate(payload);
 
-  assert.deepEqual(validated.records.measurement.weightKg, 1000);
+  assert.equal(validated.records.measurement.weightKg, null);
+  assert.equal(validated.records.measurement.bmi, null);
+  assert.equal(validated.records.sleep.sleepScore, null);
+  assert.equal(validated.semanticGate.status, 'needs_review');
+  assert.ok(validated.semanticGate.decisions.some((decision) => decision.action === 'sanitize'));
+  assert.ok(validated.semanticGate.decisions.some((decision) => decision.action === 'review'));
+  assert.equal(validated.semanticGate.rawResult.records.measurement.weightKg, 1000);
   assert.ok(validated.warnings.includes('semantic:measurement.weightKg outside supported range'));
   assert.ok(validated.warnings.includes('semantic:measurement.fatFreeMassKg exceeds weightKg'));
   assert.ok(validated.warnings.includes('semantic:sleep.totalSleepMinutes conflicts with component sleep minutes'));

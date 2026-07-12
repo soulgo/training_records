@@ -19,6 +19,7 @@ export async function readPendingRecognitionBatches(options = {}) {
   const client = createTrainingClient(config, options.createClient);
   const limit = normalizeLimit(options.limit);
   const retryLimit = normalizeRetryLimit(options.retryLimit);
+  const sourceChannel = normalizeSourceChannel(options.sourceChannel);
   const now = options.now ?? new Date();
   const claimUntil = options.claimUntil ?? new Date(now.getTime() + normalizeClaimMinutes(options.claimMinutes) * 60 * 1000);
 
@@ -28,23 +29,25 @@ export async function readPendingRecognitionBatches(options = {}) {
     const result = await client.query(
       `
         with abandoned as (
-          update ingest.telegram_pending_batch
+          update ingest.pending_task
           set status = 'abandoned',
               updated_at = $1
           where status = 'pending'
+            and source_channel = $5
             and attempt_count > $4
           returning pending_id
         ),
         claimed as (
           select pending_id
-          from ingest.telegram_pending_batch
+          from ingest.pending_task
           where status = 'pending'
+            and source_channel = $5
             and next_retry_at <= $1
           order by next_retry_at asc, pending_id asc
           limit $2
           for update skip locked
         )
-        update ingest.telegram_pending_batch pending
+        update ingest.pending_task pending
         set next_retry_at = $3,
             updated_at = $1
         from claimed
@@ -52,14 +55,14 @@ export async function readPendingRecognitionBatches(options = {}) {
         returning
           batch_id,
           kind,
-          batch_payload_json,
+          payload_json as batch_payload_json,
           failure_category,
           failure_reason,
           attempt_count,
           next_retry_at,
           last_failed_at
       `,
-      [now.toISOString(), limit, claimUntil.toISOString(), retryLimit],
+      [now.toISOString(), limit, claimUntil.toISOString(), retryLimit, sourceChannel],
     );
     await client.query('COMMIT');
 
@@ -85,6 +88,14 @@ export async function readPendingRecognitionBatches(options = {}) {
   }
 }
 
+function normalizeSourceChannel(value) {
+  const normalized = String(value ?? 'telegram').trim().toLowerCase();
+  if (!/^[a-z][a-z0-9_-]*$/u.test(normalized)) {
+    throw new Error('sourceChannel must be a lowercase channel key');
+  }
+  return normalized;
+}
+
 export async function readPendingRecognitionSummary(options = {}) {
   const config = resolveTrainingReadonlyConfig(options.env);
   if (!config.enabled || !config.url) {
@@ -108,7 +119,7 @@ export async function readPendingRecognitionSummary(options = {}) {
           last_failed_at,
           created_at,
           updated_at
-        from ingest.telegram_pending_batch
+        from ingest.pending_task
         where status = 'pending'
         order by created_at asc, pending_id asc
         limit $1
@@ -157,11 +168,12 @@ export async function appendPendingRecognitionBatch(options = {}) {
     await client.connect();
     await client.query(
       `
-        insert into ingest.telegram_pending_batch (
+        insert into ingest.pending_task (
+          source_channel,
           batch_id,
           kind,
           status,
-          batch_payload_json,
+          payload_json,
           failure_category,
           failure_reason,
           attempt_count,
@@ -171,19 +183,19 @@ export async function appendPendingRecognitionBatch(options = {}) {
           created_at,
           updated_at
         )
-        values ($1, $2, 'pending', $3::jsonb, $4, $5, 0, $6, $7, null, $8, $9)
-        on conflict (batch_id) do update set
+        values (coalesce(nullif($3::jsonb->>'sourceChannel', ''), 'telegram'), $1, $2, 'pending', $3::jsonb, $4, $5, 0, $6, $7, null, $8, $9)
+        on conflict (source_channel, batch_id) do update set
           kind = excluded.kind,
           status = 'pending',
-          batch_payload_json = excluded.batch_payload_json,
+          payload_json = excluded.payload_json,
           failure_category = excluded.failure_category,
           failure_reason = excluded.failure_reason,
-          attempt_count = ingest.telegram_pending_batch.attempt_count + 1,
+          attempt_count = ingest.pending_task.attempt_count + 1,
           next_retry_at = excluded.next_retry_at,
           last_failed_at = excluded.last_failed_at,
           resolved_at = null,
           updated_at = excluded.updated_at
-        where ingest.telegram_pending_batch.status <> 'abandoned'
+        where ingest.pending_task.status <> 'abandoned'
       `,
       [
         batch.batchId,
@@ -200,10 +212,11 @@ export async function appendPendingRecognitionBatch(options = {}) {
     const statusResult = await client.query(
       `
         select status
-        from ingest.telegram_pending_batch
+        from ingest.pending_task
         where batch_id = $1
+          and source_channel = coalesce(nullif($2, ''), 'telegram')
       `,
-      [batch.batchId],
+      [batch.batchId, batch.sourceChannel ?? 'telegram'],
     );
     const aiCallLogResult = await writeFailedRecognitionAiCallLogsBestEffort(client, {
       batch,
@@ -272,13 +285,14 @@ export async function markPendingRecognitionResolved(options = {}) {
     await client.connect();
     await client.query(
       `
-        update ingest.telegram_pending_batch
+        update ingest.pending_task
         set status = 'resolved',
             resolved_at = $2,
             updated_at = $2
         where batch_id = $1
+          and ($3::text is null or source_channel = $3)
       `,
-      [options.batchId, now.toISOString()],
+      [options.batchId, now.toISOString(), options.sourceChannel ?? null],
     );
     return { status: 'resolved', batchId: options.batchId };
   } finally {

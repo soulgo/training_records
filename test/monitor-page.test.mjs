@@ -5,8 +5,8 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildDashboardViewModel } from '../tools/dashboard-view.mjs';
-import { buildMonitorViewModel } from '../tools/monitor-view.mjs';
+import { buildDashboardViewModel } from '../src/site/dashboard-view.mjs';
+import { buildMonitorViewModel } from '../src/site/monitor-view.mjs';
 import {
   readFixtureFile,
   restoreFixtureFile,

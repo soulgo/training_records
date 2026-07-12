@@ -30,6 +30,12 @@ export function createOpenAICompatibleProvider(env = process.env) {
   return {
     name: 'openai-compatible',
     env: normalizedEnv,
+    capabilities: {
+      vision: normalizeCapability(env.AI_SUPPORTS_VISION, true),
+      jsonSchema: normalizeCapability(env.AI_SUPPORTS_JSON_SCHEMA, true),
+      jsonObject: normalizeCapability(env.AI_SUPPORTS_JSON_OBJECT, true),
+      textJson: normalizeCapability(env.AI_SUPPORTS_TEXT_JSON, true),
+    },
     async requestChatCompletion(input = {}) {
       return requestOpenAICompatibleChatCompletion(normalizedEnv, input);
     },
@@ -55,6 +61,11 @@ async function requestOpenAICompatibleChatCompletion(env, input = {}) {
   );
 
   return response;
+}
+
+function normalizeCapability(value, fallback) {
+  if (value === undefined || value === null || String(value).trim() === '') return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
 }
 
 function buildChatCompletionRequestHeaders(env, input) {

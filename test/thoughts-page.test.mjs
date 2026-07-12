@@ -12,7 +12,7 @@ const rootDir = path.resolve(__dirname, '..');
 
 test('thoughts page lists posts from source/_posts', () => {
   withSharedSiteFixture(() => {
-    execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+    execFileSync(process.execPath, ['src/app/use-cases/generate-training-data.use-case.mjs'], {
       cwd: rootDir,
       stdio: 'pipe',
     });
@@ -51,7 +51,7 @@ tags:
         'utf8',
       );
 
-      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+      execFileSync(process.execPath, ['src/app/use-cases/generate-training-data.use-case.mjs'], {
         cwd: rootDir,
         stdio: 'pipe',
       });
@@ -144,7 +144,7 @@ telegram_chat_id: 42
         'utf8',
       );
 
-      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+      execFileSync(process.execPath, ['src/app/use-cases/generate-training-data.use-case.mjs'], {
         cwd: rootDir,
         stdio: 'pipe',
       });
@@ -207,7 +207,7 @@ telegram_chat_id: 42
         'utf8',
       );
 
-      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+      execFileSync(process.execPath, ['src/app/use-cases/generate-training-data.use-case.mjs'], {
         cwd: rootDir,
         stdio: 'pipe',
       });
@@ -261,7 +261,7 @@ RPE 7
         'utf8',
       );
 
-      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+      execFileSync(process.execPath, ['src/app/use-cases/generate-training-data.use-case.mjs'], {
         cwd: rootDir,
         stdio: 'pipe',
       });
@@ -307,7 +307,7 @@ ${visibleLead}${longTail}
         'utf8',
       );
 
-      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+      execFileSync(process.execPath, ['src/app/use-cases/generate-training-data.use-case.mjs'], {
         cwd: rootDir,
         stdio: 'pipe',
       });
@@ -364,7 +364,7 @@ telegram_chat_id: 42
         );
       });
 
-      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+      execFileSync(process.execPath, ['src/app/use-cases/generate-training-data.use-case.mjs'], {
         cwd: rootDir,
         stdio: 'pipe',
       });
@@ -432,7 +432,7 @@ photos:
         cwd: rootDir,
         stdio: 'pipe',
       });
-      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+      execFileSync(process.execPath, ['src/app/use-cases/generate-training-data.use-case.mjs'], {
         cwd: rootDir,
         stdio: 'pipe',
       });
@@ -492,7 +492,7 @@ telegram_chat_id: 42
         'utf8',
       );
 
-      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+      execFileSync(process.execPath, ['src/app/use-cases/generate-training-data.use-case.mjs'], {
         cwd: rootDir,
         stdio: 'pipe',
       });
@@ -516,7 +516,7 @@ telegram_chat_id: 42
 
 test('thoughts page script copies the hidden thought id from the ID label', () => {
   withSharedSiteFixture(() => {
-    execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+    execFileSync(process.execPath, ['src/app/use-cases/generate-training-data.use-case.mjs'], {
       cwd: rootDir,
       stdio: 'pipe',
     });
@@ -560,7 +560,7 @@ telegram_chat_id:
         'utf8',
       );
 
-      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+      execFileSync(process.execPath, ['src/app/use-cases/generate-training-data.use-case.mjs'], {
         cwd: rootDir,
         stdio: 'pipe',
       });
@@ -609,7 +609,7 @@ telegram_chat_id:
         'utf8',
       );
 
-      execFileSync(process.execPath, ['tools/generate-training-data.mjs'], {
+      execFileSync(process.execPath, ['src/app/use-cases/generate-training-data.use-case.mjs'], {
         cwd: rootDir,
         stdio: 'pipe',
       });

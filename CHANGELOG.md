@@ -13,14 +13,58 @@
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-07-13
+
+### Added
+
+- 新增 `sql/main-sql/align_to_dev.sql`，将 main 当前导出结构一次性对齐到 dev：补齐旧识别结构化字段、通用 ingest 五表及回填、archive 睡眠汇总字段和缺失外键，并附人工验收查询。
+- 新增异步 Action monitor、独立 pending replay，以及 `/分析` 单连接单 SQL 的只读 PostgreSQL repository。
+- 新增 DateAlignmentService、RecordGrouper、SemanticGate 和 Provider capability negotiation，覆盖完整日期、月日补年、睡眠归档、单锚点传播、多日期隔离、越界清洗、review 决策及 strict/json_object/text_json/vision 能力组合。
+- 新增来源无关的通用截图识别链路：图片先经 Sharp 自动旋转、尺寸/像素限制、增强和压缩，可选提取带归一化坐标的 OCR 证据，再由视觉模型完成语义识别并输出稳定的 `NormalizedRecognition` 外层契约。
+- 新增通用 ingest 数据模型 `ingest.source_batch`、`source_message`、`source_asset`、`recognition_run`、`pending_task`，以及对应的 `PostgresSourceBatchRepository`；提供 Phase 1/Phase 2 可执行迁移和默认拒绝执行的旧表清理脚本。
+- 新增 Docker 多阶段构建、Nginx 静态运行配置、Compose 启动入口和无密钥 `.env.example`，支持脱离 GitHub Pages / Cloudflare Pages 部署静态站点。
+
 ### Changed
 
+- 图片识别 schema 升级到 v4，活动明细直接输出 `durationSeconds`、`calories`、`heartRate`、`distanceKm`、`avgSpeedKmh`；结构化字段优先进入 core，中文 `detail` 正则仅保留为旧结果兼容回退。
+- 同步主路径不再等待站点部署或同步拉取 Action jobs；deploy 与 monitor 独立通知失败，会话队列按稳定哈希分片，webhook 跳过 polling offset，新消息不再顺带消费 pending 队列。
+- PostgreSQL ingest messages/assets/recognitions 改为集合式 upsert，数据库观测新增安全 `queryOrdinal` 与 connect/BEGIN/query/COMMIT/AI log 分段耗时；识别缓存键新增 capability mode。
+- Telegram/飞书共享报告与结果通知入口统一为 MessageSync 命名，飞书不再导入 Telegram 命名的共享函数或执行 `telegram:` 字符串替换。
+- 静态 recognition fixture 评测改称 contract field-match；没有脱敏自然样本和受控 provider run 时，accuracy、tokens、latency 明确标记为 `not_measured`。
+- 收敛根目录 Markdown：保留 `README.md`、`CHANGELOG.md` 和运行链路固定的 `训练记录.md`、`训练数据解析.md`；将系统代码重构分析、目标、方案、TDD 与最终报告统一归档到 `docs/03_历史重构记录/重构历史/系统代码终极重构/`，并更新文档导航和交叉链接。
+- 修正站点首页对数据来源的描述：线上看板以 PostgreSQL `core.*` 为业务事实源，`训练记录.md` 是数据库派生备份和受保护恢复入口。
+- Telegram 与飞书现在直接转换为共享来源消息契约；识别缓存、Telegram offset、一致性检查、AI monitoring、batch audit、睡眠修复和 pending replay 全部切换到通用 ingest 表，不再以 Telegram 表名或飞书数字代理 ID 作为主路径身份。
+- dev 同步复用 main 的通用 AI、OCR、识别模型和备用 provider 配置；Telegram、飞书、数据库与 COS 凭据继续保持 dev 隔离，其中 Telegram 白名单优先读取 `DEV_TELEGRAM_ALLOWED_CHAT_IDS`，未配置时复用通用白名单。
+- Telegram 与飞书 Worker 在进入 Durable Object 缓冲或触发 GitHub Actions 前执行聊天白名单检查；Dashboard、Monitor 与 Action Monitor 的 EJS JSON 数据改为脚本上下文安全转义。
+- dev PostgreSQL 已于 2026-07-11 完成通用 ingest 结构迁移；main PostgreSQL 已于 2026-07-13 手工执行 `sql/main-sql/align_to_dev.sql`，数据库表结构已与 dev 对齐。
+- 同步项目包版本号到 `1.3.5`。
+- 将 `/action-monitor/` 的系统参数监控从“有效期推断”升级为“参数健康探测”：新增 `config/parameter-health/<env>.json` registry、`tools/check-parameter-health.mjs`、`Parameter Health Audit` workflow、主动只读 probes 和参数健康视图，健康状态改为 `healthy`、`present`、`invalid`、`missing`、`not_configured`、`unreachable`、`unsupported`、`unknown`，到期时间仅作为有真实证据时的附加信息。
+- 同步参数健康监控的数据库与文档入口：`monitor.system_config_parameters/checks` 新增 `health_probe_key`、`health_check_type`、`check_type`、`latency_ms`、`failure_kind`、`observed_expires_at`、`last_healthy` 查询索引和健康状态约束，当前事实文档与排查文档改为指向参数健康模型。
 - 按后续规划落地文档同步规则完成参数有效时间监控规划归档：将已实现规划从 `docs/03_历史重构记录/后续规划_未实现/参数有效时间/` 移入 `docs/03_历史重构记录/重构历史/参数有效时间监控/`，并把当前 registry、audit workflow、monitor 表、页面展示和排查方式写回 `01_系统配置`、`02_系统核心逻辑`、`04_问题与排查` 及相关 README。
+- 将 dev 页面里的 Action 日志监控从首页拆出为独立页面模块 `/action-monitor/`，新增导航入口、独立 layout、样式与历史分页脚本，首页不再嵌入该监控模块。
+- 收敛应用与同步边界：生产代码、测试和 workflow 直接引用真实 use case、adapter、domain 与数据库 owner；飞书直接进入共享 `runMessageSync`，同步报告统一只输出 `batches`，不改变 Telegram/飞书处理、通知和数据库写入行为。
+- 数据库 schema 演进统一由 `maintenance:migrate` 和显式 migration 承担；日常同步与 Markdown 导出不再包含运行时 schema preflight。SQL 分片同时移除重复睡眠日期索引定义，并校准 `core.thought.telegram_message_id` 的 legacy alias 注释。
+
+### Removed
+
+- SQL 事实源收敛为 `sql/dev-sql/` 与 `sql/main-sql/`；删除重复 canonical dump、分散 migration/rollback/cleanup 文件，以及已无迁移目录可消费的自动 migration workflow、CLI 分支和测试。
+- 删除无生产调用的空仓储端口、`training-snapshot-service` 占位服务和旧 `PostgresTelegramBatchRepository`；生产代码不再访问 `ingest.telegram_batch`、`telegram_message`、`telegram_recognition` 或 `telegram_pending_batch`。
+- 删除未进入生产链路的 `src/jobs`、`src/infra` 架构壳、无消费者 barrel、`src/ai`/PostgreSQL facade，以及 `tools` 下的纯 re-export 兼容入口；保留真实 CLI 和承载业务复杂度的模块。
+- 删除旧 schema preflight 实现、环境开关与重试代码；删除已为空且不再消费的 runtime NDJSON pending 文件、fallback inspect 工具和重复文件队列实现，pending 恢复仅保留 PostgreSQL `ingest.pending_task`。
+- 删除同步结果中的 `batchResults` 别名和无生产消费者的 `tasks` 派生集合，所有内部消费者统一读取 `batches`。
 
 ### Fixed
 
+- 修复 `Pending Replay (Dev)` 在 workflow 顶层 concurrency 中引用 matrix 导致 GitHub Actions 无法展开 job 的问题；并发分组现归属 replay job，仍按来源渠道隔离。
+- 修复 sleep backfill 查询错误引用不存在的 `batch_payload_json` 别名，改为读取真实 `source_batch.payload_json` 字段，并保持目标日期幂等回填。
+- 修复最新 canonical SQL 缺失 source identity、健康探测、Observation 审计字段和迁移/回滚入口的问题，使导出表结构与现行代码契约一致。
+- 修复 dev Telegram 同步读取不存在的 `DEV_TELEGRAM_ALLOWED_CHAT_IDS` Variable，导致图片任务在启动阶段报白名单缺失的问题；workflow 现在优先读取同名 dev Secret，并在未配置时回退现有通用白名单。
+- 修复飞书图片已经识别并入库后不返回结果的问题；通知 CLI 现在直接引用 canonical 飞书同步 use case，不再导入重构中已删除的 `tools/feishu-sync.mjs`。
+- 修复 canonical ingest SQL 将标准化识别字段错误放入 `telegram_message` 的 schema 漂移；识别元数据现归属 recognition 记录，并在 generic migration 中回填到 `ingest.recognition_run`。
+- 修复 `tools/check-parameter-health.mjs` 默认仍读取旧 `config/parameter-validity/<env>.json` 的问题；未显式传 `--registry` 时现在读取 `config/parameter-health/<env>.json`。
+- 修复 Windows 下全量测试并发执行 `build:data` 时多个进程同时写 `source/_data/*.json` 偶发 `UNKNOWN` / 文件锁错误的问题；生成器对瞬时写文件错误进行短重试。
 - 优化 `/action-monitor/` 系统参数有效期列表 UI：长参数名现在可完整换行显示并可直接选中，移除冗余复制按钮；列表行尾的状态与处理提示改为竖排状态区，避免在窄桌面宽度下互相重叠，点击参数仍可在弹窗中查看完整信息。
-- 修复 `/action-monitor/` 系统参数有效期在 dev/main registry 兜底数据下全部显示“未知有效期”的问题；当前首批监控参数补齐 `reviewAfterAt`，页面会显示到期 / 复核日期和剩余天数。
+- 修复 `/action-monitor/` 将人工编写的统一 `reviewAfterAt=2026-10-01` 冒充真实参数有效期的问题：移除 dev/main 共 36 个无外部证据的日期，registry-only 参数诚实显示“未获取真实有效期”；模型和页面新增 `expiry` / `review` / `unknown` 语义与证据标签，人工复核不再计入真实“已过期/即将到期”，并阻止数据库旧检查结果覆盖最新 registry 定义。
 - 修复系统参数有效期表格“处理提示”列在桌面宽度下溢出页面的问题；表格列宽改为容器内自适应，提示内容在单元格内换行。
 - 修复系统参数有效期列表一次性渲染全部参数的问题；页面首屏最多显示 5 个参数，超过 4 个时显示分页控件并通过前端分页浏览完整列表。
 
@@ -28,7 +72,7 @@
 
 ### Added
 
-- 新增系统参数有效期监控：提供 `config/parameter-validity/dev.json`、`config/parameter-validity/main.json` 和 registry schema，记录 dev/main 高风险 Secret、变量与运行时参数的名称、范围、有效期规则、责任方和来源路径，不保存参数值或 value hash。
+- 新增系统参数有效期监控：提供 `config/parameter-health/dev.json`、`config/parameter-health/main.json` 和 registry schema，记录 dev/main 高风险 Secret、变量与运行时参数的名称、范围、有效期规则、责任方和来源路径，不保存参数值或 value hash。
 - 新增 `tools/check-parameter-validity.mjs` 审计命令与 `Parameter Validity Audit` workflow，支持手动 / 定时检查参数状态，写入 `monitor.system_config_parameters` 与 `monitor.system_config_parameter_checks`，并在审计后触发 dev/main `/action-monitor/` 页面刷新。
 - `/action-monitor/` 页面新增“系统参数有效期”模块：`build:data` 读取 PostgreSQL 最新检查结果，展示监控参数数量、过期、缺失、即将到期和未知有效期状态，并按风险优先级排序。
 - dev 新增独立 `/action-monitor/` 的 `action 监控` 模块：`build:data` 会从 PostgreSQL `monitor.github_action_runs/jobs/steps/failures` 生成 `actionMonitorView.json`，页面展示 GitHub Actions 的状态、workflow、run 编号、commit、触发人、分支、耗时和失败摘要；本地无监控数据库时自动降级为空视图。

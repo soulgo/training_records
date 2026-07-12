@@ -136,6 +136,10 @@ export async function handleTelegramWebhook(request, env, options = {}) {
     return jsonResponse(400, { ok: false, error: 'invalid_json' });
   }
 
+  if (!isAllowedChat(getTelegramChatId(update), env.TELEGRAM_ALLOWED_CHAT_IDS)) {
+    return jsonResponse(403, { ok: false, error: 'chat_not_allowed' });
+  }
+
   if (isTelegramHelpUpdate(update)) {
     const helpResponse = await sendTelegramHelpMessage({
       fetchImpl,
@@ -230,6 +234,18 @@ export async function handleTelegramWebhook(request, env, options = {}) {
     [response.queued ? 'queued' : 'dispatched']: true,
     updateId: update?.update_id ?? null,
   });
+}
+
+function getTelegramChatId(update) {
+  return update?.message?.chat?.id ?? update?.edited_message?.chat?.id ?? null;
+}
+
+function isAllowedChat(chatId, configuredIds) {
+  const values = String(configuredIds ?? '').split(',').map((value) => value.trim()).filter(Boolean);
+  if (values.length === 0 || chatId == null) {
+    return true;
+  }
+  return values.includes(String(chatId));
 }
 
 function validateBaseConfig(env) {

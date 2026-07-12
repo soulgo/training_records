@@ -12,8 +12,8 @@
 - `Report Action Status` step 输出 `GitHub Action monitor report URL is not configured and branch-scoped PostgreSQL URL is unavailable; skipping.`。
 - `Report Action Status` step 输出 `[github-action-monitor] local report failed`。
 - `/action-monitor/` 页面有 run，但缺少 job / step / failure 计数或失败摘要。
-- `Parameter Validity Audit` summary 出现 `expired`、`missing`、`warning` 或 `unknown` 计数。
-- `/action-monitor/` 页面“系统参数有效期”为空，或参数长期显示 `unknown`。
+- `Parameter Health Audit` summary 出现 `invalid`、`missing`、`unreachable` 或 `unknown` 计数。
+- `/action-monitor/` 页面“系统参数健康”为空，或参数长期显示 `unknown`。
 
 ## 原因
 
@@ -28,9 +28,9 @@
 - 外部 report URL 只作为兜底；如果没有 DB URL 且没有 `GITHUB_ACTION_MONITOR_REPORT_URL*`，本次 run 不会落库。
 - 当前 run 的最终 step 执行时，GitHub API 可能仍返回 `in_progress`；本地 reporter 用 `${{ job.status }}` 兜底，外部 HTTP reporter 没有这个兜底时可能短暂显示运行中。
 - 站点构建读取 `/action-monitor/` 时优先读 PostgreSQL `monitor.*`，同时可用 `GITHUB_TOKEN` 从 GitHub Actions API 补齐当前分支最近 runs。
-- 参数有效期 registry 中没有 `expiresAt` / `reviewAfterAt` 时，audit 会把参数标为 `unknown`；这表示元数据待补齐，不表示已经读取到 Secret 值。
-- 参数有效期 audit 只在能确认必填参数不存在时标为 `missing`；无法读取 provider metadata 时不会把未知误判为缺失。
-- `Parameter Validity Audit` 写库成功后还需要触发对应 Pages 构建刷新静态 `actionMonitorView.json`；如果触发构建失败，Step Summary 仍是本次 audit 的即时证据，页面会停留在上一次构建结果。
+- 参数健康状态来自 probe：没有执行 probe 才是 `unknown`；`present` 只证明环境变量存在，`unsupported` 表示没有安全探测方式。Provider 不提供到期时间不会影响健康判定。
+- `invalid` 只用于明确鉴权失败；超时、网络错误、429 和 Provider 5xx 统一归为 `unreachable`，避免误判后触发错误轮换。
+- `Parameter Health Audit` 写库成功后还需要触发对应 Pages 构建刷新静态 `actionMonitorView.json`；如果触发构建失败，Step Summary 仍是本次 audit 的即时证据，页面会停留在上一次构建结果。
 
 ## 日志特征
 
@@ -73,11 +73,11 @@
 - `monitor.github_action_runs`
 - `monitor.github_action_failures`
 - `Using local PostgreSQL Action monitor reporter.`
-- `[parameter-validity]`
-- `Parameter Validity Audit`
+- `[parameter-health]`
+- `Parameter Health Audit`
 - `monitor.system_config_parameters`
 - `monitor.system_config_parameter_checks`
-- `缺少有效期或复核时间元数据`
+- `健康探测未执行或缺少真实到期证据`
 - `必填参数缺失`
 
 ## 排查步骤
@@ -98,10 +98,10 @@
 14. 如果 reporter 写库失败，优先确认 `monitor` schema 和四张表是否已经在对应 dev/main 数据库创建，再看错误是否为 GitHub API 401/403、404、网络错误或 PostgreSQL 权限问题。
 15. 如果页面缺少最新 run，先看 `source/_data/actionMonitorView.json` 是否生成，再确认构建 job 是否有 `GITHUB_TOKEN` 和 `actions: read` 权限以启用 GitHub API fallback。
 16. 如果页面有 run 但没有 job/step/failure 计数，说明该 run 可能只来自 GitHub API fallback，尚未有 PostgreSQL 明细；回看该 run 的 `Report Action Status` step。
-17. 如果参数有效期 summary 有 `expired` 或 `warning`，打开 `config/parameter-validity/<env>.json` 查对应参数的 `expiresAt` / `reviewAfterAt`，按外部平台实际轮换结果更新 registry。
-18. 如果参数长期为 `unknown`，先补 `reviewAfterAt`；只有确有真实过期日的 token / key 才补 `expiresAt`，不要用 Secret 更新时间冒充过期时间。
+17. 如果出现 `invalid`，按 `check_type` 到对应 Provider 检查或轮换凭证；如果是 `unreachable`，先排查网络、限流和 Provider 状态，不能直接轮换。
+18. 如果参数长期为 `unknown`，检查 workflow 是否注入对应 `PARAMETER_HEALTH_*`、registry 的 `healthProbeKey` 是否存在，以及数据库是否已执行健康迁移 SQL。
 19. 如果参数显示 `missing`，先确认 registry 的 `name` 和 `scope` 是否写对，再到 GitHub Settings 或 Cloudflare Worker Secret 补齐外部配置；不要把参数值写入 registry、文档、summary 或日志。
-20. 如果“系统参数有效期”为空，先确认 `Parameter Validity Audit` 是否成功写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`，再确认该 workflow 是否触发对应 Pages 构建刷新 `source/_data/actionMonitorView.json`。
+20. 如果“系统参数健康”为空，先确认 `Parameter Health Audit` 是否成功写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`，再确认该 workflow 是否触发对应 Pages 构建刷新 `source/_data/actionMonitorView.json`。
 21. 如果 Step Summary 有最新结果但页面仍旧，查 audit workflow 的 `Trigger dev action monitor page refresh` / `Trigger main action monitor page refresh` step，再查对应 Pages workflow 是否完成构建。
 
 ## 解决方案
@@ -124,10 +124,10 @@
 - `branch_not_allowed`：检查 `GITHUB_ACTION_MONITOR_ALLOWED_BRANCH` 或当前分支是否与监控实例环境一致。
 - `relation "monitor.github_action_runs" does not exist`：先在对应 dev/main 数据库执行 Action monitor 建表脚本，再重跑 workflow 或等待 GitHub API fallback 只显示顶层 run。
 - `/action-monitor/` 长时间显示运行中：优先确认该 run 是否经本地 reporter 写入；若只来自 GitHub API fallback，等 GitHub API conclusion 更新后重新构建页面。
-- `expired` / `warning`：按外部平台轮换参数后，更新 registry 的 `validFrom`、`expiresAt` 或 `reviewAfterAt`，再重跑 `Parameter Validity Audit`。
+- `invalid`：Provider 明确拒绝凭证，检查权限范围并轮换；`unreachable`：排查网络、限流或 Provider 5xx；`present`：只有存在性证据，不能当成健康。
 - `missing`：补齐对应 GitHub Secret / Variable 或 Cloudflare Worker Secret；不要把参数值写进 registry、summary、日志或文档。
-- `unknown`：补齐有效期或复核日期元数据；当前实现不会反读 Secret 明文，也不会保存 value hash。
-- 页面未刷新：手动重跑对应环境的 Pages workflow，或重新运行 `Parameter Validity Audit` 触发刷新；排查时以最新 Step Summary 和 `monitor.system_config_parameter_checks.checked_at` 为准。
+- `unknown`：本次探测未运行或证据不足；检查 probe、workflow 注入和数据库迁移。当前实现不会保存 Secret 明文或 value hash。
+- 页面未刷新：手动重跑对应环境的 Pages workflow，或重新运行 `Parameter Health Audit` 触发刷新；排查时以最新 Step Summary 和 `monitor.system_config_parameter_checks.checked_at` 为准。
 
 ## 预防措施
 
@@ -141,7 +141,7 @@
 - dev/main 数据库分别建 `monitor.*` 表，不能用同一个监控实例同时写入两个分支。
 - 外部 report URL 只能作为兜底入口；常规 GitHub Actions 内优先使用分支对应 PostgreSQL 本地 reporter。
 - 页面读取上限只在需要时配置 `GITHUB_ACTION_MONITOR_VIEW_LIMIT`；默认保留完整可读取历史，不再按最近 2 天拆分。
-- registry 只维护参数元数据，不维护实际值；新增参数时同步更新 `config/parameter-validity/dev.json` 或 `main.json`。
-- 轮换外部 token / key 后，同步更新 registry 的 `validFrom`、`expiresAt` 或 `reviewAfterAt`，再手动运行一次 `Parameter Validity Audit`。
-- 参数有效期 audit 不应让业务同步、部署、备份 workflow 因参数过期告警而失败。
+- registry 只维护参数元数据，不维护实际值；新增参数时同步更新 `config/parameter-health/dev.json` 或 `main.json`。
+- 轮换外部 token / key 后手动运行一次 `Parameter Health Audit`，以真实探测结果确认恢复；只有 Provider 明确提供到期时间时才维护 `expiresAt`。
+- 参数健康 audit 不应让业务同步、部署、备份 workflow 因健康告警而失败；但 audit 自身写库或 schema 不匹配应明确失败。
 - 当前系统文档只记录已落地事实；未实施设想保留在历史记录，不作为排查入口。

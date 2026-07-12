@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { backfillCoreFromLatestArchiveSnapshot } from './training-db-core.mjs';
+import { backfillCoreFromLatestArchiveSnapshot } from '../src/db/training/write.mjs';
 
 export async function backfillTrainingCoreFromArchive(options = {}) {
   const stderr = options.stderr ?? process.stderr;

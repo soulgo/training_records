@@ -212,6 +212,29 @@ function validateValue(value, schema, context) {
 
   const { schemaName, schemaVersion, path, allowAdditionalProperties } = context;
 
+  if (schema.const !== undefined && !Object.is(schema.const, value)) {
+    throw schemaError(`${schemaName} expected constant ${JSON.stringify(schema.const)} at ${path}`, {
+      schemaName, schemaVersion, path,
+    });
+  }
+
+  if (Array.isArray(schema.oneOf)) {
+    const matches = schema.oneOf.filter((candidate) => {
+      try {
+        validateValue(value, candidate, context);
+        return true;
+      } catch (error) {
+        if (error instanceof AiSchemaError) return false;
+        throw error;
+      }
+    });
+    if (matches.length !== 1) {
+      throw schemaError(`${schemaName} expected exactly one schema match at ${path}`, {
+        schemaName, schemaVersion, path,
+      });
+    }
+  }
+
   if (schema.enum && !schema.enum.some((item) => Object.is(item, value))) {
     throw schemaError(`${schemaName} expected one of ${schema.enum.join(', ')}`, {
       schemaName,
@@ -229,6 +252,14 @@ function validateValue(value, schema, context) {
         path,
       });
     }
+  }
+
+  if (typeof value === 'string') {
+    validateBounds(value.length, schema.minLength, schema.maxLength, 'string length', context);
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    validateBounds(value, schema.minimum, schema.maximum, 'number', context);
   }
 
   const allowedTypes = normalizeTypes(schema.type);
@@ -291,6 +322,7 @@ function validateObject(value, schema, context) {
 }
 
 function validateArray(value, schema, context) {
+  validateBounds(value.length, schema.minItems, schema.maxItems, 'array length', context);
   const itemsSchema = schema.items;
   if (!itemsSchema) {
     return;
@@ -300,6 +332,19 @@ function validateArray(value, schema, context) {
     validateValue(item, itemsSchema, {
       ...context,
       path: `${context.path}[${index}]`,
+    });
+  }
+}
+
+function validateBounds(value, minimum, maximum, label, { schemaName, schemaVersion, path }) {
+  if (minimum !== undefined && value < minimum) {
+    throw schemaError(`${schemaName} ${label} at ${path} must be >= ${minimum}`, {
+      schemaName, schemaVersion, path,
+    });
+  }
+  if (maximum !== undefined && value > maximum) {
+    throw schemaError(`${schemaName} ${label} at ${path} must be <= ${maximum}`, {
+      schemaName, schemaVersion, path,
     });
   }
 }

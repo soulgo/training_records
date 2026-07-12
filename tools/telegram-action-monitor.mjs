@@ -27,16 +27,18 @@ export async function main() {
 
 export async function notifyTelegramActionFailure(options = {}) {
   const env = options.env ?? process.env;
-  if (!isDispatchEventName(env.GITHUB_EVENT_NAME) && !env.SYNC_DISPATCH_PAYLOAD) {
+  const directTargets = collectDirectTelegramTargets(env);
+  if (directTargets.length === 0 && !isDispatchEventName(env.GITHUB_EVENT_NAME) && !env.SYNC_DISPATCH_PAYLOAD) {
     return { notified: false, reason: 'not_dispatch_event' };
   }
 
-  const updates = await readRepositoryDispatchUpdates({
-    eventPath: env.SYNC_DISPATCH_EVENT_PATH ?? env.GITHUB_EVENT_PATH,
-    githubEventName: env.GITHUB_EVENT_NAME,
-    dispatchPayload: env.SYNC_DISPATCH_PAYLOAD ?? env.DISPATCH_PAYLOAD,
-  });
-  const targets = collectTelegramTargets(updates);
+  const targets = directTargets.length > 0
+    ? directTargets
+    : collectTelegramTargets(await readRepositoryDispatchUpdates({
+        eventPath: env.SYNC_DISPATCH_EVENT_PATH ?? env.GITHUB_EVENT_PATH,
+        githubEventName: env.GITHUB_EVENT_NAME,
+        dispatchPayload: env.SYNC_DISPATCH_PAYLOAD ?? env.DISPATCH_PAYLOAD,
+      }));
   if (targets.length === 0) {
     return { notified: false, reason: 'missing_telegram_target' };
   }
@@ -131,6 +133,12 @@ async function readFailureSummary(summaryPath) {
   } catch {
     return '';
   }
+}
+
+function collectDirectTelegramTargets(env) {
+  const chatId = String(env.NOTIFICATION_CHAT_ID ?? '').trim();
+  const messageId = String(env.NOTIFICATION_MESSAGE_ID ?? '').trim();
+  return chatId && messageId ? [{ chatId, messageId }] : [];
 }
 
 function sanitizeFailureSummary(content) {

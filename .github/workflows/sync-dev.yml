@@ -1,6 +1,5 @@
 name: Sync (Dev)
 run-name: ${{ github.event.inputs.queue_task_id && format('Sync queue task {0}', github.event.inputs.queue_task_id) || github.event.action || github.workflow }}
-
 on:
   workflow_dispatch:
     inputs:
@@ -121,6 +120,9 @@ jobs:
           AI_TIMEOUT_MS: ${{ vars.AI_TIMEOUT_MS }}
           AI_CONCURRENCY: ${{ vars.AI_CONCURRENCY }}
           TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline
+          AI_IMAGE_PROCESSING_ENABLED: "true"
+          AI_OCR_ENABLED: ${{ vars.AI_OCR_ENABLED }}
+          AI_OCR_FAILURE_MODE: ${{ vars.AI_OCR_FAILURE_MODE }}
           TELEGRAM_RECOGNITION_MODEL: ${{ vars.TELEGRAM_RECOGNITION_MODEL }}
           TELEGRAM_RECOGNITION_FALLBACK_API_KEY: ${{ secrets.TELEGRAM_RECOGNITION_FALLBACK_API_KEY }}
           TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: ${{ secrets.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL }}
@@ -134,9 +136,9 @@ jobs:
           TELEGRAM_SYNC_TRANSPORT: webhook
           TELEGRAM_SYNC_NOTIFY_STAGE: after_action
           TELEGRAM_SYNC_RESULT_PATH: ${{ runner.temp }}/telegram-sync-result.json
-          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID || secrets.FEISHU_APP_ID }}
-          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET || secrets.FEISHU_APP_SECRET }}
-          FEISHU_ALLOWED_CHAT_IDS: ${{ secrets.DEV_FEISHU_ALLOWED_CHAT_IDS || secrets.FEISHU_ALLOWED_CHAT_IDS }}
+          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET }}
+          FEISHU_ALLOWED_CHAT_IDS: ${{ secrets.DEV_FEISHU_ALLOWED_CHAT_IDS }}
           FEISHU_RECOGNITION_IMAGE_INPUT_MODE: inline
           FEISHU_SYNC_TRANSPORT: webhook
           FEISHU_SYNC_NOTIFY_STAGE: after_action
@@ -204,7 +206,7 @@ jobs:
           let thoughtCheck = null;
           try {
             const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
-            const batches = result.batchResults ?? result.batches ?? [];
+            const batches = result.batches ?? [];
             readyStoredContentBatches = batches.filter((batch) => {
               const kind = batch.kind ?? 'image';
               return ['image', 'thought', 'thought_edit', 'thought_delete', 'thought_move'].includes(kind) &&
@@ -320,147 +322,28 @@ jobs:
         if: success() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'feishu'
         continue-on-error: true
         env:
-          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID || secrets.FEISHU_APP_ID }}
-          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET || secrets.FEISHU_APP_SECRET }}
+          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET }}
           FEISHU_SYNC_NOTIFY: true
           FEISHU_SYNC_NOTIFY_STAGE: after_action
           FEISHU_SYNC_RESULT_PATH: ${{ runner.temp }}/feishu-sync-result.json
         run: node tools/feishu-sync-notify.mjs
 
-      - name: Trigger and wait for async dev site deploy
+      - name: Dispatch site deploy
         id: deploy
         if: success() && steps.channel.outputs.is_webhook_dispatch == 'true' && (steps.detect.outputs.repo_changed == 'true' || steps.detect.outputs.db_content_changed == 'true')
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          SITE_DEPLOY_WORKFLOW_FILE: deploy-cloudflare-pages-dev.yml
+          SITE_DEPLOY_REF: dev
+          QUEUE_TASK_ID: ${{ github.event.inputs.queue_task_id }}
+          SOURCE_CHANNEL: ${{ steps.channel.outputs.channel }}
+          SYNC_DISPATCH_PAYLOAD: ${{ github.event.inputs.dispatch_payload }}
           THOUGHT_CHECK_ID: ${{ steps.detect.outputs.thought_check_id }}
           THOUGHT_CHECK_MODULE: ${{ steps.detect.outputs.thought_check_module }}
           THOUGHT_CHECK_PATH: ${{ steps.detect.outputs.thought_check_path }}
           THOUGHT_CHECK_EXPECTATION: ${{ steps.detect.outputs.thought_check_expectation }}
-        run: |
-          workflow_file="deploy-cloudflare-pages-dev.yml"
-          workflow_branch="dev"
-          dispatch_started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          deploy_started_epoch="$(date -u +%s)"
-          deploy_run_id=""
-          last_status=""
-          last_conclusion=""
-          last_html_url=""
-          elapsedMs() {
-            now_epoch="$(date -u +%s)"
-            echo "$(( (now_epoch - deploy_started_epoch) * 1000 ))"
-          }
-          appendDeploySummary() {
-            summary_status="$1"
-            summary_conclusion="$2"
-            summary_duration_ms="$3"
-            summary_url="$4"
-            {
-              echo "## Site deploy result"
-              echo ""
-              echo "| workflow | runId | status | conclusion | durationMs | url |"
-              echo "| --- | --- | --- | --- | ---: | --- |"
-              echo "| ${workflow_file} | ${deploy_run_id:-} | ${summary_status} | ${summary_conclusion} | ${summary_duration_ms} | ${summary_url} |"
-            } >> "$GITHUB_STEP_SUMMARY"
-          }
-          dispatch_body="$(node <<'NODE'
-          const inputs = {
-            strict_database_snapshot: 'true',
-            sync_db_mode: 'never',
-            run_tests: 'false',
-          };
-          for (const [envName, inputName] of [
-            ['THOUGHT_CHECK_ID', 'target_thought_id'],
-            ['THOUGHT_CHECK_MODULE', 'target_thought_module'],
-            ['THOUGHT_CHECK_PATH', 'target_thought_path'],
-            ['THOUGHT_CHECK_EXPECTATION', 'target_thought_expectation'],
-          ]) {
-            const value = String(process.env[envName] ?? '').trim();
-            if (value) {
-              inputs[inputName] = value;
-            }
-          }
-          process.stdout.write(JSON.stringify({ ref: 'dev', inputs }));
-          NODE
-          )"
-          curl -fsSL \
-            -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-cloudflare-pages-dev.yml/dispatches" \
-            -d "$dispatch_body"
-
-          for attempt in $(seq 1 30); do
-            sleep 5
-            runs_json_file="$(mktemp)"
-            curl -fsSL \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-cloudflare-pages-dev.yml/runs?branch=${workflow_branch}&event=workflow_dispatch&per_page=20" \
-              -o "$runs_json_file"
-            deploy_run_id="$(RUNS_JSON_FILE="$runs_json_file" DISPATCH_STARTED_AT="$dispatch_started_at" node <<'NODE'
-            const data = require('fs').readFileSync(process.env.RUNS_JSON_FILE, 'utf8');
-            const runs = JSON.parse(data || '{}').workflow_runs ?? [];
-            const startedAt = Date.parse(process.env.DISPATCH_STARTED_AT || '');
-            const run = runs.find((candidate) => Date.parse(candidate.created_at) >= startedAt - 5000);
-            if (run?.id) {
-              process.stdout.write(String(run.id));
-            }
-          NODE
-          )"
-            rm -f "$runs_json_file"
-            if [ -n "$deploy_run_id" ]; then
-              break
-            fi
-            if [ $((attempt % 6)) -eq 0 ]; then
-              echo "[action-log] {\"level\":\"INFO\",\"domain\":\"DEPLOY\",\"event\":\"workflow.waiting\",\"workflowFile\":\"${workflow_file}\",\"attempt\":${attempt},\"status\":\"not_found\",\"elapsedMs\":$(elapsedMs)}"
-            fi
-          done
-
-          if [ -z "$deploy_run_id" ]; then
-            duration_ms="$(elapsedMs)"
-            appendDeploySummary "not_found" "failure" "$duration_ms" ""
-            echo "::error title=Deploy workflow not found::Could not find the workflow_dispatch run for ${workflow_file} after dispatch. elapsedMs=${duration_ms} workflowFile=${workflow_file}"
-            exit 1
-          fi
-
-          echo "Waiting for deploy workflow run ${deploy_run_id}."
-          for attempt in $(seq 1 90); do
-            run_json="$(curl -fsSL \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${deploy_run_id}")"
-            status="$(RUN_JSON="$run_json" node -e "const run = JSON.parse(process.env.RUN_JSON); process.stdout.write(run.status || '');")"
-            conclusion="$(RUN_JSON="$run_json" node -e "const run = JSON.parse(process.env.RUN_JSON); process.stdout.write(run.conclusion || '');")"
-            html_url="$(RUN_JSON="$run_json" node -e "const run = JSON.parse(process.env.RUN_JSON); process.stdout.write(run.html_url || '');")"
-            last_status="$status"
-            last_conclusion="$conclusion"
-            last_html_url="$html_url"
-
-            if [ "$status" = "completed" ]; then
-              duration_ms="$(elapsedMs)"
-              if [ "$conclusion" = "success" ]; then
-                appendDeploySummary "$status" "$conclusion" "$duration_ms" "$html_url"
-                echo "Deploy workflow succeeded: ${html_url}"
-                exit 0
-              fi
-              appendDeploySummary "$status" "$conclusion" "$duration_ms" "$html_url"
-              echo "::error title=Deploy workflow failed::Deploy workflow ${deploy_run_id} completed with conclusion ${conclusion}. ${html_url} elapsedMs=${duration_ms} workflowFile=${workflow_file} lastStatus=${last_status} lastConclusion=${last_conclusion}"
-              exit 1
-            fi
-
-            if [ $((attempt % 6)) -eq 0 ]; then
-              echo "[action-log] {\"level\":\"INFO\",\"domain\":\"DEPLOY\",\"event\":\"workflow.waiting\",\"workflowFile\":\"${workflow_file}\",\"deployRunId\":\"${deploy_run_id}\",\"attempt\":${attempt},\"status\":\"${status}\",\"conclusion\":\"${conclusion}\",\"elapsedMs\":$(elapsedMs)}"
-            fi
-            sleep 10
-          done
-
-          duration_ms="$(elapsedMs)"
-          appendDeploySummary "timed_out" "failure" "$duration_ms" "$last_html_url"
-          echo "::error title=Deploy workflow timed out::Deploy workflow ${deploy_run_id} did not complete in time. workflowFile=${workflow_file} lastStatus=${last_status} lastConclusion=${last_conclusion} url=${last_html_url} elapsedMs=${duration_ms}"
-          exit 1
+        run: node tools/dispatch-site-deploy.mjs
 
       - name: Notify Telegram sync failure
         if: failure() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'telegram'
@@ -480,8 +363,8 @@ jobs:
         if: failure() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'feishu'
         continue-on-error: true
         env:
-          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID || secrets.FEISHU_APP_ID }}
-          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET || secrets.FEISHU_APP_SECRET }}
+          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET }}
           STEP_INSTALL_OUTCOME: ${{ steps.install.outcome }}
           STEP_SYNC_OUTCOME: ${{ steps.sync.outcome }}
           STEP_DETECT_OUTCOME: ${{ steps.detect.outcome }}
@@ -489,37 +372,3 @@ jobs:
           STEP_PUSH_OUTCOME: ${{ steps.push.outcome }}
           STEP_DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
         run: node tools/feishu-action-monitor.mjs
-
-      - name: Report Action Status
-        if: always()
-        continue-on-error: true
-        env:
-          GITHUB_ACTION_MONITOR_REPORT_URL: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL }}
-          GITHUB_ACTION_MONITOR_REPORT_URL_DEV: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL_DEV }}
-          GITHUB_ACTION_MONITOR_REPORT_URL_MAIN: ${{ vars.GITHUB_ACTION_MONITOR_REPORT_URL_MAIN }}
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_ACTION_MONITOR_JOB_STATUS: ${{ job.status }}
-          TRAINING_DB_URL: ${{ github.ref_name == 'dev' && secrets.DEV_TRAINING_DB_URL || github.ref_name == 'main' && secrets.TRAINING_DB_URL || '' }}
-          TRAINING_DB_APP_NAME: ${{ github.ref_name == 'dev' && vars.DEV_TRAINING_DB_APP_NAME || github.ref_name == 'main' && vars.TRAINING_DB_APP_NAME || '' }}
-        run: |
-          report_url="${GITHUB_ACTION_MONITOR_REPORT_URL:-}"
-          if [ "${GITHUB_REF_NAME}" = "dev" ] && [ -n "${GITHUB_ACTION_MONITOR_REPORT_URL_DEV:-}" ]; then
-            report_url="${GITHUB_ACTION_MONITOR_REPORT_URL_DEV}"
-          elif [ "${GITHUB_REF_NAME}" = "main" ] && [ -n "${GITHUB_ACTION_MONITOR_REPORT_URL_MAIN:-}" ]; then
-            report_url="${GITHUB_ACTION_MONITOR_REPORT_URL_MAIN}"
-          elif [ "${GITHUB_REF_NAME}" != "dev" ] && [ "${GITHUB_REF_NAME}" != "main" ]; then
-            echo "Branch ${GITHUB_REF_NAME} is not monitored by the Action monitor; skipping."
-            exit 0
-          fi
-          if [ -n "${TRAINING_DB_URL:-}" ]; then
-            echo "Using local PostgreSQL Action monitor reporter."
-            node tools/report-github-action-status.mjs
-            exit 0
-          fi
-          if [ -z "${report_url:-}" ]; then
-            echo "GitHub Action monitor report URL is not configured and branch-scoped PostgreSQL URL is unavailable; skipping."
-            exit 0
-          fi
-          curl -fsS -X POST "${report_url%/}/api/github/actions/report" \
-            -H "Content-Type: application/json" \
-            -d "{\"run_id\":\"${{ github.run_id }}\"}"

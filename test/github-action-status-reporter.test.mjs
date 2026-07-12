@@ -45,6 +45,34 @@ test('local github action status reporter delegates current dev run to the monit
   assert.ok(logs.some((line) => line.includes('reported run 123456789')));
 });
 
+test('local github action status reporter delegates a completed workflow_run target', async () => {
+  const calls = [];
+  await reportGitHubActionStatus({
+    env: {
+      GITHUB_RUN_ID: '999',
+      GITHUB_ACTION_TARGET_RUN_ID: '123456789',
+      GITHUB_REPOSITORY: 'soulgo/training_records',
+      GITHUB_ACTION_TARGET_BRANCH: 'main',
+      GITHUB_TOKEN: 'github-token',
+      GITHUB_ACTION_MONITOR_DB_URL: 'postgres://main-db',
+      GITHUB_ACTION_MONITOR_DB_APP_NAME: 'action-monitor-main',
+    },
+    stdout: { write() {} },
+    stderr: { write() {} },
+    reportRun: async (input) => {
+      calls.push(input);
+      return { ok: true, runId: input.runId };
+    },
+    createRepository: (client) => ({ client, upsertActionRunSnapshot() {} }),
+    createClient: (config) => ({ config, async connect() {}, async end() {} }),
+  });
+
+  assert.equal(calls[0].runId, 123456789);
+  assert.deepEqual(calls[0].allowedBranches, ['main']);
+  assert.equal(calls[0].monitorEnvironment, 'main');
+  assert.equal(calls[0].currentRunConclusion, '');
+});
+
 test('local github action status reporter skips when database configuration is absent', async () => {
   let reportCalled = false;
   const logs = [];

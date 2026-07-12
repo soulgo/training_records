@@ -1,5 +1,5 @@
 export const RECOGNITION_SCHEMA_NAME = 'telegram_training_image';
-export const RECOGNITION_SCHEMA_VERSION = 'v3';
+export const RECOGNITION_SCHEMA_VERSION = 'v4';
 
 export function buildRecognitionSchema() {
   return {
@@ -74,11 +74,25 @@ export function buildRecognitionSchema() {
             items: {
               type: 'object',
               additionalProperties: false,
-              required: ['time', 'type', 'detail'],
+              required: [
+                'time',
+                'type',
+                'detail',
+                'durationSeconds',
+                'calories',
+                'heartRate',
+                'distanceKm',
+                'avgSpeedKmh',
+              ],
               properties: {
                 time: { type: 'string' },
                 type: { type: 'string' },
                 detail: { type: 'string' },
+                durationSeconds: { type: ['number', 'null'], minimum: 0 },
+                calories: { type: ['number', 'null'], minimum: 0 },
+                heartRate: { type: ['number', 'null'], minimum: 0 },
+                distanceKm: { type: ['number', 'null'], minimum: 0 },
+                avgSpeedKmh: { type: ['number', 'null'], minimum: 0 },
               },
             },
           },

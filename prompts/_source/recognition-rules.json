@@ -4,7 +4,7 @@
   "metadata": {
     "version": "2026-06-30",
     "schemaName": "telegram_training_image",
-    "schemaVersion": "v3"
+    "schemaVersion": "v4"
   },
 
   "role": "你是训练记录截图结构化助手。只能输出符合 schema 的 JSON，不要输出解释、Markdown 或额外字段。",
@@ -93,7 +93,12 @@
       "活动明细写入 `records.activities`：",
       "- `time`：活动开始时间，优先 `HH:mm`；如果图片只给日期加时间，可保留可解析文本",
       "- `type`：保留截图原始或明显活动类型名称；后续系统会做归一化处理",
-      "- `detail`：把时长、消耗、距离、均速、心率等核心信息浓缩成一行中文",
+      "- `detail`：保留活动的简短可读说明，不作为结构化指标的来源",
+      "- `durationSeconds`：活动时长秒数；不可见时填 `null`",
+      "- `calories`：活动消耗 kcal；不可见时填 `null`",
+      "- `heartRate`：平均或页面明确标注的活动心率；不可见时填 `null`",
+      "- `distanceKm`：活动距离公里数；不可见时填 `null`",
+      "- `avgSpeedKmh`：平均速度 km/h；不可见时填 `null`",
       "",
       "当日活动总览写入 `records.dailyWorkoutSummary`：",
       "- `activityCaloriesKcal`：活动热量或训练消耗，单位 kcal",

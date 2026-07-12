@@ -1,22 +1,17 @@
-import { createHash } from 'node:crypto';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import pg from 'pg';
 
+import { resolveTrainingReadonlyConfig } from '../src/db/training/config.mjs';
+import { readPendingRecognitionSummary as readPendingBatchesDefault } from '../src/db/training/pending-recognition.mjs';
 import { exportDerivedTrainingMarkdown as exportDerivedTrainingMarkdownDefault } from './export-training-markdown.mjs';
 import { syncTrainingCore as syncTrainingCoreDefault } from './sync-training-core.mjs';
-import {
-  readPendingRecognitionSummary as readPendingBatchesDefault,
-  resolveTrainingMigrationConfig,
-  resolveTrainingReadonlyConfig,
-} from './training-db-core.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..');
 const { Client } = pg;
-const migrationDir = 'sql/training_records/migrations';
 const pendingDatabaseThresholds = {
   p2OldestAgeMinutes: 30,
   p1OldestAgeMinutes: 24 * 60,
@@ -70,20 +65,12 @@ export async function runTrainingMaintenance(options = {}) {
       flags,
       exportDerivedTrainingMarkdown,
     });
-  } else if (command === 'migrate') {
-    payload = await runMigrateMaintenance({
-      rootDir,
-      env,
-      stderr,
-      flags,
-      createClient: options.createClient,
-    });
   } else {
     payload = {
       status: 'failed',
       mode: command,
       error: `unknown maintenance command: ${command}`,
-      commands: ['inspect', 'sync', 'export', 'migrate'],
+      commands: ['inspect', 'sync', 'export'],
     };
   }
 
@@ -218,11 +205,11 @@ async function readAiMonitoringSummary({ env, createClient, now }) {
       client.query(
         `
           select
-            count(*) filter (where recognition_json->>'aiAttemptKind' = 'fallback')::int
+            count(*) filter (where raw_result_json->>'aiAttemptKind' = 'fallback')::int
               as recognition_fallback_count,
-            count(*) filter (where recognition_json ? 'aiAttemptKind')::int
+            count(*) filter (where raw_result_json ? 'aiAttemptKind')::int
               as recognition_total_count
-          from ingest.telegram_recognition
+          from ingest.recognition_run
           where updated_at >= $1
             and updated_at <= $2
         `,
@@ -361,7 +348,7 @@ function buildAiMonitoringSummary({ callLogRow, recognitionRow }) {
     totalCostUsd: normalizeNullableNumber(callLogRow.total_cost_usd) ?? 0,
     sources: [
       'ingest.ai_call_log',
-      'ingest.telegram_recognition.recognition_json.aiAttemptKind',
+      'ingest.recognition_run.raw_result_json.aiAttemptKind',
     ],
     alertReasons,
     thresholds: aiMonitoringThresholds,
@@ -386,7 +373,7 @@ function emptyAiMonitoringSummary({ status, error = null }) {
     totalCostUsd: 0,
     sources: [
       'ingest.ai_call_log',
-      'ingest.telegram_recognition.recognition_json.aiAttemptKind',
+      'ingest.recognition_run.raw_result_json.aiAttemptKind',
     ],
     alertReasons: [],
     thresholds: aiMonitoringThresholds,
@@ -552,8 +539,8 @@ export async function readTrainingBatchAuditClient(client, { batchId }) {
           reason,
           confidence,
           processed_at,
-          batch_payload_json
-        from ingest.telegram_batch
+          payload_json as batch_payload_json
+        from ingest.source_batch
         where batch_id = $1
       `,
       [batchId],
@@ -561,13 +548,13 @@ export async function readTrainingBatchAuditClient(client, { batchId }) {
     client.query(
       `
         select
-          message_id::text as message_id,
+          source_message_id as message_id,
           source_channel,
           source_chat_id,
           source_message_id,
-          recognition_json,
+          raw_result_json as recognition_json,
           updated_at
-        from ingest.telegram_recognition
+        from ingest.recognition_run
         where batch_id = $1
         order by source_channel, source_chat_id, source_message_id
       `,
@@ -804,300 +791,6 @@ async function runExportMaintenance({ rootDir, env, stderr, target, flags, expor
   return summary;
 }
 
-async function runMigrateMaintenance({ rootDir, env, flags, createClient }) {
-  const dryRun = flags.has('--dry-run');
-  const confirmed = flags.has('--confirm');
-  const migrationPlan = await readMigrationPlan(rootDir);
-
-  if (dryRun) {
-    const config = resolveTrainingMigrationConfig(env);
-    const migrationHistory = await readMigrationHistory({
-      config,
-      createClient,
-    });
-    const migrationState = buildMigrationPlanState(migrationPlan, migrationHistory.appliedRecords);
-    return {
-      status: 'planned',
-      mode: 'migrate',
-      readonly: true,
-      dryRun: true,
-      requiresConfirm: true,
-      migrationHistory: {
-        ...migrationHistory.summary,
-        checksumMismatchCount: migrationState.checksumMismatches.length,
-      },
-      plan: migrationState.plan,
-    };
-  }
-
-  if (!confirmed) {
-    return {
-      status: 'blocked',
-      mode: 'migrate',
-      readonly: false,
-      requiresConfirm: true,
-      plan: migrationPlan,
-      error: 'migrate requires --dry-run or --confirm',
-    };
-  }
-
-  const config = resolveTrainingMigrationConfig(env);
-  if (!config.url) {
-    return {
-      status: 'blocked',
-      mode: 'migrate',
-      readonly: false,
-      confirmed: true,
-      requiresMigrationUrl: true,
-      plan: migrationPlan,
-      error: 'migrate --confirm requires TRAINING_DB_MIGRATION_URL',
-    };
-  }
-
-  const migrationResult = await applyMigrationPlan({
-    rootDir,
-    migrationPlan,
-    config,
-    createClient,
-  });
-
-  if (migrationResult.blocked) {
-    return {
-      status: 'blocked',
-      mode: 'migrate',
-      readonly: false,
-      confirmed: true,
-      migrationHistory: migrationResult.history,
-      plan: migrationResult.plan,
-      appliedMigrations: [],
-      skippedMigrations: migrationResult.skippedMigrations,
-      error: migrationResult.error,
-    };
-  }
-
-  return {
-    status: migrationResult.appliedMigrations.length > 0 ? 'applied' : 'unchanged',
-    mode: 'migrate',
-    readonly: false,
-    confirmed: true,
-    migrationHistory: migrationResult.history,
-    plan: migrationResult.plan,
-    appliedMigrations: migrationResult.appliedMigrations,
-    skippedMigrations: migrationResult.skippedMigrations,
-  };
-}
-
-async function applyMigrationPlan({ rootDir, migrationPlan, config, createClient }) {
-  const createMigrationClient =
-    createClient ??
-    ((dbConfig) =>
-      new Client({
-        connectionString: dbConfig.url,
-        connectionTimeoutMillis: dbConfig.timeoutMs,
-        application_name: dbConfig.appName,
-      }));
-  const client = createMigrationClient(config);
-  const appliedMigrations = [];
-  const skippedMigrations = [];
-
-  try {
-    await client.connect();
-    await ensureMigrationHistoryTable(client);
-    const appliedRecords = await readAppliedMigrationRecords(client);
-    const migrationState = buildMigrationPlanState(migrationPlan, appliedRecords);
-    if (migrationState.checksumMismatches.length > 0) {
-      return {
-        blocked: true,
-        plan: migrationState.plan,
-        appliedMigrations,
-        skippedMigrations,
-        history: {
-          status: 'read',
-          appliedCount: migrationState.appliedIds.size,
-          checksumMismatchCount: migrationState.checksumMismatches.length,
-        },
-        error: 'applied migration checksum mismatch',
-      };
-    }
-
-    for (const migration of migrationState.plan) {
-      if (migration.status === 'applied') {
-        skippedMigrations.push({
-          id: migration.id,
-          file: migration.file,
-          status: 'applied',
-        });
-        continue;
-      }
-      const sql = await readFile(path.join(rootDir, migration.file), 'utf8');
-      await client.query(sql);
-      await recordAppliedMigration(client, migration, sql);
-      migration.status = 'applied';
-      migrationState.appliedIds.add(migration.id);
-      appliedMigrations.push({
-        id: migration.id,
-        file: migration.file,
-        status: 'applied',
-      });
-    }
-    return {
-      appliedIds: migrationState.appliedIds,
-      plan: migrationState.plan,
-      appliedMigrations,
-      skippedMigrations,
-      history: {
-        status: 'updated',
-        appliedCount: migrationState.appliedIds.size,
-        checksumMismatchCount: 0,
-      },
-    };
-  } finally {
-    await client.end?.();
-  }
-}
-
-async function readMigrationHistory({ config, createClient }) {
-  if (!config.url) {
-    return {
-      appliedRecords: new Map(),
-      summary: { status: 'not_configured' },
-    };
-  }
-
-  const createMigrationClient =
-    createClient ??
-    ((dbConfig) =>
-      new Client({
-        connectionString: dbConfig.url,
-        connectionTimeoutMillis: dbConfig.timeoutMs,
-        application_name: dbConfig.appName,
-      }));
-  const client = createMigrationClient(config);
-
-  try {
-    await client.connect();
-    const appliedRecords = await readAppliedMigrationRecords(client);
-    return {
-      appliedRecords,
-      summary: {
-        status: 'read',
-        appliedCount: appliedRecords.size,
-      },
-    };
-  } catch (error) {
-    return {
-      appliedRecords: new Map(),
-      summary: {
-        status: 'unavailable',
-        error: formatSafeErrorMessage(error),
-      },
-    };
-  } finally {
-    await client.end?.();
-  }
-}
-
-async function ensureMigrationHistoryTable(client) {
-  await client.query('create schema if not exists maintenance');
-  await client.query(`
-    create table if not exists maintenance.schema_migration (
-      migration_id text primary key,
-      file_path text not null,
-      description text null,
-      checksum_sha256 text not null,
-      status text not null default 'applied',
-      applied_at timestamptz not null default now()
-    )
-  `);
-}
-
-async function readAppliedMigrationRecords(client) {
-  const tableResult = await client.query("select to_regclass('maintenance.schema_migration') as table_name");
-  if (!tableResult.rows?.[0]?.table_name) {
-    return new Map();
-  }
-
-  const result = await client.query(`
-    select migration_id, checksum_sha256
-    from maintenance.schema_migration
-    where status = 'applied'
-    order by migration_id
-  `);
-  return new Map(
-    result.rows
-      .filter((row) => row.migration_id)
-      .map((row) => [
-        row.migration_id,
-        {
-          id: row.migration_id,
-          checksumSha256: row.checksum_sha256 ?? null,
-        },
-      ]),
-  );
-}
-
-async function recordAppliedMigration(client, migration, sql) {
-  await client.query(
-    `
-      insert into maintenance.schema_migration (
-        migration_id,
-        file_path,
-        description,
-        checksum_sha256,
-        status,
-        applied_at
-      )
-      values ($1, $2, $3, $4, 'applied', now())
-      on conflict (migration_id) do update set
-        file_path = excluded.file_path,
-        description = excluded.description,
-        checksum_sha256 = excluded.checksum_sha256,
-        status = excluded.status,
-        applied_at = excluded.applied_at
-    `,
-    [
-      migration.id,
-      migration.file,
-      migration.description,
-      createHash('sha256').update(sql, 'utf8').digest('hex'),
-    ],
-  );
-}
-
-function buildMigrationPlanState(migrationPlan, appliedRecords) {
-  const appliedIds = new Set();
-  const checksumMismatches = [];
-  const plan = migrationPlan.map((migration) => {
-    const appliedRecord = appliedRecords.get(migration.id);
-    if (!appliedRecord) {
-      return { ...migration, status: 'pending' };
-    }
-
-    if (appliedRecord.checksumSha256 !== migration.checksumSha256) {
-      const mismatch = {
-        id: migration.id,
-        file: migration.file,
-        expectedChecksumSha256: migration.checksumSha256,
-        appliedChecksumSha256: appliedRecord.checksumSha256,
-      };
-      checksumMismatches.push(mismatch);
-      return {
-        ...migration,
-        status: 'checksum_mismatch',
-        appliedChecksumSha256: appliedRecord.checksumSha256,
-      };
-    }
-
-    appliedIds.add(migration.id);
-    return { ...migration, status: 'applied' };
-  });
-
-  return {
-    appliedIds,
-    checksumMismatches,
-    plan,
-  };
-}
 
 async function readNdjsonSummary(filePath) {
   let raw = '';
@@ -1149,40 +842,6 @@ function resolvePhaseFlag(flags) {
   }
 
   return 'safe';
-}
-
-async function readMigrationPlan(rootDir) {
-  const absoluteMigrationDir = path.join(rootDir, migrationDir);
-  let entries = [];
-  try {
-    entries = await readdir(absoluteMigrationDir, { withFileTypes: true });
-  } catch (error) {
-    if (error?.code !== 'ENOENT') {
-      throw error;
-    }
-  }
-
-  const migrations = [];
-  for (const entry of entries) {
-    if (!entry.isFile() || !/\.sql$/u.test(entry.name)) {
-      continue;
-    }
-    const filePath = path.join(absoluteMigrationDir, entry.name);
-    const sql = await readFile(filePath, 'utf8');
-    migrations.push({
-      id: entry.name.replace(/\.sql$/u, ''),
-      file: `${migrationDir}/${entry.name}`,
-      description: parseMigrationDescription(sql),
-      checksumSha256: createHash('sha256').update(sql, 'utf8').digest('hex'),
-      status: 'pending',
-    });
-  }
-
-  return migrations.sort((left, right) => left.id.localeCompare(right.id));
-}
-
-function parseMigrationDescription(sql) {
-  return String(sql ?? '').match(/^--\s*purpose:\s*(.+)$/imu)?.[1]?.trim() ?? null;
 }
 
 function formatErrorMessage(error) {

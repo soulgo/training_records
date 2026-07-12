@@ -1,6 +1,6 @@
 {
   "name": "training-records-dashboard",
-  "version": "1.3.3",
+  "version": "1.3.5",
   "private": true,
   "description": "Hexo dashboard for Markdown-based training records",
   "scripts": {
@@ -16,7 +16,6 @@
     "sync:db": "node tools/training-maintenance.mjs sync",
     "maintenance:inspect": "node tools/training-maintenance.mjs inspect",
     "maintenance:sync": "node tools/training-maintenance.mjs sync",
-    "maintenance:migrate": "node tools/training-maintenance.mjs migrate",
     "check:data-consistency": "node tools/check-training-data-consistency.mjs",
     "build:site": "node tools/run-hexo-command.mjs generate",
     "build": "npm run build:data && npm run build:site",
@@ -39,6 +38,7 @@
     "hexo-renderer-marked": "^7.0.1",
     "hexo-renderer-stylus": "^3.0.1",
     "hexo-server": "^3.0.0",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "sharp": "^0.34.5"
   }
 }

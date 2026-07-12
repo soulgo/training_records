@@ -10,7 +10,7 @@
   - [Action 日志与失败补偿](../../../02_系统核心逻辑/Action日志与失败补偿.md)
   - [数据库模型](../../../02_系统核心逻辑/数据库模型.md)
   - [Action 日志排查](../../../04_问题与排查/Action日志.md)
-- **落地说明**：功能已实现为 `config/parameter-validity/<env>.json` registry、`tools/check-parameter-validity.mjs` 审计命令、`.github/workflows/parameter-validity-audit.yml` workflow、`monitor.system_config_parameters` / `monitor.system_config_parameter_checks` 表，以及 `/action-monitor/` 的“系统参数有效期”展示模块。本文件保留方案背景和实施路线，不再作为当前操作入口。
+- **落地说明**：原“有效期”方案已修正为参数健康监控：当前入口是 `config/parameter-health/<env>.json` registry、`tools/check-parameter-health.mjs` 审计命令、`.github/workflows/parameter-health-audit.yml` workflow、`monitor.system_config_parameters` / `monitor.system_config_parameter_checks` 表，以及 `/action-monitor/` 的“系统参数健康”展示模块。本文件保留方案背景和实施路线，不再作为当前操作入口。
 
 ## Go / No-Go
 
@@ -76,7 +76,7 @@
 
 ```mermaid
 flowchart LR
-  Docs["docs/01_系统配置<br/>参数清单"] --> Registry["config/parameter-validity/*.json<br/>有效期元数据"]
+  Docs["docs/01_系统配置<br/>参数清单"] --> Registry["config/parameter-health/*.json<br/>有效期元数据"]
   GitHubMeta["GitHub API<br/>Secrets/Variables metadata"] --> Checker["tools/check-parameter-validity.mjs"]
   CloudflareMeta["Cloudflare/Wrangler metadata<br/>可用则读取"] --> Checker
   RuntimeEnv["Workflow 注入 env<br/>只判断存在性"] --> Checker
@@ -102,7 +102,7 @@ flowchart LR
 新增建议路径：
 
 ```text
-config/parameter-validity/
+config/parameter-health/
   dev.json
   main.json
   schema.json
@@ -318,8 +318,8 @@ src/site/action-monitor-parameter-validity.mjs
 命令形式：
 
 ```bash
-node tools/check-parameter-validity.mjs --environment dev --registry config/parameter-validity/dev.json --write-monitor
-node tools/check-parameter-validity.mjs --environment main --registry config/parameter-validity/main.json --write-monitor
+node tools/check-parameter-validity.mjs --environment dev --registry config/parameter-health/dev.json --write-monitor
+node tools/check-parameter-validity.mjs --environment main --registry config/parameter-health/main.json --write-monitor
 ```
 
 检查步骤：
@@ -424,10 +424,10 @@ on:
   - 只新增 registry、schema 和纯函数测试。
   - 不接触 Secret 明文。
 - **Todos**:
-  - [ ] 新增 `config/parameter-validity/schema.json`。
+  - [ ] 新增 `config/parameter-health/schema.json`。
     - **Surface**: config
     - **Proof**: schema 校验测试覆盖必填字段和非法 `validityMode`。
-  - [ ] 新增 `config/parameter-validity/dev.json` 和 `main.json`。
+  - [ ] 新增 `config/parameter-health/dev.json` 和 `main.json`。
     - **Surface**: config
     - **Proof**: 参数名覆盖 `docs/01_系统配置/dev.md`、`main.md` 的第一批高风险参数。
   - [ ] 实现 `evaluateParameterValidity()`。
@@ -464,7 +464,7 @@ on:
   - [ ] 新增 `tools/check-parameter-validity.mjs`。
     - **Surface**: CLI
     - **Proof**: 本地 dry-run 不需要 DB；write-monitor 模式能写测试 repository；GitHub Step Summary 只输出计数和参数名。
-  - [ ] 新增 `.github/workflows/parameter-validity-audit.yml`。
+  - [ ] 新增 `.github/workflows/parameter-health-audit.yml`。
     - **Surface**: workflow
     - **Proof**: workflow 契约测试确认有 `Report Action Status`、`GITHUB_TOKEN`、分支 DB URL 映射，并在写库后触发或复用 Pages build。
 - **Exit proof**: 手动运行 workflow 后 `monitor.system_config_parameter_checks` 出现最新记录，GitHub Step Summary 出现风险摘要，并且新生成的 `actionMonitorView.json` 反映本次检查。
@@ -538,4 +538,4 @@ npm run build:data
 
 ## First Execution Step
 
-先创建 `config/parameter-validity/schema.json`、`dev.json`、`main.json` 的最小版本，并为 `evaluateParameterValidity()` 写红绿测试。第一批只纳入高风险 Secret：数据库连接、AI key、Telegram token、飞书 app secret、COS key、Cloudflare API token、Worker `GITHUB_TOKEN`。
+先创建 `config/parameter-health/schema.json`、`dev.json`、`main.json` 的最小版本，并为 `evaluateParameterValidity()` 写红绿测试。第一批只纳入高风险 Secret：数据库连接、AI key、Telegram token、飞书 app secret、COS key、Cloudflare API token、Worker `GITHUB_TOKEN`。

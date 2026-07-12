@@ -1,15 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import * as domainTraining from '../src/domain/training/index.mjs';
-import * as telegram from '../src/telegram/index.mjs';
-import * as site from '../src/site/index.mjs';
-import * as db from '../src/db/index.mjs';
-import * as jobs from '../src/jobs/index.mjs';
+import { buildTrainingSnapshot } from '../src/domain/training/training-snapshot.mjs';
+import { parseTrainingRecord } from '../src/domain/training/training-parser.mjs';
+import { buildDashboardViewModel } from '../src/site/dashboard-view.mjs';
+import { createTelegramCommandResolver, isTelegramHelpText } from '../src/telegram/commands.mjs';
+import { readTrainingSnapshotFromDatabase } from '../src/db/training/read.mjs';
+import { persistNormalizedBatch } from '../src/db/training/write.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FIRST_PARTY_BOUNDARY_ROOTS = [
@@ -71,20 +72,14 @@ function collectFirstPartyBoundaryFiles() {
   return files;
 }
 
-test('src boundary entry points exist and re-export expected modules', () => {
-  assert.ok(domainTraining.parseTrainingRecord);
-  assert.ok(domainTraining.buildTrainingSnapshot);
-  assert.ok(telegram.createTelegramCommandResolver);
-  assert.ok(telegram.isTelegramHelpText);
-  assert.ok(site.buildDashboardViewModel);
-  assert.ok(db.readTrainingSnapshotFromDatabase);
-  assert.ok(db.persistNormalizedBatch);
-  assert.ok(jobs.runTelegramSyncJob);
-  assert.ok(jobs.runGenerateTrainingDataJob);
-  assert.ok(jobs.runTrainingAnalysisJob);
-  assert.ok(jobs.createFilePendingStore);
-  assert.ok(jobs.createJobExecutionContext);
-  assert.ok(jobs.normalizeJobResult);
+test('production boundary modules expose the maintained behavior directly', () => {
+  assert.equal(typeof parseTrainingRecord, 'function');
+  assert.equal(typeof buildTrainingSnapshot, 'function');
+  assert.equal(typeof createTelegramCommandResolver, 'function');
+  assert.equal(typeof isTelegramHelpText, 'function');
+  assert.equal(typeof buildDashboardViewModel, 'function');
+  assert.equal(typeof readTrainingSnapshotFromDatabase, 'function');
+  assert.equal(typeof persistNormalizedBatch, 'function');
 });
 
 test('first-party runtime files avoid deprecated Node URL and punycode APIs', () => {
@@ -134,6 +129,77 @@ test('src modules do not import implementation code back from tools', () => {
     .filter(Boolean);
 
   assert.deepEqual(violations, []);
+});
+
+test('obsolete architecture shells and unused barrel entrypoints are removed', () => {
+  const obsoletePaths = [
+    'src/ai/errors.mjs',
+    'src/ai/openai-compatible-provider.mjs',
+    'src/ai/provider.mjs',
+    'src/ai/recognition-service.mjs',
+    'src/ai/schema-validator.mjs',
+    'src/adapters/postgres/training-write.facade.mjs',
+    'src/adapters/postgres/schema-preflight.pg.mjs',
+    'src/app/use-cases/telegram-sync/fallback.mjs',
+    'src/core/index.mjs',
+    'src/db/index.mjs',
+    'src/db/training/core-row-writer.mjs',
+    'src/db/training/index.mjs',
+    'src/db/training/incremental-write.mjs',
+    'src/domain/index.mjs',
+    'src/domain/telegram/index.mjs',
+    'src/domain/training/index.mjs',
+    'src/infra/app-factory.mjs',
+    'src/infra/config.mjs',
+    'src/jobs/index.mjs',
+    'src/jobs/generate-training-data-job.mjs',
+    'src/jobs/pending-store.mjs',
+    'src/jobs/service-adapter-contract.mjs',
+    'src/jobs/telegram-sync-job.mjs',
+    'src/jobs/training-analysis-job.mjs',
+    'src/shared/index.mjs',
+    'src/site/index.mjs',
+    'src/site/view-model-notes.mjs',
+    'src/telegram/sync-batch.mjs',
+    'src/telegram/sync.mjs',
+    'tools/dashboard-view.mjs',
+    'tools/feishu-sync.mjs',
+    'tools/generate-training-data.mjs',
+    'tools/lib/markdown-render.mjs',
+    'tools/lib/snapshot-fallback.mjs',
+    'tools/lib/thought-modules.mjs',
+    'tools/monitor-view.mjs',
+    'tools/prompt-generator.mjs',
+    'tools/telegram-recognition-schema.mjs',
+    'tools/telegram-sync-dates.mjs',
+    'tools/telegram-sync-image-processing.mjs',
+    'tools/telegram-sync-lib.mjs',
+    'tools/telegram-sync-markdown.mjs',
+    'tools/telegram-sync-status.mjs',
+    'tools/telegram-sync.mjs',
+    'tools/telegram-sync-fallback.mjs',
+    'tools/telegram-thoughts.mjs',
+    'tools/telegram-transport.mjs',
+    'tools/training-analysis-focus.mjs',
+    'tools/training-analysis-request.mjs',
+    'tools/training-analysis-summary.mjs',
+    'tools/training-analysis.mjs',
+    'tools/training-db-archive.mjs',
+    'tools/training-db-config.mjs',
+    'tools/training-db-core.mjs',
+    'tools/training-db-read.mjs',
+    'tools/training-db-write.mjs',
+    'tools/training-domain.mjs',
+    'tools/training-parser.mjs',
+    'tools/training-prompt.mjs',
+    'tools/training-snapshot.mjs',
+    'runtime/telegram-sync-pending.ndjson',
+  ];
+
+  assert.deepEqual(
+    obsoletePaths.filter((relativePath) => existsSync(path.join(REPO_ROOT, relativePath))),
+    [],
+  );
 });
 
 test('sync:feishu package entrypoint uses the src use case directly', async () => {

@@ -1,10 +1,12 @@
 import { Buffer } from 'node:buffer';
 
-import { recognizeTelegramImageMessage } from '../../../ai/recognition-service.mjs';
+import { recognizeTelegramImageMessage } from '../image-recognition.use-case.mjs';
 import { analyzeTelegramBatch, mapWithConcurrency } from '../../../adapters/telegram/sync-batch.adapter.mjs';
 import { resolveTelegramFileUrl } from '../../../adapters/telegram/index.mjs';
 import { getRecognitionPromptMetadata, stripPromptMetadataHeader } from '../../../core/ai/prompt-generator.mjs';
-import { createAiProvider } from '../../../ai/provider.mjs';
+import { createAiProvider } from '../../../adapters/ai/ai-provider.factory.mjs';
+import { processRecognitionImage } from '../../../adapters/image/sharp-image-processor.mjs';
+import { createOpenAiCompatibleOcrService } from '../../../adapters/ocr/openai-compatible-ocr.adapter.mjs';
 import { shouldQueueRecognitionFailure } from '../../../db/training/pending-recognition.mjs';
 import {
   classifyFailureCategory,
@@ -38,6 +40,11 @@ export async function recognizeBatch(batch, env, options = {}) {
   const sourceChannel = options.sourceChannel ?? batch.sourceChannel ?? 'telegram';
   const imageInputMode = resolveRecognitionImageInputMode(options.rawEnv ?? process.env, sourceChannel);
   const writeStartedRecognitionAiCallLog = options.writeStartedRecognitionAiCallLog ?? null;
+  const processImage = options.processImage ?? buildImageProcessor(options.rawEnv ?? process.env);
+  const extractOcr = options.extractOcr ?? buildOcrExtractor({
+    env: options.rawEnv ?? process.env,
+    aiProvider,
+  });
   const recognitionErrors = [];
   const syncStages = createImageSyncStages();
   const recognitions = await mapWithConcurrency(batch.messages, env.aiConcurrency, async (message) => {
@@ -64,6 +71,8 @@ export async function recognizeBatch(batch, env, options = {}) {
         promptMetadata,
         env: options.rawEnv ?? process.env,
         readRecognitionCache: options.readRecognitionCache,
+        processImage,
+        extractOcr,
         onCacheReadStage: (stage) => markImageStage(syncStages, 'cache_read', stage),
         onAiCallLog: buildStartedRecognitionAiCallLogWriter({
           batch,
@@ -89,6 +98,8 @@ export async function recognizeBatch(batch, env, options = {}) {
               promptMetadata,
               env: options.rawEnv ?? process.env,
               readRecognitionCache: options.readRecognitionCache,
+              processImage,
+              extractOcr,
               onCacheReadStage: (stage) => markImageStage(syncStages, 'cache_read', stage),
               onAiCallLog: buildStartedRecognitionAiCallLogWriter({
                 batch,
@@ -158,6 +169,47 @@ export async function recognizeBatch(batch, env, options = {}) {
     recognitionErrors,
     syncStages: finalizeImageSyncStages(syncStages),
   };
+}
+
+function buildImageProcessor(env) {
+  if (!isFeatureEnabled(env.AI_IMAGE_PROCESSING_ENABLED)) {
+    return undefined;
+  }
+  return ({ imageUrl }) => processRecognitionImage({
+    imageUrl,
+    maxInputBytes: positiveInteger(env.AI_IMAGE_MAX_INPUT_BYTES, 20 * 1024 * 1024),
+    maxDimension: positiveInteger(env.AI_IMAGE_MAX_DIMENSION, 2048),
+    maxPixels: positiveInteger(env.AI_IMAGE_MAX_PIXELS, 4_000_000),
+    jpegQuality: positiveInteger(env.AI_IMAGE_JPEG_QUALITY, 84),
+  });
+}
+
+function buildOcrExtractor({ env, aiProvider }) {
+  if (!isFeatureEnabled(env.AI_OCR_ENABLED)) {
+    return undefined;
+  }
+  const service = createOpenAiCompatibleOcrService({ aiProvider });
+  const required = String(env.AI_OCR_FAILURE_MODE ?? 'best_effort').trim().toLowerCase() === 'required';
+  return async (input) => {
+    try {
+      return await service.extract(input);
+    } catch (error) {
+      if (required) {
+        throw error;
+      }
+      process.stderr.write(`[ocr] extraction failed; continuing with visual recognition: ${error instanceof Error ? error.message : String(error)}\n`);
+      return null;
+    }
+  };
+}
+
+function isFeatureEnabled(value) {
+  return ['1', 'true', 'yes', 'on'].includes(String(value ?? '').trim().toLowerCase());
+}
+
+function positiveInteger(value, fallback) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number > 0 ? number : fallback;
 }
 
 function buildStartedRecognitionAiCallLogWriter({
@@ -544,7 +596,7 @@ export async function replayPendingRecognitionBatches({
   now,
   env,
 }) {
-  const batchResults = [];
+  const batches = [];
   let changed = false;
   let replayStoredImageAny = false;
 
@@ -558,10 +610,11 @@ export async function replayPendingRecognitionBatches({
         });
         const resolvedResult = await markPendingRecognitionResolved({
           batchId: pendingPersistenceBatch.batchId,
+          sourceChannel: pendingPersistenceBatch.sourceChannel ?? 'telegram',
         });
         changed ||= persistResult.status === 'stored';
         replayStoredImageAny ||= persistResult.status === 'stored';
-        batchResults.push({
+        batches.push({
           ...pendingPersistenceBatch,
           pendingReplay: true,
           persistenceStatus: persistResult.status,
@@ -576,7 +629,7 @@ export async function replayPendingRecognitionBatches({
           failedAt: now.toISOString(),
           nextRetryAt: new Date(now.getTime() + 10 * 60 * 1000),
         });
-        batchResults.push({
+        batches.push({
           ...pendingPersistenceBatch,
           pendingReplay: true,
           persistenceStatus: 'pending_replay',
@@ -609,7 +662,7 @@ export async function replayPendingRecognitionBatches({
         immediateRetry: false,
         nextRetryAt: new Date(now.getTime() + 10 * 60 * 1000),
       });
-      batchResults.push(persistedBatch);
+      batches.push(persistedBatch);
       continue;
     }
 
@@ -617,10 +670,13 @@ export async function replayPendingRecognitionBatches({
       batch: persistedBatch,
       processedAt: now,
     });
-    const resolvedResult = await markPendingRecognitionResolved({ batchId: persistedBatch.batchId });
+    const resolvedResult = await markPendingRecognitionResolved({
+      batchId: persistedBatch.batchId,
+      sourceChannel: persistedBatch.sourceChannel ?? 'telegram',
+    });
     changed ||= persistResult.status === 'stored';
     replayStoredImageAny ||= persistResult.status === 'stored';
-    batchResults.push({
+    batches.push({
       ...persistedBatch,
       persistenceStatus: persistResult.status,
       recognitionPendingStatus: resolvedResult.status,
@@ -630,7 +686,7 @@ export async function replayPendingRecognitionBatches({
   return {
     changed,
     replayStoredImageAny,
-    batchResults,
+    batches,
   };
 }
 

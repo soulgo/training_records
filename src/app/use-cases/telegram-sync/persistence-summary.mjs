@@ -9,6 +9,7 @@ const SAFE_KEYS = new Set([
   'rollbackStatus',
   'durationMs',
   'slowQueries',
+  'dbTimingsMs',
   'reason',
 ]);
 
@@ -30,6 +31,10 @@ export function buildPersistenceSummary(value) {
     }
     if (key === 'slowQueries') {
       summary.slowQueries = normalizeSlowQueries(source.slowQueries);
+      continue;
+    }
+    if (key === 'dbTimingsMs') {
+      summary.dbTimingsMs = normalizeDbTimings(source.dbTimingsMs);
       continue;
     }
     if (key === 'durationMs') {
@@ -61,13 +66,25 @@ function normalizeSlowQueries(value) {
   }
   return value
     .filter((query) => query && typeof query === 'object' && !Array.isArray(query))
-    .map((query) => ({
+    .map((query, index) => ({
+      queryOrdinal: normalizeNonNegativeInteger(query.queryOrdinal) ?? index + 1,
       operation: String(query.operation ?? 'database.query'),
       table: String(query.table ?? 'unknown'),
       durationMs: normalizeNonNegativeInteger(query.durationMs),
       thresholdMs: normalizeNonNegativeInteger(query.thresholdMs),
     }))
     .filter((query) => query.durationMs !== null && query.thresholdMs !== null);
+}
+
+function normalizeDbTimings(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    ['connect', 'begin', 'query', 'commit', 'aiCallLog']
+      .map((key) => [key, normalizeNonNegativeInteger(value[key])])
+      .filter(([, durationMs]) => durationMs !== null),
+  );
 }
 
 function normalizeNonNegativeInteger(value) {

@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { importTrainingMarkdownToDatabase } from './training-db-core.mjs';
+import { importTrainingMarkdownToDatabase } from '../src/db/training/write.mjs';
 import { parseTrainingRecord } from '../src/domain/training/training-parser.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

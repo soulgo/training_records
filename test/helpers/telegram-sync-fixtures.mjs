@@ -1,6 +1,6 @@
 export async function importTelegramSyncLib() {
   try {
-    return await import('../../src/telegram/sync-batch.mjs');
+    return await import('../../src/adapters/telegram/sync-batch.adapter.mjs');
   } catch {
     return null;
   }

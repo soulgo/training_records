@@ -2,24 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  BodyMetricRepositoryPort,
-  HealthDailyRepositoryPort,
-  SleepRepositoryPort,
   ThoughtRepositoryPort,
   TrainingRepositoryPort,
 } from '../src/core/repositories/index.mjs';
 import {
-  PostgresTelegramBatchRepository,
+  PostgresSourceBatchRepository,
   PostgresThoughtRepository,
   PostgresTrainingRepository,
 } from '../src/adapters/postgres/index.mjs';
-import { ensureCoreSchema } from '../src/adapters/postgres/schema-preflight.pg.mjs';
 
 test('repository ports fail explicitly until implemented by adapters', async () => {
   await assert.rejects(new TrainingRepositoryPort().findByDate('2026-05-09'), /findByDate/);
-  await assert.rejects(new BodyMetricRepositoryPort().findLatest(), /findLatest/);
-  await assert.rejects(new SleepRepositoryPort().findByDate('2026-05-09'), /findByDate/);
-  await assert.rejects(new HealthDailyRepositoryPort().save({}), /save/);
   await assert.rejects(new ThoughtRepositoryPort().findByTelegramMessageId(1), /findByTelegramMessageId/);
 });
 
@@ -139,30 +132,7 @@ test('PostgresTrainingRepository.findByDates reads requested dates in one batche
   }));
 });
 
-test('ensureCoreSchema adds source identity columns and indexes for thought and ingest tables', async () => {
-  const calls = [];
-  await ensureCoreSchema({
-    async query(sql, params) {
-      calls.push([sql, params]);
-      return { rows: [] };
-    },
-  });
-
-  const preflightSql = calls.map(([sql]) => sql).join('\n');
-  assert.match(preflightSql, /alter table core\.thought add column if not exists source_chat_id/i);
-  assert.match(preflightSql, /create unique index if not exists ux_core_thought_identity/i);
-  assert.match(preflightSql, /alter table ingest\.telegram_message add column if not exists source_message_id/i);
-  assert.match(preflightSql, /create unique index if not exists ux_ingest_telegram_message_source_identity/i);
-  assert.match(preflightSql, /create table if not exists ingest\.ai_call_log/i);
-  assert.match(preflightSql, /ai_call_id text primary key/i);
-  assert.match(preflightSql, /idempotency_key text/i);
-  assert.match(preflightSql, /prompt_tokens integer/i);
-  assert.match(preflightSql, /completion_tokens integer/i);
-  assert.match(preflightSql, /total_tokens integer/i);
-  assert.match(preflightSql, /cost_usd numeric/i);
-});
-
-test('PostgresTelegramBatchRepository persists batch envelope, messages, and recognitions', async () => {
+test('PostgresSourceBatchRepository persists generic batch, message, asset, and recognition records', async () => {
   const calls = [];
   const client = {
     async query(sql, params) {
@@ -170,7 +140,7 @@ test('PostgresTelegramBatchRepository persists batch envelope, messages, and rec
       return { rows: [] };
     },
   };
-  const repository = new PostgresTelegramBatchRepository(client);
+  const repository = new PostgresSourceBatchRepository(client);
   const processedAt = new Date('2026-06-10T00:00:00.000Z');
   const batch = {
     batchId: 'batch-1',
@@ -183,21 +153,55 @@ test('PostgresTelegramBatchRepository persists batch envelope, messages, and rec
       chatId: 123,
       photos: [{ fileId: 'file-id', fileUniqueId: 'file-unique-id' }],
     }],
-    recognitions: [{ messageId: 10, result: { ok: true } }],
+    recognitions: [{
+      messageId: 10,
+      result: { ok: true },
+      normalizedRecognition: {
+        sourceApp: 'Apple Health',
+        dataType: 'sleep',
+        fields: { sleep: { totalSleepMinutes: 450 } },
+        confidence: 0.94,
+        warnings: [],
+        evidence: {
+          ocr: { text: 'Sleep 7 hr 30 min', blocks: [] },
+          image: { format: 'png', width: 1170, height: 2532 },
+        },
+        runtime: {
+          pipelineVersion: 'v1',
+          cacheKey: 'telegram:file_unique_id:file-unique-id:prompt:p:schema:v2:model:m',
+        },
+      },
+    }],
   };
 
   await repository.upsertBatch(batch, 'payload-hash', processedAt);
   await repository.upsertMessages(batch, processedAt);
+  await repository.upsertAssets(batch, processedAt);
   await repository.upsertRecognitions(batch, processedAt);
 
-  assert.match(calls[0][0], /insert into ingest\.telegram_batch/i);
-  assert.equal(calls[0][1][0], 'batch-1');
-  assert.match(calls[1][0], /insert into ingest\.telegram_message/i);
-  assert.equal(JSON.parse(calls[1][1][8])[0], 'file-id');
-  assert.match(calls[2][0], /insert into ingest\.telegram_recognition/i);
+  assert.match(calls[0][0], /insert into ingest\.source_batch/i);
+  assert.deepEqual(calls[0][1].slice(0, 2), ['telegram', 'batch-1']);
+  assert.match(calls[1][0], /insert into ingest\.source_message/i);
+  const [messageRow] = JSON.parse(calls[1][1][0]);
+  assert.deepEqual(
+    [messageRow.source_channel, messageRow.source_chat_id, messageRow.source_message_id, messageRow.batch_id],
+    ['telegram', '123', '10', 'batch-1'],
+  );
+  assert.match(calls[2][0], /insert into ingest\.source_asset/i);
+  const [assetRow] = JSON.parse(calls[2][1][0]);
+  assert.equal(assetRow.source_asset_id, 'file-unique-id');
+  assert.match(calls[3][0], /insert into ingest\.recognition_run/i);
+  assert.doesNotMatch(calls[3][0], /\n\s+message_id\s*,/i);
+  const [recognitionRow] = JSON.parse(calls[3][1][0]);
+  assert.equal(recognitionRow.source_app, 'Apple Health');
+  assert.equal(recognitionRow.data_type, 'sleep');
+  assert.deepEqual(recognitionRow.fields_json, { sleep: { totalSleepMinutes: 450 } });
+  assert.equal(recognitionRow.confidence, 0.94);
+  assert.deepEqual(recognitionRow.ocr_json, { text: 'Sleep 7 hr 30 min', blocks: [] });
+  assert.deepEqual(recognitionRow.image_metadata_json, { format: 'png', width: 1170, height: 2532 });
 });
 
-test('PostgresTelegramBatchRepository stores null chat_id for Feishu string chat ids', async () => {
+test('PostgresSourceBatchRepository stores Feishu source ids without numeric chat conversion', async () => {
   const calls = [];
   const client = {
     async query(sql, params) {
@@ -205,11 +209,12 @@ test('PostgresTelegramBatchRepository stores null chat_id for Feishu string chat
       return { rows: [] };
     },
   };
-  const repository = new PostgresTelegramBatchRepository(client);
+  const repository = new PostgresSourceBatchRepository(client);
   const processedAt = new Date('2026-06-10T00:00:00.000Z');
 
   await repository.upsertMessages({
     batchId: 'feishu-batch-1',
+    sourceChannel: 'feishu',
     messages: [{
       messageId: 10,
       updateId: 1,
@@ -219,11 +224,13 @@ test('PostgresTelegramBatchRepository stores null chat_id for Feishu string chat
     }],
   }, processedAt);
 
-  assert.match(calls[0][0], /insert into ingest\.telegram_message/i);
-  assert.equal(calls[0][1][4], null);
+  assert.match(calls[0][0], /insert into ingest\.source_message/i);
+  const [messageRow] = JSON.parse(calls[0][1][0]);
+  assert.equal(messageRow.source_channel, 'feishu');
+  assert.equal(messageRow.source_chat_id, 'oc_chat_1');
 });
 
-test('PostgresTelegramBatchRepository keys messages by source channel, chat, and message id', async () => {
+test('PostgresSourceBatchRepository keys messages by source channel, chat, and message id', async () => {
   const calls = [];
   const client = {
     async query(sql, params) {
@@ -231,7 +238,7 @@ test('PostgresTelegramBatchRepository keys messages by source channel, chat, and
       return { rows: [] };
     },
   };
-  const repository = new PostgresTelegramBatchRepository(client);
+  const repository = new PostgresSourceBatchRepository(client);
   const processedAt = new Date('2026-06-10T00:00:00.000Z');
 
   await repository.upsertMessages({
@@ -259,16 +266,51 @@ test('PostgresTelegramBatchRepository keys messages by source channel, chat, and
     ],
   }, processedAt);
 
-  const messageInsert = calls.find(([sql]) => /insert into ingest\.telegram_message/i.test(sql));
+  const messageInsert = calls.find(([sql]) => /insert into ingest\.source_message/i.test(sql));
   assert.ok(messageInsert, 'expected message upsert');
   assert.match(messageInsert[0], /source_channel/i);
   assert.match(messageInsert[0], /source_chat_id/i);
   assert.match(messageInsert[0], /source_message_id/i);
   assert.match(messageInsert[0], /on conflict\s*\(\s*source_channel\s*,\s*source_chat_id\s*,\s*source_message_id\s*\)/i);
-  assert.equal(calls[0][1][10], 'feishu');
-  assert.equal(calls[0][1][11], 'oc_chat_1');
-  assert.equal(calls[0][1][12], 'om_message_1');
-  assert.equal(calls[1][1][11], 'oc_chat_2');
+  const messageRows = JSON.parse(messageInsert[1][0]);
+  assert.deepEqual(
+    messageRows.map((row) => [row.source_channel, row.source_chat_id, row.source_message_id]),
+    [
+      ['feishu', 'oc_chat_1', 'om_message_1'],
+      ['feishu', 'oc_chat_2', 'om_message_1'],
+    ],
+  );
+});
+
+test('PostgresSourceBatchRepository stores sanitized fields separately from the semantic raw result', async () => {
+  const calls = [];
+  const repository = new PostgresSourceBatchRepository({
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [], rowCount: 1 };
+    },
+  });
+  const rawResult = { imageType: 'measurement', records: { measurement: { weightKg: 1000 } } };
+
+  await repository.upsertRecognitions({
+    sourceChannel: 'telegram',
+    batchId: 'semantic-audit',
+    messages: [{ messageId: 10, chatId: 42 }],
+    recognitions: [{
+      messageId: 10,
+      imageType: 'measurement',
+      records: { measurement: { weightKg: null } },
+      semanticGate: {
+        status: 'sanitized',
+        decisions: [{ action: 'sanitize', path: 'measurement.weightKg', reason: 'outside_supported_range' }],
+        rawResult,
+      },
+    }],
+  }, new Date('2026-07-12T00:00:00.000Z'));
+
+  const [row] = JSON.parse(calls[0][1][0]);
+  assert.deepEqual(row.fields_json, { measurement: { weightKg: null } });
+  assert.deepEqual(row.raw_result_json, rawResult);
 });
 
 test('PostgresThoughtRepository persists thought mirror batches through core.thought SQL', async () => {

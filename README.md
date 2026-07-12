@@ -1,13 +1,13 @@
 # 健身训练记录看板
 
-这是一个用 PostgreSQL、Telegram Bot、AI 图片识别、Markdown 备份、Hexo 和 GitHub Pages 组成的个人训练记录系统。它的核心目标是把训练截图、体脂秤截图、饮食截图、睡眠截图和日常身体反馈归档成统一的 `TrainingSnapshot`，再生成可浏览的静态训练看板。
+这是一个用 PostgreSQL、Telegram / 飞书、通用 AI 截图识别、Markdown 备份和 Hexo 组成的个人训练记录系统。它的核心目标是把不同 App、页面布局和截图尺寸中的训练、体脂、饮食、睡眠数据与日常身体反馈归档成统一的 `TrainingSnapshot`，再生成可浏览的静态训练看板。
 
 系统当前没有独立后台、OCR 服务后台或管理后台。主要维护入口是 Telegram Bot、PostgreSQL、npm scripts、GitHub Actions 和 `docs/` 文档；`训练记录.md` 是数据库派生备份。
 
 ## 核心功能
 
 - 从 PostgreSQL `core.*` 读取结构化训练数据。
-- 通过 Telegram 发送锻炼、饮食、体脂秤和睡眠截图，并调用 AI 识别归档。
+- 通过 Telegram 或飞书发送锻炼、饮食、体脂和睡眠截图，经图片增强、可选 OCR、视觉语义识别和标准化后归档。
 - Telegram `/随想` / `/thought` 写入随想和身体反馈，支持编辑、删除、移动、带图和 Markdown 文档附件正文。
 - 随想图片默认写本地静态路径；启用腾讯云 COS 后，图片上传 COS 并把公有读 URL 写入 PostgreSQL。
 - Telegram `/分析` / `/analysis` 基于训练快照生成训练建议，只回发 Telegram，不写入数据。
@@ -25,6 +25,8 @@
 | 自动化 | GitHub Actions、GitHub Pages |
 | 消息入口 | Telegram Bot API、飞书 Open API、Cloudflare Worker、Durable Object |
 | AI | OpenAI-compatible Chat Completions |
+| 图片处理 | Sharp |
+| 可移植部署 | Docker、Nginx、Compose |
 
 ## 系统架构简述
 
@@ -37,8 +39,11 @@ flowchart TD
   W --> GH["GitHub repository_dispatch"]
   GH --> SYNC["sync.yml / sync-dev.yml"]
   SYNC --> CMD["npm run sync:telegram / sync:feishu"]
-  CMD --> AI["AI 图片识别/分析"]
-  CMD --> DB
+  CMD --> IMG["Sharp 图片处理"]
+  IMG --> OCR["可选 OCR 文本与坐标"]
+  OCR --> AI["视觉理解与语义识别"]
+  AI --> INGEST["NormalizedRecognition / generic ingest"]
+  INGEST --> DB
   CMD -. "DB 失败" .-> Q["pending queue"]
   DB --> BAK["Markdown Backup"]
   BAK --> A["训练记录.md / source/_posts"]
@@ -55,6 +60,9 @@ flowchart TD
 ├── 训练记录.md
 ├── 训练数据解析.md
 ├── CHANGELOG.md
+├── Dockerfile
+├── compose.yml
+├── deploy/
 ├── _config.yml
 ├── docs/
 ├── prompts/
@@ -78,9 +86,11 @@ flowchart TD
 - `tools/`：CLI 入口和核心编排脚本。
 - `src/`：AI、Telegram、数据库、站点和任务等内部模块。
 - `cloudflare/`：Telegram 和飞书 webhook 转 GitHub dispatch 的统一 Worker。
-- `sql/`：PostgreSQL 初始化 SQL。
+- `sql/`：PostgreSQL 初始化、增量迁移和受保护的旧表清理 SQL。
 - `runtime/`：待补偿队列和归档失败日志。
 - `docs/`：维护文档入口。
+
+根目录 Markdown 只保留标准项目入口和运行链路固定文件：`README.md`、`CHANGELOG.md`、`训练记录.md`、`训练数据解析.md`。架构分析、阶段目标、实施方案、TDD 记录和验收报告统一放在 `docs/03_历史重构记录/重构历史/`，避免把历史过程资料误当成当前操作手册。
 
 ## 快速开始
 
@@ -130,6 +140,10 @@ npm run server
 | `AI_BASE_URL` | Chat Completions base URL |
 | `AI_MODEL` | AI 模型名 |
 | `AI_CONCURRENCY` | 图片识别并发数，默认 3 |
+| `AI_IMAGE_PROCESSING_ENABLED` | 是否启用图片旋转、缩放、增强和 JPEG 标准化；同步 workflow 默认启用 |
+| `AI_IMAGE_MAX_INPUT_BYTES` / `AI_IMAGE_MAX_DIMENSION` / `AI_IMAGE_MAX_PIXELS` | 图片输入字节、边长和总像素安全上限 |
+| `AI_OCR_ENABLED` | 是否在视觉识别前提取 OCR 文本与坐标；默认关闭 |
+| `AI_OCR_FAILURE_MODE` | OCR 失败策略：`best_effort` 或 `required` |
 | `TRAINING_DB_TIMEOUT_MS` | 训练数据库连接超时时间，默认 5000ms；数据库偶发抖动时可适当调大 |
 | `TRAINING_ANALYSIS_GOAL` | `/分析` 长期训练目标覆盖值 |
 | `COS_ENABLED` | 可选，启用随想图片腾讯云 COS 存储 |
@@ -160,6 +174,14 @@ npm run server
 6. PostgreSQL 失败时写 pending 队列。
 7. 内容变化后 workflow 只提交文件；站点构建部署由 push 或 DB-only 异步 deploy workflow 完成。
 
+图片批次的持久化主路径使用 `ingest.source_batch`、`source_message`、`source_asset`、`recognition_run` 和 `pending_task`。旧 `ingest.telegram_*` 表只保留为迁移观察期历史数据，不再被生产代码访问。
+
+## 数据库迁移状态
+
+- 数据库结构按环境分别以 `sql/dev-sql/` 和 `sql/main-sql/` 为准；main 合并 dev 前手工执行 `sql/main-sql/align_to_dev.sql` 并完成文件末尾验收查询。
+- main 数据库尚未执行本轮两阶段迁移；必须先备份并按上述顺序执行、运行 SQL 末尾验收查询，再部署当前代码。
+- `sql/cleanup_phase2_legacy_ingest.sql` 尚未执行。至少观察一个完整同步、pending 重试、备份和维护周期，并确认旧表调用为 0 后，才可显式开启清理门禁。
+
 详细规则见 [系统总览](docs/02_系统核心逻辑/系统总览.md)、[Action 日志与失败补偿](docs/02_系统核心逻辑/Action日志与失败补偿.md) 和 [数据入库流程](docs/02_系统核心逻辑/数据入库流程.md)。
 
 ## GitHub Pages 部署
@@ -169,6 +191,16 @@ npm run server
 站点配置在 `_config.yml`，当前 URL 为 `https://soulgo.chat`，`source/CNAME` 也指向 `soulgo.chat`。GitHub Pages 自定义域名、DNS 和 Cloudflare 控制台状态需要在对应平台人工确认。
 
 Dev 分支在线预览由 `.github/workflows/deploy-cloudflare-pages-dev.yml` 发布到 Cloudflare Pages，默认地址为 `https://training-records-dev.pages.dev`。该 workflow 构建前使用 Dev 数据库变量，上传前会删除 `public/CNAME`，避免覆盖生产域名。
+
+## Docker 部署
+
+静态站点也可脱离 Pages 平台构建和运行：
+
+```bash
+docker compose up --build -d
+```
+
+默认监听 `8080`，可通过 `SITE_PORT` 覆盖宿主机端口。镜像在 Node 24 构建阶段执行 `npm run build`，最终由 Nginx 提供静态文件；构建期数据库或第三方配置应通过受控环境注入，禁止写入镜像和仓库。
 
 ## GitHub Actions
 
@@ -228,6 +260,7 @@ PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`
 - [问题与排查](docs/04_问题与排查/README.md)：PostgreSQL、OSS、Telegram、飞书、AI、Action 日志、部署和资源问题
 - [日常规则](docs/05_日常规则/README.md)：dev/main 合并、后续规划落地和文档同步规则
 - [历史重构记录](docs/03_历史重构记录/README.md)：旧文档入口和历史方案归档
+- [系统代码终极重构历史资料](docs/03_历史重构记录/重构历史/系统代码终极重构/README.md)：本轮分析、目标、方案、TDD 和最终验收报告
 
 ## FAQ
 
@@ -255,7 +288,7 @@ PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`
 ## 注意事项
 
 - 不要随意改变 `训练记录.md` 的日期标题、四级标题和字段名，解析器依赖这些结构。
-- 修改 prompt 规则时，改 `prompts/_source/*.json`，再运行 `node tools/prompt-generator.mjs`，不要直接手写运行时 prompt。
+- 修改 prompt 规则时，改 `prompts/_source/*.json`，再运行 `node src/core/ai/prompt-generator.mjs`，不要直接手写运行时 prompt。
 - 更新 Telegram 命令、数据库结构、环境变量或 workflow 时，必须同步更新 `docs/`。
 - 生产环境 Secrets、Variables、Cloudflare Worker 变量和数据库状态无法从仓库文件完全确认，需要在对应平台检查。
 - 纯文档整理不应修改代码、配置逻辑、接口行为或系统功能。

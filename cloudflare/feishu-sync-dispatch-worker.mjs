@@ -180,6 +180,10 @@ export async function handleFeishuWebhook(request, env, options = {}) {
     return jsonResponse(200, { ok: true, ignored: true });
   }
 
+  if (!isAllowedChat(event?.event?.message?.chat_id, env.FEISHU_ALLOWED_CHAT_IDS)) {
+    return jsonResponse(403, { ok: false, error: 'chat_not_allowed' });
+  }
+
   logFeishuEventMetadata(event, env, options.logger ?? console);
 
   const dispatchConfigError = validateDispatchConfig(env);
@@ -244,6 +248,14 @@ export async function handleFeishuWebhook(request, env, options = {}) {
     [response.queued ? 'queued' : 'dispatched']: true,
     eventId: event?.header?.event_id ?? null,
   });
+}
+
+function isAllowedChat(chatId, configuredIds) {
+  const values = String(configuredIds ?? '').split(',').map((value) => value.trim()).filter(Boolean);
+  if (values.length === 0 || !chatId) {
+    return true;
+  }
+  return values.includes(String(chatId));
 }
 
 export async function verifyFeishuSignature(request, body, encryptKey, options = {}) {

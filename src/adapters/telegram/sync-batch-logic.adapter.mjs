@@ -131,18 +131,25 @@ const telegramCommandResolver = createTelegramCommandResolver({
 });
 
 export function groupTelegramUpdates(updates, options = {}) {
-  const batches = [];
-  const albumMap = new Map();
-  const knownThoughtMessageKeys = new Set(options.knownThoughtMessageKeys ?? []);
-
+  const messages = [];
   for (const update of updates) {
     const message = update.message ?? update.edited_message;
     if (!message) {
       continue;
     }
-
     const normalized = normalizeTelegramMessage(update, message);
     normalized.updateType = update.edited_message ? 'edited_message' : 'message';
+    messages.push(normalized);
+  }
+  return groupSourceMessages(messages, options);
+}
+
+export function groupSourceMessages(messages, options = {}) {
+  const batches = [];
+  const albumMap = new Map();
+  const knownThoughtMessageKeys = new Set(options.knownThoughtMessageKeys ?? []);
+
+  for (const normalized of messages ?? []) {
 
     const parsedThoughtEdit = parseThoughtEditCommand(normalized.text) ?? parseThoughtEditCommand(normalized.caption);
     const parsedThought = parseThoughtCommand(normalized.text) ?? parseThoughtCommand(normalized.caption);
@@ -193,7 +200,7 @@ export function groupTelegramUpdates(updates, options = {}) {
   }
 
   for (const batch of batches) {
-    batch.messages.sort((left, right) => left.messageId - right.messageId);
+    batch.messages.sort(compareSourceMessageIdentity);
     if (batch.kind === 'image') {
       const thoughtEditBatch = buildExplicitThoughtEditBatchFromMessages(batch.messages);
       if (thoughtEditBatch) {
@@ -208,6 +215,15 @@ export function groupTelegramUpdates(updates, options = {}) {
   }
 
   return batches;
+}
+
+function compareSourceMessageIdentity(left, right) {
+  const leftNumber = Number(left.messageId);
+  const rightNumber = Number(right.messageId);
+  if (Number.isSafeInteger(leftNumber) && Number.isSafeInteger(rightNumber)) {
+    return leftNumber - rightNumber;
+  }
+  return String(left.messageId ?? '').localeCompare(String(right.messageId ?? ''));
 }
 
 export function analyzeTelegramBatch(batch, recognitions, options = {}) {
@@ -532,7 +548,7 @@ export async function processTelegramUpdates({
   previousLastProcessedUpdateId = 0,
 }) {
   const grouped = groupTelegramUpdates(updates);
-  const batchResults = [];
+  const batches = [];
   const inboxEntries = [];
   let nextMarkdown = markdown;
   let changed = false;
@@ -544,7 +560,7 @@ export async function processTelegramUpdates({
   for (const batch of grouped) {
     const isAllowed = batch.messages.every((message) => allowedChatIds.has(message.chatId));
     if (!isAllowed) {
-      batchResults.push({
+      batches.push({
         kind: batch.kind ?? 'image',
         batchId: batch.batchId,
         status: 'ignored',
@@ -556,7 +572,7 @@ export async function processTelegramUpdates({
 
     const recognitions = batch.kind === 'image' ? await recognizeBatch(batch) : [];
     const analyzed = analyzeTelegramBatch(batch, recognitions, { minConfidence });
-    batchResults.push({
+    batches.push({
       kind: batch.kind ?? analyzed.kind ?? 'image',
       ...analyzed,
       updateIds: batch.messages.map((message) => message.updateId),
@@ -583,7 +599,7 @@ export async function processTelegramUpdates({
     changed,
     markdown: nextMarkdown,
     lastProcessedUpdateId,
-    batchResults,
+    batches,
     inboxEntries,
   };
 }

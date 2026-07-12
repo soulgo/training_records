@@ -15,6 +15,7 @@ test('all GitHub workflows report action status with minimal run id payload', as
   const workflowDir = new URL('.github/workflows/', rootDir);
   const workflowFiles = (await readdir(workflowDir))
     .filter((fileName) => fileName.endsWith('.yml') || fileName.endsWith('.yaml'))
+    .filter((fileName) => !['sync.yml', 'sync-dev.yml', 'action-monitor-report.yml', 'pending-replay.yml'].includes(fileName))
     .sort();
 
   assert.ok(workflowFiles.length > 0);
@@ -38,6 +39,7 @@ test('GitHub workflows report action status directly to branch-scoped PostgreSQL
   const workflowDir = new URL('.github/workflows/', rootDir);
   const workflowFiles = (await readdir(workflowDir))
     .filter((fileName) => fileName.endsWith('.yml') || fileName.endsWith('.yaml'))
+    .filter((fileName) => !['sync.yml', 'sync-dev.yml', 'action-monitor-report.yml', 'pending-replay.yml'].includes(fileName))
     .sort();
 
   for (const fileName of workflowFiles) {
@@ -263,7 +265,7 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
 	    '.github/workflows/deploy-cloudflare-pages-dev.yml',
     '.github/workflows/refresh-telegram-webhook.yml',
     '.github/workflows/markdown-backup.yml',
-    '.github/workflows/parameter-validity-audit.yml',
+    '.github/workflows/parameter-health-audit.yml',
     '.github/workflows/ci-tests.yml',
     'package.json',
     'package-lock.json',
@@ -488,7 +490,83 @@ test('deploy-pages workflow still triggers for site-relevant changes', async () 
   }
 });
 
-test('main sync workflow notifies after sync and waits for site deploy completion', async () => {
+test('sync workflows dispatch site deploy without polling deploy runs', async () => {
+  for (const [workflowPath, deployWorkflowFile, deployRef] of [
+    ['.github/workflows/sync.yml', 'deploy-pages.yml', 'main'],
+    ['.github/workflows/sync-dev.yml', 'deploy-cloudflare-pages-dev.yml', 'dev'],
+  ]) {
+    const workflow = await readWorkflow(workflowPath);
+    const dispatchStart = workflow.indexOf('- name: Dispatch site deploy');
+    const failureStart = workflow.indexOf('- name: Notify Telegram sync failure');
+    assert.ok(dispatchStart >= 0, `${workflowPath} should contain the asynchronous dispatch step`);
+    const dispatchStep = workflow.slice(dispatchStart, failureStart);
+
+    assert.match(dispatchStep, /id:\s*deploy/);
+    assert.match(dispatchStep, /node tools\/dispatch-site-deploy\.mjs/);
+    assert.match(dispatchStep, new RegExp(`SITE_DEPLOY_WORKFLOW_FILE:\\s*${escapeRegExp(deployWorkflowFile)}`));
+    assert.match(dispatchStep, new RegExp(`SITE_DEPLOY_REF:\\s*${deployRef}`));
+    assert.doesNotMatch(dispatchStep, /actions\/workflows\/[^\s]+\/runs|actions\/runs\//);
+    assert.doesNotMatch(dispatchStep, /for attempt|while\s|sleep\s/);
+    assert.doesNotMatch(dispatchStep, /continue-on-error:\s*true/);
+  }
+});
+
+test('action monitor reports completed business workflows asynchronously without recursion', async () => {
+  const monitor = await readWorkflow('.github/workflows/action-monitor-report.yml');
+  assert.match(monitor, /name:\s*Action Monitor Report/);
+  assert.match(monitor, /workflow_run:\s*\n\s+workflows:/);
+  for (const workflowName of ['Sync (Main)', 'Sync (Dev)', 'Deploy GitHub Pages', 'Deploy Cloudflare Pages (Dev)', 'Pending Replay (Dev)']) {
+    assert.match(monitor, new RegExp(`- ${escapeRegExp(workflowName)}`));
+  }
+  assert.doesNotMatch(monitor, /- Action Monitor Report/);
+  assert.match(monitor, /types:\s*\n\s+- completed/);
+  assert.match(monitor, /GITHUB_ACTION_TARGET_RUN_ID:\s*\$\{\{ github\.event\.workflow_run\.id \}\}/);
+  assert.match(monitor, /GITHUB_ACTION_TARGET_BRANCH:\s*\$\{\{ github\.event\.workflow_run\.head_branch \}\}/);
+  assert.match(monitor, /node tools\/report-github-action-status\.mjs/);
+  for (const workflowPath of ['.github/workflows/sync.yml', '.github/workflows/sync-dev.yml']) {
+    const sync = await readWorkflow(workflowPath);
+    assert.doesNotMatch(sync, /- name: Report Action Status/);
+    assert.doesNotMatch(sync, /node tools\/report-github-action-status\.mjs/);
+    assert.doesNotMatch(sync, /actions\/runs\/\$\{\{ github\.run_id \}\}/);
+  }
+});
+
+test('pending replay runs independently per source channel with scheduled claim mode', async () => {
+  const workflow = await readWorkflow('.github/workflows/pending-replay.yml');
+  const parsedWorkflow = parseYaml(workflow);
+  assert.match(workflow, /name:\s*Pending Replay \(Dev\)/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /cron:\s*'\*\/10 \* \* \* \*'/);
+  assert.match(workflow, /matrix:[\s\S]*channel:[\s\S]*- telegram[\s\S]*- feishu/);
+  assert.match(workflow, /SYNC_REPLAY_MODE:\s*scheduled/);
+  assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{ secrets\.DEV_TRAINING_DB_URL \}\}/);
+  assert.match(workflow, /run:\s*npm run sync:\$\{\{ matrix\.channel \}\}/);
+  assert.doesNotMatch(workflow, /repository_dispatch|dispatch_payload|queue_task_id/);
+  assert.equal(parsedWorkflow.concurrency, undefined);
+  assert.equal(parsedWorkflow.jobs.replay.concurrency.group, 'pending-replay-dev-${{ matrix.channel }}');
+});
+
+test('site deploy workflows notify the originating channel on asynchronous failure', async () => {
+  for (const [workflowPath, telegramSecret, feishuIdSecret] of [
+    ['.github/workflows/deploy-pages.yml', 'TELEGRAM_BOT_TOKEN', 'FEISHU_APP_ID'],
+    ['.github/workflows/deploy-cloudflare-pages-dev.yml', 'DEV_TELEGRAM_BOT_TOKEN', 'DEV_FEISHU_APP_ID'],
+  ]) {
+    const workflow = await readWorkflow(workflowPath);
+    for (const input of ['queue_task_id', 'source_channel', 'notification_chat_id', 'notification_message_id']) {
+      assert.match(workflow, new RegExp(`${input}:\\s*\\n\\s+description:`));
+    }
+    assert.match(workflow, /- name: Notify Telegram deploy failure[\s\S]*if: failure\(\)[\s\S]*inputs\.source_channel == 'telegram'/);
+    assert.match(workflow, new RegExp(`TELEGRAM_BOT_TOKEN:\\s*\\$\\{\\{ secrets\\.${telegramSecret} \\}\\}`));
+    assert.match(workflow, /NOTIFICATION_CHAT_ID:\s*\$\{\{ inputs\.notification_chat_id \}\}/);
+    assert.match(workflow, /NOTIFICATION_MESSAGE_ID:\s*\$\{\{ inputs\.notification_message_id \}\}/);
+    assert.match(workflow, /run: node tools\/telegram-action-monitor\.mjs/);
+    assert.match(workflow, /- name: Notify Feishu deploy failure[\s\S]*if: failure\(\)[\s\S]*inputs\.source_channel == 'feishu'/);
+    assert.match(workflow, new RegExp(`FEISHU_APP_ID:\\s*\\$\\{\\{ secrets\\.${feishuIdSecret} \\}\\}`));
+    assert.match(workflow, /run: node tools\/feishu-action-monitor\.mjs/);
+  }
+});
+
+test('main sync workflow notifies after sync and dispatches site deploy asynchronously', async () => {
   const workflow = await readWorkflow('.github/workflows/sync.yml');
 
   assert.match(workflow, /git status --porcelain -- 训练记录\.md source\/_posts source\/images/);
@@ -520,39 +598,26 @@ test('main sync workflow notifies after sync and waits for site deploy completio
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
-  assert.match(workflow, /- name: Trigger and wait for site deploy/);
-  assert.match(workflow, /actions\/workflows\/deploy-pages\.yml\/dispatches/);
+  assert.match(workflow, /- name: Dispatch site deploy/);
+  assert.match(workflow, /node tools\/dispatch-site-deploy\.mjs/);
+  assert.match(workflow, /SITE_DEPLOY_WORKFLOW_FILE:\s*deploy-pages\.yml/);
+  assert.match(workflow, /SITE_DEPLOY_REF:\s*main/);
   assert.match(workflow, /steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'/);
   assert.match(workflow, /THOUGHT_CHECK_ID:\s*\$\{\{\s*steps\.detect\.outputs\.thought_check_id\s*\}\}/);
   assert.match(workflow, /THOUGHT_CHECK_EXPECTATION:\s*\$\{\{\s*steps\.detect\.outputs\.thought_check_expectation\s*\}\}/);
-  assert.match(workflow, /target_thought_id/);
-  assert.match(workflow, /target_thought_module/);
-  assert.match(workflow, /target_thought_path/);
-  assert.match(workflow, /target_thought_expectation/);
-  assert.match(workflow, /sync_db_mode: 'never'/);
-  assert.match(workflow, /run_tests: 'false'/);
   const deployStep = workflow.slice(
-    workflow.indexOf('- name: Trigger and wait for site deploy'),
+    workflow.indexOf('- name: Dispatch site deploy'),
     workflow.indexOf('- name: Notify Telegram sync failure'),
   );
   assert.doesNotMatch(deployStep, /continue-on-error:\s*true/);
-  assert.match(deployStep, /dispatch_started_at=/);
-  assert.match(deployStep, /actions\/workflows\/deploy-pages\.yml\/runs/);
-  assert.match(deployStep, /Deploy workflow failed/);
-  assert.match(deployStep, /GITHUB_STEP_SUMMARY/);
-  assert.match(deployStep, /## Site deploy result/);
-  assert.match(deployStep, /\| workflow \| runId \| status \| conclusion \| durationMs \| url \|/);
-  assert.match(deployStep, /appendDeploySummary/);
-  assert.match(deployStep, /\[action-log\]/);
-  assert.match(deployStep, /workflow\.waiting/);
-  assert.match(deployStep, /elapsedMs/);
-  assert.match(deployStep, /Deploy workflow succeeded/);
+  assert.doesNotMatch(deployStep, /actions\/workflows\/[^\s]+\/runs|actions\/runs\//);
+  assert.doesNotMatch(deployStep, /for attempt|sleep\s/);
   assert.ok(
     workflow.indexOf('- name: Notify Telegram sync result') > workflow.indexOf('- name: Push changes'),
     'Telegram notification should run after push and before any asynchronous site deployment workflow',
   );
   assert.ok(
-    workflow.indexOf('- name: Trigger and wait for site deploy') > workflow.indexOf('- name: Notify Telegram sync result'),
+    workflow.indexOf('- name: Dispatch site deploy') > workflow.indexOf('- name: Notify Telegram sync result'),
     'Site deploy should be triggered only after Telegram has been notified',
   );
 });
@@ -593,13 +658,13 @@ test('telegram-sync workflows keep database-only detection without blocking on p
     assert.match(workflow, /readyStoredContentBatches/);
     assert.match(workflow, /- name: Write Telegram sync summary/);
     assert.match(workflow, /- name: Notify Telegram sync result/);
-    assert.match(workflow, /if: success\(\) && steps\.channel\.outputs\.is_webhook_dispatch == 'true' && \(steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'\)/);
-    assert.match(workflow, /strict_database_snapshot/);
+    assert.match(workflow, /- name: Dispatch site deploy[\s\S]*if: success\(\) && steps\.channel\.outputs\.is_webhook_dispatch == 'true' && \(steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'\)/);
+    assert.match(workflow, /node tools\/dispatch-site-deploy\.mjs/);
     assert.doesNotMatch(workflow, /steps\.detect\.outputs\.db_content_changed == 'true'[\s\S]*uses:\s*\.\/\.github\/actions\/site-build/);
   }
 });
 
-test('telegram-sync workflows keep dev and main environment sources isolated', async () => {
+test('telegram-sync workflows share AI sources while isolating environment resources', async () => {
   const main = await readWorkflowConfig('.github/workflows/sync.yml');
   const dev = await readWorkflowConfig('.github/workflows/sync-dev.yml');
   const mainSyncEnv = getWorkflowStep(main, 'sync', 'Sync updates').env;
@@ -622,13 +687,19 @@ test('telegram-sync workflows keep dev and main environment sources isolated', a
   assert.equal(mainSyncEnv.TELEGRAM_BOT_TOKEN, '${{ secrets.TELEGRAM_BOT_TOKEN }}');
   assert.equal(devSyncEnv.TELEGRAM_BOT_TOKEN, '${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}');
   assert.notEqual(devSyncEnv.TELEGRAM_BOT_TOKEN, mainSyncEnv.TELEGRAM_BOT_TOKEN);
+  assert.equal(mainSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS, '${{ secrets.TELEGRAM_ALLOWED_CHAT_IDS }}');
+  assert.equal(
+    devSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS,
+    '${{ secrets.DEV_TELEGRAM_ALLOWED_CHAT_IDS || secrets.TELEGRAM_ALLOWED_CHAT_IDS }}',
+  );
+  assert.notEqual(devSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS, mainSyncEnv.TELEGRAM_ALLOWED_CHAT_IDS);
 
   assert.equal(mainSyncEnv.FEISHU_APP_ID, '${{ secrets.FEISHU_APP_ID }}');
   assert.equal(mainSyncEnv.FEISHU_APP_SECRET, '${{ secrets.FEISHU_APP_SECRET }}');
   assert.equal(mainSyncEnv.FEISHU_ALLOWED_CHAT_IDS, '${{ secrets.FEISHU_ALLOWED_CHAT_IDS }}');
-  assert.equal(devSyncEnv.FEISHU_APP_ID, '${{ secrets.DEV_FEISHU_APP_ID || secrets.FEISHU_APP_ID }}');
-  assert.equal(devSyncEnv.FEISHU_APP_SECRET, '${{ secrets.DEV_FEISHU_APP_SECRET || secrets.FEISHU_APP_SECRET }}');
-  assert.equal(devSyncEnv.FEISHU_ALLOWED_CHAT_IDS, '${{ secrets.DEV_FEISHU_ALLOWED_CHAT_IDS || secrets.FEISHU_ALLOWED_CHAT_IDS }}');
+  assert.equal(devSyncEnv.FEISHU_APP_ID, '${{ secrets.DEV_FEISHU_APP_ID }}');
+  assert.equal(devSyncEnv.FEISHU_APP_SECRET, '${{ secrets.DEV_FEISHU_APP_SECRET }}');
+  assert.equal(devSyncEnv.FEISHU_ALLOWED_CHAT_IDS, '${{ secrets.DEV_FEISHU_ALLOWED_CHAT_IDS }}');
 
   assert.equal(mainSyncEnv.COS_ENABLED, '${{ vars.COS_ENABLED }}');
   assert.equal(mainSyncEnv.COS_PROVIDER, "${{ vars.COS_PROVIDER || 'tencent_cos' }}");
@@ -682,7 +753,7 @@ test('telegram-sync workflows keep dev and main environment sources isolated', a
     'TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS',
     'TELEGRAM_RECOGNITION_CACHE_ENABLED',
   ]) {
-    assert.equal(devSyncEnv[envName], mainSyncEnv[envName], `${envName} should use the same repository-level source`);
+    assert.equal(devSyncEnv[envName], mainSyncEnv[envName], `${envName} must use the shared AI source`);
   }
 });
 
@@ -732,7 +803,7 @@ test('main sync workflow passes stored thought edit targets to async deploy veri
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought_edit',
           status: 'ready',
@@ -769,7 +840,7 @@ test('main sync workflow uses persisted thought module when edit command preserv
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought_edit',
           status: 'ready',
@@ -808,7 +879,7 @@ test('main sync workflow sends deleted thought targets as absent deploy checks',
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought_delete',
           status: 'ready',
@@ -878,8 +949,7 @@ test('sync workflows accept queued workflow dispatch payloads and expose a webho
     assert.match(workflow, /client_payload: payload\.client_payload \?\? payload/);
     assert.match(workflow, /echo "SYNC_DISPATCH_EVENT_PATH=\$GITHUB_EVENT_PATH" >> "\$GITHUB_ENV"/);
     assert.match(workflow, /steps\.channel\.outputs\.is_webhook_dispatch == 'true'/);
-    assert.doesNotMatch(workflow, /DISPATCH_PAYLOAD:\s*\$\{\{\s*github\.event\.inputs\.dispatch_payload\s*\}\}/);
-    assert.doesNotMatch(workflow, /SYNC_DISPATCH_PAYLOAD/);
+    assert.match(workflow, /SYNC_DISPATCH_PAYLOAD:\s*\$\{\{ github\.event\.inputs\.dispatch_payload \}\}/);
     assert.doesNotMatch(workflow, /echo "\$DISPATCH_PAYLOAD" >> "\$GITHUB_ENV"/);
     assert.doesNotMatch(workflow, /echo "GITHUB_EVENT_PATH=\$GITHUB_EVENT_PATH" >> "\$GITHUB_ENV"/);
     assert.doesNotMatch(workflow, /\$\{\{\s*env\.SYNC_DISPATCH_PAYLOAD\s*\}\}/);
@@ -949,7 +1019,7 @@ test('telegram-sync workflow summary normalizes partial failure task status from
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'image',
           status: 'ready',
@@ -1015,7 +1085,7 @@ test('sync workflow summaries emit image storage stats when batches upload to CO
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'thought',
           status: 'ready',
@@ -1070,7 +1140,7 @@ test('sync workflow summaries omit image storage section when no COS uploads occ
   await writeFile(
     resultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'image',
           status: 'ready',
@@ -1104,7 +1174,7 @@ test('sync workflow summaries emit warnings for business-incomplete batches', as
   await writeFile(
     telegramResultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'image',
           status: 'ready',
@@ -1138,7 +1208,7 @@ test('sync workflow summaries emit warnings for business-incomplete batches', as
   await writeFile(
     feishuResultPath,
     JSON.stringify({
-      batchResults: [
+      batches: [
         {
           kind: 'image',
           status: 'skipped',
@@ -1282,8 +1352,8 @@ test('telegram-sync dev workflow only handles dev dispatches and writes dev bran
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_URL\s*\}\}/);
   assert.match(workflow, /TRAINING_DB_READONLY_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_READONLY_URL\s*\}\}/);
   assert.match(workflow, /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.DEV_TELEGRAM_BOT_TOKEN\s*\}\}/);
-  assert.match(workflow, /FEISHU_APP_ID:\s*\$\{\{\s*secrets\.DEV_FEISHU_APP_ID \|\| secrets\.FEISHU_APP_ID\s*\}\}/);
-  assert.match(workflow, /FEISHU_ALLOWED_CHAT_IDS:\s*\$\{\{\s*secrets\.DEV_FEISHU_ALLOWED_CHAT_IDS \|\| secrets\.FEISHU_ALLOWED_CHAT_IDS\s*\}\}/);
+  assert.match(workflow, /FEISHU_APP_ID:\s*\$\{\{\s*secrets\.DEV_FEISHU_APP_ID\s*\}\}/);
+  assert.match(workflow, /FEISHU_ALLOWED_CHAT_IDS:\s*\$\{\{\s*secrets\.DEV_FEISHU_ALLOWED_CHAT_IDS\s*\}\}/);
   assert.match(workflow, /export TRAINING_DB_APP_NAME=sync-dev-feishu/);
   assert.match(workflow, /echo "commit_message=chore\(dev\): sync Telegram updates"/);
   assert.match(workflow, /echo "commit_message=chore\(dev\): sync Feishu updates"/);
@@ -1292,7 +1362,7 @@ test('telegram-sync dev workflow only handles dev dispatches and writes dev bran
   assert.match(workflow, /run:\s*git push origin HEAD:dev/);
 });
 
-test('telegram-sync dev workflow waits for the dev deploy workflow', async () => {
+test('telegram-sync dev workflow dispatches the dev deploy workflow asynchronously', async () => {
   const workflow = await readWorkflow('.github/workflows/sync-dev.yml');
   const deployWorkflow = await readWorkflow('.github/workflows/deploy-cloudflare-pages-dev.yml');
 
@@ -1300,8 +1370,10 @@ test('telegram-sync dev workflow waits for the dev deploy workflow', async () =>
   assert.doesNotMatch(workflow, /- name: Remove production custom domain file/);
   assert.doesNotMatch(workflow, /- name: Deploy dev site to Cloudflare Pages/);
   assert.doesNotMatch(workflow, /STEP_PAGES_DEPLOY_OUTCOME/);
-  assert.match(workflow, /- name: Trigger and wait for async dev site deploy/);
-  assert.match(workflow, /actions\/workflows\/deploy-cloudflare-pages-dev\.yml\/dispatches/);
+  assert.match(workflow, /- name: Dispatch site deploy/);
+  assert.match(workflow, /node tools\/dispatch-site-deploy\.mjs/);
+  assert.match(workflow, /SITE_DEPLOY_WORKFLOW_FILE:\s*deploy-cloudflare-pages-dev\.yml/);
+  assert.match(workflow, /SITE_DEPLOY_REF:\s*dev/);
   assert.match(workflow, /AI_PROVIDER:\s*\$\{\{\s*vars\.AI_PROVIDER \|\| 'openai-compatible'\s*\}\}/);
   assert.match(workflow, /AI_TIMEOUT_MS:\s*\$\{\{\s*vars\.AI_TIMEOUT_MS\s*\}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline/);
@@ -1311,26 +1383,15 @@ test('telegram-sync dev workflow waits for the dev deploy workflow', async () =>
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_MODEL: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_MODEL \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: \$\{\{ vars\.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS \}\}/);
   assert.match(workflow, /TELEGRAM_RECOGNITION_CACHE_ENABLED: \$\{\{ vars\.TELEGRAM_RECOGNITION_CACHE_ENABLED \}\}/);
-  assert.match(workflow, /dispatch_body="\$\(node <<'NODE'/);
-  assert.match(workflow, /process\.stdout\.write\(JSON\.stringify\(\{ ref: 'dev', inputs \}\)\)/);
-  assert.match(workflow, /target_thought_expectation/);
-  assert.match(workflow, /sync_db_mode: 'never'/);
-  assert.match(workflow, /run_tests: 'false'/);
-  assert.match(workflow, /- name: Trigger and wait for async dev site deploy\n\s+id: deploy/);
-  assert.match(workflow, /-d "\$dispatch_body"/);
+  assert.match(workflow, /THOUGHT_CHECK_EXPECTATION:/);
+  assert.match(workflow, /- name: Dispatch site deploy\n\s+id: deploy/);
   const deployStep = workflow.slice(
-    workflow.indexOf('- name: Trigger and wait for async dev site deploy'),
+    workflow.indexOf('- name: Dispatch site deploy'),
     workflow.indexOf('- name: Notify Telegram sync failure'),
   );
   assert.doesNotMatch(deployStep, /continue-on-error:\s*true/);
-  assert.match(deployStep, /dispatch_started_at=/);
-  assert.match(deployStep, /actions\/workflows\/deploy-cloudflare-pages-dev\.yml\/runs/);
-  assert.match(deployStep, /Deploy workflow failed/);
-  assert.match(deployStep, /GITHUB_STEP_SUMMARY/);
-  assert.match(deployStep, /## Site deploy result/);
-  assert.match(deployStep, /\| workflow \| runId \| status \| conclusion \| durationMs \| url \|/);
-  assert.match(deployStep, /appendDeploySummary/);
-  assert.match(deployStep, /Deploy workflow succeeded/);
+  assert.doesNotMatch(deployStep, /actions\/workflows\/[^\s]+\/runs|actions\/runs\//);
+  assert.doesNotMatch(deployStep, /for attempt|sleep\s/);
   assert.match(workflow, /STEP_DEPLOY_OUTCOME: \$\{\{ steps\.deploy\.outcome \}\}/);
   assert.match(deployWorkflow, /push:\s*\n\s+branches:\s*\n\s+- dev/);
   assert.match(deployWorkflow, /workflow_dispatch:/);
@@ -1373,7 +1434,7 @@ test('main sync workflow reports queued webhook dispatch failures back to Telegr
     ['Commit sync results', 'commit'],
     ['Rebase on latest main', 'rebase'],
     ['Push changes', 'push'],
-    ['Trigger and wait for site deploy', 'deploy'],
+    ['Dispatch site deploy', 'deploy'],
   ]) {
     assert.match(
       workflow,
@@ -1391,9 +1452,9 @@ test('main sync workflow reports queued webhook dispatch failures back to Telegr
   assert.match(workflow, /node tools\/telegram-action-monitor\.mjs/);
   assert.match(workflow, /STEP_INSTALL_OUTCOME: \$\{\{ steps\.install\.outcome \}\}/);
   assert.match(workflow, /STEP_DEPLOY_OUTCOME: \$\{\{ steps\.deploy\.outcome \}\}/);
-  assert.match(workflow, /- name: Trigger and wait for site deploy/);
+  assert.match(workflow, /- name: Dispatch site deploy/);
   const deployStep = workflow.slice(
-    workflow.indexOf('- name: Trigger and wait for site deploy'),
+    workflow.indexOf('- name: Dispatch site deploy'),
     workflow.indexOf('- name: Notify Telegram sync failure'),
   );
   assert.doesNotMatch(deployStep, /continue-on-error:\s*true/);

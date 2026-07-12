@@ -96,12 +96,14 @@ test('checkTrainingDataConsistencyClient reports failed row count checks', async
   const checks = await checkTrainingDataConsistencyClient(client);
 
   assert.ok(queries.some((sql) => /archive\.training_day/i.test(sql)));
+  assert.ok(queries.some((sql) => /from ingest\.source_batch b/i.test(sql)));
+  assert.equal(queries.some((sql) => /from ingest\.telegram_batch b/i.test(sql)), false);
   assert.equal(checks.find((check) => check.name === 'core.sleep has no orphaned records').status, 'failed');
   assert.equal(checks.at(-1).status, 'ok');
 });
 
 test('core schema defines training_day sleep summary columns', async () => {
-  const sql = await readFile(new URL('../sql/training_records/core.sql', import.meta.url), 'utf8');
+  const sql = await readFile(new URL('../sql/dev-sql/core.sql', import.meta.url), 'utf8');
 
   assert.match(sql, /CREATE TABLE "core"\."training_day"[\s\S]*"sleep_total_minutes" int4/i);
   assert.match(sql, /CREATE TABLE "core"\."training_day"[\s\S]*"night_sleep_minutes" int4/i);

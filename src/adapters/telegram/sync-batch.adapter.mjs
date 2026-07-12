@@ -2,6 +2,7 @@ export {
   analyzeTelegramBatch,
   applyTelegramSyncToMarkdown,
   groupTelegramUpdates,
+  groupSourceMessages,
   mapWithConcurrency,
   processTelegramBatch,
   processTelegramUpdates,
