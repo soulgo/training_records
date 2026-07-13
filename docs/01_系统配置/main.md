@@ -43,7 +43,7 @@ main 环境对应：
 | `TRAINING_DB_ENABLED` | `true` | 必填 | 是否启用生产 PostgreSQL。 |
 | `TRAINING_DB_TIMEOUT_MS` | `5000` | 建议填 | 数据库连接超时。 |
 | `TRAINING_DB_APP_NAME` | `sync-main` | 建议填 | PostgreSQL `application_name`，便于在 DB 侧区分来源。 |
-| `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` | main 监控 API base URL | 可选 | `Report Action Status` 在没有可用生产 PostgreSQL 连接时的 HTTP 兜底上报地址。 |
+| `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` | main 监控 API base URL | 可选 | 本地或旧 workflow 使用 HTTP monitor server 时的兜底地址；当前 `Action Monitor Report` 直接写生产 PostgreSQL。 |
 | `GITHUB_ACTION_MONITOR_REPORT_URL` | 共享监控 API base URL | 可选 | main/dev 专用 URL 未配置时的共享兜底地址。 |
 | `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` | dev 监控 API base URL | 可选 | 所有 workflow 都注入该变量；main 分支不会优先使用它。 |
 | `TRAINING_SNAPSHOT_SOURCE` | `database` | 建议填 | 构建站点时从数据库还是 Markdown 生成快照。 |
@@ -134,6 +134,7 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 | `AI_BASE_URL` | AI 服务商文档 | Variable。必须是 Chat Completions 兼容接口的 base URL。 |
 | `AI_MODEL` | AI 服务商模型列表 | Variable。默认识别和分析模型。 |
 | `TELEGRAM_RECOGNITION_MODEL` | AI 服务商模型列表 | Variable。只想让图片识别用另一个模型时再填。 |
+| `AI_SUPPORTS_VISION` / `AI_SUPPORTS_JSON_SCHEMA` / `AI_SUPPORTS_JSON_OBJECT` / `AI_SUPPORTS_TEXT_JSON` | AI 服务商能力说明 | 运行时代码支持，默认都为 `true`；当前 sync workflow 尚未注入这些变量，如需显式覆盖必须先同步修改 workflow。 |
 
 当前代码读取位置：`src/adapters/ai/openai-compatible.adapter.mjs`、`src/app/use-cases/telegram-sync.use-case.mjs`。
 
@@ -171,9 +172,9 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 | `TRAINING_DB_APP_NAME` | 自定义 | DB 连接名，便于排查。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 生产建议使用 `database`。 |
 
-main 数据库 schema 事实源是 `sql/main-sql/`。合并 dev 代码前必须先完整备份 main 数据库，手工执行 `sql/main-sql/align_to_dev.sql`，并逐条运行文件末尾验收查询。Action 监控当前在同一个生产 PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，参数健康 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
+main 数据库已经与 dev 完成结构对齐，当前 schema 事实源是 `sql/main-sql/`。后续结构变更仍要先备份生产库、独立执行并验收，再重新导出 main SQL；不得用 dev 业务数据覆盖 main。
 
-`Report Action Status` step 会使用运行时 `TRAINING_DB_URL`、`TRAINING_DB_APP_NAME` 和 `github.token` 读取 GitHub Actions run/jobs/steps 后直写 `monitor.*`。只有当生产 DB URL 不可用时，才使用 `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` / `GITHUB_ACTION_MONITOR_REPORT_URL` 走 HTTP 兜底。
+`Action Monitor Report` 在被监控 run 完成后使用 `TRAINING_DB_URL`、`TRAINING_DB_APP_NAME` 和 `github.token` 读取 GitHub run/jobs/steps，并直写生产 `monitor.*`；参数健康 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
 
 参数健康 registry 维护在 `config/parameter-health/main.json`。根级 `probes` 定义 PostgreSQL、AI、Telegram、飞书、COS、Cloudflare、存在性检查和不支持探测；参数项通过 `healthProbeKey` 引用 probe。registry 只保存环境变量名和非敏感配置，不保存实际值或 value hash。只有真实 API/连接探测成功才是 `healthy`；`present` 只表示参数已注入，`unsupported` 表示没有安全探测方式。
 
@@ -222,10 +223,10 @@ main 只有在 `COS_ENABLED=true` 时才需要配置 COS。
 3. 手动运行 `Deploy Cloudflare Worker`，确认 Worker 部署成功并刷新 Telegram webhook。
 4. 手动运行 `Deploy GitHub Pages`，确认生产站点能构建、部署并清理 Cloudflare 缓存。
 5. 给生产 Telegram bot 或生产飞书应用发测试消息，确认 `Sync (Main)` 被触发。
-6. 检查 GitHub Actions summary：同步结果、数据库写入、图片上传、站点部署、缓存清理都应成功。
+6. 检查 `Sync (Main)` summary：同步、数据库写入、图片上传和 deploy dispatch 应成功；站点构建、发布和缓存清理在独立 `Deploy GitHub Pages` run 中确认。
 7. 如启用备份，手动运行一次 `Markdown Backup`，确认能从生产 DB 导出 Markdown。
 8. 运行 `Parameter Health Audit` 并选择 `main`，确认 Step Summary 出现 main 健康状态计数并触发生产 Pages 刷新。
-9. 打开生产站点 `/action-monitor/`，确认新 run 出现在 Action 日志里，且“系统参数健康”展示 main registry 中的真实探测状态；如果只有顶层 run 没有 job/step 明细，先回看该 run 的 `Report Action Status` step 是否成功写入 `monitor.*`。
+9. 打开生产站点 `/action-monitor/`，确认 sync 与 deploy 由 `Action Monitor Report` 写入日志，且“系统参数健康”展示 main registry 的真实探测状态。
 
 ## 5. 可选 Docker 运行
 

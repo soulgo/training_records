@@ -1,6 +1,6 @@
 # Training Records 文档
 
-本目录是当前系统维护入口。当前事实只以代码、SQL、workflow、prompt source 和本目录的一线文档为准；历史重构记录只用于追溯背景。
+本目录是当前系统维护入口。当前事实只以代码、SQL、workflow、prompt source 和本目录的一线文档为准；历史背景通过 Git 历史、提交记录和 CHANGELOG 追溯。
 
 ## 快速导航
 
@@ -10,7 +10,6 @@
 | [系统核心逻辑](02_系统核心逻辑/README.md) | 架构、消息链路、AI 识别、数据入库、展示读取、Action 日志与失败补偿。 |
 | [问题与排查](04_问题与排查/README.md) | PostgreSQL、OSS、Telegram、飞书、AI、Action 日志、部署和资源问题。 |
 | [日常规则](05_日常规则/README.md) | dev/main 合并、后续规划落地和文档同步规则。 |
-| [历史重构记录](03_历史重构记录/README.md) | 旧文档入口和历史方案归档，不作为当前操作入口。 |
 
 ## 推荐阅读路径
 
@@ -27,8 +26,8 @@
 - `monitor.*` 保存 GitHub Actions run/job/step/failure 监控事实，驱动 `/action-monitor/`。
 - `archive.*` 保存历史 Markdown 解析和归档。
 - Markdown 是数据库派生备份，不是图片同步的主写入路径。
-- 历史目录中的旧入口、旧配置和旧核心文档只能用于追溯，不得作为当前维护入口。
-- 根目录只保留项目入口和运行链路需要的 Markdown；重构分析、目标、方案和报告统一归档到 `03_历史重构记录/重构历史/` 的对应专题。
+- `docs/` 不长期保留已完成的一次性目标、方案、TDD 过程或验收报告；完成后的当前事实写回对应长期文档，变更摘要进入 CHANGELOG，过程通过 Git 历史追溯。
+- 根目录只保留项目入口和运行链路需要的 Markdown。
 
 ## 维护命令
 

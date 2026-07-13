@@ -20,7 +20,7 @@
 | GitHub dispatch type | `telegram_update_dev` / `feishu_update_dev` | `telegram_update` / `feishu_update` |
 | GitHub sync ref | `dev` | `main` |
 | 数据库连接 | `DEV_TRAINING_DB_URL` 映射为运行时 `TRAINING_DB_URL`；`DEV_TRAINING_DB_READONLY_URL` 映射为运行时 `TRAINING_DB_READONLY_URL`；迁移时手动映射 `DEV_TRAINING_DB_MIGRATION_URL` 为 `TRAINING_DB_MIGRATION_URL` | `TRAINING_DB_URL`；读取可选 `TRAINING_DB_READONLY_URL`；迁移显式使用 `TRAINING_DB_MIGRATION_URL` |
-| Action 监控写库 | `Report Action Status` 优先把 `DEV_TRAINING_DB_URL` 映射为 `TRAINING_DB_URL` 后写入 dev 库 `monitor.*` | `Report Action Status` 优先使用 `TRAINING_DB_URL` 写入 main 库 `monitor.*` |
+| Action 监控写库 | `Action Monitor Report` 按被监控 run 的 dev 分支选择 `DEV_TRAINING_DB_URL` 写入 dev `monitor.*` | `Action Monitor Report` 按 main 分支选择 `TRAINING_DB_URL` 写入 main `monitor.*` |
 | Action 监控兜底 URL | 可选 `GITHUB_ACTION_MONITOR_REPORT_URL_DEV`，未填且 DB URL 不可用时跳过上报 | 可选 `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN`，未填且 DB URL 不可用时跳过上报 |
 | 参数健康 registry | `config/parameter-health/dev.json`，由 `Parameter Health Audit` 写入 dev 库 `monitor.system_config_*` | `config/parameter-health/main.json`，由 `Parameter Health Audit` 写入 main 库 `monitor.system_config_*` |
 | Telegram token | `DEV_TELEGRAM_BOT_TOKEN` 映射为运行时 `TELEGRAM_BOT_TOKEN` | `TELEGRAM_BOT_TOKEN` |

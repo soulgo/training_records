@@ -15,7 +15,7 @@
 
 ### Added
 
-- 新增 `sql/main-sql/align_to_dev.sql`，将 main 当前导出结构一次性对齐到 dev：补齐旧识别结构化字段、通用 ingest 五表及回填、archive 睡眠汇总字段和缺失外键，并附人工验收查询。
+- 新增当前 `/分析` 维护文档，记录单只读连接、近 28 天单 SQL 聚合、训练者画像和只读输出边界。
 - 新增异步 Action monitor、独立 pending replay，以及 `/分析` 单连接单 SQL 的只读 PostgreSQL repository。
 - 新增 DateAlignmentService、RecordGrouper、SemanticGate 和 Provider capability negotiation，覆盖完整日期、月日补年、睡眠归档、单锚点传播、多日期隔离、越界清洗、review 决策及 strict/json_object/text_json/vision 能力组合。
 - 新增来源无关的通用截图识别链路：图片先经 Sharp 自动旋转、尺寸/像素限制、增强和压缩，可选提取带归一化坐标的 OCR 证据，再由视觉模型完成语义识别并输出稳定的 `NormalizedRecognition` 外层契约。
@@ -29,21 +29,23 @@
 - PostgreSQL ingest messages/assets/recognitions 改为集合式 upsert，数据库观测新增安全 `queryOrdinal` 与 connect/BEGIN/query/COMMIT/AI log 分段耗时；识别缓存键新增 capability mode。
 - Telegram/飞书共享报告与结果通知入口统一为 MessageSync 命名，飞书不再导入 Telegram 命名的共享函数或执行 `telegram:` 字符串替换。
 - 静态 recognition fixture 评测改称 contract field-match；没有脱敏自然样本和受控 provider run 时，accuracy、tokens、latency 明确标记为 `not_measured`。
-- 收敛根目录 Markdown：保留 `README.md`、`CHANGELOG.md` 和运行链路固定的 `训练记录.md`、`训练数据解析.md`；将系统代码重构分析、目标、方案、TDD 与最终报告统一归档到 `docs/03_历史重构记录/重构历史/系统代码终极重构/`，并更新文档导航和交叉链接。
+- 收敛文档体系为当前配置、当前核心逻辑、当前排查和长期规则四类入口；已完成的一次性分析、目标、方案、TDD 与验收过程不再保留重复文档，通过 Git 历史和 CHANGELOG 追溯。
 - 修正站点首页对数据来源的描述：线上看板以 PostgreSQL `core.*` 为业务事实源，`训练记录.md` 是数据库派生备份和受保护恢复入口。
 - Telegram 与飞书现在直接转换为共享来源消息契约；识别缓存、Telegram offset、一致性检查、AI monitoring、batch audit、睡眠修复和 pending replay 全部切换到通用 ingest 表，不再以 Telegram 表名或飞书数字代理 ID 作为主路径身份。
 - dev 同步复用 main 的通用 AI、OCR、识别模型和备用 provider 配置；Telegram、飞书、数据库与 COS 凭据继续保持 dev 隔离，其中 Telegram 白名单优先读取 `DEV_TELEGRAM_ALLOWED_CHAT_IDS`，未配置时复用通用白名单。
 - Telegram 与飞书 Worker 在进入 Durable Object 缓冲或触发 GitHub Actions 前执行聊天白名单检查；Dashboard、Monitor 与 Action Monitor 的 EJS JSON 数据改为脚本上下文安全转义。
-- dev PostgreSQL 已于 2026-07-11 手工执行 `sql/migration.sql` 和 `sql/migration_phase2_generic_ingest.sql`；main 数据库仍须在部署本代码前按相同顺序迁移。
+- dev 与 main PostgreSQL 已完成结构对齐；仓库分别以 `sql/dev-sql/`、`sql/main-sql/` 保存环境导出，后续结构变更按目标环境独立备份、执行、验收和重新导出。
 - 将 `/action-monitor/` 的系统参数监控从“有效期推断”升级为“参数健康探测”：新增 `config/parameter-health/<env>.json` registry、`tools/check-parameter-health.mjs`、`Parameter Health Audit` workflow、主动只读 probes 和参数健康视图，健康状态改为 `healthy`、`present`、`invalid`、`missing`、`not_configured`、`unreachable`、`unsupported`、`unknown`，到期时间仅作为有真实证据时的附加信息。
 - 同步参数健康监控的数据库与文档入口：`monitor.system_config_parameters/checks` 新增 `health_probe_key`、`health_check_type`、`check_type`、`latency_ms`、`failure_kind`、`observed_expires_at`、`last_healthy` 查询索引和健康状态约束，当前事实文档与排查文档改为指向参数健康模型。
-- 按后续规划落地文档同步规则完成参数有效时间监控规划归档：将已实现规划从 `docs/03_历史重构记录/后续规划_未实现/参数有效时间/` 移入 `docs/03_历史重构记录/重构历史/参数有效时间监控/`，并把当前 registry、audit workflow、monitor 表、页面展示和排查方式写回 `01_系统配置`、`02_系统核心逻辑`、`04_问题与排查` 及相关 README。
+- 将参数健康监控的当前 registry、audit workflow、monitor 表、页面展示和排查方式收敛到 `01_系统配置`、`02_系统核心逻辑`、`04_问题与排查` 及相关 README，不再维护独立历史规划副本。
 - 将 dev 页面里的 Action 日志监控从首页拆出为独立页面模块 `/action-monitor/`，新增导航入口、独立 layout、样式与历史分页脚本，首页不再嵌入该监控模块。
 - 收敛应用与同步边界：生产代码、测试和 workflow 直接引用真实 use case、adapter、domain 与数据库 owner；飞书直接进入共享 `runMessageSync`，同步报告统一只输出 `batches`，不改变 Telegram/飞书处理、通知和数据库写入行为。
 - 数据库 schema 演进统一由 `maintenance:migrate` 和显式 migration 承担；日常同步与 Markdown 导出不再包含运行时 schema preflight。SQL 分片同时移除重复睡眠日期索引定义，并校准 `core.thought.telegram_message_id` 的 legacy alias 注释。
 
 ### Removed
 
+- 删除 `docs/03_历史重构记录/` 整套旧分析、规划、TDD、审计和验收资料；仍有效的系统优化 0711 事实已写回当前 docs，历史过程改由 Git 追溯。
+- 删除已完成使命的 `sql/main-sql/align_to_dev.sql`，并将 schema 测试改为直接验证 dev/main 环境导出的表与字段结构一致。
 - SQL 事实源收敛为 `sql/dev-sql/` 与 `sql/main-sql/`；删除重复 canonical dump、分散 migration/rollback/cleanup 文件，以及已无迁移目录可消费的自动 migration workflow、CLI 分支和测试。
 - 删除无生产调用的空仓储端口、`training-snapshot-service` 占位服务和旧 `PostgresTelegramBatchRepository`；生产代码不再访问 `ingest.telegram_batch`、`telegram_message`、`telegram_recognition` 或 `telegram_pending_batch`。
 - 删除未进入生产链路的 `src/jobs`、`src/infra` 架构壳、无消费者 barrel、`src/ai`/PostgreSQL facade，以及 `tools` 下的纯 re-export 兼容入口；保留真实 CLI 和承载业务复杂度的模块。
