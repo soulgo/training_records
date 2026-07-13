@@ -1,7 +1,7 @@
 /*
- Navicat Premium Data Transfer
+ Navicat Premium Dump SQL
 
- Source Server         : pgsql
+ Source Server         : training_records pgsql17
  Source Server Type    : PostgreSQL
  Source Server Version : 170000 (170000)
  Source Host           : 122.51.66.213:15432
@@ -12,7 +12,7 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 12/07/2026 21:16:37
+ Date: 13/07/2026 17:20:54
 */
 
 
@@ -38,7 +38,6 @@ CREATE TABLE "core"."activity" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
-ALTER TABLE "core"."activity" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Table structure for meal
@@ -56,7 +55,6 @@ CREATE TABLE "core"."meal" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
-ALTER TABLE "core"."meal" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Table structure for measurement
@@ -84,7 +82,6 @@ CREATE TABLE "core"."measurement" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
-ALTER TABLE "core"."measurement" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Table structure for sleep
@@ -124,7 +121,6 @@ CREATE TABLE "core"."sleep" (
   "suggestion_text" text COLLATE "pg_catalog"."default"
 )
 ;
-ALTER TABLE "core"."sleep" OWNER TO "training_writer";
 COMMENT ON COLUMN "core"."sleep"."sleep_key" IS '睡眠记录幂等键，按归档日期、睡眠类型、入睡时间、醒来时间和总睡眠分钟数生成';
 COMMENT ON COLUMN "core"."sleep"."archived_date" IS '归档日期，关联 core.training_day.archived_date';
 COMMENT ON COLUMN "core"."sleep"."source_channel" IS '来源通道，例如 telegram、markdown_import、archive_backfill 或 ingest_sleep_backfill';
@@ -181,7 +177,6 @@ CREATE TABLE "core"."thought" (
   "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL
 )
 ;
-ALTER TABLE "core"."thought" OWNER TO "training_writer";
 COMMENT ON COLUMN "core"."thought"."telegram_message_id" IS '原 Telegram message_id，也是随想的稳定定位 ID';
 COMMENT ON COLUMN "core"."thought"."body" IS '随想正文文本，不包含图片二进制';
 COMMENT ON COLUMN "core"."thought"."thought_module" IS '随想模块：workout 为锻炼随想，misc 为杂七杂八，body_feedback 为身体反馈；历史缺省按 workout 兼容';
@@ -192,6 +187,39 @@ COMMENT ON COLUMN "core"."thought"."source_channel" IS '来源通道，例如 te
 COMMENT ON COLUMN "core"."thought"."source_chat_id" IS '来源 chat/conversation ID，Telegram 为 chat_id，飞书为 chat_id 原始字符串';
 COMMENT ON COLUMN "core"."thought"."source_message_id" IS '来源消息 ID，Telegram 为 message_id，飞书为 message_id 原始字符串';
 COMMENT ON TABLE "core"."thought" IS '锻炼随想正文镜像表；图片仍保存在本地目录或后续对象存储，表内只保存引用';
+
+-- ----------------------------
+-- Table structure for trainee_profile
+-- ----------------------------
+DROP TABLE IF EXISTS "core"."trainee_profile";
+CREATE TABLE "core"."trainee_profile" (
+  "trainee_id" text COLLATE "pg_catalog"."default" NOT NULL,
+  "timezone" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'Asia/Shanghai'::text,
+  "birth_date" date,
+  "sex_at_birth" text COLLATE "pg_catalog"."default",
+  "height_cm" numeric(5,2),
+  "experience_level" text COLLATE "pg_catalog"."default",
+  "goal_text" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT '增肌减腹：优先增加或保住骨骼肌/瘦体重，同时通过整体减脂降低腰围和腹部脂肪；不追求单纯掉体重或局部减脂。'::text,
+  "weekly_training_days_target" int2,
+  "profile_json" jsonb NOT NULL DEFAULT jsonb_build_object('availableEquipment', '[]'::jsonb, 'chronicLimitations', '[]'::jsonb, 'preferredActivities', '[]'::jsonb, 'scheduleNotes', NULL::unknown),
+  "profile_version" int4 NOT NULL DEFAULT 1,
+  "is_active" bool NOT NULL DEFAULT true,
+  "created_at" timestamptz(6) NOT NULL DEFAULT now(),
+  "updated_at" timestamptz(6) NOT NULL DEFAULT now()
+)
+;
+COMMENT ON COLUMN "core"."trainee_profile"."trainee_id" IS '系统内训练者身份；当前单用户使用 default，保留未来多训练者扩展能力';
+COMMENT ON COLUMN "core"."trainee_profile"."timezone" IS '训练者 IANA 时区，用于日期窗口和年龄计算';
+COMMENT ON COLUMN "core"."trainee_profile"."birth_date" IS '出生日期；年龄在分析时计算，不存储 age';
+COMMENT ON COLUMN "core"."trainee_profile"."sex_at_birth" IS '可选生理性别输入，仅在确有运动科学计算需要时使用；undisclosed 表示不提供';
+COMMENT ON COLUMN "core"."trainee_profile"."height_cm" IS '身高厘米；用于需要身高的派生指标，不复制体测表中的动态数据';
+COMMENT ON COLUMN "core"."trainee_profile"."experience_level" IS '训练经验等级：beginner、intermediate、advanced 或 unknown';
+COMMENT ON COLUMN "core"."trainee_profile"."goal_text" IS '训练者当前长期目标原文，直接进入分析上下文，不由后端猜测';
+COMMENT ON COLUMN "core"."trainee_profile"."weekly_training_days_target" IS '用户期望的每周训练天数；为空表示不设置硬目标';
+COMMENT ON COLUMN "core"."trainee_profile"."profile_json" IS '不参与主查询的可演进画像配置：可用器械、长期限制、偏好活动和日程说明';
+COMMENT ON COLUMN "core"."trainee_profile"."profile_version" IS '画像乐观更新版本；每次业务更新递增，用于分析上下文审计';
+COMMENT ON COLUMN "core"."trainee_profile"."is_active" IS '是否为可用于分析的有效画像';
+COMMENT ON TABLE "core"."trainee_profile" IS '训练者稳定画像；供训练分析限定目标、经验、长期限制与可用器械，不复制动态训练和健康事实';
 
 -- ----------------------------
 -- Table structure for training_day
@@ -221,7 +249,6 @@ CREATE TABLE "core"."training_day" (
   "awake_minutes" int4
 )
 ;
-ALTER TABLE "core"."training_day" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Indexes structure for table activity
@@ -291,6 +318,29 @@ CREATE UNIQUE INDEX "ux_core_thought_identity" ON "core"."thought" USING btree (
 -- Primary Key structure for table thought
 -- ----------------------------
 ALTER TABLE "core"."thought" ADD CONSTRAINT "thought_pkey" PRIMARY KEY ("telegram_message_id");
+
+-- ----------------------------
+-- Checks structure for table trainee_profile
+-- ----------------------------
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_timezone" CHECK (btrim(timezone) <> ''::text);
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_birth_date" CHECK (birth_date IS NULL OR birth_date >= '1900-01-01'::date);
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_sex_at_birth" CHECK (sex_at_birth IS NULL OR (sex_at_birth = ANY (ARRAY['female'::text, 'male'::text, 'intersex'::text, 'undisclosed'::text])));
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_height" CHECK (height_cm IS NULL OR height_cm >= 80::numeric AND height_cm <= 250::numeric);
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_experience" CHECK (experience_level IS NULL OR (experience_level = ANY (ARRAY['beginner'::text, 'intermediate'::text, 'advanced'::text, 'unknown'::text])));
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_goal" CHECK (btrim(goal_text) <> ''::text);
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_id" CHECK (btrim(trainee_id) <> ''::text);
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_json_object" CHECK (jsonb_typeof(profile_json) = 'object'::text);
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_equipment_array" CHECK (NOT profile_json ? 'availableEquipment'::text OR jsonb_typeof(profile_json -> 'availableEquipment'::text) = 'array'::text);
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_limitations_array" CHECK (NOT profile_json ? 'chronicLimitations'::text OR jsonb_typeof(profile_json -> 'chronicLimitations'::text) = 'array'::text);
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_activities_array" CHECK (NOT profile_json ? 'preferredActivities'::text OR jsonb_typeof(profile_json -> 'preferredActivities'::text) = 'array'::text);
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_schedule_notes" CHECK (NOT profile_json ? 'scheduleNotes'::text OR (profile_json -> 'scheduleNotes'::text) = 'null'::jsonb OR jsonb_typeof(profile_json -> 'scheduleNotes'::text) = 'string'::text);
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_version" CHECK (profile_version >= 1);
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "ck_trainee_profile_weekly_days" CHECK (weekly_training_days_target IS NULL OR weekly_training_days_target >= 1 AND weekly_training_days_target <= 7);
+
+-- ----------------------------
+-- Primary Key structure for table trainee_profile
+-- ----------------------------
+ALTER TABLE "core"."trainee_profile" ADD CONSTRAINT "trainee_profile_pkey" PRIMARY KEY ("trainee_id");
 
 -- ----------------------------
 -- Primary Key structure for table training_day

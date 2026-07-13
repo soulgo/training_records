@@ -1,7 +1,7 @@
 /*
- Navicat Premium Data Transfer
+ Navicat Premium Dump SQL
 
- Source Server         : pgsql
+ Source Server         : training_records pgsql17
  Source Server Type    : PostgreSQL
  Source Server Version : 170000 (170000)
  Source Host           : 122.51.66.213:15432
@@ -12,7 +12,7 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 12/07/2026 22:30:45
+ Date: 13/07/2026 17:27:28
 */
 
 
@@ -26,8 +26,6 @@ MINVALUE  1
 MAXVALUE 9223372036854775807
 START 1
 CACHE 1;
-ALTER SEQUENCE "monitor"."github_action_steps_step_id_seq" OWNER TO "training_writer";
-
 
 -- ----------------------------
 -- Table structure for github_action_failures
@@ -49,7 +47,6 @@ CREATE TABLE "monitor"."github_action_failures" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
-ALTER TABLE "monitor"."github_action_failures" OWNER TO "training_writer";
 COMMENT ON COLUMN "monitor"."github_action_failures"."failure_key" IS '失败记录幂等键，由 run_id、job_id、step_number 和失败层级生成';
 COMMENT ON COLUMN "monitor"."github_action_failures"."run_id" IS '所属 GitHub Action Run ID';
 COMMENT ON COLUMN "monitor"."github_action_failures"."job_id" IS '所属 GitHub Action Job ID，run 级失败可为空';
@@ -87,7 +84,6 @@ CREATE TABLE "monitor"."github_action_jobs" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
-ALTER TABLE "monitor"."github_action_jobs" OWNER TO "training_writer";
 COMMENT ON COLUMN "monitor"."github_action_jobs"."job_id" IS 'GitHub Action Job 唯一 ID';
 COMMENT ON COLUMN "monitor"."github_action_jobs"."run_id" IS '所属 GitHub Action Run ID';
 COMMENT ON COLUMN "monitor"."github_action_jobs"."job_name" IS 'Job 名称';
@@ -134,7 +130,6 @@ CREATE TABLE "monitor"."github_action_runs" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
-ALTER TABLE "monitor"."github_action_runs" OWNER TO "training_writer";
 COMMENT ON COLUMN "monitor"."github_action_runs"."run_id" IS 'GitHub Action Run 唯一 ID';
 COMMENT ON COLUMN "monitor"."github_action_runs"."repository_full_name" IS '仓库全名，例如 soulgo/training_records';
 COMMENT ON COLUMN "monitor"."github_action_runs"."workflow_id" IS 'GitHub Workflow ID';
@@ -179,7 +174,6 @@ CREATE TABLE "monitor"."github_action_steps" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
-ALTER TABLE "monitor"."github_action_steps" OWNER TO "training_writer";
 COMMENT ON COLUMN "monitor"."github_action_steps"."step_id" IS '本地 step 自增主键';
 COMMENT ON COLUMN "monitor"."github_action_steps"."job_id" IS '所属 GitHub Action Job ID';
 COMMENT ON COLUMN "monitor"."github_action_steps"."run_id" IS '所属 GitHub Action Run ID';
@@ -195,14 +189,12 @@ COMMENT ON COLUMN "monitor"."github_action_steps"."created_at" IS '监控记录�
 COMMENT ON COLUMN "monitor"."github_action_steps"."updated_at" IS '监控记录更新时间';
 COMMENT ON TABLE "monitor"."github_action_steps" IS 'GitHub Actions step 明细表，每个 job 的 step_number 唯一';
 
-
 -- ----------------------------
 -- Alter sequences owned by
 -- ----------------------------
 ALTER SEQUENCE "monitor"."github_action_steps_step_id_seq"
 OWNED BY "monitor"."github_action_steps"."step_id";
-SELECT setval('"monitor"."github_action_steps_step_id_seq"', 1019, true);
-
+SELECT setval('"monitor"."github_action_steps_step_id_seq"', 1370, true);
 
 -- ----------------------------
 -- Indexes structure for table github_action_failures
@@ -275,7 +267,6 @@ ALTER TABLE "monitor"."github_action_steps" ADD CONSTRAINT "ux_github_action_ste
 -- Primary Key structure for table github_action_steps
 -- ----------------------------
 ALTER TABLE "monitor"."github_action_steps" ADD CONSTRAINT "github_action_steps_pkey" PRIMARY KEY ("step_id");
-
 
 -- ----------------------------
 -- Foreign Keys structure for table github_action_failures

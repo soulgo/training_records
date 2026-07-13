@@ -1,7 +1,7 @@
 /*
- Navicat Premium Data Transfer
+ Navicat Premium Dump SQL
 
- Source Server         : pgsql
+ Source Server         : training_records pgsql17
  Source Server Type    : PostgreSQL
  Source Server Version : 170000 (170000)
  Source Host           : 122.51.66.213:15432
@@ -12,7 +12,7 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 12/07/2026 22:30:15
+ Date: 13/07/2026 17:26:40
 */
 
 
@@ -37,7 +37,6 @@ CREATE TABLE "archive"."training_activity" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
-ALTER TABLE "archive"."training_activity" OWNER TO "training_writer";
 COMMENT ON TABLE "archive"."training_activity" IS '训练活动明细表，一次活动一行';
 
 -- ----------------------------
@@ -68,7 +67,6 @@ CREATE TABLE "archive"."training_day" (
   "awake_minutes" int4
 )
 ;
-ALTER TABLE "archive"."training_day" OWNER TO "training_writer";
 COMMENT ON TABLE "archive"."training_day" IS '训练归档日汇总表，一天一行，供主查询和看板使用';
 
 -- ----------------------------
@@ -86,7 +84,6 @@ CREATE TABLE "archive"."training_meal" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
-ALTER TABLE "archive"."training_meal" OWNER TO "training_writer";
 COMMENT ON TABLE "archive"."training_meal" IS '训练饮食明细表，一餐一行';
 
 -- ----------------------------
@@ -114,7 +111,6 @@ CREATE TABLE "archive"."training_measurement" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
-ALTER TABLE "archive"."training_measurement" OWNER TO "training_writer";
 COMMENT ON TABLE "archive"."training_measurement" IS '训练体测明细表，一次体测一行';
 
 -- ----------------------------
@@ -135,7 +131,6 @@ CREATE TABLE "archive"."training_parse_run" (
   "db_sync_status" text COLLATE "pg_catalog"."default" NOT NULL DEFAULT 'success'::text
 )
 ;
-ALTER TABLE "archive"."training_parse_run" OWNER TO "training_writer";
 COMMENT ON COLUMN "archive"."training_parse_run"."run_id" IS '本次运行唯一标识UUID';
 COMMENT ON COLUMN "archive"."training_parse_run"."source_hash" IS '关联的训练记录原文哈希，对应快照表主键';
 COMMENT ON COLUMN "archive"."training_parse_run"."trigger_name" IS '触发来源，例如local-build-data、local-build、github-actions-build';
@@ -164,7 +159,6 @@ CREATE TABLE "archive"."training_parse_snapshot" (
   "last_seen_at" timestamptz(6) NOT NULL
 )
 ;
-ALTER TABLE "archive"."training_parse_snapshot" OWNER TO "training_writer";
 COMMENT ON COLUMN "archive"."training_parse_snapshot"."source_hash" IS '训练记录Markdown原文的SHA-256哈希，作为快照主键';
 COMMENT ON COLUMN "archive"."training_parse_snapshot"."payload_version" IS '解析结果结构版本号，便于后续结构升级兼容';
 COMMENT ON COLUMN "archive"."training_parse_snapshot"."payload_json" IS '完整解析结果JSON，内容对应当前parseTrainingRecord输出';
@@ -212,7 +206,6 @@ CREATE TABLE "archive"."training_sleep" (
   "suggestion_text" text COLLATE "pg_catalog"."default"
 )
 ;
-ALTER TABLE "archive"."training_sleep" OWNER TO "training_writer";
 COMMENT ON COLUMN "archive"."training_sleep"."sleep_hash" IS '睡眠记录幂等哈希，用于去重';
 COMMENT ON COLUMN "archive"."training_sleep"."archived_date" IS '归档日期';
 COMMENT ON COLUMN "archive"."training_sleep"."source_hash" IS '来源快照哈希';

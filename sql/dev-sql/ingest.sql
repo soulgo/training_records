@@ -1,7 +1,7 @@
 /*
- Navicat Premium Data Transfer
+ Navicat Premium Dump SQL
 
- Source Server         : pgsql
+ Source Server         : training_records pgsql17
  Source Server Type    : PostgreSQL
  Source Server Version : 170000 (170000)
  Source Host           : 122.51.66.213:15432
@@ -12,7 +12,7 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 12/07/2026 21:17:23
+ Date: 13/07/2026 17:21:01
 */
 
 
@@ -26,7 +26,6 @@ MINVALUE  1
 MAXVALUE 9223372036854775807
 START 1
 CACHE 1;
-ALTER SEQUENCE "ingest"."pending_task_pending_id_seq" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Sequence structure for telegram_pending_batch_pending_id_seq
@@ -38,7 +37,6 @@ MINVALUE  1
 MAXVALUE 9223372036854775807
 START 1
 CACHE 1;
-ALTER SEQUENCE "ingest"."telegram_pending_batch_pending_id_seq" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Table structure for ai_call_log
@@ -64,7 +62,6 @@ CREATE TABLE "ingest"."ai_call_log" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
-ALTER TABLE "ingest"."ai_call_log" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Table structure for pending_task
@@ -93,7 +90,6 @@ CACHE 1
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
-ALTER TABLE "ingest"."pending_task" OWNER TO "training_writer";
 COMMENT ON COLUMN "ingest"."pending_task"."source_channel" IS '失败任务所属来源渠道';
 COMMENT ON COLUMN "ingest"."pending_task"."payload_json" IS '可重放的来源无关批次快照';
 COMMENT ON TABLE "ingest"."pending_task" IS '来源无关的失败重试任务，不依赖 Telegram 批次命名';
@@ -128,7 +124,6 @@ CREATE TABLE "ingest"."recognition_run" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
-ALTER TABLE "ingest"."recognition_run" OWNER TO "training_writer";
 COMMENT ON COLUMN "ingest"."recognition_run"."recognition_id" IS '应用生成的稳定识别运行 ID 或迁移生成的 legacy ID';
 COMMENT ON COLUMN "ingest"."recognition_run"."cache_key" IS '包含来源资源、prompt、schema 和 model 的缓存键';
 COMMENT ON COLUMN "ingest"."recognition_run"."status" IS '识别状态，例如 succeeded、unmapped、failed';
@@ -158,7 +153,6 @@ CREATE TABLE "ingest"."source_asset" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
-ALTER TABLE "ingest"."source_asset" OWNER TO "training_writer";
 COMMENT ON COLUMN "ingest"."source_asset"."source_asset_id" IS '平台原始资源稳定 ID；优先使用 file_unique_id 或 image_key';
 COMMENT ON COLUMN "ingest"."source_asset"."asset_order" IS '资源在消息中的零基顺序';
 COMMENT ON COLUMN "ingest"."source_asset"."kind" IS '资源类型，例如 image 或 document';
@@ -185,7 +179,6 @@ CREATE TABLE "ingest"."source_batch" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
-ALTER TABLE "ingest"."source_batch" OWNER TO "training_writer";
 COMMENT ON COLUMN "ingest"."source_batch"."source_channel" IS '来源渠道，例如 telegram、feishu 或未来新增渠道';
 COMMENT ON COLUMN "ingest"."source_batch"."batch_id" IS '来源渠道内稳定的批次标识';
 COMMENT ON COLUMN "ingest"."source_batch"."kind" IS '批次类型，例如 image、thought、analysis';
@@ -214,7 +207,6 @@ CREATE TABLE "ingest"."source_message" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
-ALTER TABLE "ingest"."source_message" OWNER TO "training_writer";
 COMMENT ON COLUMN "ingest"."source_message"."source_chat_id" IS '平台原始会话 ID，按 text 保存避免数字代理和精度丢失';
 COMMENT ON COLUMN "ingest"."source_message"."source_message_id" IS '平台原始消息 ID，按 text 保存';
 COMMENT ON COLUMN "ingest"."source_message"."source_event_id" IS '平台事件 ID；消息重投或编辑事件可与消息身份分离';
@@ -242,7 +234,6 @@ CREATE TABLE "ingest"."telegram_batch" (
   "updated_at" timestamptz(6) NOT NULL
 )
 ;
-ALTER TABLE "ingest"."telegram_batch" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Table structure for telegram_message
@@ -265,7 +256,6 @@ CREATE TABLE "ingest"."telegram_message" (
   "source_message_id" text COLLATE "pg_catalog"."default" NOT NULL
 )
 ;
-ALTER TABLE "ingest"."telegram_message" OWNER TO "training_writer";
 
 -- ----------------------------
 -- Table structure for telegram_pending_batch
@@ -287,7 +277,6 @@ CREATE TABLE "ingest"."telegram_pending_batch" (
   "updated_at" timestamptz(6) NOT NULL DEFAULT now()
 )
 ;
-ALTER TABLE "ingest"."telegram_pending_batch" OWNER TO "training_writer";
 COMMENT ON COLUMN "ingest"."telegram_pending_batch"."pending_id" IS '待重试记录自增主键';
 COMMENT ON COLUMN "ingest"."telegram_pending_batch"."batch_id" IS 'Telegram 批次 ID，单图为 single-messageId，相册为 media_group_id';
 COMMENT ON COLUMN "ingest"."telegram_pending_batch"."kind" IS '批次类型，当前主要为 image';
@@ -325,7 +314,6 @@ CREATE TABLE "ingest"."telegram_recognition" (
   "cache_key" text COLLATE "pg_catalog"."default"
 )
 ;
-ALTER TABLE "ingest"."telegram_recognition" OWNER TO "training_writer";
 COMMENT ON COLUMN "ingest"."telegram_recognition"."source_app" IS 'AI 识别出的来源应用名称；为空表示无法可靠判断';
 COMMENT ON COLUMN "ingest"."telegram_recognition"."data_type" IS '标准化数据类型，例如 measurement、workout、nutrition、sleep 或 unknown';
 COMMENT ON COLUMN "ingest"."telegram_recognition"."fields_json" IS '跨来源标准化后的业务字段，不绑定特定 App 页面布局';
