@@ -1118,6 +1118,63 @@ test('runTelegramSync runs sleep backfill for a fresh stored sleep image by defa
   assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), true);
 });
 
+test('runTelegramSync exposes sleep backfill failures as partial batch failures', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-sleep-backfill-failure-'));
+  await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 126,
+          date: 1775433600,
+          chat: { id: 42 },
+          caption: '归档到 2026-05-30',
+          photo: [{ file_id: 'file-sleep', file_unique_id: 'uniq-sleep' }],
+        },
+      },
+    ],
+    recognizeBatch: async () => [
+      {
+        messageId: 126,
+        imageType: 'sleep',
+        detectedDate: '2026-05-30',
+        dateEvidence: 'image header',
+        confidence: 0.97,
+        warnings: [],
+        records: {
+          measurement: null,
+          activities: [],
+          meals: [],
+          totalCalories: null,
+          details: [],
+          dailyWorkoutSummary: null,
+          sleep: {
+            totalSleepMinutes: 505,
+            nightSleepMinutes: 505,
+            bedtime: '22:56',
+            wakeTime: '07:21',
+          },
+        },
+      },
+    ],
+    persistNormalizedBatch: async ({ batch }) => ({ status: 'stored', archivedDate: batch.archivedDate }),
+    backfillCoreSleepFromIngestBatches: async () => {
+      throw new Error('ON CONFLICT DO UPDATE command cannot affect row a second time');
+    },
+  });
+
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].partialFailure, true);
+  assert.equal(result.batches[0].failureCategory, 'database');
+  assert.match(result.batches[0].failureReason, /ON CONFLICT DO UPDATE/);
+  assert.match(result.batches[0].warnings.join('\n'), /sleep backfill failed/i);
+  assert.equal(buildMessageSyncReport(result).batches[0].taskStatus, 'partialFailure');
+});
+
 test('runTelegramSync does not run sleep backfill for a fresh stored non-sleep image by default', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-nutrition-no-sleep-backfill-'));
   await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');

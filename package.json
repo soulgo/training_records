@@ -31,7 +31,7 @@
     "github-action-monitor:server": "node tools/github-action-monitor-server.mjs"
   },
   "dependencies": {
-    "cos-nodejs-sdk-v5": "^2.15.4",
+    "cos-nodejs-sdk-v5": "^3.0.0",
     "hexo": "^7.3.0",
     "hexo-cli": "^4.3.2",
     "hexo-renderer-ejs": "^2.0.0",

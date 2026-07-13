@@ -295,7 +295,7 @@ export async function insertCoreMeals(client, days, options, processedAtIso) {
 }
 
 export async function insertCoreSleep(client, days, options, processedAtIso) {
-  const rows = buildSleepRows(days, options, processedAtIso);
+  const rows = deduplicateSleepRows(buildSleepRows(days, options, processedAtIso));
   if (rows.length === 0) {
     return;
   }
@@ -466,7 +466,7 @@ async function deleteCoreSleepRowsByIdentity(client, rows) {
 }
 
 export async function insertArchiveSleep(client, days, options, processedAtIso) {
-  const rows = buildSleepRows(days, options, processedAtIso).map((row) => ({
+  const rows = deduplicateSleepRows(buildSleepRows(days, options, processedAtIso)).map((row) => ({
     ...row,
     sourceHash: options.sourceHash ?? null,
     sleepHash: createHash('md5')
@@ -662,4 +662,12 @@ function buildSleepRows(days, options, processedAtIso) {
       };
     }),
   );
+}
+
+function deduplicateSleepRows(rows) {
+  const rowsBySleepKey = new Map();
+  for (const row of rows) {
+    rowsBySleepKey.set(row.sleepKey, row);
+  }
+  return [...rowsBySleepKey.values()];
 }

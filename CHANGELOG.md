@@ -41,6 +41,7 @@
 - 将 dev 页面里的 Action 日志监控从首页拆出为独立页面模块 `/action-monitor/`，新增导航入口、独立 layout、样式与历史分页脚本，首页不再嵌入该监控模块。
 - 收敛应用与同步边界：生产代码、测试和 workflow 直接引用真实 use case、adapter、domain 与数据库 owner；飞书直接进入共享 `runMessageSync`，同步报告统一只输出 `batches`，不改变 Telegram/飞书处理、通知和数据库写入行为。
 - 数据库 schema 演进统一由 `maintenance:migrate` 和显式 migration 承担；日常同步与 Markdown 导出不再包含运行时 schema preflight。SQL 分片同时移除重复睡眠日期索引定义，并校准 `core.thought.telegram_message_id` 的 legacy alias 注释。
+- GitHub 官方 Actions 升级到 Node 24 运行时版本：checkout v7、setup-node/cache/configure-pages v6、deploy-pages/upload-pages-artifact v5，移除同步、部署和监控日志中的 Node 20 弃用告警。
 
 ### Removed
 
@@ -136,7 +137,8 @@
 ### Security
 
 - Telegram/飞书同步命令行 stdout 改为只输出脱敏 safe report；完整同步结果仍写入 result file 供 summary/通知使用。同步 workflow 中 AI base URL、fallback base URL、chat id、COS bucket/domain/path prefix 等配置改为从 secrets 注入，并保留最小必要 workflow 权限说明。
-- 修复 `sync.yml` / `sync-dev.yml` 在 `workflow_dispatch` 队列任务中把完整 Telegram/飞书 `dispatch_payload` 注入 GitHub Actions step env 和 `$GITHUB_ENV` 的问题，避免 `chat_id`、用户名、消息正文、图片 `file_id` 等 webhook payload 内容出现在 Action 日志；同步和失败通知改为通过 runner 临时事件文件读取队列 payload。
+- 修复 `sync.yml` / `sync-dev.yml` 在 `workflow_dispatch` 队列任务中把完整 Telegram/飞书 `dispatch_payload` 注入 GitHub Actions step env 和 `$GITHUB_ENV` 的问题，避免 `chat_id`、用户名、消息正文、图片 `file_id` 等 webhook payload 内容出现在 Action 日志；同步、失败通知和部署派发统一通过 runner 临时事件文件读取队列 payload 与通知路由，不再设置 `SYNC_DISPATCH_PAYLOAD`。
+- 腾讯云 COS SDK 升级到 3.0，移除旧 `request` 栈及其中存在漏洞的 `form-data`、`fast-xml-parser` 版本；生产依赖 `npm audit` 结果从 11 个漏洞降为 0。
 - 同步 summary 与 action logger 默认 hash 飞书 `oc_`、chat id、file/image key、COS bucket/pathPrefix 等敏感字段；GitHub Actions 中禁止 `--debug-json`，避免 snapshot/健康明细进入 Action 日志。
 - 收敛 PostgreSQL 角色权限：初始化脚本拆分 `training_migrator`、`training_app`、`training_maintenance` 和 `training_readonly`，schema owner、default privileges 与 migration history 由迁移账号管理，日常业务账号不再持有 DDL 或 `maintenance.schema_migration` 权限。
 - `maintenance:inspect` 新增只读权限审计摘要，输出当前 DB 用户、superuser/migrator-like 标记、各 schema `CREATE` 权限和危险原因，同时继续避免 DB URL、SQL 参数和 Secret 进入日志。
@@ -145,7 +147,7 @@
 
 - 修复 main 飞书随想入库成功后仍收到“GitHub Action 执行失败：站点部署/页面刷新”的假失败回执：`deploy-pages.yml` 现在先强校验本次生成的 `public/<module>/index.html` 产物，确认目标随想是否出现在正确模块；生产域名 `soulgo.chat` 因 GitHub Pages / Cloudflare 传播延迟短暂读到旧 HTML 时只记 warning，不再把已成功入库和已生成产物的同步 run 标红。
 - 修复 Telegram 纯随想 `/移动` 等数据库内操作在 Actions 缺少 AI Provider 配置时提前失败的问题：AI Provider 改为仅在图片识别或 `/analysis` 实际需要时懒加载，纯随想同步不再强依赖 `AI_BASE_URL`。
-- 修复图片同步后 `sleepBackfill` 对全部历史 ingest/archive 做全量扫描的问题：同步链路只把本次新入库或 pending replay 中实际含 sleep 的归档日期传给 backfill，非睡眠图片默认不触发 sleep backfill，睡眠图片只修复目标日期。
+- 修复图片同步后 `sleepBackfill` 外层入口遗漏透传 `targetArchivedDates`、实际仍扫描全部历史 ingest/archive 的问题；同步链路现在只查询本轮实际含 sleep 的目标日期，同日候选合并后只写一次，相同 `sleepKey` 保留最新记录，并在回填异常时把 batch 标记为 `partialFailure` 而不再静默吞错。
 - 修复监控页趋势图图例排版不协调的问题：图表副标题改用专用 class，避免标题区 `span` 样式污染图例色点和标签；图例改为紧凑胶囊标签并支持移动端自然换行。
 - 修复 Telegram 随想 `/移动 id 模块` 移动带图随想时图片引用丢失的问题：DB-only 移动/编辑现在会保留 `photoPaths: null` 的“不改原图片”语义，不再误转为空数组清空 `core.thought.image_refs_json`；同步补充移动带图随想和落库参数回归测试。
 - 修复华为运动健康睡眠详情图在 AI 识别时误把阶段图/趋势小卡片推算值当作睡眠总时长的问题：睡眠 prompt 现在明确以 `夜间睡眠 X小时Y分钟` 文字行为权威来源，单独缺少 `总睡眠` 标签时只写 `nightSleepMinutes` 并由程序侧回退展示；同步 bump recognition prompt version 以避开旧识别缓存，并更新 Telegram 睡眠截图回归用例。

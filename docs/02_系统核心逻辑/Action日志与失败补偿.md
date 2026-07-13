@@ -30,10 +30,13 @@
 - Database：status、transactionId、rowCounts、duration、pendingStatus、rollbackStatus。
 - Slow queries：只记录 `queryOrdinal`、operation、table、durationMs、thresholdMs，不输出 SQL 或参数。
 - Deploy dispatch：是否成功提交目标 workflow、ref 和必要的 thought 校验输入；不包含 deploy run 结论。
+- 睡眠回填失败会把本轮已存储的睡眠 batch 标记为 `partialFailure`，并在 warnings 中记录安全错误摘要；主写入仍保留 `stored`，但不能再把绿色 run 当作回填成功证明。
 
 ## 数据库观测
 
 `persistNormalizedBatch()` 对 connect、BEGIN、业务 query、COMMIT 和 AI call log 分段计时。messages、assets、recognitions 使用 `jsonb_to_recordset` 集合式 upsert，避免按记录逐条网络往返。超过 `TRAINING_DB_SLOW_QUERY_MS`（默认 1000ms）的调用进入安全慢查询摘要。
+
+`sleepBackfill` 只接收本轮实际写入睡眠数据的归档日期。同一天存在多个 ingest 候选时先按时间顺序合并，再执行一次 core 写入；相同睡眠身份键只保留最新记录，避免单条 `ON CONFLICT` 语句重复更新同一行。
 
 ## Action monitor 落库
 
@@ -67,6 +70,7 @@ workflow 根据被监控 run 的 `head_branch` 选择 `DEV_TRAINING_DB_URL` 或 
 ## 安全规则
 
 - 不输出 dispatch payload、chat id 明文、消息正文、图片 file id/key、COS 路径、Prompt、完整 AI 响应、SQL 参数或 Secret。
+- `workflow_dispatch` 只在 channel 判定步骤读取原始 input，并将同步事件和通知路由写入 runner 临时文件；后续同步、通知和部署派发只传 `SYNC_DISPATCH_EVENT_PATH`，不得重新注入 `SYNC_DISPATCH_PAYLOAD`。
 - 完整同步结果只写 runner 临时 result file 供 summary/通知使用；stdout 使用脱敏 safe report。
 - `monitor.*` 保存 GitHub run/job/step/failure 结构化数据，不保存业务 payload。
 - 参数健康表只保存参数名称、来源、探测状态和非敏感证据，不保存参数值或 value hash。
@@ -81,6 +85,7 @@ workflow 根据被监控 run 的 `head_branch` 选择 `DEV_TRAINING_DB_URL` 或 
 | `recognitionAttemptKinds` | strict schema、json object、text JSON、fallback provider 等尝试类型。 |
 | `syncStages` | resolve、recognition、persist、notify 等同步阶段。 |
 | `dateConfidence` / `dateStages` | 日期可信度和批次日期决策过程。 |
+| `partialFailure` | 主业务写入已完成，但识别或睡眠回填等后续阶段不完整；必须结合 warnings 继续处理。 |
 
 ## 安全数据库修复与维护命令
 

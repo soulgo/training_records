@@ -8,6 +8,15 @@ const templatePaths = [
   'themes/cactus/layout/action-monitor.ejs',
 ];
 
+test('production dependency graph uses COS SDK v3 without the legacy request stack', async () => {
+  const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  const packageLock = JSON.parse(await readFile(new URL('../package-lock.json', import.meta.url), 'utf8'));
+
+  assert.match(packageJson.dependencies['cos-nodejs-sdk-v5'], /^\^3\./);
+  assert.match(packageLock.packages['node_modules/cos-nodejs-sdk-v5'].version, /^3\./);
+  assert.equal(packageLock.packages['node_modules/request'], undefined);
+});
+
 test('JSON script templates escape HTML-significant code points before raw EJS output', async () => {
   for (const path of templatePaths) {
     const template = await readFile(new URL(`../${path}`, import.meta.url), 'utf8');

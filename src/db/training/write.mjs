@@ -489,6 +489,7 @@ export async function backfillCoreSleepFromIngestBatches(options = {}) {
     return await backfillCoreSleepFromIngestBatchesClient(client, {
       processedAt: options.processedAt,
       sourceChannel: options.sourceChannel ?? 'ingest_sleep_backfill',
+      targetArchivedDates: options.targetArchivedDates,
     });
   } finally {
     await client.end();
@@ -630,24 +631,35 @@ ${targetArchiveDateFilter}
   }
 
   const daysBackfilled = new Set();
+  const candidatesByDate = new Map();
+  for (const candidate of candidates) {
+    const archivedDate = candidate.batch.archivedDate;
+    const sameDayCandidates = candidatesByDate.get(archivedDate) ?? [];
+    sameDayCandidates.push(candidate);
+    candidatesByDate.set(archivedDate, sameDayCandidates);
+  }
   let transactionStarted = false;
   try {
     await client.query('BEGIN');
     transactionStarted = true;
-    for (const { batchId, batch } of candidates) {
-      const existingDay = await readCoreDay(client, batch.archivedDate);
-      const mergedDay = mergeBatchIntoDay(existingDay, batch);
+    for (const [archivedDate, sameDayCandidates] of candidatesByDate) {
+      let mergedDay = await readCoreDay(client, archivedDate);
+      let sourceBatchId = null;
+      for (const { batchId, batch } of sameDayCandidates) {
+        mergedDay = mergeBatchIntoDay(mergedDay, batch);
+        sourceBatchId = batch.batchId ?? batchId;
+      }
       await replaceCoreDay(
         client,
         mergedDay,
-        batch.batchId ?? batchId,
+        sourceBatchId,
         processedAt,
         {
           sourceChannel: options.sourceChannel ?? 'ingest_sleep_backfill',
           writeArchiveSleep: false,
         },
       );
-      daysBackfilled.add(batch.archivedDate);
+      daysBackfilled.add(archivedDate);
     }
     await client.query('COMMIT');
     transactionStarted = false;
