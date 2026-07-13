@@ -19,7 +19,7 @@
 | Worker 名称 | `sync-dispatch-dev` | `feishu-sync-dispatch` |
 | GitHub dispatch type | `telegram_update_dev` / `feishu_update_dev` | `telegram_update` / `feishu_update` |
 | GitHub sync ref | `dev` | `main` |
-| 数据库连接 | `DEV_TRAINING_DB_URL` 映射为运行时 `TRAINING_DB_URL`；`DEV_TRAINING_DB_READONLY_URL` 映射为运行时 `TRAINING_DB_READONLY_URL`；迁移时手动映射 `DEV_TRAINING_DB_MIGRATION_URL` 为 `TRAINING_DB_MIGRATION_URL` | `TRAINING_DB_URL`；读取可选 `TRAINING_DB_READONLY_URL`；迁移显式使用 `TRAINING_DB_MIGRATION_URL` |
+| 数据库连接 | GitHub Secret `DEV_TRAINING_DB_URL` 使用 `training_writer` 连接 dev 库并映射为运行时 `TRAINING_DB_URL`；`DEV_TRAINING_DB_READONLY_URL` 提供 dev 只读连接 | GitHub Secret `TRAINING_DB_URL` 使用同一个 `training_writer` 账号连接 main 库；`TRAINING_DB_READONLY_URL` 提供 main 只读连接 |
 | Action 监控写库 | `Action Monitor Report` 按被监控 run 的 dev 分支选择 `DEV_TRAINING_DB_URL` 写入 dev `monitor.*` | `Action Monitor Report` 按 main 分支选择 `TRAINING_DB_URL` 写入 main `monitor.*` |
 | Action 监控兜底 URL | 可选 `GITHUB_ACTION_MONITOR_REPORT_URL_DEV`，未填且 DB URL 不可用时跳过上报 | 可选 `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN`，未填且 DB URL 不可用时跳过上报 |
 | 参数健康 registry | `config/parameter-health/dev.json`，由 `Parameter Health Audit` 写入 dev 库 `monitor.system_config_*` | `config/parameter-health/main.json`，由 `Parameter Health Audit` 写入 main 库 `monitor.system_config_*` |
@@ -37,7 +37,7 @@
 
 ## 修改配置注意事项
 
-- `TRAINING_DB_URL`、`DEV_TRAINING_DB_URL` 影响 PostgreSQL 写入、读取、快照、备份和站点构建；`TRAINING_DB_READONLY_URL` / `DEV_TRAINING_DB_READONLY_URL` 配置后优先用于读取快照、导出、巡检、一致性检查和站点构建；`TRAINING_DB_MIGRATION_URL` / `DEV_TRAINING_DB_MIGRATION_URL` 只用于显式迁移。
+- `TRAINING_DB_URL`、`DEV_TRAINING_DB_URL` 都由 GitHub Settings/Secrets 提供，URL 中的写账号固定为 `training_writer`；两个 Secret 分别指向 main/dev 数据库。`TRAINING_DB_READONLY_URL` / `DEV_TRAINING_DB_READONLY_URL` 同样由 GitHub Settings/Secrets 提供，并优先用于快照、导出、巡检、一致性检查和站点构建。源码不硬编码只读用户名。
 - Action 监控默认复用分支 PostgreSQL 连接写入 `monitor.*`；外部 `GITHUB_ACTION_MONITOR_REPORT_URL*` 只在分支 DB URL 不可用时作为 HTTP 兜底。
 - 参数健康监控默认复用 `Parameter Health Audit` workflow、`config/parameter-health/<env>.json` 和分支 PostgreSQL；健康状态为 `healthy`、`present`、`invalid`、`missing`、`not_configured`、`unreachable`、`unsupported`、`unknown`，不反向改变同步、部署或备份 workflow 结论。
 - `GITHUB_SYNC_WORKFLOW_FILE` 与 `GITHUB_SYNC_REF` 决定 Worker 触发哪条 Actions 链路，配错会把消息写到错误分支。

@@ -22,10 +22,10 @@
 同步 summary 重点字段：
 
 - `traceId`、`queueTaskId`、`channel`、`batchId`
-- `persistenceStatus` / `status`
+- `persistenceStatus` / `status` / `businessStatus`
 - `transactionId`、`rowCounts`、`durationMs`
 - `pendingStatus`、`rollbackStatus`
-- `partialFailure`、`failureCategory` 和 warnings 中的 `sleep backfill failed`
+- `partialFailure`、`failureCategory`，以及 warnings 中的 `sleep backfill failed` 或 analysis business incomplete
 - `slowQueries[].queryOrdinal/operation/table/durationMs/thresholdMs`
 - deploy dispatch 的 workflow、ref 与 dispatch 成功/失败
 
@@ -39,16 +39,17 @@ Queue / Worker 重点字段：
 ## 排查步骤
 
 1. 从 Bot 回执或 sync run 记录 `queueTaskId`、`traceId` 和 `batchId`。
-2. 打开 `Sync (Main)` / `Sync (Dev)` summary，先判断业务状态是否为 `stored` / `unchanged`，还是 `pending_replay` / `partialFailure` / `skipped`。
+2. 打开 `Sync (Main)` / `Sync (Dev)` summary，先判断 `businessStatus` 是否为 `sent` / `ready`，还是 `failed`；写入类 batch 再判断 `persistenceStatus` 是 `stored` / `unchanged`，还是 `pending_replay` / `partialFailure` / `skipped`。
 3. 查看 Database 摘要。慢查询只根据 operation/table/ordinal 定位，不应要求日志输出 SQL 参数。
 4. 如果 `stored` batch 同时为 `partialFailure`，先看 warnings；`sleep backfill failed` 表示主写入成功但目标日期修复未完成，应检查 `targetArchivedDates` 过滤和重复睡眠身份，修复后运行 `npm run sync:db`。
-5. 如果 sync 成功但页面未更新，打开独立 `Deploy GitHub Pages` 或 `Deploy Cloudflare Pages (Dev)` run；不要在 sync run 中等待 deploy conclusion。
-6. 如果没有 sync run，查 Cloudflare Worker/Queue 日志，确认分片键对应正确 channel/chat，并检查 `dead-letter`。
-7. 如果 workflow 已 dispatch 但 Queue 报 run lookup timeout，确认 run-name 含同一个 `queue_task_id`，并检查 workflow file/ref 配置。
-8. 对 `pending_replay`，运行 `npm run maintenance:inspect`；需要精确审计时加 `-- --batch-id <batchId>`。
-9. 检查 `Pending Replay (Dev)` 最近两条 matrix job，确认 `SYNC_REPLAY_MODE=scheduled` 和目标渠道凭据完整。
-10. `/action-monitor/` 缺少明细时，打开由原 run 触发的 `Action Monitor Report`，确认选择了正确分支数据库并成功读取 GitHub API。
-11. 页面只有 GitHub API 顶层 run 时，说明 PostgreSQL 明细尚未写入或上报失败；继续查 `Action Monitor Report`，不要修改原 workflow conclusion。
+5. 如果 `/分析` 的 `businessStatus=failed` 且 `failureCategory=database`，先核对 `core.trainee_profile` 是否存在；dev 缺表时使用 `sql/dev-sql/update-dev-sql/20260713_add_core_trainee_profile.sql` 手工更新并执行文件末尾验收查询。
+6. 如果 sync 成功但页面未更新，打开独立 `Deploy GitHub Pages` 或 `Deploy Cloudflare Pages (Dev)` run；不要在 sync run 中等待 deploy conclusion。
+7. 如果没有 sync run，查 Cloudflare Worker/Queue 日志，确认分片键对应正确 channel/chat，并检查 `dead-letter`。
+8. 如果 workflow 已 dispatch 但 Queue 报 run lookup timeout，确认 run-name 含同一个 `queue_task_id`，并检查 workflow file/ref 配置。
+9. 对 `pending_replay`，运行 `npm run maintenance:inspect`；需要精确审计时加 `-- --batch-id <batchId>`。
+10. 检查 `Pending Replay (Dev)` 最近两条 matrix job，确认 `SYNC_REPLAY_MODE=scheduled` 和目标渠道凭据完整。
+11. `/action-monitor/` 缺少明细时，打开由原 run 触发的 `Action Monitor Report`，确认选择了正确分支数据库并成功读取 GitHub API。
+12. 页面只有 GitHub API 顶层 run 时，说明 PostgreSQL 明细尚未写入或上报失败；继续查 `Action Monitor Report`，不要修改原 workflow conclusion。
 
 ## 解决方案
 

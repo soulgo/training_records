@@ -128,9 +128,10 @@ test('dev and main registries map every parameter to an explicit health probe', 
       'utf8',
     ));
     validateParameterHealthRegistry(registry);
-    assert.equal(registry.parameters.length, 18);
+    assert.equal(registry.parameters.length, 17);
     assert.ok(registry.parameters.every((parameter) => parameter.healthProbeKey));
     assert.ok(registry.parameters.every((parameter) => !Object.hasOwn(parameter, 'value')));
     assert.deepEqual(new Set(registry.probes.map((probe) => probe.type)), expectedProbeTypes);
+    assert.doesNotMatch(JSON.stringify(registry), /MIGRATION_URL|database_migration/u);
   }
 });

@@ -285,6 +285,7 @@ function buildDatabasePermissionAudit(row) {
   const sessionUser = normalizeNullableString(row.session_user);
   const isSuperuser = normalizeBooleanFlag(row.is_superuser);
   const isMigratorLikeUser = /\bmigrator\b|_migrator\b|migrator_/iu.test(currentUser ?? '');
+  const isConfiguredWriter = currentUser === 'training_writer';
   const schemaCreatePrivileges = {
     archive: normalizeBooleanFlag(row.can_create_archive),
     core: normalizeBooleanFlag(row.can_create_core),
@@ -299,7 +300,7 @@ function buildDatabasePermissionAudit(row) {
     dangerousPrivilegeReasons.push('migrator_like_user');
   }
   for (const [schema, canCreate] of Object.entries(schemaCreatePrivileges)) {
-    if (canCreate) {
+    if (canCreate && !isConfiguredWriter) {
       dangerousPrivilegeReasons.push(`schema_create:${schema}`);
     }
   }

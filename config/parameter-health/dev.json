@@ -18,14 +18,6 @@
       "timeoutMs": 5000
     },
     {
-      "key": "database_migration",
-      "type": "postgres_connect",
-      "env": {
-        "url": "PARAMETER_HEALTH_DB_MIGRATION_URL"
-      },
-      "timeoutMs": 5000
-    },
-    {
       "key": "ai_primary",
       "type": "openai_models",
       "env": {
@@ -148,23 +140,6 @@
         ".github/workflows/deploy-cloudflare-pages-dev.yml"
       ],
       "healthProbeKey": "database_readonly"
-    },
-    {
-      "key": "dev.github.secret.DEV_TRAINING_DB_MIGRATION_URL",
-      "name": "DEV_TRAINING_DB_MIGRATION_URL",
-      "scope": "github_actions_secret",
-      "category": "database",
-      "required": false,
-      "sensitive": true,
-      "validityMode": "provider_metadata",
-      "warningDays": 30,
-      "criticalDays": 7,
-      "owner": "ops",
-      "sourceDoc": "docs/01_系统配置/dev.md",
-      "sourceCode": [
-        "tools/training-maintenance.mjs"
-      ],
-      "healthProbeKey": "database_migration"
     },
     {
       "key": "dev.github.secret.AI_API_KEY",

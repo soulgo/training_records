@@ -97,6 +97,47 @@ test('action sync summary renders trace AI database image storage and warning se
   assert.doesNotMatch(output, /6314355239|private-training-bucket|thoughts\/2026\/06/);
 });
 
+test('action sync summary marks failed analysis as business incomplete without exposing the raw error', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'action-sync-summary-analysis-failure-'));
+  const resultPath = path.join(tempRoot, 'telegram-result.json');
+  await writeFile(
+    resultPath,
+    JSON.stringify({
+      batches: [
+        {
+          kind: 'analysis',
+          batchId: 'analysis-487',
+          status: 'ready',
+          analysisReplyStatus: 'failed',
+          analysisReplyError: 'relation "core.trainee_profile" does not exist',
+          failureCategory: 'database',
+          failureReason: 'relation "core.trainee_profile" does not exist',
+        },
+      ],
+    }),
+    'utf8',
+  );
+
+  const output = execFileSync(
+    process.execPath,
+    [
+      'tools/action-sync-summary.mjs',
+      '--channel',
+      'telegram',
+      '--result-path',
+      resultPath,
+      '--trace-id',
+      'tr_dddddddddddddddd',
+    ],
+    { cwd: process.cwd(), encoding: 'utf8' },
+  );
+
+  assert.match(output, /businessStatus/);
+  assert.match(output, /analysis-487[^\n]+failed[^\n]+database/);
+  assert.match(output, /::warning title=Telegram sync business incomplete::analysis-487:failed:manual_intervention/);
+  assert.doesNotMatch(output, /core\.trainee_profile/);
+});
+
 test('action sync summary logs one structured completion event to stderr', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'action-sync-summary-log-'));
   const resultPath = path.join(tempRoot, 'telegram-result.json');

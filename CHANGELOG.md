@@ -13,6 +13,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 补充 dev `core.trainee_profile` 人工更新 SQL，修正脚本对不存在的 `training_app`、`training_maintenance`、`training_readonly` 角色的错误依赖；新表固定归属 `training_writer`，并继承现有事实表的只读授权。`/分析` 的 PostgreSQL schema 错误改为数据库失败，Action summary 同时展示业务状态和失败分类，不再把绿色 workflow conclusion 当作分析成功证明。
+
 ### Added
 
 - 新增当前 `/分析` 维护文档，记录单只读连接、近 28 天单 SQL 聚合、训练者画像和只读输出边界。
@@ -24,6 +28,7 @@
 
 ### Changed
 
+- main/dev 写连接统一使用 GitHub Settings 中的分支数据库 URL 和同一个 `training_writer` 账号；只读账号仅由各自 readonly URL 决定。移除无迁移执行器消费的 migration URL 参数健康项。
 - 图片识别 schema 升级到 v4，活动明细直接输出 `durationSeconds`、`calories`、`heartRate`、`distanceKm`、`avgSpeedKmh`；结构化字段优先进入 core，中文 `detail` 正则仅保留为旧结果兼容回退。
 - 同步主路径不再等待站点部署或同步拉取 Action jobs；deploy 与 monitor 独立通知失败，会话队列按稳定哈希分片，webhook 跳过 polling offset，新消息不再顺带消费 pending 队列。
 - PostgreSQL ingest messages/assets/recognitions 改为集合式 upsert，数据库观测新增安全 `queryOrdinal` 与 connect/BEGIN/query/COMMIT/AI log 分段耗时；识别缓存键新增 capability mode。

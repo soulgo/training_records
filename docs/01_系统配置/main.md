@@ -21,8 +21,8 @@ main 环境对应：
 
 | Secret 名称 | 是否必填 | 用途 |
 | --- | --- | --- |
-| `TRAINING_DB_URL` | 必填 | 生产 PostgreSQL 连接串，同步、构建、Markdown 备份都读这个库。 |
-| `TRAINING_DB_READONLY_URL` | 可选 | 生产只读 PostgreSQL 连接串；站点构建、数据库快照读取、Markdown 导出、巡检和一致性检查优先使用，未配置时回退 `TRAINING_DB_URL`。 |
+| `TRAINING_DB_URL` | 必填 | 使用与 dev 相同 `training_writer` 账号、但指向 main 数据库的 PostgreSQL 连接串；workflow 从 GitHub Secret 注入。 |
+| `TRAINING_DB_READONLY_URL` | 可选 | main 只读 PostgreSQL 连接串；只读账号名只存在于该 GitHub Secret 的 URL 中，读取任务优先使用，未配置时回退 `TRAINING_DB_URL`。 |
 | `AI_API_KEY` | 必填 | AI 服务鉴权。 |
 | `TELEGRAM_BOT_TOKEN` | 必填 | 生产 Telegram Bot token，用于拉取消息、下载图片、通知结果、刷新 webhook。 |
 | `TELEGRAM_SECRET_TOKEN` | 必填 | 生产 Telegram webhook secret。必须和 Cloudflare Worker Secret `TELEGRAM_SECRET_TOKEN` 的值一致。 |
@@ -165,8 +165,8 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 
 | 参数 | 来源 | 说明 |
 | --- | --- | --- |
-| `TRAINING_DB_URL` | PostgreSQL 服务商 | 生产数据库连接串，放 GitHub Secrets。 |
-| `TRAINING_DB_READONLY_URL` | PostgreSQL 服务商 | 可选只读连接串，放 GitHub Secrets；读取快照、巡检和一致性检查优先使用。 |
+| `TRAINING_DB_URL` | PostgreSQL 服务商 | `training_writer` 连接 main 数据库的 URL，放 GitHub Secrets。 |
+| `TRAINING_DB_READONLY_URL` | PostgreSQL 服务商 | 可选 main 只读连接串，账号名不写入源码；读取快照、巡检和一致性检查优先使用。 |
 | `TRAINING_DB_ENABLED` | 自定义 | 生产建议为 `true`。 |
 | `TRAINING_DB_TIMEOUT_MS` | 自定义 | 连接超时，放 GitHub Variables。 |
 | `TRAINING_DB_APP_NAME` | 自定义 | DB 连接名，便于排查。 |

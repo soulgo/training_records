@@ -5117,6 +5117,34 @@ test('runTelegramSync replies with a short failure message when analysis generat
   assert.match(sentMessages[0].text, /训练分析暂时生成失败：AI unavailable/);
 });
 
+test('runTelegramSync classifies missing analysis relation as a database failure', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-analysis-database-failure-'));
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv(),
+    getLastProcessedUpdateId: async () => 900,
+    fetchTelegramUpdates: async () => [
+      {
+        update_id: 901,
+        message: {
+          message_id: 9012,
+          date: Math.floor(new Date('2026-05-14T02:30:00Z').getTime() / 1000),
+          chat: { id: 42 },
+          text: '/分析 最近饮食怎么样',
+        },
+      },
+    ],
+    generateTrainingAnalysisReply: async () => {
+      throw new Error('relation "core.trainee_profile" does not exist');
+    },
+    sendTelegramMessage: async () => ({ message_id: 10002 }),
+  });
+
+  assert.equal(result.batches[0].analysisReplyStatus, 'failed');
+  assert.equal(result.batches[0].failureCategory, 'database');
+});
+
 test('runTelegramSync ignores unauthorized /analysis commands without generating replies', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-analysis-unauthorized-'));
   let generated = false;

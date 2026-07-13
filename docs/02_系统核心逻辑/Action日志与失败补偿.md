@@ -9,7 +9,7 @@
 3. 部署 workflow 自己构建、验证页面并在失败时通知原 Telegram/飞书会话。
 4. `Action Monitor Report` 通过 `workflow_run` 异步采集已完成的 sync、deploy 和 pending replay。
 
-因此：同步成功表示业务链路已经接受或持久化，并已提交需要的部署请求；页面是否发布成功必须查看独立 deploy run。
+因此：同步 workflow 成功表示消息处理进程正常结束，并已提交需要的部署请求；它不等于每个业务 batch 都成功。`/分析` 等只读命令可能已经向用户返回失败消息，但 workflow 仍保持成功，业务结论必须查看 sync summary 的 `businessStatus`、`failureCategory` 和 warnings。页面是否发布成功必须查看独立 deploy run。
 
 ## 关联 ID
 
@@ -25,12 +25,13 @@
 `tools/action-sync-summary.mjs` 生成安全摘要，重点包含：
 
 - Run context：workflow、runId、traceId、queueTaskId、channel。
-- Batch results：业务状态、识别结果、归档日期和通知状态。
+- Batch results：任务状态、`businessStatus`、`failureCategory`、识别结果、归档日期和通知状态。
 - AI：provider、model、promptVersion、token/latency/fallback 的安全统计。
 - Database：status、transactionId、rowCounts、duration、pendingStatus、rollbackStatus。
 - Slow queries：只记录 `queryOrdinal`、operation、table、durationMs、thresholdMs，不输出 SQL 或参数。
 - Deploy dispatch：是否成功提交目标 workflow、ref 和必要的 thought 校验输入；不包含 deploy run 结论。
 - 睡眠回填失败会把本轮已存储的睡眠 batch 标记为 `partialFailure`，并在 warnings 中记录安全错误摘要；主写入仍保留 `stored`，但不能再把绿色 run 当作回填成功证明。
+- `/分析` 回复失败时，summary 将 `businessStatus` 标为 `failed`、`failureDisposition` 标为 `manual_intervention` 并生成 business incomplete warning；原始数据库错误不会写入 summary 表格。
 
 ## 数据库观测
 

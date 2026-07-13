@@ -20,8 +20,8 @@ dev 环境对应：
 
 | Secret 名称 | 是否必填 | 用途 |
 | --- | --- | --- |
-| `DEV_TRAINING_DB_URL` | 必填 | dev PostgreSQL 连接串，同步、构建、导出都读这个库。 |
-| `DEV_TRAINING_DB_READONLY_URL` | 可选 | dev 只读 PostgreSQL 连接串；workflow 映射为运行时 `TRAINING_DB_READONLY_URL`，站点构建、数据库快照读取、Markdown 导出、巡检和一致性检查优先使用，未配置时回退 `DEV_TRAINING_DB_URL` 映射后的运行时 `TRAINING_DB_URL`。 |
+| `DEV_TRAINING_DB_URL` | 必填 | 使用 `training_writer` 的 dev PostgreSQL 连接串；workflow 从 GitHub Secret 注入，同步、构建、导出和受控维护共用。 |
+| `DEV_TRAINING_DB_READONLY_URL` | 可选 | dev 只读 PostgreSQL 连接串；只读账号名只存在于该 GitHub Secret 的 URL 中。workflow 映射为运行时 `TRAINING_DB_READONLY_URL`，站点构建、数据库快照读取、Markdown 导出、巡检和一致性检查优先使用，未配置时回退 `DEV_TRAINING_DB_URL`。 |
 | `AI_API_KEY` | 必填 | dev 与 main 共用的 AI 服务鉴权；两个同步 workflow 都映射为运行时 `AI_API_KEY`。 |
 | `AI_BASE_URL` | 必填 | dev 与 main 共用的 OpenAI-compatible base URL。 |
 | `DEV_TELEGRAM_BOT_TOKEN` | 必填 | dev Telegram Bot token，用于拉取消息、下载图片、通知结果、刷新 webhook。 |
@@ -157,8 +157,8 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.dev.toml
 
 | 参数 | 来源 | 说明 |
 | --- | --- | --- |
-| `DEV_TRAINING_DB_URL` | PostgreSQL 服务商 | dev 数据库连接串，放 GitHub Secrets。 |
-| `DEV_TRAINING_DB_READONLY_URL` | PostgreSQL 服务商 | 可选只读连接串，放 GitHub Secrets；workflow 映射为运行时 `TRAINING_DB_READONLY_URL`，读取快照、巡检和一致性检查优先使用。 |
+| `DEV_TRAINING_DB_URL` | PostgreSQL 服务商 | `training_writer` 连接 dev 数据库的 URL，放 GitHub Secrets。 |
+| `DEV_TRAINING_DB_READONLY_URL` | PostgreSQL 服务商 | 可选 dev 只读连接串，账号名不写入源码；workflow 映射为运行时 `TRAINING_DB_READONLY_URL`。 |
 | `TRAINING_DB_TIMEOUT_MS` | 自定义 | 连接超时，放 GitHub Variables。 |
 | `DEV_TRAINING_DB_APP_NAME` | 自定义 | DB 连接名，便于排查。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 建议 dev 使用 `database`。 |

@@ -1071,7 +1071,7 @@ test('telegram-sync workflow summary normalizes partial failure task status from
     assert.match(output, /image:2026-06-13/);
     assert.match(output, /no_date:null/);
     assert.match(output, /detectedDate missing year \/ needs review/);
-    assert.match(output, /\| album-partial-summary \| partialFailure \| stored \| 2026-06-13 \| image:2026-06-13; no_date:null \| detectedDate missing year \/ needs review \| uncertain \| 2\/1\/1 \|  \| written \|/);
+    assert.match(output, /\| album-partial-summary \| partialFailure \| partialFailure \| ai_service \| stored \| 2026-06-13 \| image:2026-06-13; no_date:null \| detectedDate missing year \/ needs review \| uncertain \| 2\/1\/1 \|  \| written \|/);
     assert.match(output, /\| auto_retry \| 6102 \|/);
     assert.doesNotMatch(output, /\| album-partial-summary \| ready \| stored/);
   }
@@ -1268,7 +1268,7 @@ test('sync workflow summaries emit warnings for business-incomplete batches', as
     assert.match(feishuOutput, /archivedDate \| dateSources \| warnings \| dateConfidence \| images/);
     assert.match(feishuOutput, /no_date:null/);
     assert.match(feishuOutput, /no reliable image or filename date/);
-    assert.match(feishuOutput, /\| fs-manual-date \| [^|]+ \| [^|]* \| skipped \|  \| 2026-06-17 \| no_date:null \| no reliable image or filename date \| missing \| 1\/0\/1 \|/);
+    assert.match(feishuOutput, /\| fs-manual-date \| [^|]+ \| [^|]* \| skipped \| skipped \| user_input \|  \| 2026-06-17 \| no_date:null \| no reliable image or filename date \| missing \| 1\/0\/1 \|/);
   }
 });
 
@@ -1417,6 +1417,14 @@ test('dev Worker config dispatches to the dev Telegram workflow event', async ()
   assert.match(config, /main\s*=\s*"cloudflare\/sync-dispatch-worker\.mjs"/);
   assert.match(config, /\[vars\]\s*\n(?:.*\n)*?GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM\s*=\s*"telegram_update_dev"/);
   assert.match(config, /\[vars\]\s*\n(?:.*\n)*?GITHUB_DISPATCH_EVENT_TYPE_FEISHU\s*=\s*"feishu_update_dev"/);
+});
+
+test('parameter health audit gets writer and readonly database URLs from GitHub settings only', async () => {
+  const workflow = await readWorkflow('.github/workflows/parameter-health-audit.yml');
+
+  assert.match(workflow, /PARAMETER_HEALTH_DB_PRIMARY_URL:[^\n]+secrets\.DEV_TRAINING_DB_URL[^\n]+secrets\.TRAINING_DB_URL/u);
+  assert.match(workflow, /PARAMETER_HEALTH_DB_READONLY_URL:[^\n]+secrets\.DEV_TRAINING_DB_READONLY_URL[^\n]+secrets\.TRAINING_DB_READONLY_URL/u);
+  assert.doesNotMatch(workflow, /TRAINING_DB_MIGRATION_URL/u);
 });
 
 test('package fast tests skip the slow thought module page render and exposes sync db', async () => {

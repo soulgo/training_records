@@ -414,6 +414,9 @@ function normalizeFailureDisposition(batch) {
   if (batch.persistenceStatus === 'fallback_markdown' || batch.persistenceStatus === 'pending_replay') {
     return 'auto_retry';
   }
+  if ((batch.kind ?? 'image') === 'analysis' && batch.analysisReplyStatus === 'failed') {
+    return 'manual_intervention';
+  }
   if (
     batch.failureCategory === 'ai_service' ||
     batch.failureCategory === 'telegram_api' ||
@@ -734,7 +737,9 @@ export function classifyFailureCategory(message, options = {}) {
   if (/invalid\s+archivedDate|invalid\s+archive\s+date/i.test(text)) {
     return 'user_input';
   }
-  if (/database|postgres|TRAINING_DB|ECONN|connection|pending_replay|fallback_markdown/i.test(`${phase} ${text}`)) {
+  if (
+    /database|postgres|TRAINING_DB|ECONN|connection|pending_replay|fallback_markdown|SQLSTATE\s*(?:42P01|42703)|\b(?:42P01|42703)\b|undefined_(?:table|column)|(?:relation|column)\s+[^\r\n]+\s+does not exist/i.test(`${phase} ${text}`)
+  ) {
     return 'database';
   }
   if (/missing recognition/i.test(text)) {
