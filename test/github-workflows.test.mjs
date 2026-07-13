@@ -63,10 +63,10 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
   for (const inputName of ['run_backfill', 'sync_db_mode', 'run_tests', 'deploy', 'install_dependencies']) {
     assert.match(action, new RegExp(`${inputName}:([\\s\\S]*?)required:\\s*false`));
   }
-  assert.match(action, /actions\/setup-node@v4/);
+  assert.match(action, /actions\/setup-node@v6/);
   assert.match(action, /node-version:\s*22/);
   assert.match(action, /cache:\s*npm/);
-  assert.match(action, /actions\/cache@v4/);
+  assert.match(action, /actions\/cache@v6/);
   assert.match(action, /- name: Install dependencies\s*\n\s*if: \$\{\{ inputs\.install_dependencies == 'true' \}\}/);
   assert.match(action, /path:\s*\|\s*\n\s*db\.json/);
   assert.match(
@@ -104,9 +104,9 @@ test('shared site build action centralizes Hexo build cache and deploy steps', a
   assert.match(action, /- name: Build site data and static files/);
   assert.match(action, /- name: Verify generated site artifact/);
   assert.match(action, /test -s public\/index\.html/);
-  assert.match(action, /actions\/configure-pages@v5/);
-  assert.match(action, /actions\/upload-pages-artifact@v3/);
-  assert.match(action, /actions\/deploy-pages@v4/);
+  assert.match(action, /actions\/configure-pages@v6/);
+  assert.match(action, /actions\/upload-pages-artifact@v5/);
+  assert.match(action, /actions\/deploy-pages@v5/);
 });
 
 test('shared site build action exposes GitHub API credentials for complete action monitor history', async () => {
@@ -142,7 +142,7 @@ test('deploy-pages workflow uses the shared site build action', async () => {
   const workflow = await readWorkflow('.github/workflows/deploy-pages.yml');
 
   assert.match(workflow, /- name: Checkout/);
-  assert.match(workflow, /actions\/checkout@v4/);
+  assert.match(workflow, /actions\/checkout@v7/);
   assert.match(workflow, /ref:\s*\$\{\{\s*github\.ref_name\s*\}\}/);
   assert.doesNotMatch(workflow, /ref:\s*main/);
   assert.match(workflow, /- name: Build and deploy site/);
@@ -272,10 +272,10 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
   ]) {
     assert.match(workflow, new RegExp(`-\\s*${escapeRegExp(expectedPath)}`));
   }
-  assert.match(workflow, /actions\/checkout@v4/);
+  assert.match(workflow, /actions\/checkout@v7/);
   assert.match(workflow, /fetch-depth:\s*0/);
   assert.doesNotMatch(workflow, /ref:\s*main/);
-  assert.match(workflow, /actions\/setup-node@v4/);
+  assert.match(workflow, /actions\/setup-node@v6/);
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /cache:\s*npm/);
   assert.match(workflow, /run:\s*npm ci/);
@@ -286,7 +286,7 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
   assert.match(workflow, /full-test:/);
   assert.match(workflow, /if: github\.event_name == 'schedule' \|\| github\.event_name == 'workflow_dispatch'/);
   assert.match(workflow, /run:\s*npm test/);
-  assert.doesNotMatch(workflow, /actions\/deploy-pages@v4/);
+  assert.doesNotMatch(workflow, /actions\/deploy-pages@v5/);
 });
 
 test('deploy-cloudflare-pages-dev workflow publishes dev branch to Cloudflare Pages preview', async () => {
@@ -357,14 +357,14 @@ test('deploy-cloudflare-worker workflow refreshes Telegram webhook after deploym
   assert.match(workflow, /name:\s*Deploy Cloudflare Worker/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /push:/);
-  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
-  assert.match(workflow, /command:\s*deploy/);
+  assert.doesNotMatch(workflow, /cloudflare\/wrangler-action/);
+  assert.match(workflow, /run:\s*npx --yes wrangler@3\.114\.14 deploy --config wrangler\.toml/);
   assert.match(workflow, /- name: Configure Telegram Worker secrets/);
   assert.match(workflow, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
   assert.match(workflow, /CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
-  assert.match(workflow, /printf '%s' "\$TELEGRAM_BOT_TOKEN" \| npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler\.toml/);
-  assert.match(workflow, /printf '%s' "\$TELEGRAM_SECRET_TOKEN" \| npx wrangler secret put TELEGRAM_SECRET_TOKEN --config wrangler\.toml/);
-  assert.match(workflow, /actions\/setup-node@v4/);
+  assert.match(workflow, /printf '%s' "\$TELEGRAM_BOT_TOKEN" \| npx --yes wrangler@3\.114\.14 secret put TELEGRAM_BOT_TOKEN --config wrangler\.toml/);
+  assert.match(workflow, /printf '%s' "\$TELEGRAM_SECRET_TOKEN" \| npx --yes wrangler@3\.114\.14 secret put TELEGRAM_SECRET_TOKEN --config wrangler\.toml/);
+  assert.match(workflow, /actions\/setup-node@v6/);
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /run:\s*npm ci/);
   assert.match(workflow, /- name: Refresh Telegram webhook/);
@@ -398,8 +398,10 @@ test('deploy-cloudflare-worker-dev workflow deploys the unified dev worker and r
   ]) {
     assert.match(workflow, new RegExp(`-\\s*${escapeRegExp(expectedPath)}`));
   }
-  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
-  assert.match(workflow, /command:\s*deploy --config wrangler\.dev\.toml/);
+  assert.doesNotMatch(workflow, /cloudflare\/wrangler-action/);
+  assert.match(workflow, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+  assert.match(workflow, /CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
+  assert.match(workflow, /run:\s*npx --yes wrangler@3\.114\.14 deploy --config wrangler\.dev\.toml/);
   assert.match(workflow, /- name: Refresh Dev Telegram webhook/);
   assert.match(workflow, /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.DEV_TELEGRAM_BOT_TOKEN\s*\}\}/);
   assert.match(workflow, /TELEGRAM_WEBHOOK_URL:\s*\$\{\{\s*vars\.DEV_TELEGRAM_WEBHOOK_URL\s*\}\}/);
@@ -458,8 +460,8 @@ test('refresh-telegram-webhook workflow supports manual and scheduled webhook re
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /schedule:\s*\n\s*-\s*cron:\s*'17 \*\/6 \* \* \*'/);
   assert.match(workflow, /group:\s*telegram-webhook/);
-  assert.match(workflow, /actions\/checkout@v4/);
-  assert.match(workflow, /actions\/setup-node@v4/);
+  assert.match(workflow, /actions\/checkout@v7/);
+  assert.match(workflow, /actions\/setup-node@v6/);
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /run:\s*npm ci/);
   assert.match(workflow, /- name: Set Telegram webhook/);
@@ -947,9 +949,10 @@ test('sync workflows accept queued workflow dispatch payloads and expose a webho
     assert.match(workflow, /const workflowEvent = JSON\.parse\(fs\.readFileSync\(process\.env\.ORIGINAL_GITHUB_EVENT_PATH, 'utf8'\)\);/);
     assert.match(workflow, /const dispatchPayloadRaw = workflowEvent\.inputs\?\.dispatch_payload \?\? '';/);
     assert.match(workflow, /client_payload: payload\.client_payload \?\? payload/);
+    assert.match(workflow, /notification: payload\.notification \?\? null/);
     assert.match(workflow, /echo "SYNC_DISPATCH_EVENT_PATH=\$GITHUB_EVENT_PATH" >> "\$GITHUB_ENV"/);
     assert.match(workflow, /steps\.channel\.outputs\.is_webhook_dispatch == 'true'/);
-    assert.match(workflow, /SYNC_DISPATCH_PAYLOAD:\s*\$\{\{ github\.event\.inputs\.dispatch_payload \}\}/);
+    assert.doesNotMatch(workflow, /SYNC_DISPATCH_PAYLOAD/);
     assert.doesNotMatch(workflow, /echo "\$DISPATCH_PAYLOAD" >> "\$GITHUB_ENV"/);
     assert.doesNotMatch(workflow, /echo "GITHUB_EVENT_PATH=\$GITHUB_EVENT_PATH" >> "\$GITHUB_ENV"/);
     assert.doesNotMatch(workflow, /\$\{\{\s*env\.SYNC_DISPATCH_PAYLOAD\s*\}\}/);
@@ -1001,10 +1004,10 @@ test('Pages deployment uploads and deploys a single github-pages artifact path',
   const action = await readWorkflow('.github/actions/site-build/action.yml');
   const deployPages = await readWorkflow('.github/workflows/deploy-pages.yml');
 
-  assert.equal(matchCount(action, /actions\/upload-pages-artifact@v3/g), 1);
-  assert.equal(matchCount(action, /actions\/deploy-pages@v4/g), 1);
-  assert.equal(matchCount(deployPages, /actions\/upload-pages-artifact@v3/g), 0);
-  assert.equal(matchCount(deployPages, /actions\/deploy-pages@v4/g), 0);
+  assert.equal(matchCount(action, /actions\/upload-pages-artifact@v5/g), 1);
+  assert.equal(matchCount(action, /actions\/deploy-pages@v5/g), 1);
+  assert.equal(matchCount(deployPages, /actions\/upload-pages-artifact@v5/g), 0);
+  assert.equal(matchCount(deployPages, /actions\/deploy-pages@v5/g), 0);
   assert.match(deployPages, /uses:\s*\.\/\.github\/actions\/site-build/);
 });
 
@@ -1068,7 +1071,7 @@ test('telegram-sync workflow summary normalizes partial failure task status from
     assert.match(output, /image:2026-06-13/);
     assert.match(output, /no_date:null/);
     assert.match(output, /detectedDate missing year \/ needs review/);
-    assert.match(output, /\| album-partial-summary \| partialFailure \| stored \| 2026-06-13 \| image:2026-06-13; no_date:null \| detectedDate missing year \/ needs review \| uncertain \| 2\/1\/1 \|  \| written \|/);
+    assert.match(output, /\| album-partial-summary \| partialFailure \| partialFailure \| ai_service \| stored \| 2026-06-13 \| image:2026-06-13; no_date:null \| detectedDate missing year \/ needs review \| uncertain \| 2\/1\/1 \|  \| written \|/);
     assert.match(output, /\| auto_retry \| 6102 \|/);
     assert.doesNotMatch(output, /\| album-partial-summary \| ready \| stored/);
   }
@@ -1265,7 +1268,7 @@ test('sync workflow summaries emit warnings for business-incomplete batches', as
     assert.match(feishuOutput, /archivedDate \| dateSources \| warnings \| dateConfidence \| images/);
     assert.match(feishuOutput, /no_date:null/);
     assert.match(feishuOutput, /no reliable image or filename date/);
-    assert.match(feishuOutput, /\| fs-manual-date \| [^|]+ \| [^|]* \| skipped \|  \| 2026-06-17 \| no_date:null \| no reliable image or filename date \| missing \| 1\/0\/1 \|/);
+    assert.match(feishuOutput, /\| fs-manual-date \| [^|]+ \| [^|]* \| skipped \| skipped \| user_input \|  \| 2026-06-17 \| no_date:null \| no reliable image or filename date \| missing \| 1\/0\/1 \|/);
   }
 });
 
@@ -1316,7 +1319,7 @@ test('main sync workflow handles production dispatches and writes main branch', 
   assert.match(workflow, /repository_dispatch:\s*\n\s+types:\s*\n\s+- telegram_update\s*\n\s+- feishu_update/);
   assert.doesNotMatch(workflow, /-\s*telegram_update_dev\s*(?:\n|$)/);
   assert.doesNotMatch(workflow, /-\s*feishu_update_dev\s*(?:\n|$)/);
-  assert.match(workflow, /- name: Checkout main branch\s*\n\s+uses: actions\/checkout@v4\s*\n\s+with:\s*\n\s+ref:\s*main/);
+  assert.match(workflow, /- name: Checkout main branch\s*\n\s+uses: actions\/checkout@v7\s*\n\s+with:\s*\n\s+ref:\s*main/);
   assert.match(workflow, /permissions:\s*\n\s+contents:\s*write\s*\n\s+actions:\s*write/);
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.TRAINING_DB_URL\s*\}\}/);
   assert.match(workflow, /TRAINING_DB_READONLY_URL:\s*\$\{\{\s*secrets\.TRAINING_DB_READONLY_URL\s*\}\}/);
@@ -1347,7 +1350,7 @@ test('telegram-sync dev workflow only handles dev dispatches and writes dev bran
   assert.match(workflow, /repository_dispatch:\s*\n\s+types:\s*\n\s+- telegram_update_dev\s*\n\s+- feishu_update_dev/);
   assert.doesNotMatch(workflow, /-\s*telegram_update\s*(?:\n|$)/);
   assert.doesNotMatch(workflow, /-\s*feishu_update\s*(?:\n|$)/);
-  assert.match(workflow, /- name: Checkout dev branch\s*\n\s+uses: actions\/checkout@v4\s*\n\s+with:\s*\n\s+ref:\s*dev/);
+  assert.match(workflow, /- name: Checkout dev branch\s*\n\s+uses: actions\/checkout@v7\s*\n\s+with:\s*\n\s+ref:\s*dev/);
   assert.match(workflow, /permissions:\s*\n\s+contents:\s*write\s*\n\s+actions:\s*write/);
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_URL\s*\}\}/);
   assert.match(workflow, /TRAINING_DB_READONLY_URL:\s*\$\{\{\s*secrets\.DEV_TRAINING_DB_READONLY_URL\s*\}\}/);
@@ -1414,6 +1417,14 @@ test('dev Worker config dispatches to the dev Telegram workflow event', async ()
   assert.match(config, /main\s*=\s*"cloudflare\/sync-dispatch-worker\.mjs"/);
   assert.match(config, /\[vars\]\s*\n(?:.*\n)*?GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM\s*=\s*"telegram_update_dev"/);
   assert.match(config, /\[vars\]\s*\n(?:.*\n)*?GITHUB_DISPATCH_EVENT_TYPE_FEISHU\s*=\s*"feishu_update_dev"/);
+});
+
+test('parameter health audit gets writer and readonly database URLs from GitHub settings only', async () => {
+  const workflow = await readWorkflow('.github/workflows/parameter-health-audit.yml');
+
+  assert.match(workflow, /PARAMETER_HEALTH_DB_PRIMARY_URL:[^\n]+secrets\.DEV_TRAINING_DB_URL[^\n]+secrets\.TRAINING_DB_URL/u);
+  assert.match(workflow, /PARAMETER_HEALTH_DB_READONLY_URL:[^\n]+secrets\.DEV_TRAINING_DB_READONLY_URL[^\n]+secrets\.TRAINING_DB_READONLY_URL/u);
+  assert.doesNotMatch(workflow, /TRAINING_DB_MIGRATION_URL/u);
 });
 
 test('package fast tests skip the slow thought module page render and exposes sync db', async () => {

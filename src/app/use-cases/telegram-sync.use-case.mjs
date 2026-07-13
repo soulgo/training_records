@@ -508,6 +508,16 @@ export async function runMessageSync(options = {}) {
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const warning = `sleep backfill failed: ${errorMessage}`;
+      for (const batch of batches) {
+        if (batch.persistenceStatus !== 'stored' || !hasSleepBatchPayload(batch)) {
+          continue;
+        }
+        batch.partialFailure = true;
+        batch.failureCategory ??= 'database';
+        batch.failureReason ??= errorMessage;
+        batch.warnings = [...new Set([...(batch.warnings ?? []), warning])];
+      }
       process.stderr.write(`[telegram-sync] sleep backfill failed: ${errorMessage}\n`);
     }
   }

@@ -742,15 +742,24 @@ test('action monitor view model keeps all branch runs in one fifteen-item pagina
   assert.deepEqual(view.runs.map((run) => run.runId), rows.slice(0, 15).map((row) => row.runId));
 });
 
-test('github action monitor SQL documents dev and main environment separation', async () => {
-  const sql = await readFile(new URL('../docs/03_历史重构记录/重构历史/action日志监控/03_github_action_monitor.sql', import.meta.url), 'utf8');
+test('action monitor workflow and current SQL keep dev and main reporting separated', async () => {
+  const [workflow, devSql, mainSql] = await Promise.all([
+    readFile(new URL('../.github/workflows/action-monitor-report.yml', import.meta.url), 'utf8'),
+    readFile(new URL('../sql/dev-sql/monitor.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../sql/main-sql/monitor.sql', import.meta.url), 'utf8'),
+  ]);
 
-  assert.match(sql, /monitor_environment text NOT NULL/);
-  assert.match(sql, /COMMENT ON COLUMN monitor\.github_action_runs\.monitor_environment IS '监控环境：dev 或 main'/);
-  assert.match(sql, /GITHUB_ACTION_MONITOR_ENVIRONMENT=dev/);
-  assert.match(sql, /GITHUB_ACTION_MONITOR_ALLOWED_BRANCH=dev/);
-  assert.match(sql, /GITHUB_ACTION_MONITOR_ENVIRONMENT=main/);
-  assert.match(sql, /GITHUB_ACTION_MONITOR_ALLOWED_BRANCH=main/);
+  assert.match(workflow, /workflow_run:/);
+  assert.match(workflow, /head_branch == 'dev' \|\| github\.event\.workflow_run\.head_branch == 'main'/);
+  assert.match(workflow, /DEV_TRAINING_DB_URL/);
+  assert.match(workflow, /secrets\.TRAINING_DB_URL/);
+  assert.match(workflow, /GITHUB_ACTION_MONITOR_ENVIRONMENT:\s*\$\{\{ github\.event\.workflow_run\.head_branch \}\}/);
+  for (const sql of [devSql, mainSql]) {
+    assert.match(sql, /CREATE TABLE "monitor"\."github_action_runs"/);
+    assert.match(sql, /CREATE TABLE "monitor"\."github_action_jobs"/);
+    assert.match(sql, /CREATE TABLE "monitor"\."github_action_steps"/);
+    assert.match(sql, /CREATE TABLE "monitor"\."github_action_failures"/);
+  }
 });
 
 function jsonResponse(payload, status = 200) {

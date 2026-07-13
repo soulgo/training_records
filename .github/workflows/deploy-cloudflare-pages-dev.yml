@@ -94,7 +94,7 @@ jobs:
       TRAINING_BUILD_ARCHIVE_WRITE: false
     steps:
       - name: Checkout dev branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0

@@ -20,8 +20,8 @@ dev 环境对应：
 
 | Secret 名称 | 是否必填 | 用途 |
 | --- | --- | --- |
-| `DEV_TRAINING_DB_URL` | 必填 | dev PostgreSQL 连接串，同步、构建、导出都读这个库。 |
-| `DEV_TRAINING_DB_READONLY_URL` | 可选 | dev 只读 PostgreSQL 连接串；workflow 映射为运行时 `TRAINING_DB_READONLY_URL`，站点构建、数据库快照读取、Markdown 导出、巡检和一致性检查优先使用，未配置时回退 `DEV_TRAINING_DB_URL` 映射后的运行时 `TRAINING_DB_URL`。 |
+| `DEV_TRAINING_DB_URL` | 必填 | 使用 `training_writer` 的 dev PostgreSQL 连接串；workflow 从 GitHub Secret 注入，同步、构建、导出和受控维护共用。 |
+| `DEV_TRAINING_DB_READONLY_URL` | 可选 | dev 只读 PostgreSQL 连接串；只读账号名只存在于该 GitHub Secret 的 URL 中。workflow 映射为运行时 `TRAINING_DB_READONLY_URL`，站点构建、数据库快照读取、Markdown 导出、巡检和一致性检查优先使用，未配置时回退 `DEV_TRAINING_DB_URL`。 |
 | `AI_API_KEY` | 必填 | dev 与 main 共用的 AI 服务鉴权；两个同步 workflow 都映射为运行时 `AI_API_KEY`。 |
 | `AI_BASE_URL` | 必填 | dev 与 main 共用的 OpenAI-compatible base URL。 |
 | `DEV_TELEGRAM_BOT_TOKEN` | 必填 | dev Telegram Bot token，用于拉取消息、下载图片、通知结果、刷新 webhook。 |
@@ -44,7 +44,7 @@ dev 环境对应：
 | --- | --- | --- | --- |
 | `TRAINING_DB_TIMEOUT_MS` | `5000` | 建议填 | 数据库连接超时。 |
 | `DEV_TRAINING_DB_APP_NAME` | `sync-dev` | 建议填 | PostgreSQL `application_name`，便于在 DB 侧区分来源。 |
-| `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` | dev 监控 API base URL | 可选 | `Report Action Status` 在没有可用 dev PostgreSQL 连接时的 HTTP 兜底上报地址。 |
+| `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` | dev 监控 API base URL | 可选 | 本地或旧 workflow 使用 HTTP monitor server 时的兜底地址；当前 `Action Monitor Report` 直接写 dev PostgreSQL。 |
 | `GITHUB_ACTION_MONITOR_REPORT_URL` | 共享监控 API base URL | 可选 | dev/main 专用 URL 未配置时的共享兜底地址。 |
 | `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` | main 监控 API base URL | 可选 | 所有 workflow 都注入该变量；dev 分支不会优先使用它。 |
 | `TRAINING_SNAPSHOT_SOURCE` | `database` | 建议填 | 构建站点时从数据库还是 Markdown 生成快照。 |
@@ -126,6 +126,7 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.dev.toml
 | `AI_BASE_URL` | AI 服务商文档 | GitHub Secret；必须是 Chat Completions 兼容接口的 base URL。 |
 | `AI_MODEL` | AI 服务商模型列表 | GitHub Variable；dev 与 main 的默认识别和分析模型。 |
 | `TELEGRAM_RECOGNITION_MODEL` | AI 服务商模型列表 | GitHub Variable；需要覆盖默认图片识别模型时再填。 |
+| `AI_SUPPORTS_VISION` / `AI_SUPPORTS_JSON_SCHEMA` / `AI_SUPPORTS_JSON_OBJECT` / `AI_SUPPORTS_TEXT_JSON` | AI 服务商能力说明 | 运行时代码支持，默认都为 `true`；当前 sync workflow 尚未注入这些变量，如需显式覆盖必须先同步修改 workflow。 |
 
 当前代码读取位置：`src/adapters/ai/openai-compatible.adapter.mjs`、`src/app/use-cases/telegram-sync.use-case.mjs`。
 
@@ -156,15 +157,13 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.dev.toml
 
 | 参数 | 来源 | 说明 |
 | --- | --- | --- |
-| `DEV_TRAINING_DB_URL` | PostgreSQL 服务商 | dev 数据库连接串，放 GitHub Secrets。 |
-| `DEV_TRAINING_DB_READONLY_URL` | PostgreSQL 服务商 | 可选只读连接串，放 GitHub Secrets；workflow 映射为运行时 `TRAINING_DB_READONLY_URL`，读取快照、巡检和一致性检查优先使用。 |
+| `DEV_TRAINING_DB_URL` | PostgreSQL 服务商 | `training_writer` 连接 dev 数据库的 URL，放 GitHub Secrets。 |
+| `DEV_TRAINING_DB_READONLY_URL` | PostgreSQL 服务商 | 可选 dev 只读连接串，账号名不写入源码；workflow 映射为运行时 `TRAINING_DB_READONLY_URL`。 |
 | `TRAINING_DB_TIMEOUT_MS` | 自定义 | 连接超时，放 GitHub Variables。 |
 | `DEV_TRAINING_DB_APP_NAME` | 自定义 | DB 连接名，便于排查。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 建议 dev 使用 `database`。 |
 
-dev 数据库 schema 事实源是 `sql/dev-sql/`。Action 监控当前在同一个 dev PostgreSQL 中写入 `monitor.github_action_runs/jobs/steps/failures`，参数健康 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
-
-`Report Action Status` step 会把 `DEV_TRAINING_DB_URL` 映射为运行时 `TRAINING_DB_URL`，把 `DEV_TRAINING_DB_APP_NAME` 映射为 `TRAINING_DB_APP_NAME`，并使用 `github.token` 读取 GitHub Actions run/jobs/steps 后直写 `monitor.*`。只有当分支 DB URL 不可用时，才使用 `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` / `GITHUB_ACTION_MONITOR_REPORT_URL` 走 HTTP 兜底。
+dev 数据库 schema 事实源是 `sql/dev-sql/`。`Action Monitor Report` 在被监控 run 完成后把 `DEV_TRAINING_DB_URL`、`DEV_TRAINING_DB_APP_NAME` 映射为监控写库配置，读取 GitHub run/jobs/steps 后写入 dev `monitor.*`；参数健康 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
 
 参数健康 registry 维护在 `config/parameter-health/dev.json`。根级 `probes` 定义 PostgreSQL、AI、Telegram、飞书、COS、Cloudflare、存在性检查和不支持探测；参数项通过 `healthProbeKey` 引用 probe。registry 只保存环境变量名和非敏感配置，不保存实际值或 value hash。只有真实 API/连接探测成功才是 `healthy`；`present` 只表示参数已注入，`unsupported` 表示没有安全探测方式。
 
@@ -213,9 +212,9 @@ dev workflow 会检查 `DEV_COS_BUCKET` / `DEV_COS_DOMAIN` 不能和 main 的 `C
 3. 运行 `Deploy Cloudflare Worker (Dev)`，确认 Worker 部署成功并刷新 Telegram webhook。
 4. 运行 `Deploy Cloudflare Pages (Dev)`，确认 dev 站点能构建和部署。
 5. 给 dev Telegram bot 或 dev 飞书应用发测试消息，确认 `Sync (Dev)` 被触发。
-6. 检查 GitHub Actions summary：同步结果、数据库写入、图片上传、站点部署都应成功。
+6. 检查 `Sync (Dev)` summary：同步、数据库写入、图片上传和 deploy dispatch 应成功；站点构建结论在独立 `Deploy Cloudflare Pages (Dev)` run 中确认。
 7. 运行 `Parameter Health Audit`，确认 Step Summary 出现 dev 健康状态计数并触发 dev Pages 刷新。
-8. 打开 dev 站点 `/action-monitor/`，确认新 run 出现在 Action 日志里，且“系统参数健康”展示 dev registry 中的真实探测状态；如果只有顶层 run 没有 job/step 明细，先回看该 run 的 `Report Action Status` step 是否成功写入 `monitor.*`。
+8. 打开 dev 站点 `/action-monitor/`，确认 sync、deploy、pending replay 由 `Action Monitor Report` 写入日志，且“系统参数健康”展示 dev registry 的真实探测状态。
 
 ## 5. 可选 Docker 运行
 

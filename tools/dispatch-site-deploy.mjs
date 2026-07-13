@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const GITHUB_API_URL = 'https://api.github.com';
@@ -11,7 +12,7 @@ export async function dispatchSiteDeploy(options = {}) {
   if (!repository || !token || !workflowFile || !ref) {
     throw new Error('repository, token, workflowFile, and ref are required');
   }
-  const notification = readDispatchNotification(options.syncDispatchPayload);
+  const notification = await readDispatchNotification(options.syncDispatchEventPath);
 
   const inputs = compactInputs({
     strict_database_snapshot: 'true',
@@ -46,12 +47,12 @@ export async function dispatchSiteDeploy(options = {}) {
   return { dispatched: true, workflowFile, ref };
 }
 
-function readDispatchNotification(rawPayload) {
-  if (!rawPayload) {
+async function readDispatchNotification(eventPath) {
+  if (!eventPath) {
     return null;
   }
   try {
-    const notification = JSON.parse(String(rawPayload)).notification;
+    const notification = JSON.parse(await readFile(String(eventPath), 'utf8')).notification;
     if (!notification || typeof notification !== 'object') {
       return null;
     }
@@ -78,7 +79,7 @@ async function main() {
     ref: env.SITE_DEPLOY_REF,
     queueTaskId: env.QUEUE_TASK_ID,
     sourceChannel: env.SOURCE_CHANNEL,
-    syncDispatchPayload: env.SYNC_DISPATCH_PAYLOAD,
+    syncDispatchEventPath: env.SYNC_DISPATCH_EVENT_PATH,
     notificationChatId: env.NOTIFICATION_CHAT_ID,
     notificationMessageId: env.NOTIFICATION_MESSAGE_ID,
     thoughtCheck: {

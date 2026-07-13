@@ -60,7 +60,7 @@ test('action monitor build falls back to current health registry without inventi
     stderr: { write() {} },
   });
 
-  assert.equal(view.parameterHealth.total, 18);
+  assert.equal(view.parameterHealth.total, 17);
   assert.ok(view.parameterHealth.items.every((item) => ['unknown', 'unsupported'].includes(item.status)));
   assert.ok(view.parameterHealth.items.every((item) => item.status !== 'healthy'));
 });

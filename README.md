@@ -36,7 +36,8 @@
 flowchart TD
   DB["PostgreSQL core.*"] --> S
   MSG["Telegram / 飞书 图片与命令"] --> W["统一 Cloudflare Worker"]
-  W --> GH["GitHub repository_dispatch"]
+  W --> QD["按渠道 + 会话分片的 SyncDispatchQueue"]
+  QD --> GH["GitHub workflow_dispatch"]
   GH --> SYNC["sync.yml / sync-dev.yml"]
   SYNC --> CMD["npm run sync:telegram / sync:feishu"]
   CMD --> IMG["Sharp 图片处理"]
@@ -44,7 +45,11 @@ flowchart TD
   OCR --> AI["视觉理解与语义识别"]
   AI --> INGEST["NormalizedRecognition / generic ingest"]
   INGEST --> DB
-  CMD -. "DB 失败" .-> Q["pending queue"]
+  CMD -. "可重试失败" .-> Q["PostgreSQL pending_task"]
+  Q --> PR["Pending Replay (Dev)"]
+  SYNC -->|"异步派发"| DEPLOY["Pages deploy workflow"]
+  SYNC -. "workflow_run" .-> AM["Action Monitor Report"]
+  DEPLOY -. "workflow_run" .-> AM
   DB --> BAK["Markdown Backup"]
   BAK --> A["训练记录.md / source/_posts"]
   S --> DATA["source/_data/training.json + dashboardView.json"]
@@ -90,7 +95,7 @@ flowchart TD
 - `runtime/`：待补偿队列和归档失败日志。
 - `docs/`：维护文档入口。
 
-根目录 Markdown 只保留标准项目入口和运行链路固定文件：`README.md`、`CHANGELOG.md`、`训练记录.md`、`训练数据解析.md`。架构分析、阶段目标、实施方案、TDD 记录和验收报告统一放在 `docs/03_历史重构记录/重构历史/`，避免把历史过程资料误当成当前操作手册。
+根目录 Markdown 只保留标准项目入口和运行链路固定文件：`README.md`、`CHANGELOG.md`、`训练记录.md`、`训练数据解析.md`。`docs/` 只维护当前配置、当前运行逻辑、当前排查方式和长期规则；一次性分析、阶段目标、实施方案、TDD 过程与验收明细由 Git 历史、提交记录和 CHANGELOG 追溯，不在仓库中长期保留重复副本。
 
 ## 快速开始
 
@@ -167,20 +172,20 @@ npm run server
 消息通道自动流程：
 
 1. Telegram 或飞书消息进入统一 Cloudflare Worker。
-2. Worker 校验 secret / 飞书签名；Telegram 帮助消息可直接回复，其它消息触发 GitHub `repository_dispatch`。
-3. `sync.yml` 或 `sync-dev.yml` 判断 channel，再执行 `npm run sync:telegram` 或 `npm run sync:feishu`。
+2. Worker 校验 secret / 飞书签名；Telegram 帮助消息可直接回复，其它消息按“渠道 + 会话”稳定分片进入 `SyncDispatchQueue`。
+3. Queue 使用 `workflow_dispatch` 触发 `sync.yml` 或 `sync-dev.yml`；同一会话保持顺序，不同会话可以并行。
 4. 图片批次调用 AI 识别；随想、Markdown 附件随想、帮助和分析按通道能力分支处理。
 5. 带图随想先写本地图片 artifact 或腾讯云 COS，再把图片引用、随想和身体反馈写 PostgreSQL。
-6. PostgreSQL 失败时写 pending 队列。
-7. 内容变化后 workflow 只提交文件；站点构建部署由 push 或 DB-only 异步 deploy workflow 完成。
+6. PostgreSQL 或可重试识别失败时写入 `ingest.pending_task`；dev 的 `Pending Replay (Dev)` 定时或手工独立重放，不阻塞新消息。
+7. 内容变化后 sync workflow 只派发站点部署，不等待 Pages 完成；部署失败由部署 workflow 独立通知，Action 监控由 `workflow_run` 异步采集。
 
 图片批次的持久化主路径使用 `ingest.source_batch`、`source_message`、`source_asset`、`recognition_run` 和 `pending_task`。旧 `ingest.telegram_*` 表只保留为迁移观察期历史数据，不再被生产代码访问。
 
-## 数据库迁移状态
+## 数据库结构状态
 
-- 数据库结构按环境分别以 `sql/dev-sql/` 和 `sql/main-sql/` 为准；main 合并 dev 前手工执行 `sql/main-sql/align_to_dev.sql` 并完成文件末尾验收查询。
-- main 数据库尚未执行本轮两阶段迁移；必须先备份并按上述顺序执行、运行 SQL 末尾验收查询，再部署当前代码。
-- `sql/cleanup_phase2_legacy_ingest.sql` 尚未执行。至少观察一个完整同步、pending 重试、备份和维护周期，并确认旧表调用为 0 后，才可显式开启清理门禁。
+- dev 与 main 数据库已经完成结构对齐；仓库分别以 `sql/dev-sql/` 和 `sql/main-sql/` 保存两套环境的当前导出。
+- 日常 sync、deploy、导出和巡检不执行运行时 DDL。后续结构变更必须作为独立数据库任务，在目标环境备份、执行、验收后重新导出对应环境 SQL。
+- dev/main 业务数据仍然互相独立；结构对齐不代表可以用一侧的数据导出覆盖另一侧。
 
 详细规则见 [系统总览](docs/02_系统核心逻辑/系统总览.md)、[Action 日志与失败补偿](docs/02_系统核心逻辑/Action日志与失败补偿.md) 和 [数据入库流程](docs/02_系统核心逻辑/数据入库流程.md)。
 
@@ -211,6 +216,8 @@ docker compose up --build -d
 | `deploy-cloudflare-pages-dev.yml` | 构建 dev 分支并部署 Cloudflare Pages 预览 |
 | `sync.yml` | main Telegram / 飞书统一同步、提交内容变化，并在图片、随想新增/编辑/删除/移动等 DB-only 入库时异步触发站点部署 |
 | `sync-dev.yml` | dev Telegram / 飞书统一同步，并在图片、随想新增/编辑/删除/移动等 DB-only 入库时触发 dev Cloudflare Pages 预览部署 |
+| `pending-replay.yml` | 每 10 分钟或手工按 Telegram/飞书两条并发组重放 dev 到期 pending 任务 |
+| `action-monitor-report.yml` | 通过 `workflow_run` 异步采集 sync、deploy 和 pending replay 的 run/job/step/failure 状态 |
 | `markdown-backup.yml` | 按 GitHub Variables 控制定时从数据库导出 Markdown 备份 |
 | `deploy-cloudflare-worker.yml` | 部署 main 统一 Cloudflare Worker，并刷新 Telegram webhook |
 | `deploy-cloudflare-worker-dev.yml` | 部署 dev 统一 Cloudflare Worker，并刷新 dev Telegram webhook |
@@ -258,9 +265,7 @@ PR 到 `main` 会运行 `npm run check:derived-data-merge -- --base origin/main`
 - [系统核心逻辑](docs/02_系统核心逻辑/README.md)：架构、消息链路、AI 识别、数据入库、展示读取、Action 日志与失败补偿
 - [系统配置](docs/01_系统配置/README.md)：dev/main 配置差异、GitHub Actions、Wrangler、Secret/Variable 读取位置
 - [问题与排查](docs/04_问题与排查/README.md)：PostgreSQL、OSS、Telegram、飞书、AI、Action 日志、部署和资源问题
-- [日常规则](docs/05_日常规则/README.md)：dev/main 合并、后续规划落地和文档同步规则
-- [历史重构记录](docs/03_历史重构记录/README.md)：旧文档入口和历史方案归档
-- [系统代码终极重构历史资料](docs/03_历史重构记录/重构历史/系统代码终极重构/README.md)：本轮分析、目标、方案、TDD 和最终验收报告
+- [日常规则](docs/05_日常规则/README.md)：dev/main 合并、实施规划落地和文档目录维护规则
 
 ## FAQ
 

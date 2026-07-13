@@ -1,10 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 import { dispatchSiteDeploy } from '../tools/dispatch-site-deploy.mjs';
 
 test('dispatchSiteDeploy sends one workflow dispatch without polling for a run', async () => {
   const requests = [];
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'dispatch-site-deploy-'));
+  const eventPath = path.join(tempDir, 'queued-dispatch-event.json');
+  await writeFile(eventPath, JSON.stringify({
+    action: 'telegram_update_dev',
+    notification: {
+      channel: 'telegram',
+      chatId: 42,
+      replyToMessageId: 701,
+    },
+    client_payload: { telegram_updates: [{ update_id: 1, message: { text: 'private' } }] },
+  }));
   const result = await dispatchSiteDeploy({
     repository: 'soulgo/training_records',
     token: 'token',
@@ -12,15 +26,7 @@ test('dispatchSiteDeploy sends one workflow dispatch without polling for a run',
     ref: 'dev',
     queueTaskId: 'queue-123',
     sourceChannel: 'telegram',
-    syncDispatchPayload: JSON.stringify({
-      action: 'telegram_update_dev',
-      notification: {
-        channel: 'telegram',
-        chatId: 42,
-        replyToMessageId: 701,
-      },
-      client_payload: { telegram_updates: [{ update_id: 1, message: { text: 'private' } }] },
-    }),
+    syncDispatchEventPath: eventPath,
     thoughtCheck: {
       id: '590',
       module: 'body_feedback',

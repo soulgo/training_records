@@ -13,6 +13,21 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 收敛文档体系为当前配置、核心逻辑、问题排查和长期规则四类入口；已完成的一次性分析、目标、方案、TDD 与验收过程改由 Git 历史和 CHANGELOG 追溯。
+- GitHub 官方 Actions 升级到 Node 24 运行时版本，Cloudflare Worker 部署改用固定版本 Wrangler CLI，移除 Node 20 弃用告警。
+- main/dev 写连接统一使用 GitHub Settings 中各自数据库 URL 和同一个 `training_writer` 账号；只读账号由各环境 readonly URL 决定，并移除无迁移执行器消费的 migration URL 参数健康项。
+
+### Security
+
+- 同步、失败通知和部署派发统一通过 runner 临时事件文件读取队列 payload 与通知路由，不再把完整 dispatch payload 注入 step env；腾讯云 COS SDK 升级到 3.0，生产依赖审计恢复为 0 个漏洞。
+
+### Fixed
+
+- 修复睡眠回填遗漏目标日期透传、同日候选重复和异常静默吞错问题；回填只处理本轮目标日期并把异常 batch 标记为 `partialFailure`。
+- 补充 dev `core.trainee_profile` 人工更新 SQL，移除对不存在数据库角色的依赖；新表归属 `training_writer` 并继承事实表只读授权。`/分析` 的 PostgreSQL schema 错误正确归类为数据库失败，Action summary 同时展示业务状态和失败分类。
+
 ## [1.3.5] - 2026-07-13
 
 ### Added

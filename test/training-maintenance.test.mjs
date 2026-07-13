@@ -106,13 +106,13 @@ test('training maintenance inspect reports pending queue age attempts and thresh
   });
 });
 
-test('training maintenance inspect reports a read-only database permission audit', async () => {
+test('training maintenance inspect treats training_writer schema privileges as the expected account model', async () => {
   const queries = [];
   const result = await runTrainingMaintenance({
     argv: ['inspect'],
     env: {
       TRAINING_DB_ENABLED: 'true',
-      TRAINING_DB_URL: 'postgresql://training_app:secret@example.com:5432/training_records',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
     },
     readPendingBatches: async () => [],
     createClient() {
@@ -148,12 +148,12 @@ test('training maintenance inspect reports a read-only database permission audit
           if (/current_user::text as current_user/i.test(sql)) {
             return {
               rows: [{
-                current_user: 'training_app',
-                session_user: 'training_app',
+                current_user: 'training_writer',
+                session_user: 'training_writer',
                 is_superuser: false,
-                can_create_core: false,
-                can_create_ingest: false,
-                can_create_archive: false,
+                can_create_core: true,
+                can_create_ingest: true,
+                can_create_archive: true,
                 can_create_public: false,
               }],
             };
@@ -169,13 +169,13 @@ test('training maintenance inspect reports a read-only database permission audit
   });
 
   assert.equal(result.data.database.permissionAudit.status, 'ok');
-  assert.equal(result.data.database.permissionAudit.currentUser, 'training_app');
+  assert.equal(result.data.database.permissionAudit.currentUser, 'training_writer');
   assert.equal(result.data.database.permissionAudit.isSuperuser, false);
   assert.equal(result.data.database.permissionAudit.isMigratorLikeUser, false);
   assert.deepEqual(result.data.database.permissionAudit.schemaCreatePrivileges, {
-    archive: false,
-    core: false,
-    ingest: false,
+    archive: true,
+    core: true,
+    ingest: true,
     public: false,
   });
   assert.deepEqual(result.data.database.permissionAudit.dangerousPrivilegeReasons, []);

@@ -109,11 +109,11 @@ function renderBusinessResult(lines, { channel, batches }) {
   const businessIncomplete = [];
   lines.push('### Business result', '');
   if (channel === 'feishu') {
-    lines.push('| batchId | sourceId | chatIds | taskStatus | persistenceStatus | archivedDate | dateSources | warnings | dateConfidence | images | aiAttemptKinds | aiCallLogStatus | pending | failureDisposition | failed messageIds |');
-    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+    lines.push('| batchId | sourceId | chatIds | taskStatus | businessStatus | failureCategory | persistenceStatus | archivedDate | dateSources | warnings | dateConfidence | images | aiAttemptKinds | aiCallLogStatus | pending | failureDisposition | failed messageIds |');
+    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
   } else {
-    lines.push('| batchId | taskStatus | persistenceStatus | archivedDate | dateSources | warnings | dateConfidence | images | aiAttemptKinds | aiCallLogStatus | pending | failureDisposition | failed messageIds |');
-    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+    lines.push('| batchId | taskStatus | businessStatus | failureCategory | persistenceStatus | archivedDate | dateSources | warnings | dateConfidence | images | aiAttemptKinds | aiCallLogStatus | pending | failureDisposition | failed messageIds |');
+    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
   }
 
   for (const batch of batches) {
@@ -127,9 +127,12 @@ function renderBusinessResult(lines, { channel, batches }) {
     const aiAttemptKinds = (batch.recognitionAttemptKinds ?? batch.ai?.attemptKinds ?? [])
       .map(formatSummaryCell)
       .join(', ');
+    const businessStatus = resolveBusinessStatus(batch);
     const commonCells = [
       batch.batchId,
       batch.taskStatus ?? batch.status,
+      businessStatus,
+      batch.failureCategory,
       batch.persistenceStatus,
       batch.archivedDate,
       formatDateSources(batch.dateSources),
@@ -154,7 +157,7 @@ function renderBusinessResult(lines, { channel, batches }) {
     }
     if (isBusinessIncompleteBatch(batch, failureDisposition)) {
       businessIncomplete.push(
-        `${formatSummaryCell(batch.batchId ?? '(unknown)')}:${formatSummaryCell(batch.persistenceStatus ?? batch.taskStatus ?? batch.status ?? 'unknown')}:${formatSummaryCell(failureDisposition)}`,
+        `${formatSummaryCell(batch.batchId ?? '(unknown)')}:${formatSummaryCell(businessStatus)}:${formatSummaryCell(failureDisposition)}`,
       );
     }
   }
@@ -332,8 +335,20 @@ function resolveFailureDisposition(batch) {
       : (batch.status === 'skipped' || batch.status === 'ignored' ? 'skip' : 'none'));
 }
 
+function resolveBusinessStatus(batch) {
+  if ((batch.kind ?? 'image') === 'analysis') {
+    return batch.analysisReplyStatus ?? batch.taskStatus ?? batch.status ?? 'unknown';
+  }
+  if (batch.kind === 'help') {
+    return batch.helpReplyStatus ?? batch.taskStatus ?? batch.status ?? 'unknown';
+  }
+  return batch.taskStatus ?? batch.status ?? 'unknown';
+}
+
 function isBusinessIncompleteBatch(batch, failureDisposition) {
   return (
+    ((batch.kind ?? 'image') === 'analysis' && batch.analysisReplyStatus === 'failed') ||
+    (batch.kind === 'help' && batch.helpReplyStatus === 'failed') ||
     batch.persistenceStatus === 'pending_replay' ||
     batch.taskStatus === 'partialFailure' ||
     batch.status === 'partial_failed' ||

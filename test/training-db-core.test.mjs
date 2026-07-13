@@ -17,6 +17,7 @@ import {
 } from '../src/db/training/read.mjs';
 import {
   backfillCoreFromLatestArchiveSnapshot,
+  backfillCoreSleepFromIngestBatches,
   backfillCoreSleepFromIngestBatchesClient,
   importTrainingMarkdownToDatabase,
   persistNormalizedBatch,
@@ -31,6 +32,7 @@ import {
   persistTelegramImageBatchIncremental,
 } from '../src/adapters/postgres/incremental-write.pg.mjs';
 import { PostgresSourceBatchRepository } from '../src/adapters/postgres/source-batch-repository.pg.mjs';
+import { insertCoreSleep } from '../src/adapters/postgres/core-row-writer.pg.mjs';
 import {
   assertSequentialUnnestParameters,
   buildCoreTestDay,
@@ -2094,6 +2096,42 @@ test('backfillCoreSleepFromIngestBatchesClient repairs stored sleep batches miss
   assert.deepEqual(sleepInsert[1][10], [145]);
 });
 
+test('insertCoreSleep keeps only the latest row for a duplicate sleep identity', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [] };
+    },
+  };
+
+  await insertCoreSleep(client, [{
+    date: '2026-06-29',
+    sleep: [
+      {
+        sleepType: '夜间睡眠',
+        bedtime: '23:48',
+        wakeTime: '06:34',
+        totalSleepMinutes: 267,
+      },
+      {
+        sleepType: '夜间睡眠',
+        bedtime: '23:48',
+        wakeTime: '06:34',
+        totalSleepMinutes: 387,
+      },
+    ],
+  }], {
+    sourceChannel: 'ingest_sleep_backfill',
+    batchId: 'new-correct-sleep',
+  }, '2026-06-30T00:30:00.000Z');
+
+  const sleepInsert = calls.find(([sql]) => /insert into core\.sleep/i.test(sql));
+  assert.ok(sleepInsert);
+  assert.equal(sleepInsert[1][0].length, 1);
+  assert.deepEqual(sleepInsert[1][8], [387]);
+});
+
 test('backfillCoreSleepFromIngestBatchesClient filters the persisted payload_json column', async () => {
   const calls = [];
   const client = {
@@ -2138,7 +2176,32 @@ test('backfillCoreSleepFromIngestBatchesClient limits ingest and archive candida
   assert.equal(calls.filter(([sql]) => /from ingest\.source_batch b|from archive\.training_sleep\s+a/i.test(sql)).length, 2);
 });
 
-test('backfillCoreSleepFromIngestBatchesClient replays latest ingest sleep batches for existing core sleep rows', async () => {
+test('backfillCoreSleepFromIngestBatches forwards target dates to the database query', async () => {
+  const fakeClient = {
+    async connect() {},
+    async end() {},
+    async query(sql, params) {
+      if (/from ingest\.source_batch b|from archive\.training_sleep\s+a/i.test(sql)) {
+        assert.match(sql, /archived_date = any\(\$1::date\[\]\)/);
+        assert.deepEqual(params, [['2026-06-04']]);
+      }
+      return { rows: [] };
+    },
+  };
+
+  const result = await backfillCoreSleepFromIngestBatches({
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgres://example.invalid/training',
+    },
+    createClient: () => fakeClient,
+    targetArchivedDates: ['2026-06-04'],
+  });
+
+  assert.equal(result.status, 'unchanged');
+});
+
+test('backfillCoreSleepFromIngestBatchesClient merges same-day ingest candidates before one core sleep write', async () => {
   const calls = [];
   const fakeClient = {
     async query(sql, params) {
@@ -2218,9 +2281,9 @@ test('backfillCoreSleepFromIngestBatchesClient replays latest ingest sleep batch
   assert.equal(result.batchesBackfilled, 2);
   assert.deepEqual(result.daysBackfilled, ['2026-06-29']);
   assert.equal(calls.some(([sql]) => /from ingest\.source_batch b[\s\S]*not exists[\s\S]*from core\.sleep/i.test(sql)), false);
-  assert.equal(sleepInserts.length, 2);
-  assert.deepEqual(sleepInserts.at(-1)[1][7], [387]);
-  assert.deepEqual(sleepInserts.at(-1)[1][8], [387]);
+  assert.equal(sleepInserts.length, 1);
+  assert.deepEqual(sleepInserts[0][1][7], [387]);
+  assert.deepEqual(sleepInserts[0][1][8], [387]);
 });
 
 test('backfillCoreSleepFromIngestBatchesClient creates core day from archive-only sleep rows', async () => {

@@ -25,10 +25,10 @@ jobs:
       PARAMETER_HEALTH_ENVIRONMENT: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -42,7 +42,6 @@ jobs:
           PARAMETER_HEALTH_MONITOR_DB_APP_NAME: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev' || github.ref_name == 'dev') && vars.DEV_TRAINING_DB_APP_NAME || (github.event_name == 'workflow_dispatch' && inputs.environment == 'main' || github.ref_name == 'main') && vars.TRAINING_DB_APP_NAME || '' }}
           PARAMETER_HEALTH_DB_PRIMARY_URL: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev' || github.ref_name == 'dev') && secrets.DEV_TRAINING_DB_URL || secrets.TRAINING_DB_URL }}
           PARAMETER_HEALTH_DB_READONLY_URL: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev' || github.ref_name == 'dev') && secrets.DEV_TRAINING_DB_READONLY_URL || secrets.TRAINING_DB_READONLY_URL }}
-          PARAMETER_HEALTH_DB_MIGRATION_URL: ${{ (github.event_name == 'workflow_dispatch' && inputs.environment == 'dev' || github.ref_name == 'dev') && secrets.DEV_TRAINING_DB_MIGRATION_URL || secrets.TRAINING_DB_MIGRATION_URL }}
           PARAMETER_HEALTH_AI_API_KEY: ${{ secrets.AI_API_KEY }}
           PARAMETER_HEALTH_AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
           PARAMETER_HEALTH_AI_FALLBACK_API_KEY: ${{ secrets.TELEGRAM_RECOGNITION_FALLBACK_API_KEY }}

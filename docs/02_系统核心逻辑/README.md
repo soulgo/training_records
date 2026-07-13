@@ -13,8 +13,9 @@
 7. `随想流程.md`
 8. `查询展示逻辑.md`
 9. `训练监控逻辑.md`
-10. `Action日志与失败补偿.md`
-11. `数据库模型.md`
+10. `训练分析逻辑.md`
+11. `Action日志与失败补偿.md`
+12. `数据库模型.md`
 
 ## 源码事实入口
 
@@ -27,6 +28,7 @@
 | Prompt | `prompts/telegram-training-image-recognition.md`、`prompts/training-analysis.md` |
 | PostgreSQL 写入 | `src/db/training/write.mjs`、`src/adapters/postgres/*` |
 | 数据读取和快照 | `src/domain/training/training-snapshot.mjs`、`src/db/training/read*.mjs` |
+| `/分析` 上下文 | `src/adapters/postgres/training-analysis-repository.pg.mjs`、`src/app/use-cases/training-analysis.impl.mjs` |
 | GitHub Action 监控 | `tools/report-github-action-status.mjs`、`tools/github-action-monitor-server.mjs`、`src/app/use-cases/github-action-monitor.use-case.mjs`、`src/adapters/postgres/github-action-monitor-repository.pg.mjs` |
 | 系统参数健康监控 | `config/parameter-health/<env>.json`、`tools/check-parameter-health.mjs`、`src/app/use-cases/parameter-health-monitor.use-case.mjs`、`src/adapters/postgres/parameter-health-monitor-repository.pg.mjs` |
 | 站点生成 | `src/app/use-cases/generate-training-data.use-case.mjs`、`src/site/dashboard-view.mjs`、`themes/cactus/*` |
@@ -41,4 +43,4 @@
 - `archive.*` 保存历史 Markdown 解析和归档。
 - Telegram 和飞书共享同一套应用层同步逻辑；两个来源都直接生成来源无关消息，不再互相伪装平台事件。
 - 图片只有通过 schema、置信度、日期和业务校验后才会写入 `core.*`。
-- `/分析` 只读取快照并回发，不写入训练事实。
+- `/分析` 使用只读连接一次查询近 28 天训练上下文和当前训练者画像，只回发分析结果，不写入训练事实。
