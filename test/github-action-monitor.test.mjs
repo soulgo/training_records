@@ -722,6 +722,21 @@ test('action monitor view model formats recent dev runs for the standalone modul
   assert.ok(view.summaryCards.some((card) => card.label === '失败' && card.value === '1 次'));
 });
 
+test('action monitor view omits retired system parameter monitoring data', () => {
+  const view = buildActionMonitorViewModel([], {
+    environment: 'dev',
+    parameterHealthRows: [
+      {
+        parameterKey: 'dev.github.secret.AI_API_KEY',
+        parameterName: 'AI_API_KEY',
+        status: 'healthy',
+      },
+    ],
+  });
+
+  assert.equal(Object.hasOwn(view, 'parameterHealth'), false);
+});
+
 test('action monitor view model keeps all branch runs in one fifteen-item paginated log', () => {
   const rows = Array.from({ length: 51 }, (_, index) => buildActionRunRow({
     runId: 2050 - index,

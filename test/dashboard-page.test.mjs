@@ -328,7 +328,7 @@ test('action monitor page renders the module from generated action monitor data'
   assert.match(actionMonitorPage, /5m 42s/);
 });
 
-test('action monitor page renders parameter health status without secret values', { concurrency: false }, () => {
+test('action monitor page ignores retired parameter monitoring data', { concurrency: false }, () => {
   const actionMonitorPage = withSharedSiteFixture(() => {
     const originalTrainingData = readOptionalFile(trainingDataPath);
     const originalDashboardView = readOptionalFile(dashboardViewPath);
@@ -383,109 +383,15 @@ test('action monitor page renders parameter health status without secret values'
     }
   });
 
-  assert.match(actionMonitorPage, /系统参数健康/);
-  assert.match(actionMonitorPage, /真实 API 探测优先；仅存在不代表凭证可用/);
-  assert.match(actionMonitorPage, /TELEGRAM_RECOGNITION_FALLBACK_API_KEY/);
-  assert.match(actionMonitorPage, /github_actions_secret/);
-  assert.match(actionMonitorPage, /健康/);
-  assert.match(actionMonitorPage, /AI 模型列表鉴权/);
-  assert.match(actionMonitorPage, /真实 API 探测/);
-  assert.match(actionMonitorPage, /data-parameter-health-open="dev\.github\.secret\.AI_API_KEY"/);
-  assert.match(actionMonitorPage, /parameter-health__state/);
-  assert.doesNotMatch(actionMonitorPage, /data-parameter-health-copy=/);
-  assert.doesNotMatch(actionMonitorPage, /data-parameter-health-modal-copy/);
-  assert.doesNotMatch(actionMonitorPage, /复制参数/);
-  assert.match(actionMonitorPage, /class="parameter-health__modal"[^>]*data-parameter-health-modal/);
-  assert.match(actionMonitorPage, /data-parameter-health-modal-name/);
-  assert.match(actionMonitorPage, /data-parameter-health-modal-category/);
-  assert.match(actionMonitorPage, /data-parameter-health-modal-scope/);
-  assert.match(actionMonitorPage, /data-parameter-health-modal-status/);
-  assert.match(actionMonitorPage, /data-parameter-health-modal-check/);
-  assert.match(actionMonitorPage, /data-parameter-health-modal-evidence/);
-  assert.match(actionMonitorPage, /data-parameter-health-modal-checked/);
-  assert.match(actionMonitorPage, /data-parameter-health-modal-message/);
-  assert.doesNotMatch(actionMonitorPage, /sk-live|postgres:\/\/|bot-token-value/);
-});
-
-test('action monitor page renders five parameter health rows with pagination controls', { concurrency: false }, () => {
-  const actionMonitorPage = withSharedSiteFixture(() => {
-    const originalTrainingData = readOptionalFile(trainingDataPath);
-    const originalDashboardView = readOptionalFile(dashboardViewPath);
-    const originalActionMonitorView = readOptionalFile(actionMonitorViewPath);
-
-    try {
-      const snapshot = buildHomepageDashboard();
-      ensureDataDir();
-      writeFixtureFile(trainingDataPath, JSON.stringify(snapshot, null, 2));
-      writeFixtureFile(dashboardViewPath, JSON.stringify(buildDashboardViewModel(snapshot), null, 2));
-      writeFixtureFile(actionMonitorViewPath, JSON.stringify({
-        title: 'action 监控',
-        environment: 'dev',
-        updatedTime: '14:30',
-        summaryCards: [],
-        runs: [],
-        parameterHealth: {
-          title: '系统参数健康',
-          summaryCards: [
-            { label: '监控参数', value: '6 个', hint: 'dev 环境' },
-          ],
-          pageSize: 5,
-          total: 6,
-          status: '1-5 / 共 6 个',
-          paginationEnabled: true,
-          items: Array.from({ length: 6 }, (_, index) => ({
-            key: `dev.github.secret.PARAM_${index + 1}`,
-            name: `PARAM_${index + 1}`,
-            scope: 'github_actions_secret',
-            category: 'ai',
-            statusLabel: '健康',
-            tone: 'success',
-            checkTypeLabel: 'AI 模型列表鉴权',
-            latencyLabel: `${40 + index} ms`,
-            evidenceLabel: '真实 API 探测',
-            checkedAtLabel: '2026-07-10 00:00',
-            lastCheckedLabel: '1 小时前',
-            lastHealthyLabel: '1 小时前',
-            expiryLabel: 'Provider 未提供到期时间',
-            message: 'AI Provider 鉴权成功',
-          })),
-        },
-      }, null, 2));
-      execFileSync(process.execPath, ['tools/run-hexo-command.mjs', 'generate'], {
-        cwd: rootDir,
-        stdio: 'pipe',
-      });
-      return readFileSync(path.join(rootDir, 'public', 'action-monitor', 'index.html'), 'utf8');
-    } finally {
-      restoreOptionalFile(trainingDataPath, originalTrainingData);
-      restoreOptionalFile(dashboardViewPath, originalDashboardView);
-      restoreOptionalFile(actionMonitorViewPath, originalActionMonitorView);
-    }
-  });
-
-  const renderedParameterRows = actionMonitorPage.match(/parameter-health__row parameter-health__row--success/g) ?? [];
-
-  assert.equal(renderedParameterRows.length, 5);
-  assert.match(actionMonitorPage, /data-parameter-health-grid/);
-  assert.match(actionMonitorPage, /data-parameter-health-status>1-5 \/ 共 6 个/);
-  assert.match(actionMonitorPage, /data-parameter-health-nav="next"/);
-  assert.match(actionMonitorPage, /id="parameter-health-data"/);
-  assert.match(actionMonitorPage, /data-page-size="5"/);
+  assert.match(actionMonitorPage, /action 监控/);
+  assert.doesNotMatch(actionMonitorPage, /系统参数健康|parameter-health|TELEGRAM_RECOGNITION_FALLBACK_API_KEY/);
 });
 
 test('action monitor client pagination labels use the visible row count as the range end', () => {
   const actionMonitorScript = readFileSync(actionMonitorScriptPath, 'utf8');
   const closedRangeCalculations = actionMonitorScript.match(/Math\.min\(start \+ pageSize - 1, total\)/g) ?? [];
 
-  assert.equal(closedRangeCalculations.length, 2);
-});
-
-test('action monitor client keeps parameter rows click-only without row copy controls', () => {
-  const actionMonitorScript = readFileSync(actionMonitorScriptPath, 'utf8');
-
-  assert.doesNotMatch(actionMonitorScript, /data-parameter-health-copy/);
-  assert.doesNotMatch(actionMonitorScript, /copyText/);
-  assert.match(actionMonitorScript, /data-parameter-health-open/);
+  assert.equal(closedRangeCalculations.length, 1);
 });
 
 test('action monitor page keeps the module visible when no Action rows were generated', { concurrency: false }, () => {

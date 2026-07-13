@@ -50,6 +50,7 @@
 
 ### Removed
 
+- 删除 `/action-monitor/` 的系统参数监控模块及其 registry、探测 workflow/CLI、业务用例、PostgreSQL 仓储、页面模板/脚本/样式和专属测试；dev/main canonical `monitor.sql` 同步移除 `monitor.system_config_parameters`、`monitor.system_config_parameter_checks` 及相关序列、索引和约束，dev 运行库通过 `20260713_remove_system_parameter_monitoring.sql` 清理遗留对象，Action 日志功能保持不变。
 - 删除 `docs/03_历史重构记录/` 整套旧分析、规划、TDD、审计和验收资料；仍有效的系统优化 0711 事实已写回当前 docs，历史过程改由 Git 追溯。
 - 删除已完成使命的 `sql/main-sql/align_to_dev.sql`，并将 schema 测试改为直接验证 dev/main 环境导出的表与字段结构一致。
 - SQL 事实源收敛为 `sql/dev-sql/` 与 `sql/main-sql/`；删除重复 canonical dump、分散 migration/rollback/cleanup 文件，以及已无迁移目录可消费的自动 migration workflow、CLI 分支和测试。

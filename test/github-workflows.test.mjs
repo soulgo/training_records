@@ -265,7 +265,6 @@ test('ci-tests workflow runs npm run test:fast without deploying Pages', async (
 	    '.github/workflows/deploy-cloudflare-pages-dev.yml',
     '.github/workflows/refresh-telegram-webhook.yml',
     '.github/workflows/markdown-backup.yml',
-    '.github/workflows/parameter-health-audit.yml',
     '.github/workflows/ci-tests.yml',
     'package.json',
     'package-lock.json',
@@ -1417,14 +1416,6 @@ test('dev Worker config dispatches to the dev Telegram workflow event', async ()
   assert.match(config, /main\s*=\s*"cloudflare\/sync-dispatch-worker\.mjs"/);
   assert.match(config, /\[vars\]\s*\n(?:.*\n)*?GITHUB_DISPATCH_EVENT_TYPE_TELEGRAM\s*=\s*"telegram_update_dev"/);
   assert.match(config, /\[vars\]\s*\n(?:.*\n)*?GITHUB_DISPATCH_EVENT_TYPE_FEISHU\s*=\s*"feishu_update_dev"/);
-});
-
-test('parameter health audit gets writer and readonly database URLs from GitHub settings only', async () => {
-  const workflow = await readWorkflow('.github/workflows/parameter-health-audit.yml');
-
-  assert.match(workflow, /PARAMETER_HEALTH_DB_PRIMARY_URL:[^\n]+secrets\.DEV_TRAINING_DB_URL[^\n]+secrets\.TRAINING_DB_URL/u);
-  assert.match(workflow, /PARAMETER_HEALTH_DB_READONLY_URL:[^\n]+secrets\.DEV_TRAINING_DB_READONLY_URL[^\n]+secrets\.TRAINING_DB_READONLY_URL/u);
-  assert.doesNotMatch(workflow, /TRAINING_DB_MIGRATION_URL/u);
 });
 
 test('package fast tests skip the slow thought module page render and exposes sync db', async () => {

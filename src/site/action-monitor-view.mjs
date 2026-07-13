@@ -1,5 +1,3 @@
-import { buildParameterHealthViewModel } from './parameter-health-view.mjs';
-
 const DEFAULT_HISTORY_PAGE_SIZE = 15;
 const SUCCESS_CONCLUSIONS = new Set(['success']);
 const FAILURE_CONCLUSIONS = new Set(['failure', 'cancelled', 'timed_out', 'action_required', 'startup_failure']);
@@ -30,10 +28,6 @@ export function buildActionMonitorViewModel(rows = [], options = {}) {
     historyRuns: actionRuns,
     runs: visibleRuns,
     allRuns: actionRuns,
-    parameterHealth: buildParameterHealthViewModel(options.parameterHealthRows, {
-      environment,
-      now,
-    }),
   };
 }
 
