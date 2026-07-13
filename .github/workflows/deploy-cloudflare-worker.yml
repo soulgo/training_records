@@ -33,15 +33,14 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_SECRET_TOKEN: ${{ secrets.TELEGRAM_SECRET_TOKEN }}
         run: |
-          printf '%s' "$TELEGRAM_BOT_TOKEN" | npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.toml
-          printf '%s' "$TELEGRAM_SECRET_TOKEN" | npx wrangler secret put TELEGRAM_SECRET_TOKEN --config wrangler.toml
+          printf '%s' "$TELEGRAM_BOT_TOKEN" | npx --yes wrangler@3.114.14 secret put TELEGRAM_BOT_TOKEN --config wrangler.toml
+          printf '%s' "$TELEGRAM_SECRET_TOKEN" | npx --yes wrangler@3.114.14 secret put TELEGRAM_SECRET_TOKEN --config wrangler.toml
 
       - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@3.114.14 deploy --config wrangler.toml
 
       - name: Refresh Telegram webhook
         env:

@@ -41,7 +41,7 @@
 - 将 dev 页面里的 Action 日志监控从首页拆出为独立页面模块 `/action-monitor/`，新增导航入口、独立 layout、样式与历史分页脚本，首页不再嵌入该监控模块。
 - 收敛应用与同步边界：生产代码、测试和 workflow 直接引用真实 use case、adapter、domain 与数据库 owner；飞书直接进入共享 `runMessageSync`，同步报告统一只输出 `batches`，不改变 Telegram/飞书处理、通知和数据库写入行为。
 - 数据库 schema 演进统一由 `maintenance:migrate` 和显式 migration 承担；日常同步与 Markdown 导出不再包含运行时 schema preflight。SQL 分片同时移除重复睡眠日期索引定义，并校准 `core.thought.telegram_message_id` 的 legacy alias 注释。
-- GitHub 官方 Actions 升级到 Node 24 运行时版本：checkout v7、setup-node/cache/configure-pages v6、deploy-pages/upload-pages-artifact v5，移除同步、部署和监控日志中的 Node 20 弃用告警。
+- GitHub 官方 Actions 升级到 Node 24 运行时版本：checkout v7、setup-node/cache/configure-pages v6、deploy-pages/upload-pages-artifact v5；Cloudflare Worker 部署改用固定版本 Wrangler CLI，移除同步、部署和监控日志中的 Node 20 弃用告警。
 
 ### Removed
 

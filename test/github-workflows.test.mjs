@@ -357,13 +357,13 @@ test('deploy-cloudflare-worker workflow refreshes Telegram webhook after deploym
   assert.match(workflow, /name:\s*Deploy Cloudflare Worker/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /push:/);
-  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
-  assert.match(workflow, /command:\s*deploy/);
+  assert.doesNotMatch(workflow, /cloudflare\/wrangler-action/);
+  assert.match(workflow, /run:\s*npx --yes wrangler@3\.114\.14 deploy --config wrangler\.toml/);
   assert.match(workflow, /- name: Configure Telegram Worker secrets/);
   assert.match(workflow, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
   assert.match(workflow, /CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
-  assert.match(workflow, /printf '%s' "\$TELEGRAM_BOT_TOKEN" \| npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler\.toml/);
-  assert.match(workflow, /printf '%s' "\$TELEGRAM_SECRET_TOKEN" \| npx wrangler secret put TELEGRAM_SECRET_TOKEN --config wrangler\.toml/);
+  assert.match(workflow, /printf '%s' "\$TELEGRAM_BOT_TOKEN" \| npx --yes wrangler@3\.114\.14 secret put TELEGRAM_BOT_TOKEN --config wrangler\.toml/);
+  assert.match(workflow, /printf '%s' "\$TELEGRAM_SECRET_TOKEN" \| npx --yes wrangler@3\.114\.14 secret put TELEGRAM_SECRET_TOKEN --config wrangler\.toml/);
   assert.match(workflow, /actions\/setup-node@v6/);
   assert.match(workflow, /node-version:\s*22/);
   assert.match(workflow, /run:\s*npm ci/);
@@ -398,8 +398,10 @@ test('deploy-cloudflare-worker-dev workflow deploys the unified dev worker and r
   ]) {
     assert.match(workflow, new RegExp(`-\\s*${escapeRegExp(expectedPath)}`));
   }
-  assert.match(workflow, /cloudflare\/wrangler-action@v3/);
-  assert.match(workflow, /command:\s*deploy --config wrangler\.dev\.toml/);
+  assert.doesNotMatch(workflow, /cloudflare\/wrangler-action/);
+  assert.match(workflow, /CLOUDFLARE_API_TOKEN:\s*\$\{\{\s*secrets\.CLOUDFLARE_API_TOKEN\s*\}\}/);
+  assert.match(workflow, /CLOUDFLARE_ACCOUNT_ID:\s*\$\{\{\s*secrets\.CLOUDFLARE_ACCOUNT_ID\s*\}\}/);
+  assert.match(workflow, /run:\s*npx --yes wrangler@3\.114\.14 deploy --config wrangler\.dev\.toml/);
   assert.match(workflow, /- name: Refresh Dev Telegram webhook/);
   assert.match(workflow, /TELEGRAM_BOT_TOKEN:\s*\$\{\{\s*secrets\.DEV_TELEGRAM_BOT_TOKEN\s*\}\}/);
   assert.match(workflow, /TELEGRAM_WEBHOOK_URL:\s*\$\{\{\s*vars\.DEV_TELEGRAM_WEBHOOK_URL\s*\}\}/);
