@@ -16,16 +16,6 @@ const scriptSafeJson = (value) => JSON.stringify(value)
 const actionMonitorHistoryPageSize = actionMonitorView.historyPageSize || 15;
 const actionMonitorHistoryJson = scriptSafeJson(actionMonitorLogRuns);
 const actionMonitorSummaryCards = actionMonitorView.summaryCards || [];
-const parameterHealth = actionMonitorView.parameterHealth || {};
-const parameterHealthCards = parameterHealth.summaryCards || [];
-const parameterHealthItems = parameterHealth.items || [];
-const parameterHealthPageSize = parameterHealth.pageSize || 5;
-const parameterHealthVisibleItems = parameterHealth.visibleItems ||
-  parameterHealthItems.slice(0, parameterHealthPageSize);
-const parameterHealthTotal = parameterHealth.total || parameterHealthItems.length;
-const parameterHealthJson = scriptSafeJson(parameterHealthItems);
-const showParameterHealthPagination = Boolean(parameterHealth.paginationEnabled) ||
-  parameterHealthTotal > 4;
 
 function formatActionRange(pageIndex, pageSize, total) {
   if (!total) {
@@ -61,99 +51,6 @@ function formatActionRange(pageIndex, pageSize, total) {
             <small><%= card.hint %></small>
           </div>
         <% }); %>
-      </div>
-    <% } %>
-
-    <section class="parameter-health" aria-label="系统参数健康">
-      <div class="action-monitor__subheader">
-        <div>
-          <h2><%= parameterHealth.title || '系统参数健康' %></h2>
-          <span><%= parameterHealth.environment || actionMonitorView.environment || 'dev' %> 真实 API 探测优先；仅存在不代表凭证可用</span>
-        </div>
-      </div>
-
-      <% if (parameterHealthCards.length) { %>
-        <div class="parameter-health__summary" aria-label="系统参数健康摘要">
-          <% parameterHealthCards.forEach((card) => { %>
-            <div class="action-monitor__summary-card">
-              <span><%= card.label %></span>
-              <strong><%= card.value %></strong>
-              <small><%= card.hint %></small>
-            </div>
-          <% }); %>
-        </div>
-      <% } %>
-
-      <% if (parameterHealthItems.length) { %>
-        <% if (showParameterHealthPagination) { %>
-          <div class="parameter-health__controls">
-            <span data-parameter-health-status><%= parameterHealth.status || formatActionRange(0, parameterHealthPageSize, parameterHealthTotal).replace('次', '个') %></span>
-            <button type="button" class="action-monitor__history-nav" data-parameter-health-nav="prev" disabled>较新</button>
-            <button
-              type="button"
-              class="action-monitor__history-nav"
-              data-parameter-health-nav="next"
-              <%= parameterHealthTotal > parameterHealthPageSize ? '' : 'disabled' %>
-            >较早</button>
-          </div>
-        <% } %>
-        <div class="parameter-health__table" role="list" aria-label="系统参数健康列表">
-          <div class="parameter-health__body" data-parameter-health-grid>
-          <% parameterHealthVisibleItems.forEach((item) => { %>
-            <div
-              class="parameter-health__row parameter-health__row--<%= item.tone || 'neutral' %>"
-              role="listitem"
-              tabindex="0"
-              data-parameter-health-open="<%= item.key %>"
-            >
-              <span class="parameter-health__identity">
-                <strong class="parameter-health__name" title="<%= item.name %>"><%= item.name %></strong>
-                <small><%= item.category %> · <%= item.scope %> · <%= item.evidenceLabel %></small>
-              </span>
-              <span class="parameter-health__due"><%= item.checkTypeLabel %><small><%= item.latencyLabel %> · <%= item.lastCheckedLabel %></small></span>
-              <span class="parameter-health__state">
-                <span class="parameter-health__status"><em><%= item.statusLabel %></em></span>
-                <span class="parameter-health__message"><%= item.message || '—' %></span>
-              </span>
-            </div>
-          <% }); %>
-          </div>
-        </div>
-      <% } else { %>
-        <div class="action-monitor__empty action-monitor__empty--compact">
-          <strong><%= parameterHealth.emptyMessage || '暂无参数健康数据' %></strong>
-          <span>参数健康 audit 完成真实探测并重新构建站点后，这里会显示 dev/main 的健康证据。</span>
-        </div>
-      <% } %>
-    </section>
-
-    <% if (parameterHealthItems.length) { %>
-      <div class="parameter-health__modal" data-parameter-health-modal hidden role="dialog" aria-modal="true" aria-labelledby="parameter-health-modal-title">
-        <div class="parameter-health__modal-backdrop" data-parameter-health-modal-close></div>
-        <div class="parameter-health__modal-panel">
-          <div class="parameter-health__modal-header">
-            <div>
-              <span class="action-monitor__eyebrow">PARAMETER DETAIL</span>
-              <h3 id="parameter-health-modal-title">参数详情</h3>
-            </div>
-            <button type="button" class="parameter-health__modal-close" data-parameter-health-modal-close aria-label="关闭参数详情">×</button>
-          </div>
-          <div class="parameter-health__modal-name">
-            <code data-parameter-health-modal-name></code>
-          </div>
-          <dl class="parameter-health__modal-fields">
-            <div><dt>分类</dt><dd data-parameter-health-modal-category></dd></div>
-            <div><dt>位置</dt><dd data-parameter-health-modal-scope></dd></div>
-            <div><dt>状态</dt><dd data-parameter-health-modal-status></dd></div>
-            <div><dt>探测方式</dt><dd data-parameter-health-modal-check></dd></div>
-            <div><dt>证据来源</dt><dd data-parameter-health-modal-evidence></dd></div>
-            <div><dt>探测耗时</dt><dd data-parameter-health-modal-latency></dd></div>
-            <div><dt>最近检查</dt><dd data-parameter-health-modal-checked></dd></div>
-            <div><dt>最近健康</dt><dd data-parameter-health-modal-healthy></dd></div>
-            <div><dt>真实到期信息</dt><dd data-parameter-health-modal-expiry></dd></div>
-            <div><dt>处理提示</dt><dd data-parameter-health-modal-message></dd></div>
-          </dl>
-        </div>
       </div>
     <% } %>
 
@@ -223,13 +120,8 @@ function formatActionRange(pageIndex, pageSize, total) {
     <% } %>
   </section>
 
-  <% if (parameterHealthItems.length) { %>
-    <script id="parameter-health-data" type="application/json" data-page-size="<%= parameterHealthPageSize %>"><%- parameterHealthJson %></script>
-  <% } %>
   <% if (actionMonitorLogRuns.length) { %>
     <script id="action-history-data" type="application/json" data-page-size="<%= actionMonitorHistoryPageSize %>"><%- actionMonitorHistoryJson %></script>
-  <% } %>
-  <% if (actionMonitorLogRuns.length || parameterHealthItems.length) { %>
     <script defer src="<%- url_for('/js/action-monitor.js') %>"></script>
   <% } %>
 </section>

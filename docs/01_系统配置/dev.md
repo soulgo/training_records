@@ -163,23 +163,9 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.dev.toml
 | `DEV_TRAINING_DB_APP_NAME` | 自定义 | DB 连接名，便于排查。 |
 | `TRAINING_SNAPSHOT_SOURCE` | 自定义 | 建议 dev 使用 `database`。 |
 
-dev 数据库 schema 事实源是 `sql/dev-sql/`。`Action Monitor Report` 在被监控 run 完成后把 `DEV_TRAINING_DB_URL`、`DEV_TRAINING_DB_APP_NAME` 映射为监控写库配置，读取 GitHub run/jobs/steps 后写入 dev `monitor.*`；参数健康 audit 写入 `monitor.system_config_parameters` 和 `monitor.system_config_parameter_checks`。
+dev 数据库 schema 事实源是 `sql/dev-sql/`。`Action Monitor Report` 在被监控 run 完成后把 `DEV_TRAINING_DB_URL`、`DEV_TRAINING_DB_APP_NAME` 映射为监控写库配置，读取 GitHub run/jobs/steps 后写入 dev `monitor.*`。
 
-参数健康 registry 维护在 `config/parameter-health/dev.json`。根级 `probes` 定义 PostgreSQL、AI、Telegram、飞书、COS、Cloudflare、存在性检查和不支持探测；参数项通过 `healthProbeKey` 引用 probe。registry 只保存环境变量名和非敏感配置，不保存实际值或 value hash。只有真实 API/连接探测成功才是 `healthy`；`present` 只表示参数已注入，`unsupported` 表示没有安全探测方式。
-
-registry 字段边界如下：
-
-| 字段 | 维护要求 |
-| --- | --- |
-| `key` / `name` / `scope` / `category` | 记录参数身份、所在位置和业务分类；不得写入参数值。 |
-| `required` / `sensitive` | 标记是否必填、是否敏感；敏感参数只展示名称和状态。 |
-| 根级 `probes` / 参数 `healthProbeKey` | 定义并引用安全健康探测；probe 的 `env` 只写环境变量名称，不写 Secret 值。 |
-| `validityMode` | 只描述可选到期信息来源，不参与当前健康状态判定。 |
-| `validFrom` / `expiresAt` / `reviewAfterAt` / `rotationCycleDays` | `expiresAt` 仅记录有合同、管理员确认或 Provider metadata 支撑的真实到期日；`reviewAfterAt` 只表示人工复核计划，页面不会将其计入真实过期/即将到期。不能把 Secret 更新时间或随意指定的统一日期冒充真实过期时间。 |
-| `warningDays` / `criticalDays` | 仅在 Provider 或人工登记提供真实 `expiresAt` 时计算到期提醒；不影响健康探测状态。 |
-| `sourceDoc` / `sourceCode` | 指向当前文档、workflow、代码或配置文件，便于排查来源。 |
-
-`/action-monitor/` 页面在 dev Pages 构建时由 `build:data` 生成。构建 job 设置 `TRAINING_DB_ENABLED=true`，优先用 `DEV_TRAINING_DB_READONLY_URL` 映射后的 `TRAINING_DB_READONLY_URL` 读取 `monitor.*`；未配置只读连接时回退 `DEV_TRAINING_DB_URL`。共享 site-build action 会注入 `GITHUB_TOKEN`，用于通过 GitHub Actions API 补齐当前 dev 分支漏报或滞后的 runs，并读取最新参数健康检查结果。
+`/action-monitor/` 页面在 dev Pages 构建时由 `build:data` 生成。构建 job 设置 `TRAINING_DB_ENABLED=true`，优先用 `DEV_TRAINING_DB_READONLY_URL` 映射后的 `TRAINING_DB_READONLY_URL` 读取 Action 日志；未配置只读连接时回退 `DEV_TRAINING_DB_URL`。共享 site-build action 会注入 `GITHUB_TOKEN`，用于通过 GitHub Actions API 补齐当前 dev 分支漏报或滞后的 runs。
 
 ### 3.5 COS 图片存储
 
@@ -213,8 +199,7 @@ dev workflow 会检查 `DEV_COS_BUCKET` / `DEV_COS_DOMAIN` 不能和 main 的 `C
 4. 运行 `Deploy Cloudflare Pages (Dev)`，确认 dev 站点能构建和部署。
 5. 给 dev Telegram bot 或 dev 飞书应用发测试消息，确认 `Sync (Dev)` 被触发。
 6. 检查 `Sync (Dev)` summary：同步、数据库写入、图片上传和 deploy dispatch 应成功；站点构建结论在独立 `Deploy Cloudflare Pages (Dev)` run 中确认。
-7. 运行 `Parameter Health Audit`，确认 Step Summary 出现 dev 健康状态计数并触发 dev Pages 刷新。
-8. 打开 dev 站点 `/action-monitor/`，确认 sync、deploy、pending replay 由 `Action Monitor Report` 写入日志，且“系统参数健康”展示 dev registry 的真实探测状态。
+7. 打开 dev 站点 `/action-monitor/`，确认 sync、deploy、pending replay 由 `Action Monitor Report` 写入 Action 日志。
 
 ## 5. 可选 Docker 运行
 

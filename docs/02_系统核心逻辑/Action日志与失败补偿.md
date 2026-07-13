@@ -74,7 +74,6 @@ workflow 根据被监控 run 的 `head_branch` 选择 `DEV_TRAINING_DB_URL` 或 
 - `workflow_dispatch` 只在 channel 判定步骤读取原始 input，并将同步事件和通知路由写入 runner 临时文件；后续同步、通知和部署派发只传 `SYNC_DISPATCH_EVENT_PATH`，不得重新注入 `SYNC_DISPATCH_PAYLOAD`。
 - 完整同步结果只写 runner 临时 result file 供 summary/通知使用；stdout 使用脱敏 safe report。
 - `monitor.*` 保存 GitHub run/job/step/failure 结构化数据，不保存业务 payload。
-- 参数健康表只保存参数名称、来源、探测状态和非敏感证据，不保存参数值或 value hash。
 
 ## 状态合同
 
@@ -111,7 +110,7 @@ pending 恢复只有 PostgreSQL `ingest.pending_task` 一条路径。巡检重�
 | --- | --- |
 | GitHub sync run summary | 判断业务是否 stored、pending、partial 或 skipped。 |
 | 独立 deploy run | 判断页面构建、发布和 thought 精确校验是否成功。 |
-| `/action-monitor/` | 查看分支内 Action 历史、job/step 失败和参数健康。 |
+| `/action-monitor/` | 查看分支内 Action 历史和 job/step 失败。 |
 | `npm run maintenance:inspect` | 只读巡检 pending、AI monitoring、单批次恢复目标和 DB 权限。 |
 | `npm run maintenance:inspect -- --batch-id <batchId>` | 审计指定 batch 的识别、core 目标和恢复日期。 |
 

@@ -13,26 +13,13 @@
 
 ## [Unreleased]
 
-### Changed
-
-- 收敛文档体系为当前配置、核心逻辑、问题排查和长期规则四类入口；已完成的一次性分析、目标、方案、TDD 与验收过程改由 Git 历史和 CHANGELOG 追溯。
-- GitHub 官方 Actions 升级到 Node 24 运行时版本，Cloudflare Worker 部署改用固定版本 Wrangler CLI，移除 Node 20 弃用告警。
-- main/dev 写连接统一使用 GitHub Settings 中各自数据库 URL 和同一个 `training_writer` 账号；只读账号由各环境 readonly URL 决定，并移除无迁移执行器消费的 migration URL 参数健康项。
-
-### Security
-
-- 同步、失败通知和部署派发统一通过 runner 临时事件文件读取队列 payload 与通知路由，不再把完整 dispatch payload 注入 step env；腾讯云 COS SDK 升级到 3.0，生产依赖审计恢复为 0 个漏洞。
-
 ### Fixed
 
-- 修复睡眠回填遗漏目标日期透传、同日候选重复和异常静默吞错问题；回填只处理本轮目标日期并把异常 batch 标记为 `partialFailure`。
-- 补充 dev `core.trainee_profile` 人工更新 SQL，移除对不存在数据库角色的依赖；新表归属 `training_writer` 并继承事实表只读授权。`/分析` 的 PostgreSQL schema 错误正确归类为数据库失败，Action summary 同时展示业务状态和失败分类。
-
-## [1.3.5] - 2026-07-13
+- 补充 dev `core.trainee_profile` 人工更新 SQL，修正脚本对不存在的 `training_app`、`training_maintenance`、`training_readonly` 角色的错误依赖；新表固定归属 `training_writer`，并继承现有事实表的只读授权。`/分析` 的 PostgreSQL schema 错误改为数据库失败，Action summary 同时展示业务状态和失败分类，不再把绿色 workflow conclusion 当作分析成功证明。
 
 ### Added
 
-- 新增 `sql/main-sql/align_to_dev.sql`，将 main 当前导出结构一次性对齐到 dev：补齐旧识别结构化字段、通用 ingest 五表及回填、archive 睡眠汇总字段和缺失外键，并附人工验收查询。
+- 新增当前 `/分析` 维护文档，记录单只读连接、近 28 天单 SQL 聚合、训练者画像和只读输出边界。
 - 新增异步 Action monitor、独立 pending replay，以及 `/分析` 单连接单 SQL 的只读 PostgreSQL repository。
 - 新增 DateAlignmentService、RecordGrouper、SemanticGate 和 Provider capability negotiation，覆盖完整日期、月日补年、睡眠归档、单锚点传播、多日期隔离、越界清洗、review 决策及 strict/json_object/text_json/vision 能力组合。
 - 新增来源无关的通用截图识别链路：图片先经 Sharp 自动旋转、尺寸/像素限制、增强和压缩，可选提取带归一化坐标的 OCR 证据，再由视觉模型完成语义识别并输出稳定的 `NormalizedRecognition` 外层契约。
@@ -41,27 +28,31 @@
 
 ### Changed
 
+- main/dev 写连接统一使用 GitHub Settings 中的分支数据库 URL 和同一个 `training_writer` 账号；只读账号仅由各自 readonly URL 决定。移除无迁移执行器消费的 migration URL 参数健康项。
 - 图片识别 schema 升级到 v4，活动明细直接输出 `durationSeconds`、`calories`、`heartRate`、`distanceKm`、`avgSpeedKmh`；结构化字段优先进入 core，中文 `detail` 正则仅保留为旧结果兼容回退。
 - 同步主路径不再等待站点部署或同步拉取 Action jobs；deploy 与 monitor 独立通知失败，会话队列按稳定哈希分片，webhook 跳过 polling offset，新消息不再顺带消费 pending 队列。
 - PostgreSQL ingest messages/assets/recognitions 改为集合式 upsert，数据库观测新增安全 `queryOrdinal` 与 connect/BEGIN/query/COMMIT/AI log 分段耗时；识别缓存键新增 capability mode。
 - Telegram/飞书共享报告与结果通知入口统一为 MessageSync 命名，飞书不再导入 Telegram 命名的共享函数或执行 `telegram:` 字符串替换。
 - 静态 recognition fixture 评测改称 contract field-match；没有脱敏自然样本和受控 provider run 时，accuracy、tokens、latency 明确标记为 `not_measured`。
-- 收敛根目录 Markdown：保留 `README.md`、`CHANGELOG.md` 和运行链路固定的 `训练记录.md`、`训练数据解析.md`；将系统代码重构分析、目标、方案、TDD 与最终报告统一归档到 `docs/03_历史重构记录/重构历史/系统代码终极重构/`，并更新文档导航和交叉链接。
+- 收敛文档体系为当前配置、当前核心逻辑、当前排查和长期规则四类入口；已完成的一次性分析、目标、方案、TDD 与验收过程不再保留重复文档，通过 Git 历史和 CHANGELOG 追溯。
 - 修正站点首页对数据来源的描述：线上看板以 PostgreSQL `core.*` 为业务事实源，`训练记录.md` 是数据库派生备份和受保护恢复入口。
 - Telegram 与飞书现在直接转换为共享来源消息契约；识别缓存、Telegram offset、一致性检查、AI monitoring、batch audit、睡眠修复和 pending replay 全部切换到通用 ingest 表，不再以 Telegram 表名或飞书数字代理 ID 作为主路径身份。
 - dev 同步复用 main 的通用 AI、OCR、识别模型和备用 provider 配置；Telegram、飞书、数据库与 COS 凭据继续保持 dev 隔离，其中 Telegram 白名单优先读取 `DEV_TELEGRAM_ALLOWED_CHAT_IDS`，未配置时复用通用白名单。
 - Telegram 与飞书 Worker 在进入 Durable Object 缓冲或触发 GitHub Actions 前执行聊天白名单检查；Dashboard、Monitor 与 Action Monitor 的 EJS JSON 数据改为脚本上下文安全转义。
-- dev PostgreSQL 已于 2026-07-11 完成通用 ingest 结构迁移；main PostgreSQL 已于 2026-07-13 手工执行 `sql/main-sql/align_to_dev.sql`，数据库表结构已与 dev 对齐。
-- 同步项目包版本号到 `1.3.5`。
+- dev 与 main PostgreSQL 已完成结构对齐；仓库分别以 `sql/dev-sql/`、`sql/main-sql/` 保存环境导出，后续结构变更按目标环境独立备份、执行、验收和重新导出。
 - 将 `/action-monitor/` 的系统参数监控从“有效期推断”升级为“参数健康探测”：新增 `config/parameter-health/<env>.json` registry、`tools/check-parameter-health.mjs`、`Parameter Health Audit` workflow、主动只读 probes 和参数健康视图，健康状态改为 `healthy`、`present`、`invalid`、`missing`、`not_configured`、`unreachable`、`unsupported`、`unknown`，到期时间仅作为有真实证据时的附加信息。
 - 同步参数健康监控的数据库与文档入口：`monitor.system_config_parameters/checks` 新增 `health_probe_key`、`health_check_type`、`check_type`、`latency_ms`、`failure_kind`、`observed_expires_at`、`last_healthy` 查询索引和健康状态约束，当前事实文档与排查文档改为指向参数健康模型。
-- 按后续规划落地文档同步规则完成参数有效时间监控规划归档：将已实现规划从 `docs/03_历史重构记录/后续规划_未实现/参数有效时间/` 移入 `docs/03_历史重构记录/重构历史/参数有效时间监控/`，并把当前 registry、audit workflow、monitor 表、页面展示和排查方式写回 `01_系统配置`、`02_系统核心逻辑`、`04_问题与排查` 及相关 README。
+- 将参数健康监控的当前 registry、audit workflow、monitor 表、页面展示和排查方式收敛到 `01_系统配置`、`02_系统核心逻辑`、`04_问题与排查` 及相关 README，不再维护独立历史规划副本。
 - 将 dev 页面里的 Action 日志监控从首页拆出为独立页面模块 `/action-monitor/`，新增导航入口、独立 layout、样式与历史分页脚本，首页不再嵌入该监控模块。
 - 收敛应用与同步边界：生产代码、测试和 workflow 直接引用真实 use case、adapter、domain 与数据库 owner；飞书直接进入共享 `runMessageSync`，同步报告统一只输出 `batches`，不改变 Telegram/飞书处理、通知和数据库写入行为。
 - 数据库 schema 演进统一由 `maintenance:migrate` 和显式 migration 承担；日常同步与 Markdown 导出不再包含运行时 schema preflight。SQL 分片同时移除重复睡眠日期索引定义，并校准 `core.thought.telegram_message_id` 的 legacy alias 注释。
+- GitHub 官方 Actions 升级到 Node 24 运行时版本：checkout v7、setup-node/cache/configure-pages v6、deploy-pages/upload-pages-artifact v5；Cloudflare Worker 部署改用固定版本 Wrangler CLI，移除同步、部署和监控日志中的 Node 20 弃用告警。
 
 ### Removed
 
+- 删除 `/action-monitor/` 的系统参数监控模块及其 registry、探测 workflow/CLI、业务用例、PostgreSQL 仓储、页面模板/脚本/样式和专属测试；dev/main canonical `monitor.sql` 同步移除 `monitor.system_config_parameters`、`monitor.system_config_parameter_checks` 及相关序列、索引和约束，dev 运行库通过 `20260713_remove_system_parameter_monitoring.sql` 清理遗留对象，Action 日志功能保持不变。
+- 删除 `docs/03_历史重构记录/` 整套旧分析、规划、TDD、审计和验收资料；仍有效的系统优化 0711 事实已写回当前 docs，历史过程改由 Git 追溯。
+- 删除已完成使命的 `sql/main-sql/align_to_dev.sql`，并将 schema 测试改为直接验证 dev/main 环境导出的表与字段结构一致。
 - SQL 事实源收敛为 `sql/dev-sql/` 与 `sql/main-sql/`；删除重复 canonical dump、分散 migration/rollback/cleanup 文件，以及已无迁移目录可消费的自动 migration workflow、CLI 分支和测试。
 - 删除无生产调用的空仓储端口、`training-snapshot-service` 占位服务和旧 `PostgresTelegramBatchRepository`；生产代码不再访问 `ingest.telegram_batch`、`telegram_message`、`telegram_recognition` 或 `telegram_pending_batch`。
 - 删除未进入生产链路的 `src/jobs`、`src/infra` 架构壳、无消费者 barrel、`src/ai`/PostgreSQL facade，以及 `tools` 下的纯 re-export 兼容入口；保留真实 CLI 和承载业务复杂度的模块。
@@ -152,7 +143,8 @@
 ### Security
 
 - Telegram/飞书同步命令行 stdout 改为只输出脱敏 safe report；完整同步结果仍写入 result file 供 summary/通知使用。同步 workflow 中 AI base URL、fallback base URL、chat id、COS bucket/domain/path prefix 等配置改为从 secrets 注入，并保留最小必要 workflow 权限说明。
-- 修复 `sync.yml` / `sync-dev.yml` 在 `workflow_dispatch` 队列任务中把完整 Telegram/飞书 `dispatch_payload` 注入 GitHub Actions step env 和 `$GITHUB_ENV` 的问题，避免 `chat_id`、用户名、消息正文、图片 `file_id` 等 webhook payload 内容出现在 Action 日志；同步和失败通知改为通过 runner 临时事件文件读取队列 payload。
+- 修复 `sync.yml` / `sync-dev.yml` 在 `workflow_dispatch` 队列任务中把完整 Telegram/飞书 `dispatch_payload` 注入 GitHub Actions step env 和 `$GITHUB_ENV` 的问题，避免 `chat_id`、用户名、消息正文、图片 `file_id` 等 webhook payload 内容出现在 Action 日志；同步、失败通知和部署派发统一通过 runner 临时事件文件读取队列 payload 与通知路由，不再设置 `SYNC_DISPATCH_PAYLOAD`。
+- 腾讯云 COS SDK 升级到 3.0，移除旧 `request` 栈及其中存在漏洞的 `form-data`、`fast-xml-parser` 版本；生产依赖 `npm audit` 结果从 11 个漏洞降为 0。
 - 同步 summary 与 action logger 默认 hash 飞书 `oc_`、chat id、file/image key、COS bucket/pathPrefix 等敏感字段；GitHub Actions 中禁止 `--debug-json`，避免 snapshot/健康明细进入 Action 日志。
 - 收敛 PostgreSQL 角色权限：初始化脚本拆分 `training_migrator`、`training_app`、`training_maintenance` 和 `training_readonly`，schema owner、default privileges 与 migration history 由迁移账号管理，日常业务账号不再持有 DDL 或 `maintenance.schema_migration` 权限。
 - `maintenance:inspect` 新增只读权限审计摘要，输出当前 DB 用户、superuser/migrator-like 标记、各 schema `CREATE` 权限和危险原因，同时继续避免 DB URL、SQL 参数和 Secret 进入日志。
@@ -161,7 +153,7 @@
 
 - 修复 main 飞书随想入库成功后仍收到“GitHub Action 执行失败：站点部署/页面刷新”的假失败回执：`deploy-pages.yml` 现在先强校验本次生成的 `public/<module>/index.html` 产物，确认目标随想是否出现在正确模块；生产域名 `soulgo.chat` 因 GitHub Pages / Cloudflare 传播延迟短暂读到旧 HTML 时只记 warning，不再把已成功入库和已生成产物的同步 run 标红。
 - 修复 Telegram 纯随想 `/移动` 等数据库内操作在 Actions 缺少 AI Provider 配置时提前失败的问题：AI Provider 改为仅在图片识别或 `/analysis` 实际需要时懒加载，纯随想同步不再强依赖 `AI_BASE_URL`。
-- 修复图片同步后 `sleepBackfill` 对全部历史 ingest/archive 做全量扫描的问题：同步链路只把本次新入库或 pending replay 中实际含 sleep 的归档日期传给 backfill，非睡眠图片默认不触发 sleep backfill，睡眠图片只修复目标日期。
+- 修复图片同步后 `sleepBackfill` 外层入口遗漏透传 `targetArchivedDates`、实际仍扫描全部历史 ingest/archive 的问题；同步链路现在只查询本轮实际含 sleep 的目标日期，同日候选合并后只写一次，相同 `sleepKey` 保留最新记录，并在回填异常时把 batch 标记为 `partialFailure` 而不再静默吞错。
 - 修复监控页趋势图图例排版不协调的问题：图表副标题改用专用 class，避免标题区 `span` 样式污染图例色点和标签；图例改为紧凑胶囊标签并支持移动端自然换行。
 - 修复 Telegram 随想 `/移动 id 模块` 移动带图随想时图片引用丢失的问题：DB-only 移动/编辑现在会保留 `photoPaths: null` 的“不改原图片”语义，不再误转为空数组清空 `core.thought.image_refs_json`；同步补充移动带图随想和落库参数回归测试。
 - 修复华为运动健康睡眠详情图在 AI 识别时误把阶段图/趋势小卡片推算值当作睡眠总时长的问题：睡眠 prompt 现在明确以 `夜间睡眠 X小时Y分钟` 文字行为权威来源，单独缺少 `总睡眠` 标签时只写 `nightSleepMinutes` 并由程序侧回退展示；同步 bump recognition prompt version 以避开旧识别缓存，并更新 Telegram 睡眠截图回归用例。

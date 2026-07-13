@@ -22,7 +22,6 @@
 | 数据库连接 | GitHub Secret `DEV_TRAINING_DB_URL` 使用 `training_writer` 连接 dev 库并映射为运行时 `TRAINING_DB_URL`；`DEV_TRAINING_DB_READONLY_URL` 提供 dev 只读连接 | GitHub Secret `TRAINING_DB_URL` 使用同一个 `training_writer` 账号连接 main 库；`TRAINING_DB_READONLY_URL` 提供 main 只读连接 |
 | Action 监控写库 | `Action Monitor Report` 按被监控 run 的 dev 分支选择 `DEV_TRAINING_DB_URL` 写入 dev `monitor.*` | `Action Monitor Report` 按 main 分支选择 `TRAINING_DB_URL` 写入 main `monitor.*` |
 | Action 监控兜底 URL | 可选 `GITHUB_ACTION_MONITOR_REPORT_URL_DEV`，未填且 DB URL 不可用时跳过上报 | 可选 `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN`，未填且 DB URL 不可用时跳过上报 |
-| 参数健康 registry | `config/parameter-health/dev.json`，由 `Parameter Health Audit` 写入 dev 库 `monitor.system_config_*` | `config/parameter-health/main.json`，由 `Parameter Health Audit` 写入 main 库 `monitor.system_config_*` |
 | Telegram token | `DEV_TELEGRAM_BOT_TOKEN` 映射为运行时 `TELEGRAM_BOT_TOKEN` | `TELEGRAM_BOT_TOKEN` |
 | COS | 当前 dev workflow 注入 `DEV_COS_*` 并映射为运行时 `COS_*` | 当前 `main` 分支 `sync.yml` 未注入 `COS_*` |
 
@@ -30,16 +29,14 @@
 
 1. 新增或删除 GitHub Secret/Variable 时，同时核对 `.github/workflows/*.yml`、`src/`、`tools/`、`cloudflare/`。
 2. 新增或删除 Worker 变量时，同时核对 `wrangler.toml`、`wrangler.dev.toml` 和 `cloudflare/*.mjs`。
-3. 新增、删除或轮换需要监控的参数时，同时更新 `config/parameter-health/<env>.json`：在根级 `probes` 定义安全探测，在参数项用 `healthProbeKey` 引用；只维护环境变量名、非敏感探测配置、来源路径和责任方，不维护实际值。
-4. 不在文档中填写 Secret 明文。
-5. `main.md` 必须用 `git show main:<path>` 重新核对后维护。
-6. 如果代码只支持某个运行时 env，但 workflow 没有注入，应写成“代码支持，当前 workflow 未注入”，不能写成必配项。
+3. 不在文档中填写 Secret 明文。
+4. `main.md` 必须用 `git show main:<path>` 重新核对后维护。
+5. 如果代码只支持某个运行时 env，但 workflow 没有注入，应写成“代码支持，当前 workflow 未注入”，不能写成必配项。
 
 ## 修改配置注意事项
 
 - `TRAINING_DB_URL`、`DEV_TRAINING_DB_URL` 都由 GitHub Settings/Secrets 提供，URL 中的写账号固定为 `training_writer`；两个 Secret 分别指向 main/dev 数据库。`TRAINING_DB_READONLY_URL` / `DEV_TRAINING_DB_READONLY_URL` 同样由 GitHub Settings/Secrets 提供，并优先用于快照、导出、巡检、一致性检查和站点构建。源码不硬编码只读用户名。
 - Action 监控默认复用分支 PostgreSQL 连接写入 `monitor.*`；外部 `GITHUB_ACTION_MONITOR_REPORT_URL*` 只在分支 DB URL 不可用时作为 HTTP 兜底。
-- 参数健康监控默认复用 `Parameter Health Audit` workflow、`config/parameter-health/<env>.json` 和分支 PostgreSQL；健康状态为 `healthy`、`present`、`invalid`、`missing`、`not_configured`、`unreachable`、`unsupported`、`unknown`，不反向改变同步、部署或备份 workflow 结论。
 - `GITHUB_SYNC_WORKFLOW_FILE` 与 `GITHUB_SYNC_REF` 决定 Worker 触发哪条 Actions 链路，配错会把消息写到错误分支。
 - `TELEGRAM_SECRET_TOKEN` 和 `FEISHU_VERIFICATION_TOKEN` / `FEISHU_ENCRYPT_KEY` 是 webhook 入口校验配置，配错会导致 Worker 拒绝请求。
 - `COS_*` 只由同步 workflow 中的 Node 代码使用；Cloudflare Worker 不读取 COS Secret。

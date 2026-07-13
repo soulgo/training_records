@@ -21,15 +21,11 @@ import {
   MonitorGenerator,
   TrainingDayGenerator,
 } from '../../adapters/hexo/index.mjs';
-import {
-  PostgresGitHubActionMonitorRepository,
-  PostgresParameterHealthMonitorRepository,
-} from '../../adapters/postgres/index.mjs';
+import { PostgresGitHubActionMonitorRepository } from '../../adapters/postgres/index.mjs';
 import {
   listGitHubActionRunsForMonitor,
   mergeActionMonitorRows,
 } from './github-action-monitor.use-case.mjs';
-import { runParameterHealthAudit } from './parameter-health-monitor.use-case.mjs';
 import { buildActionMonitorViewModel } from '../../site/action-monitor-view.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -185,26 +181,16 @@ export async function loadActionMonitorViewFromPostgres(options = {}) {
     environment: config.environment,
     limit: config.limit,
   });
-  const registryParameterHealthRows = await loadParameterHealthRowsFromRegistry({
-    rootDir: options.rootDir ?? defaultRootDir,
-    environment: config.environment,
-    env,
-    now,
-    stderr,
-  });
-
   if (!config.enabled && !githubConfig.enabled) {
     return buildActionMonitorViewModel([], {
       environment: config.environment,
       now,
       limit: config.limit,
-      parameterHealthRows: registryParameterHealthRows,
     });
   }
 
   let databaseRows = [];
   let githubRows = [];
-  let parameterHealthRows = [];
 
   if (githubConfig.enabled) {
     try {
@@ -229,7 +215,6 @@ export async function loadActionMonitorViewFromPostgres(options = {}) {
       environment: config.environment,
       now,
       limit: config.limit,
-      parameterHealthRows: registryParameterHealthRows,
     });
   }
 
@@ -246,24 +231,9 @@ export async function loadActionMonitorViewFromPostgres(options = {}) {
       monitorEnvironment: config.environment,
       limit: config.limit,
     });
-    try {
-      const parameterRepository = new PostgresParameterHealthMonitorRepository(client);
-      const databaseParameterHealthRows = await parameterRepository.listLatestParameterChecks({
-        monitorEnvironment: config.environment,
-      });
-      parameterHealthRows = mergeParameterHealthRows({
-        registryRows: registryParameterHealthRows,
-        databaseRows: databaseParameterHealthRows,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      stderr.write(`[parameter-health-monitor-view] ${message}; using registry parameter health data\n`);
-      parameterHealthRows = registryParameterHealthRows;
-    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     stderr.write(`[github-action-monitor-view] ${message}; using GitHub API fallback rows\n`);
-    parameterHealthRows = registryParameterHealthRows;
   } finally {
     await client.end().catch(() => {});
   }
@@ -276,137 +246,7 @@ export async function loadActionMonitorViewFromPostgres(options = {}) {
     environment: config.environment,
     now,
     limit: config.limit,
-    parameterHealthRows,
   });
-}
-
-export async function loadParameterHealthRowsFromRegistry(options = {}) {
-  const rootDir = normalizeRootDir(options.rootDir ?? defaultRootDir);
-  const environment = firstNonEmpty([options.environment, 'dev']);
-  const registryPath = path.join(rootDir, 'config', 'parameter-health', `${environment}.json`);
-
-  try {
-    const registry = JSON.parse(await readFile(registryPath, 'utf8'));
-    const audit = runParameterHealthAudit({
-      registry,
-      environment,
-      env: options.env ?? {},
-      now: options.now ?? new Date(),
-    });
-    return mapParameterHealthAuditToRows(audit);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    options.stderr?.write?.(`[parameter-health-monitor-view] registry ${registryPath} unavailable: ${message}\n`);
-    return [];
-  }
-}
-
-function mapParameterHealthAuditToRows(audit) {
-  const checksByKey = new Map((audit.checks ?? []).map((check) => [check.parameterKey, check]));
-  return (audit.parameters ?? []).map((parameter) => {
-    const check = checksByKey.get(parameter.key) ?? {};
-    return {
-      parameterKey: parameter.key,
-      monitorEnvironment: parameter.environment ?? audit.environment,
-      parameterName: parameter.name,
-      scope: parameter.scope,
-      category: parameter.category,
-      required: parameter.required,
-      sensitive: parameter.sensitive,
-      healthProbeKey: parameter.healthProbeKey,
-      healthCheckType: parameter.healthCheckType,
-      validityMode: parameter.validityMode,
-      validFrom: parameter.validFrom,
-      expiresAt: parameter.expiresAt,
-      reviewAfterAt: parameter.reviewAfterAt,
-      rotationCycleDays: parameter.rotationCycleDays,
-      warningDays: parameter.warningDays,
-      criticalDays: parameter.criticalDays,
-      owner: parameter.owner,
-      sourceDoc: parameter.sourceDoc,
-      sourceCode: parameter.sourceCode,
-      metadata: parameter.metadata,
-      checkedAt: check.checkedAt ?? audit.checkedAt,
-      status: check.status ?? 'unknown',
-      checkType: check.checkType ?? parameter.healthCheckType,
-      latencyMs: check.latencyMs ?? null,
-      failureKind: check.failureKind ?? null,
-      observedExpiresAt: check.observedExpiresAt ?? null,
-      lastHealthyAt: null,
-      daysUntilDue: check.daysUntilDue ?? null,
-      evidenceSource: check.evidenceSource ?? 'registry',
-      message: check.message ?? '本次未执行健康探测',
-      details: check.details ?? {},
-    };
-  });
-}
-
-export function mergeParameterHealthRows({ registryRows = [], databaseRows = [] } = {}) {
-  if (!registryRows.length) {
-    return Array.isArray(databaseRows) ? databaseRows : [];
-  }
-
-  const databaseRowsByKey = new Map();
-  for (const row of Array.isArray(databaseRows) ? databaseRows : []) {
-    const key = firstNonEmpty([row.parameterKey, row.parameter_key, row.key]);
-    if (key) {
-      databaseRowsByKey.set(key, row);
-    }
-  }
-
-  return registryRows.map((registryRow) => {
-    const key = firstNonEmpty([registryRow.parameterKey, registryRow.parameter_key, registryRow.key]);
-    const databaseRow = databaseRowsByKey.get(key);
-    if (!databaseRow || !hasSameParameterHealthDefinition(registryRow, databaseRow)) {
-      return registryRow;
-    }
-    return {
-      ...registryRow,
-      ...databaseRow,
-      healthProbeKey: registryRow.healthProbeKey,
-      healthCheckType: registryRow.healthCheckType,
-      validityMode: registryRow.validityMode,
-      validFrom: registryRow.validFrom,
-      expiresAt: registryRow.expiresAt,
-      reviewAfterAt: registryRow.reviewAfterAt,
-      rotationCycleDays: registryRow.rotationCycleDays,
-      warningDays: registryRow.warningDays,
-      criticalDays: registryRow.criticalDays,
-    };
-  });
-}
-
-function hasSameParameterHealthDefinition(left, right) {
-  return [
-    ['healthProbeKey', 'health_probe_key', normalizeValidityText],
-    ['healthCheckType', 'health_check_type', normalizeValidityText],
-    ['validityMode', 'validity_mode', normalizeValidityText],
-    ['validFrom', 'valid_from', normalizeValidityDate],
-    ['expiresAt', 'expires_at', normalizeValidityDate],
-    ['reviewAfterAt', 'review_after_at', normalizeValidityDate],
-    ['rotationCycleDays', 'rotation_cycle_days', normalizeValidityNumber],
-    ['warningDays', 'warning_days', normalizeValidityNumber],
-    ['criticalDays', 'critical_days', normalizeValidityNumber],
-  ].every(([camelKey, snakeKey, normalize]) => (
-    normalize(left?.[camelKey] ?? left?.[snakeKey]) === normalize(right?.[camelKey] ?? right?.[snakeKey])
-  ));
-}
-
-function normalizeValidityText(value) {
-  return String(value ?? '').trim();
-}
-
-function normalizeValidityDate(value) {
-  if (!value) {
-    return '';
-  }
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value).trim() : date.toISOString();
-}
-
-function normalizeValidityNumber(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
 }
 
 function resolveActionMonitorReadConfig(env) {
@@ -508,13 +348,6 @@ function parsePositiveInteger(value, fallback) {
 function parseOptionalPositiveInteger(value) {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
-}
-
-function normalizeRootDir(value) {
-  if (value instanceof URL) {
-    return fileURLToPath(value);
-  }
-  return path.resolve(String(value ?? defaultRootDir));
 }
 
 function toPosixRelativePath(rootDir, targetPath) {
