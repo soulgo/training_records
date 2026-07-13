@@ -2,6 +2,8 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
+import { fetchWithRetry } from './lib/http-retry.mjs';
+
 const GITHUB_API_URL = 'https://api.github.com';
 
 export async function dispatchSiteDeploy(options = {}) {
@@ -27,8 +29,7 @@ export async function dispatchSiteDeploy(options = {}) {
     target_thought_path: options.thoughtCheck?.path,
     target_thought_expectation: options.thoughtCheck?.expectation,
   });
-  const fetchImpl = options.fetchImpl ?? fetch;
-  const response = await fetchImpl(
+  const response = await fetchWithRetry(
     `${GITHUB_API_URL}/repos/${repository}/actions/workflows/${workflowFile}/dispatches`,
     {
       method: 'POST',
@@ -39,6 +40,13 @@ export async function dispatchSiteDeploy(options = {}) {
         'x-github-api-version': '2022-11-28',
       },
       body: JSON.stringify({ ref, inputs }),
+    },
+    {
+      fetchImpl: options.fetchImpl,
+      maxAttempts: 3,
+      baseDelayMs: options.retryBaseDelayMs,
+      retryableStatuses: new Set([500, 502, 503, 504]),
+      logPrefix: '[site-deploy-dispatch]',
     },
   );
   if (!response.ok) {
