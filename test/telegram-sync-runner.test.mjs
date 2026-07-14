@@ -5784,7 +5784,7 @@ test('runTelegramSync falls back to inline image data when AI rejects a Telegram
         JSON.stringify({
           ok: true,
           result: {
-            file_path: 'photos/file_803.jpg',
+            file_path: 'photos/file_803',
           },
         }),
         {
@@ -5796,11 +5796,11 @@ test('runTelegramSync falls back to inline image data when AI rejects a Telegram
       );
     }
 
-    if (requestUrl.includes('/file/bottoken/photos/file_803.jpg')) {
+    if (requestUrl.includes('/file/bottoken/photos/file_803')) {
       return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
         status: 200,
         headers: {
-          'content-type': 'image/jpeg',
+          'content-type': 'application/octet-stream',
         },
       });
     }
@@ -5810,7 +5810,7 @@ test('runTelegramSync falls back to inline image data when AI rejects a Telegram
       const imagePart = body.messages?.[1]?.content?.find((part) => part.type === 'image_url');
       const imageUrl = imagePart?.image_url?.url ?? '';
 
-      if (imageUrl === 'https://api.telegram.org/file/bottoken/photos/file_803.jpg') {
+      if (imageUrl === 'https://api.telegram.org/file/bottoken/photos/file_803') {
         remoteUrlAttempts += 1;
         return new Response(
           JSON.stringify({
