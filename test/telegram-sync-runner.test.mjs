@@ -12,13 +12,13 @@ import {
   createRecognitionAiProvider,
   loadRecognitionSystemPrompt,
   runMessageSync,
-  runTelegramSync,
-  shouldPersistTelegramArtifacts,
-} from '../src/app/use-cases/telegram-sync.use-case.mjs';
+  shouldPersistMessageSyncArtifacts,
+} from '../src/app/use-cases/message-sync.use-case.mjs';
+import { runTelegramSync } from '../src/app/use-cases/telegram-sync.use-case.mjs';
 import {
   recognizeBatch,
   resolveRecognitionImageInputMode,
-} from '../src/app/use-cases/telegram-sync/image-processing.mjs';
+} from '../src/app/use-cases/message-sync/image-processing.mjs';
 import { notifyTelegramActionFailure } from '../tools/telegram-action-monitor.mjs';
 import { buildRecognitionCacheKey, isRecognitionCacheEnabled } from '../src/app/use-cases/image-recognition.use-case.mjs';
 import { emptyTrainingCharts, telegramSyncEnv } from './helpers/telegram-sync-runner-fixtures.mjs';
@@ -475,7 +475,7 @@ test('runMessageSync respects AI_CONCURRENCY_MAX when clamping image recognition
 
 test('does not persist telegram artifacts when no updates were fetched and nothing changed', () => {
   assert.equal(
-    shouldPersistTelegramArtifacts({
+    shouldPersistMessageSyncArtifacts({
       updatesFetched: 0,
       changed: false,
       previousLastProcessedUpdateId: 520905382,
@@ -487,7 +487,7 @@ test('does not persist telegram artifacts when no updates were fetched and nothi
 
 test('persists telegram artifacts when new updates advance the processed offset', () => {
   assert.equal(
-    shouldPersistTelegramArtifacts({
+    shouldPersistMessageSyncArtifacts({
       updatesFetched: 1,
       changed: false,
       previousLastProcessedUpdateId: 520905382,
@@ -6986,7 +6986,7 @@ test('runTelegramSync defers Telegram success notification until the action fini
   assert.equal(savedResult.batches[0].persistenceStatus, 'stored');
 
   const notifierMessages = [];
-  const { notifyMessageSyncResultFromFile } = await import('../src/app/use-cases/telegram-sync.use-case.mjs');
+  const { notifyMessageSyncResultFromFile } = await import('../src/app/use-cases/message-sync.use-case.mjs');
   const notifyResult = await notifyMessageSyncResultFromFile({
     resultPath,
     env: {

@@ -5,10 +5,10 @@ import {
   normalizeThoughtModuleOrNull,
 } from '../../core/thought-modules.mjs';
 import { fetchTelegramFile } from '../../adapters/telegram/index.mjs';
-import { buildPersistenceSummary } from './telegram-sync/persistence-summary.mjs';
-import { classifyFailureCategory } from './telegram-sync/status.mjs';
-import { writeThoughtImageArtifacts } from './telegram-sync/thought-artifacts.mjs';
-import { withPendingStatus } from './telegram-sync-timings.mjs';
+import { buildPersistenceSummary } from './message-sync/persistence-summary.mjs';
+import { classifyFailureCategory } from './message-sync/status.mjs';
+import { writeThoughtImageArtifacts } from './message-sync/thought-artifacts.mjs';
+import { withPendingStatus } from './message-sync-timings.mjs';
 
 const MAX_THOUGHT_MARKDOWN_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
