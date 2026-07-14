@@ -52,6 +52,28 @@ const EMPTY_ROW_COUNTS = {
 };
 
 export async function persistNormalizedBatch(options) {
+  const maxRetries = options.maxRetries ?? 2;
+  const retryDelayMs = options.retryDelayMs ?? 500;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await persistNormalizedBatchAttempt(options);
+    } catch (error) {
+      if (attempt < maxRetries && isRetryableDatabaseError(error)) {
+        const delayMs = retryDelayMs * attempt;
+        process.stderr.write(
+          `[persist-batch] attempt ${attempt}/${maxRetries} failed, retrying in ${delayMs}ms: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error('persistNormalizedBatch: max retries exceeded');
+}
+
+async function persistNormalizedBatchAttempt(options) {
   const config = resolveTrainingCoreConfig(options.env);
   if (!config.enabled) {
     return {

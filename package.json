@@ -1,6 +1,6 @@
 {
   "name": "training-records-dashboard",
-  "version": "1.3.3",
+  "version": "1.3.5",
   "private": true,
   "description": "Hexo dashboard for Markdown-based training records",
   "scripts": {
@@ -9,6 +9,7 @@
     "check:derived-data-merge": "node tools/check-derived-data-merge.mjs",
     "check:data-consistency": "node tools/check-training-data-consistency.mjs",
     "check:sleep-consistency": "node tools/check-sleep-data-consistency.mjs",
+    "check:core-consistency": "node tools/check-core-data-consistency.mjs",
     "build:data": "node src/app/use-cases/generate-training-data.use-case.mjs",
     "backfill:core": "node tools/training-maintenance.mjs sync --phase archive",
     "backfill:sleep": "node tools/training-maintenance.mjs sync --phase ingest",

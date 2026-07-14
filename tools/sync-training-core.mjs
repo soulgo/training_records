@@ -5,12 +5,14 @@ import { backfillTrainingCoreFromArchive } from './backfill-training-core-from-a
 import { backfillThoughtsToCore } from './backfill-thoughts-to-core.mjs';
 import { reconcileTrainingMarkdownToCore } from './reconcile-training-markdown-to-core.mjs';
 import { checkSleepDataConsistency, extractTargetDatesFromConsistencyResult } from './check-sleep-data-consistency.mjs';
+import { checkCoreDataConsistency, extractBatchIdsFromConsistencyResult } from './check-core-data-consistency.mjs';
 import { resolveTrainingCoreConfig } from '../src/db/training/config.mjs';
 import {
   backfillCoreSleepFromIngestBatchesClient,
   backfillCoreFromLatestArchiveSnapshotClient,
   importTrainingMarkdownToDatabase,
 } from '../src/db/training/write.mjs';
+import { persistTelegramImageBatchIncremental } from '../src/adapters/postgres/incremental-write.pg.mjs';
 import pg from 'pg';
 
 const { Client } = pg;
@@ -149,9 +151,9 @@ async function syncTrainingCoreDefault(options, stderr, phase) {
       result.ingest = await runPhase(
         'ingest',
         async () => {
-          // 先执行睡眠数据一致性检查
-          stderr.write('[sync-training-core:ingest] 检查睡眠数据一致性...\n');
-          const consistencyResult = await checkSleepDataConsistency({
+          // 执行全面数据一致性检查（包括 activities/measurements/meals/sleep）
+          stderr.write('[sync-training-core:ingest] 检查所有数据类型一致性...\n');
+          const consistencyResult = await checkCoreDataConsistency({
             env: options.env ?? process.env,
             createClient,
           });
@@ -166,36 +168,58 @@ async function syncTrainingCoreDefault(options, stderr, phase) {
             };
           }
 
-          stderr.write(`[sync-training-core:ingest] 发现 ${consistencyResult.inconsistentCount} 个不一致批次\n`);
+          stderr.write(`[sync-training-core:ingest] 发现 ${consistencyResult.totalInconsistentCount} 个不一致批次\n`);
+          stderr.write(`[sync-training-core:ingest]   - Activities: ${consistencyResult.inconsistentBatches.activities.length}\n`);
+          stderr.write(`[sync-training-core:ingest]   - Measurements: ${consistencyResult.inconsistentBatches.measurements.length}\n`);
+          stderr.write(`[sync-training-core:ingest]   - Meals: ${consistencyResult.inconsistentBatches.meals.length}\n`);
+          stderr.write(`[sync-training-core:ingest]   - Sleep: ${consistencyResult.inconsistentBatches.sleep.length}\n`);
 
-          // 如果发现不一致，提取目标日期并执行修复
-          let backfillResult;
-          if (consistencyResult.inconsistentCount > 0) {
-            const targetDates = extractTargetDatesFromConsistencyResult(consistencyResult);
-            stderr.write(`[sync-training-core:ingest] 修复 ${targetDates.length} 个目标日期的睡眠数据...\n`);
+          // 如果发现不一致，执行修复
+          if (consistencyResult.totalInconsistentCount > 0) {
+            const batchIds = extractBatchIdsFromConsistencyResult(consistencyResult);
+            stderr.write(`[sync-training-core:ingest] 修复 ${batchIds.length} 个批次的数据不一致...\n`);
 
-            backfillResult = await backfillCoreSleepFromIngestBatchesClient(client, {
-              processedAt,
-              sourceChannel: options.sourceChannel ?? 'ingest_sleep_backfill',
-              targetArchivedDates: targetDates,
-            });
+            let repairedCount = 0;
+            for (const batchId of batchIds) {
+              try {
+                await repairBatchIncremental(client, batchId, processedAt);
+                repairedCount++;
+              } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                stderr.write(`[sync-training-core:ingest] 修复批次 ${batchId} 失败: ${errorMessage}\n`);
+              }
+            }
 
-            stderr.write(`[sync-training-core:ingest] 睡眠数据修复完成: ${backfillResult.status}\n`);
-          } else {
-            // 没有不一致，执行常规回填（检查是否有新的睡眠数据）
-            stderr.write('[sync-training-core:ingest] 一致性检查通过，执行常规睡眠回填...\n');
-            backfillResult = await backfillCoreSleepFromIngestBatchesClient(client, {
-              processedAt,
-              sourceChannel: options.sourceChannel ?? 'ingest_sleep_backfill',
-            });
+            stderr.write(`[sync-training-core:ingest] 数据修复完成，成功修复 ${repairedCount}/${batchIds.length} 个批次\n`);
+
+            return {
+              status: 'stored',
+              repairedBatchCount: repairedCount,
+              consistencyCheck: {
+                totalInconsistentCount: consistencyResult.totalInconsistentCount,
+                activitiesFixed: consistencyResult.inconsistentBatches.activities.length,
+                measurementsFixed: consistencyResult.inconsistentBatches.measurements.length,
+                mealsFixed: consistencyResult.inconsistentBatches.meals.length,
+                sleepFixed: consistencyResult.inconsistentBatches.sleep.length,
+              },
+            };
           }
+
+          // 没有不一致，执行常规睡眠回填
+          stderr.write('[sync-training-core:ingest] 一致性检查通过，执行常规睡眠回填...\n');
+          const backfillResult = await backfillCoreSleepFromIngestBatchesClient(client, {
+            processedAt,
+            sourceChannel: options.sourceChannel ?? 'ingest_backfill',
+          });
 
           return {
             ...backfillResult,
             consistencyCheck: {
-              inconsistentCount: consistencyResult.inconsistentCount,
-              missingBatchCount: consistencyResult.missingBatches?.length ?? 0,
-              mismatchBatchCount: consistencyResult.partialMismatchBatches?.length ?? 0,
+              totalInconsistentCount: 0,
+              activitiesFixed: 0,
+              measurementsFixed: 0,
+              mealsFixed: 0,
+              sleepFixed: 0,
             },
           };
         },
@@ -321,6 +345,44 @@ function normalizeSyncPhase(value) {
   return ['safe', 'all', 'archive', 'ingest', 'markdown', 'thoughts'].includes(phase) ? phase : 'safe';
 }
 
+/**
+ * 修复单个批次的增量数据
+ * 从 ingest.source_batch 读取原始识别结果，重新执行增量写入到 core 表
+ */
+async function repairBatchIncremental(client, batchId, processedAt) {
+  const batchResult = await client.query(
+    `select batch_id, source_channel, archived_date, payload_json
+     from ingest.source_batch
+     where batch_id = $1`,
+    [batchId]
+  );
+
+  if (batchResult.rows.length === 0) {
+    return;
+  }
+
+  const batch = batchResult.rows[0];
+  const payload = batch.payload_json;
+
+  // 重新执行增量写入
+  await persistTelegramImageBatchIncremental(
+    client,
+    {
+      batchId: batch.batch_id,
+      sourceChannel: batch.source_channel,
+      archivedDate: batch.archived_date,
+      measurement: payload.measurement,
+      activities: payload.activities,
+      nutrition: payload.nutrition,
+      sleep: payload.sleep,
+      workoutDailySummary: payload.workoutDailySummary,
+    },
+    processedAt,
+    { sourceChannel: batch.source_channel }
+  );
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   await syncTrainingCore();
+}
 }

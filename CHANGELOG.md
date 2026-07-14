@@ -15,16 +15,20 @@
 
 ### Fixed
 
-- 修复睡眠数据回填（sleepBackfill）失败时静默丢失数据的问题：当 sleepBackfill 因数据库连接中断、超时等瞬时错误失败时，系统现在会自动将失败任务加入 `ingest.pending_task` 队列进行重试，而不是仅标记 `partialFailure` 后静默忽略，确保睡眠数据最终一致性。
-- 增强 sleepBackfill 的健壮性：在 `backfillCoreSleepFromIngestBatchesClient` 内部增加最多 3 次的自动重试机制，对可重试的数据库错误（连接中断、超时、死锁等）自动重试，减少瞬时错误导致的失败。
-- 优化睡眠数据去重逻辑：改进 `deleteCoreSleepRowsByIdentity` 的匹配算法，当 `bedtime` 或 `wakeTime` 为空时，额外匹配 `totalSleepMinutes` 以避免过于宽泛的删除，减少并发场景下的竞态条件。
-- 新增睡眠数据一致性检查和自动修复功能：`tools/check-sleep-data-consistency.mjs` 脚本可检查 `ingest` 和 `core` 之间的数据一致性，`npm run sync:db` 现在会自动检查并修复不一致的睡眠数据。
+- **全面修复图片数据丢失问题（v1.3.5）**：针对 Telegram/飞书图片识别后，训练消耗（activities）、体脂秤（measurements）、饮食（meals）、睡眠（sleep）数据偶发丢失的问题，实施三项全面修复：
+  1. **主事务自动重试**：为 `persistNormalizedBatch` 增加最多 2 次重试机制，对可重试的数据库错误（连接中断、超时、死锁等）立即重试而非进入 pending 队列，减少用户等待时间从 30 分钟降至秒级。
+  2. **全类型数据一致性检查**：新增 `tools/check-core-data-consistency.mjs` 工具，检查所有数据类型（activities/measurements/meals/sleep）在 `ingest` 和 `core` 之间的一致性，替代仅检查睡眠数据的 v1.3.4 方案。
+  3. **自动修复集成**：`npm run sync:db` 现在会自动检查所有数据类型的一致性，发现不一致时从 `ingest.source_batch` 读取原始识别结果并重新执行增量写入到 `core.*` 表，确保数据最终一致性。
+- 修复睡眠数据回填（sleepBackfill）失败时静默丢失数据的问题（v1.3.4）：当 sleepBackfill 因数据库连接中断、超时等瞬时错误失败时，系统现在会自动将失败任务加入 `ingest.pending_task` 队列进行重试，而不是仅标记 `partialFailure` 后静默忽略，确保睡眠数据最终一致性。
+- 增强 sleepBackfill 的健壮性（v1.3.4）：在 `backfillCoreSleepFromIngestBatchesClient` 内部增加最多 3 次的自动重试机制，对可重试的数据库错误（连接中断、超时、死锁等）自动重试，减少瞬时错误导致的失败。
+- 优化睡眠数据去重逻辑（v1.3.4）：改进 `deleteCoreSleepRowsByIdentity` 的匹配算法，当 `bedtime` 或 `wakeTime` 为空时，额外匹配 `totalSleepMinutes` 以避免过于宽泛的删除，减少并发场景下的竞态条件。
 - 修复 Telegram/飞书同步完成后派发站点部署时，GitHub workflow dispatch API 遇到瞬时 HTTP 5xx 就立即中断并向用户回报 Action 失败的问题；部署派发现在复用统一 HTTP 重试机制，对服务端瞬时错误最多尝试 3 次，永久错误仍立即失败。
 - 补充 dev `core.trainee_profile` 人工更新 SQL，修正脚本对不存在的 `training_app`、`training_maintenance`、`training_readonly` 角色的错误依赖；新表固定归属 `training_writer`，并继承现有事实表的只读授权。`/分析` 的 PostgreSQL schema 错误改为数据库失败，Action summary 同时展示业务状态和失败分类，不再把绿色 workflow conclusion 当作分析成功证明。
 
 ### Added
 
-- 新增 `npm run check:sleep-consistency` 命令用于检查睡眠数据一致性，`npm run backfill:sleep` 命令用于手动执行睡眠数据回填。
+- 新增 `npm run check:core-consistency` 命令用于检查所有数据类型（activities/measurements/meals/sleep）的一致性，替代仅检查睡眠数据的 `check:sleep-consistency`。
+- 新增 `npm run check:sleep-consistency` 命令用于检查睡眠数据一致性（v1.3.4），`npm run backfill:sleep` 命令用于手动执行睡眠数据回填。
 - 新增当前 `/分析` 维护文档，记录单只读连接、近 28 天单 SQL 聚合、训练者画像和只读输出边界。
 - 新增异步 Action monitor、独立 pending replay，以及 `/分析` 单连接单 SQL 的只读 PostgreSQL repository。
 - 新增 DateAlignmentService、RecordGrouper、SemanticGate 和 Provider capability negotiation，覆盖完整日期、月日补年、睡眠归档、单锚点传播、多日期隔离、越界清洗、review 决策及 strict/json_object/text_json/vision 能力组合。
