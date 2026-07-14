@@ -12,7 +12,7 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 13/07/2026 17:21:10
+ Date: 14/07/2026 14:44:03
 */
 
 
@@ -194,7 +194,7 @@ COMMENT ON TABLE "monitor"."github_action_steps" IS 'GitHub Actions step 明细�
 -- ----------------------------
 ALTER SEQUENCE "monitor"."github_action_steps_step_id_seq"
 OWNED BY "monitor"."github_action_steps"."step_id";
-SELECT setval('"monitor"."github_action_steps_step_id_seq"', 1152, true);
+SELECT setval('"monitor"."github_action_steps_step_id_seq"', 1415, true);
 
 -- ----------------------------
 -- Indexes structure for table github_action_failures

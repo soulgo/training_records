@@ -12,7 +12,7 @@
  Target Server Version : 170000 (170000)
  File Encoding         : 65001
 
- Date: 13/07/2026 17:21:01
+ Date: 14/07/2026 14:43:56
 */
 
 
@@ -328,7 +328,7 @@ COMMENT ON COLUMN "ingest"."telegram_recognition"."cache_key" IS '包含来源�
 -- ----------------------------
 ALTER SEQUENCE "ingest"."pending_task_pending_id_seq"
 OWNED BY "ingest"."pending_task"."pending_id";
-SELECT setval('"ingest"."pending_task_pending_id_seq"', 13, true);
+SELECT setval('"ingest"."pending_task_pending_id_seq"', 15, true);
 
 -- ----------------------------
 -- Alter sequences owned by
