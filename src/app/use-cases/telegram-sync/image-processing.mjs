@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 
 import { recognizeTelegramImageMessage } from '../image-recognition.use-case.mjs';
-import { analyzeTelegramBatch, mapWithConcurrency } from '../../../adapters/telegram/sync-batch.adapter.mjs';
+import { analyzeTelegramBatch, mapWithConcurrency } from '../../../adapters/telegram/sync-batch-logic.adapter.mjs';
 import { resolveTelegramFileUrl } from '../../../adapters/telegram/index.mjs';
 import { getRecognitionPromptMetadata, stripPromptMetadataHeader } from '../../../core/ai/prompt-generator.mjs';
 import { createAiProvider } from '../../../adapters/ai/ai-provider.factory.mjs';
