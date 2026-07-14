@@ -13,6 +13,8 @@
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-07-15
+
 ### Fixed
 
 - **全面修复图片数据丢失问题（v1.3.5）**：针对 Telegram/飞书图片识别后，训练消耗（activities）、体脂秤（measurements）、饮食（meals）、睡眠（sleep）数据偶发丢失的问题，实施三项全面修复：
@@ -38,6 +40,7 @@
 
 ### Changed
 
+- 同步项目包版本号到 `1.3.5`。
 - 合并 PostgreSQL 持久化双层：连接配置与快照读实现从 `src/db/training` 迁入 `src/adapters/postgres`（`config.mjs` → `training-config.pg.mjs`，`read-queries/read-mapper/read-client.mjs` → `training-read-*.pg.mjs`），`adapters/postgres` 成为唯一 PostgreSQL 适配层落点且不再反向 import `db/training`；`db/training` 仅保留 `read`/`write`/`pending-recognition`/`consistency-check` 编排入口，单向依赖适配层。
 - 渠道无关同步编排去 telegram 化：`runMessageSync`、`createRecognitionAiProvider` 与共享子模块迁至 `src/app/use-cases/message-sync.use-case.mjs`、`message-sync/`、`message-sync-{env,timings,handlers,thoughts}.mjs`；`telegram-sync.use-case.mjs` 重建为仅含 `main`/`runTelegramSync`/CLI 的 Telegram 装配薄入口（`sync:telegram` 脚本不变）；`feishu-sync` 改为 import 中性模块，不再引用任何 telegram 命名模块。
 - 渠道无关符号统一 source/message 语义（一次性全量改名，无兼容 re-export）：`persistTelegramImageBatchIncremental` → `persistSourceImageBatchIncremental`、`shouldPersistTelegramArtifacts` → `shouldPersistMessageSyncArtifacts`、`notifyTelegramSyncResult` 等通知辅助 → `notifyMessageSyncResult` 等；`runMessageSync` 选项键 `sendTelegramMessage`/`fetchTelegramUpdates` → `sendMessage`/`fetchUpdates`。GitHub dispatch 载荷解析（`isDispatchEventName` 等）抽到 `src/shared/dispatch-payload.mjs`，telegram/feishu transport 与 action-monitor 工具统一从 shared 导入。
@@ -663,7 +666,10 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.3.5...HEAD
+[1.3.5]: https://github.com/soulgo/training_records/compare/v1.3.3...v1.3.5
+[1.3.3]: https://github.com/soulgo/training_records/compare/v1.3.2...v1.3.3
+[1.3.2]: https://github.com/soulgo/training_records/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/soulgo/training_records/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/soulgo/training_records/compare/v1.2.9...v1.3.0
 [1.2.9]: https://github.com/soulgo/training_records/compare/v1.2.8...v1.2.9
