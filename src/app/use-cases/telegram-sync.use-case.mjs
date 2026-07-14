@@ -508,16 +508,47 @@ export async function runMessageSync(options = {}) {
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const failureCategory = classifyFailureCategory(errorMessage, { phase: 'database' });
       const warning = `sleep backfill failed: ${errorMessage}`;
+
+      // 对于非用户输入错误，将睡眠批次加入 pending 队列
       for (const batch of batches) {
         if (batch.persistenceStatus !== 'stored' || !hasSleepBatchPayload(batch)) {
           continue;
         }
+
         batch.partialFailure = true;
-        batch.failureCategory ??= 'database';
+        batch.failureCategory ??= failureCategory;
         batch.failureReason ??= errorMessage;
         batch.warnings = [...new Set([...(batch.warnings ?? []), warning])];
+
+        // 新增：如果不是用户输入错误，加入 pending 重试
+        if (failureCategory !== 'user_input') {
+          try {
+            await measureSyncStage(timings, 'queueSleepBackfillReplay', () =>
+              appendPendingRecognitionBatch({
+                batch: {
+                  ...batch,
+                  kind: 'sleep_backfill',
+                  targetArchivedDates: [...storedSleepArchivedDates].sort(),
+                },
+                failureCategory,
+                error: errorMessage,
+                failedAt: now.toISOString(),
+              }),
+            );
+            process.stderr.write(
+              `[telegram-sync] queued sleep backfill replay for ${batch.batchId} (${batch.archivedDate ?? 'unknown date'}): ${errorMessage}\n`,
+            );
+          } catch (pendingError) {
+            const pendingErrorMessage = pendingError instanceof Error ? pendingError.message : String(pendingError);
+            process.stderr.write(
+              `[telegram-sync] failed to queue sleep backfill replay for ${batch.batchId}: ${pendingErrorMessage}\n`,
+            );
+          }
+        }
       }
+
       process.stderr.write(`[telegram-sync] sleep backfill failed: ${errorMessage}\n`);
     }
   }

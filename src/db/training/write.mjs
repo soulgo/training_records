@@ -510,6 +510,48 @@ export async function importTrainingMarkdownToDatabase(options) {
 
 export async function backfillCoreSleepFromIngestBatchesClient(client, options = {}) {
   const processedAt = options.processedAt ?? new Date();
+  const maxRetries = options.maxRetries ?? 3;
+  const retryDelayMs = options.retryDelayMs ?? 1000;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await backfillCoreSleepFromIngestBatchesClientAttempt(client, { ...options, processedAt });
+    } catch (error) {
+      if (attempt < maxRetries && isRetryableDatabaseError(error)) {
+        const delayMs = retryDelayMs * attempt;
+        process.stderr.write(
+          `[sleep-backfill] attempt ${attempt}/${maxRetries} failed, retrying in ${delayMs}ms: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error('backfillCoreSleepFromIngestBatchesClient: max retries exceeded');
+}
+
+function isRetryableDatabaseError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const retryablePatterns = [
+    /connection.*terminated/i,
+    /connection.*reset/i,
+    /connection.*closed/i,
+    /timeout/i,
+    /timed out/i,
+    /deadlock/i,
+    /lock.*timeout/i,
+    /serialization.*failure/i,
+    /could not serialize/i,
+    /ECONNRESET/i,
+    /ETIMEDOUT/i,
+    /ECONNREFUSED/i,
+  ];
+  return retryablePatterns.some((pattern) => pattern.test(message));
+}
+
+async function backfillCoreSleepFromIngestBatchesClientAttempt(client, options = {}) {
+  const processedAt = options.processedAt ?? new Date();
   const hasTargetArchivedDates = Object.hasOwn(options, 'targetArchivedDates');
   const targetArchivedDates = normalizeTargetArchivedDates(options.targetArchivedDates);
   if (hasTargetArchivedDates && targetArchivedDates.length === 0) {

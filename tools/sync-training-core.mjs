@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { backfillTrainingCoreFromArchive } from './backfill-training-core-from-archive.mjs';
 import { backfillThoughtsToCore } from './backfill-thoughts-to-core.mjs';
 import { reconcileTrainingMarkdownToCore } from './reconcile-training-markdown-to-core.mjs';
+import { checkSleepDataConsistency, extractTargetDatesFromConsistencyResult } from './check-sleep-data-consistency.mjs';
 import { resolveTrainingCoreConfig } from '../src/db/training/config.mjs';
 import {
   backfillCoreSleepFromIngestBatchesClient,
@@ -147,11 +148,57 @@ async function syncTrainingCoreDefault(options, stderr, phase) {
     if (phase === 'safe' || phase === 'all' || phase === 'ingest') {
       result.ingest = await runPhase(
         'ingest',
-        () =>
-          backfillCoreSleepFromIngestBatchesClient(client, {
-            processedAt,
-            sourceChannel: options.sourceChannel,
-          }),
+        async () => {
+          // 先执行睡眠数据一致性检查
+          stderr.write('[sync-training-core:ingest] 检查睡眠数据一致性...\n');
+          const consistencyResult = await checkSleepDataConsistency({
+            env: options.env ?? process.env,
+            createClient,
+          });
+
+          if (consistencyResult.status === 'skipped') {
+            stderr.write(`[sync-training-core:ingest] 一致性检查已跳过: ${consistencyResult.reason}\n`);
+            return {
+              status: 'skipped',
+              reason: consistencyResult.reason,
+              batchesBackfilled: 0,
+              daysBackfilled: [],
+            };
+          }
+
+          stderr.write(`[sync-training-core:ingest] 发现 ${consistencyResult.inconsistentCount} 个不一致批次\n`);
+
+          // 如果发现不一致，提取目标日期并执行修复
+          let backfillResult;
+          if (consistencyResult.inconsistentCount > 0) {
+            const targetDates = extractTargetDatesFromConsistencyResult(consistencyResult);
+            stderr.write(`[sync-training-core:ingest] 修复 ${targetDates.length} 个目标日期的睡眠数据...\n`);
+
+            backfillResult = await backfillCoreSleepFromIngestBatchesClient(client, {
+              processedAt,
+              sourceChannel: options.sourceChannel ?? 'ingest_sleep_backfill',
+              targetArchivedDates: targetDates,
+            });
+
+            stderr.write(`[sync-training-core:ingest] 睡眠数据修复完成: ${backfillResult.status}\n`);
+          } else {
+            // 没有不一致，执行常规回填（检查是否有新的睡眠数据）
+            stderr.write('[sync-training-core:ingest] 一致性检查通过，执行常规睡眠回填...\n');
+            backfillResult = await backfillCoreSleepFromIngestBatchesClient(client, {
+              processedAt,
+              sourceChannel: options.sourceChannel ?? 'ingest_sleep_backfill',
+            });
+          }
+
+          return {
+            ...backfillResult,
+            consistencyCheck: {
+              inconsistentCount: consistencyResult.inconsistentCount,
+              missingBatchCount: consistencyResult.missingBatches?.length ?? 0,
+              mismatchBatchCount: consistencyResult.partialMismatchBatches?.length ?? 0,
+            },
+          };
+        },
         {},
         stderr,
       );

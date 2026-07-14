@@ -41,7 +41,7 @@ Queue / Worker 重点字段：
 1. 从 Bot 回执或 sync run 记录 `queueTaskId`、`traceId` 和 `batchId`。
 2. 打开 `Sync (Main)` / `Sync (Dev)` summary，先判断 `businessStatus` 是否为 `sent` / `ready`，还是 `failed`；写入类 batch 再判断 `persistenceStatus` 是 `stored` / `unchanged`，还是 `pending_replay` / `partialFailure` / `skipped`。
 3. 查看 Database 摘要。慢查询只根据 operation/table/ordinal 定位，不应要求日志输出 SQL 参数。
-4. 如果 `stored` batch 同时为 `partialFailure`，先看 warnings；`sleep backfill failed` 表示主写入成功但目标日期修复未完成，应检查 `targetArchivedDates` 过滤和重复睡眠身份，修复后运行 `npm run sync:db`。
+4. 如果 `stored` batch 同时为 `partialFailure`，先看 warnings；`sleep backfill failed` 表示主写入成功但目标日期修复未完成。从 v1.3.4 开始，系统会自动将失败任务（非用户输入错误）加入 `ingest.pending_task` 队列并进行最多 3 次重试，同时 `sleepBackfill` 本身也具备自动重试机制。如需手动修复，检查 `targetArchivedDates` 过滤和重复睡眠身份后运行 `npm run sync:db`。
 5. 如果 `/分析` 的 `businessStatus=failed` 且 `failureCategory=database`，先核对 `core.trainee_profile` 是否存在；dev 缺表时使用 `sql/dev-sql/update-dev-sql/20260713_add_core_trainee_profile.sql` 手工更新并执行文件末尾验收查询。
 6. 如果 sync 成功但页面未更新，打开独立 `Deploy GitHub Pages` 或 `Deploy Cloudflare Pages (Dev)` run；不要在 sync run 中等待 deploy conclusion。
 7. 如果没有 sync run，查 Cloudflare Worker/Queue 日志，确认分片键对应正确 channel/chat，并检查 `dead-letter`。
@@ -59,7 +59,7 @@ Queue / Worker 重点字段：
 - Action monitor 上报失败：确认 `.github/workflows/action-monitor-report.yml` 的 `actions: read`、目标分支、DB Secret 和 `monitor.*` 表权限。
 - Provider fallback：核对 `AI_SUPPORTS_VISION/JSON_SCHEMA/JSON_OBJECT/TEXT_JSON` 与服务商真实能力，再查 HTTP 429/5xx、timeout 和本地 schema failure。
 - DB 慢：先区分 connect/BEGIN/query/COMMIT 分段，再根据 `queryOrdinal + operation + table` 定位；不要把网络停顿猜成具体 SQL 执行慢。
-- sleep backfill 失败：确认调用只携带本轮目标日期、同日候选合并且相同 `sleepKey` 已去重；修复后运行 `npm run sync:db`，再核对 summary 不再出现 `partialFailure`。
+- sleep backfill 失败：从 v1.3.4 开始，系统已内置自动重试机制（最多 3 次）和 pending 队列自动恢复。如仍需手动干预，确认调用只携带本轮目标日期、同日候选合并且相同 `sleepKey` 已去重；修复后运行 `npm run sync:db` 执行一致性检查和自动修复，再核对 summary 不再出现 `partialFailure`。可使用 `npm run check:sleep-consistency` 单独检查数据一致性。
 
 ## 预防措施
 
