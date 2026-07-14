@@ -108,7 +108,7 @@ export async function runFeishuSync(options = {}) {
       }),
     groupUpdates: groupFeishuUpdates,
     getLastProcessedUpdateId: options.getLastProcessedUpdateId ?? (async () => 0),
-    fetchTelegramUpdates: options.fetchTelegramUpdates ?? (async () => []),
+    fetchUpdates: options.fetchUpdates ?? (async () => []),
     recognizeBatch:
       options.recognizeBatch ??
       ((batch, env) => recognizeBatch(batch, env, {
@@ -120,7 +120,7 @@ export async function runFeishuSync(options = {}) {
       })),
     persistNormalizedBatch,
     writeStartedRecognitionAiCallLog,
-    sendTelegramMessage: sendMessage,
+    sendMessage,
     fetchMessageFile: fetchImageFileById,
     aiProvider,
     recognitionAiProvider,

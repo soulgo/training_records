@@ -1,8 +1,8 @@
-import { readFile } from 'node:fs/promises';
 import {
+  readGithubEventFile,
   readInlineDispatchPayload,
   shouldReadDispatchEventFile,
-} from '../telegram/polling.transport.mjs';
+} from '../../shared/dispatch-payload.mjs';
 
 export async function resolveDispatchFeishuUpdates({
   repositoryDispatchEvent,
@@ -29,13 +29,4 @@ export async function resolveDispatchFeishuUpdates({
     return clientPayload.feishu_updates;
   }
   return [];
-}
-
-async function readGithubEventFile(eventPath) {
-  try {
-    const raw = await readFile(eventPath, 'utf8');
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
 }

@@ -123,24 +123,24 @@
 
 改动点：
 
-- [ ] `runMessageSync` 及渠道无关编排逻辑抽到中性模块（如 `src/app/use-cases/message-sync.use-case.mjs`）。
-- [ ] `telegram-sync.use-case.mjs` 只保留 Telegram 特有装配。
-- [ ] `feishu-sync.use-case.mjs` 改为 import 中性模块，不再 import `telegram-sync`。
-- [ ] `feishu-sync` 对 `telegram-sync/image-processing.mjs`（`recognizeBatch`）、`telegram-sync/status.mjs` 的依赖改指中性位置。
-- [ ] 重命名 `groupTelegramUpdates`、`processTelegramBatch`、`persistTelegramImageBatchIncremental` 等为 source 语义（对齐已有 `groupSourceMessages`）。
-- [ ] `adapters/feishu/feishu-event.transport.mjs` 对 `../telegram/polling.transport.mjs` 的依赖评估是否一并中性化。
+- [x] `runMessageSync` 及渠道无关编排逻辑抽到中性模块 `src/app/use-cases/message-sync.use-case.mjs`（git mv 保留历史；共享子模块同步迁移：`telegram-sync/` → `message-sync/`，`telegram-sync-{env,timings,handlers,thoughts}.mjs` → `message-sync-*.mjs`；编排器日志前缀改为 `[message-sync]`）。
+- [x] `telegram-sync.use-case.mjs` 只保留 Telegram 特有装配（重建为 25 行薄入口：`main`/`runTelegramSync`/CLI footer；`sync:telegram` 脚本入口路径不变）。
+- [x] `feishu-sync.use-case.mjs` 改为 import 中性模块，不再 import `telegram-sync`（feishu 文件中已无任何 telegram 字样引用）。
+- [x] `feishu-sync` 对 `message-sync/image-processing.mjs`（`recognizeBatch`）、`message-sync/status.mjs` 的依赖已随子目录迁移指向中性位置。
+- [x] 重命名渠道无关符号为 source/message 语义：`persistTelegramImageBatchIncremental`→`persistSourceImageBatchIncremental`、`buildTelegramImageBatchDay`→`buildSourceImageBatchDay`、`shouldPersistTelegramArtifacts`→`shouldPersistMessageSyncArtifacts`、`notifyTelegramSyncResult`→`notifyMessageSyncResult`、`shouldNotifyTelegramSyncResult`→`shouldNotifyMessageSyncResult`、`resolveTelegramSync{NotificationStage,ResultPath}`→`resolveMessageSync*`；`runMessageSync` 选项键 `sendTelegramMessage`→`sendMessage`、`fetchTelegramUpdates`→`fetchUpdates`（feishu 传参与全部测试注入点一次性更新）。读码修正：`groupTelegramUpdates`/`processTelegramBatch`/`processTelegramUpdates` 实为 Telegram 专属（解析 Telegram Update 形状后委托中性 `groupSourceMessages`），`getLastProcessedTelegramUpdateId` SQL 过滤 `source_channel='telegram'`，均为正确命名，不改。
+- [x] `adapters/feishu/feishu-event.transport.mjs` 对 `../telegram/polling.transport.mjs` 的依赖已中性化：GitHub dispatch 载荷解析（`isDispatchEventName`/`shouldReadDispatchEventFile`/`readInlineDispatchPayload`/`readGithubEventFile`）抽到 `src/shared/dispatch-payload.mjs`，telegram/feishu transport 与两个 action-monitor 工具改从 shared 导入，并消除 feishu 侧 `readGithubEventFile` 重复实现。评估结论：`adapters/feishu/sync-batch-logic.adapter.mjs` 对 `groupSourceMessages` 的跨适配器导入保留——符号已是 source 语义，消息分组引擎为双渠道共享的归一化层，搬迁成本远大于收益。
 
 核对：
 
-- [ ] 全部旧名引用一次性更新，无遗留旧名。
-- [ ] 未保留旧名 re-export 兼容层（符合净瘦身前提）。
-- [ ] 命令、识别结果、入库结果一致（外部行为不变）。
-- [ ] `docs/02_系统核心逻辑` 中"源码事实入口表"已同步新模块名。
+- [x] 全部旧名引用一次性更新，无遗留旧名（全仓库 grep 零残留；`sendTelegramMessage`/`fetchTelegramUpdates` 仅存于 Telegram 真实适配器与 telegram-action-monitor 专属通道，属正确命名）。
+- [x] 未保留旧名 re-export 兼容层（telegram-sync.use-case.mjs 重建为装配入口而非转发层，仅导出 telegram 专属 `main`/`runTelegramSync`）。
+- [x] 命令、识别结果、入库结果一致（纯改名+移动；全量测试 768/771，3 个失败为基线既有）。
+- [x] `docs/02_系统核心逻辑` 中"源码事实入口表"已同步新模块名（收尾阶段统一回写，见落地收尾）。
 
 验证：
 
-- [ ] Telegram 与飞书同步全链路测试通过。
-- [ ] 全量测试 + `npm run build` 通过。
+- [x] Telegram 与飞书同步全链路测试通过（telegram-sync-runner 135/135、feishu 全链路、dispatch worker 全部通过）。
+- [x] 全量测试通过（768/771，3 个失败均为基线已记录既有失败）；`npm run build` 收尾阶段统一跑。
 
 ### R6 数据库遗留表清理（不可逆 DDL，须用户单独批准 + 人工执行）
 

@@ -116,7 +116,7 @@ export async function runMessageSync(options = {}) {
     options.getLastProcessedUpdateId ??
     (() => getLastProcessedTelegramUpdateId({ env: options.env ?? process.env }));
   const fetchUpdates =
-    options.fetchTelegramUpdates ??
+    options.fetchUpdates ??
     ((input) =>
       fetchTelegramUpdates({
         botToken: env.botToken,
@@ -168,7 +168,7 @@ export async function runMessageSync(options = {}) {
     });
   const useDefaultPendingRecognitionStore =
     !options.persistNormalizedBatch &&
-    !options.fetchTelegramUpdates &&
+    !options.fetchUpdates &&
     !options.repositoryDispatchEvent &&
     !options.readPendingRecognitionBatches &&
     !options.appendPendingRecognitionBatch &&
@@ -217,7 +217,7 @@ export async function runMessageSync(options = {}) {
         createClient: options.createClient,
       }));
   const sendMessage =
-    options.sendTelegramMessage ??
+    options.sendMessage ??
     ((input) =>
       sendTelegramMessage({
         ...input,

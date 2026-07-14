@@ -346,7 +346,7 @@ test('runMessageSync keeps Telegram behavior while exposing batch results', asyn
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -379,7 +379,7 @@ test('runMessageSync clamps oversized AI_CONCURRENCY before image recognition', 
       AI_CONCURRENCY: '50',
     }),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -432,7 +432,7 @@ test('runMessageSync respects AI_CONCURRENCY_MAX when clamping image recognition
       AI_CONCURRENCY_MAX: '2',
     }),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -773,7 +773,7 @@ test('runTelegramSync persists ready image batches to the database without writi
       ...telegramSyncEnv(),
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -873,7 +873,7 @@ test('runTelegramSync leaves existing markdown untouched after storing an image 
       ...telegramSyncEnv(),
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -941,7 +941,7 @@ test('runTelegramSync stores image batches even when markdown contains stale dat
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -1002,7 +1002,7 @@ test('runTelegramSync stores sleep image batches without writing markdown', asyn
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -1071,7 +1071,7 @@ test('runTelegramSync runs sleep backfill for a fresh stored sleep image by defa
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -1128,7 +1128,7 @@ test('runTelegramSync exposes sleep backfill failures as partial batch failures'
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -1186,7 +1186,7 @@ test('runTelegramSync does not run sleep backfill for a fresh stored non-sleep i
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -1237,7 +1237,7 @@ test('runTelegramSync can explicitly run sleep backfill for a fresh stored image
       TELEGRAM_SYNC_RUN_SLEEP_BACKFILL: 'true',
     }),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -1428,7 +1428,7 @@ test('runTelegramSync queues database replay when image persistence fails', asyn
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -1491,7 +1491,7 @@ test('runTelegramSync treats DB-rejected invalid image archive dates as manual i
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -1550,7 +1550,7 @@ test('runTelegramSync replays a ready batch from pending after database recovery
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -1600,7 +1600,7 @@ test('runTelegramSync replays a ready batch from pending after database recovery
     rootDir: tempRoot,
     env: { ...telegramSyncEnv(), SYNC_REPLAY_MODE: 'scheduled' },
     getLastProcessedUpdateId: async () => 901,
-    fetchTelegramUpdates: async () => [],
+    fetchUpdates: async () => [],
     readPendingRecognitionBatches: async () =>
       pendingRows.map((entry) => ({
         batchId: entry.batch.batchId,
@@ -1641,7 +1641,7 @@ test('runTelegramSync skips undated batches without persisting fallback or markd
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -1741,7 +1741,7 @@ test('runTelegramSync skips conflicting-date batches and continues processing re
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -2355,7 +2355,7 @@ test('runTelegramSync processes updates from repository dispatch payload without
       pendingRead = true;
       throw new Error('new webhook messages must not claim pending work');
     },
-    fetchTelegramUpdates: async () => {
+    fetchUpdates: async () => {
       fetchCalled = true;
       return [];
     },
@@ -2728,7 +2728,7 @@ test('runTelegramSync skips polling when webhook mode is enabled without dispatc
       offsetRead = true;
       return 900;
     },
-    fetchTelegramUpdates: async () => {
+    fetchUpdates: async () => {
       fetchCalled = true;
       return [];
     },
@@ -2758,7 +2758,7 @@ test('runTelegramSync stores a /thought telegram message in core without writing
       ...telegramSyncEnv(),
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -2810,7 +2810,7 @@ test('runTelegramSync stores markdown document content as the thought body', asy
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -2865,7 +2865,7 @@ test('runTelegramSync accepts markdown thought attachments larger than 1MB up to
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -2908,7 +2908,7 @@ test('runTelegramSync allows module-only captions when a markdown document suppl
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -2950,7 +2950,7 @@ test('runTelegramSync rejects empty markdown thought attachments before persiste
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -2994,7 +2994,7 @@ test('runTelegramSync rejects oversized markdown thought attachments before down
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -3041,7 +3041,7 @@ test('runTelegramSync reports markdown thought attachment download failures', as
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -3084,7 +3084,7 @@ test('runTelegramSync writes /随想 image artifacts and stores core thought met
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -3192,7 +3192,7 @@ test('runTelegramSync stores COS image URLs from injected image storage in core 
     env: telegramSyncEnv(),
     imageStorage,
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -3265,7 +3265,7 @@ test('runTelegramSync does not persist thought metadata when image storage uploa
         },
       },
       getLastProcessedUpdateId: async () => 900,
-      fetchTelegramUpdates: async () => [
+      fetchUpdates: async () => [
         {
           update_id: 901,
           message: {
@@ -3616,7 +3616,7 @@ test('runTelegramSync stores module-scoped /随想 metadata in core payload', as
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -3661,7 +3661,7 @@ test('runTelegramSync stores body feedback /随想 metadata in core payload', as
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -3703,7 +3703,7 @@ test('runTelegramSync writes /thought album images as artifacts only', async () 
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -3780,7 +3780,7 @@ test('runTelegramSync ignores existing markdown posts when storing new core thou
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -3838,7 +3838,7 @@ telegram_chat_id: 42
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         edited_message: {
@@ -3942,7 +3942,7 @@ tags:
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         edited_message: {
@@ -4012,7 +4012,7 @@ telegram_chat_id: 42
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4096,7 +4096,7 @@ photos:
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4158,7 +4158,7 @@ test('runTelegramSync uses markdown document content as an explicit thought edit
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4216,7 +4216,7 @@ test('runTelegramSync reports missing database thought edit targets without mark
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4261,7 +4261,7 @@ test('runTelegramSync allows module-only explicit thought edit captions when mar
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4310,7 +4310,7 @@ test('runTelegramSync rejects empty markdown explicit thought edit attachments b
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4361,7 +4361,7 @@ test('runTelegramSync rejects oversized markdown explicit thought edit attachmen
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4449,7 +4449,7 @@ photos:
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4513,7 +4513,7 @@ telegram_chat_id: 42
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4583,7 +4583,7 @@ telegram_chat_id: 42
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4627,7 +4627,7 @@ test('runTelegramSync does not require AI provider config for pure thought move 
     rootDir: tempRoot,
     env: telegramSyncEnv({ AI_BASE_URL: '' }),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4686,7 +4686,7 @@ photos:
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4741,7 +4741,7 @@ telegram_chat_id: 42
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4785,7 +4785,7 @@ test('runTelegramSync keeps thought posts when database persistence fails and qu
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4869,7 +4869,7 @@ test('runTelegramSync replays pending thought batches without rewriting training
       SYNC_REPLAY_MODE: 'scheduled',
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [],
+    fetchUpdates: async () => [],
     readPendingRecognitionBatches: async () => [
       {
         failureCategory: 'database',
@@ -4905,7 +4905,7 @@ test('runTelegramSync replies to /analysis without image recognition or file wri
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4928,7 +4928,7 @@ test('runTelegramSync replies to /analysis without image recognition or file wri
       assert.equal(question, '今天怎么练');
       return '数据结论：最近训练稳定。\n下一步行动：今天做低强度有氧 30 分钟。';
     },
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 10001 };
     },
@@ -4967,7 +4967,7 @@ test('runTelegramSync keeps analysis reply text unchanged while reporting AI att
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -4985,7 +4985,7 @@ test('runTelegramSync keeps analysis reply text unchanged while reporting AI att
       aiAttemptKind: 'fallback',
       model: 'gpt-analysis-fallback',
     }),
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 10005 };
     },
@@ -5053,7 +5053,7 @@ test('runTelegramSync default analysis path reports primary model metadata witho
       return fakeClient;
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -5064,7 +5064,7 @@ test('runTelegramSync default analysis path reports primary model metadata witho
         },
       },
     ],
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 10006 };
     },
@@ -5090,7 +5090,7 @@ test('runTelegramSync replies with a short failure message when analysis generat
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -5104,7 +5104,7 @@ test('runTelegramSync replies with a short failure message when analysis generat
     generateTrainingAnalysisReply: async () => {
       throw new Error('AI unavailable');
     },
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 10002 };
     },
@@ -5127,7 +5127,7 @@ test('runTelegramSync classifies missing analysis relation as a database failure
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -5141,7 +5141,7 @@ test('runTelegramSync classifies missing analysis relation as a database failure
     generateTrainingAnalysisReply: async () => {
       throw new Error('relation "core.trainee_profile" does not exist');
     },
-    sendTelegramMessage: async () => ({ message_id: 10002 }),
+    sendMessage: async () => ({ message_id: 10002 }),
   });
 
   assert.equal(result.batches[0].analysisReplyStatus, 'failed');
@@ -5157,7 +5157,7 @@ test('runTelegramSync ignores unauthorized /analysis commands without generating
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -5172,7 +5172,7 @@ test('runTelegramSync ignores unauthorized /analysis commands without generating
       generated = true;
       return 'should not run';
     },
-    sendTelegramMessage: async () => {
+    sendMessage: async () => {
       sent = true;
     },
   });
@@ -5485,7 +5485,7 @@ test('runTelegramSync ignores removed /ai assistant commands without side effect
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -5504,7 +5504,7 @@ test('runTelegramSync ignores removed /ai assistant commands without side effect
       persisted = true;
       return { status: 'stored' };
     },
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 10004 };
     },
@@ -5535,7 +5535,7 @@ test('runTelegramSync ignores removed unauthorized /ai commands without replies'
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -5546,7 +5546,7 @@ test('runTelegramSync ignores removed unauthorized /ai commands without replies'
         },
       },
     ],
-    sendTelegramMessage: async () => {
+    sendMessage: async () => {
       sent = true;
     },
   });
@@ -5566,7 +5566,7 @@ test('runTelegramSync replies to help commands without image recognition or pers
     rootDir: tempRoot,
     env: telegramSyncEnv(),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -5594,7 +5594,7 @@ test('runTelegramSync replies to help commands without image recognition or pers
       persisted = true;
       return { status: 'stored' };
     },
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 10006 };
     },
@@ -5723,7 +5723,7 @@ test('runTelegramSync retries transient AI recognition failures and continues sy
         TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       },
       getLastProcessedUpdateId: async () => 900,
-      fetchTelegramUpdates: async () => [
+      fetchUpdates: async () => [
         {
           update_id: 901,
           message: {
@@ -5897,7 +5897,7 @@ test('runTelegramSync falls back to inline image data when AI rejects a Telegram
         TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       },
       getLastProcessedUpdateId: async () => 900,
-      fetchTelegramUpdates: async () => [
+      fetchUpdates: async () => [
         {
           update_id: 901,
           message: {
@@ -6011,7 +6011,7 @@ test('runTelegramSync keeps inline image download failures visible in the summar
         TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       },
       getLastProcessedUpdateId: async () => 900,
-      fetchTelegramUpdates: async () => [
+      fetchUpdates: async () => [
         {
           update_id: 902,
           message: {
@@ -6223,7 +6223,7 @@ test('runTelegramSync retries invalid JSON recognition with inline image data an
         TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       },
       getLastProcessedUpdateId: async () => 900,
-      fetchTelegramUpdates: async () => [
+      fetchUpdates: async () => [
         {
           update_id: 901,
           message: {
@@ -6438,7 +6438,7 @@ test('runTelegramSync retries recognition with json_object when json_schema resp
         TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       },
       getLastProcessedUpdateId: async () => 900,
-      fetchTelegramUpdates: async () => [
+      fetchUpdates: async () => [
         {
           update_id: 901,
           message: {
@@ -6561,7 +6561,7 @@ test('runTelegramSync normalizes object recognition details before batch analysi
         TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       },
       getLastProcessedUpdateId: async () => 900,
-      fetchTelegramUpdates: async () => [
+      fetchUpdates: async () => [
         {
           update_id: 901,
           message: {
@@ -6687,7 +6687,7 @@ test('runTelegramSync normalizes null recognition details without dropping worko
         TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       },
       getLastProcessedUpdateId: async () => 900,
-      fetchTelegramUpdates: async () => [
+      fetchUpdates: async () => [
         {
           update_id: 901,
           message: {
@@ -6793,7 +6793,7 @@ test('runTelegramSync skips malformed recognition responses after logging the re
         TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
       },
       getLastProcessedUpdateId: async () => 900,
-      fetchTelegramUpdates: async () => [
+      fetchUpdates: async () => [
         {
           update_id: 901,
           message: {
@@ -6846,7 +6846,7 @@ test('runTelegramSync sends Telegram result notification after storing an image 
       TELEGRAM_SYNC_NOTIFY: 'true',
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -6887,7 +6887,7 @@ test('runTelegramSync sends Telegram result notification after storing an image 
       charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-22\n',
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 9901 };
     },
@@ -6919,7 +6919,7 @@ test('runTelegramSync sends Telegram result notification after writing a thought
       TELEGRAM_SYNC_NOTIFY: 'true',
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -6931,7 +6931,7 @@ test('runTelegramSync sends Telegram result notification after writing a thought
       },
     ],
     persistNormalizedBatch: async () => ({ status: 'stored' }),
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 9903 };
     },
@@ -6966,7 +6966,7 @@ test('runTelegramSync defers Telegram success notification until the action fini
       TELEGRAM_SYNC_RESULT_PATH: resultPath,
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -7027,7 +7027,7 @@ test('runTelegramSync explains thought database fallback in Telegram notificatio
       TELEGRAM_SYNC_NOTIFY: 'true',
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -7045,7 +7045,7 @@ test('runTelegramSync explains thought database fallback in Telegram notificatio
       queued.push(entry);
       return { status: 'queued', batchId: entry.batch.batchId, aiCallLogStatus: 'written' };
     },
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 9904 };
     },
@@ -7082,7 +7082,7 @@ test('runTelegramSync preserves image recognition failure reason in report and n
       TELEGRAM_SYNC_NOTIFY: 'true',
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -7096,7 +7096,7 @@ test('runTelegramSync preserves image recognition failure reason in report and n
     recognizeBatch: async () => {
       throw new Error('AI recognition failed with HTTP 429: rate limit');
     },
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 9905 };
     },
@@ -7133,7 +7133,7 @@ test('runTelegramSync queues image batches when AI recognition fails before any 
       TELEGRAM_SYNC_NOTIFY: 'true',
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -7158,7 +7158,7 @@ test('runTelegramSync queues image batches when AI recognition fails before any 
       queued.push(entry);
       return { status: 'queued', batchId: entry.batch.batchId, aiCallLogStatus: 'written' };
     },
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 9909 };
     },
@@ -7214,7 +7214,7 @@ test('runTelegramSync queues image batches when primary and fallback AI provider
       },
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -7237,7 +7237,7 @@ test('runTelegramSync queues image batches when primary and fallback AI provider
     persistNormalizedBatch: async () => {
       throw new Error('should not persist when both AI providers fail');
     },
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 9911 };
     },
@@ -7279,7 +7279,7 @@ test('runTelegramSync replays pending recognition batches and marks them resolve
     rootDir: tempRoot,
     env: telegramSyncEnv({ SYNC_REPLAY_MODE: 'scheduled' }),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [],
+    fetchUpdates: async () => [],
     readPendingRecognitionBatches: async () => [
       {
         batchId: 'single-383',
@@ -7383,7 +7383,7 @@ test('runTelegramSync uses the normalized runtime env for first-time and replaye
     rootDir: tempRoot,
     env: { ...telegramSyncEnv(), SYNC_REPLAY_MODE: 'scheduled' },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 902,
         message: {
@@ -7473,7 +7473,7 @@ test('runTelegramSync keeps pending recognition batches queued when replay still
     now,
     env: telegramSyncEnv({ SYNC_REPLAY_MODE: 'scheduled' }),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [],
+    fetchUpdates: async () => [],
     readPendingRecognitionBatches: async () => [
       {
         batchId: 'single-383',
@@ -7540,7 +7540,7 @@ test('runTelegramSync marks ready image albums with failed photos as partial fai
       TELEGRAM_SYNC_NOTIFY: 'true',
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -7606,7 +7606,7 @@ test('runTelegramSync marks ready image albums with failed photos as partial fai
       charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-31\n',
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 9908 };
     },
@@ -7645,7 +7645,7 @@ test('runTelegramSync sends Telegram result notification when an image batch is 
       TELEGRAM_SYNC_NOTIFY: 'true',
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -7657,7 +7657,7 @@ test('runTelegramSync sends Telegram result notification when an image batch is 
       },
     ],
     recognizeBatch: async () => [],
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 9902 };
     },
@@ -7691,7 +7691,7 @@ test('runTelegramSync queues partial failure ready batches for pending recogniti
       TELEGRAM_SYNC_NOTIFY: 'true',
     },
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [
+    fetchUpdates: async () => [
       {
         update_id: 901,
         message: {
@@ -7756,7 +7756,7 @@ test('runTelegramSync queues partial failure ready batches for pending recogniti
       charts: emptyTrainingCharts(),
     }),
     exportTrainingMarkdown: () => '### 2026-05-31\n',
-    sendTelegramMessage: async (message) => {
+    sendMessage: async (message) => {
       sentMessages.push(message);
       return { message_id: 9910 };
     },
@@ -7787,7 +7787,7 @@ test('runTelegramSync report includes image counts for pending replay batches', 
     rootDir: tempRoot,
     env: telegramSyncEnv({ SYNC_REPLAY_MODE: 'scheduled' }),
     getLastProcessedUpdateId: async () => 900,
-    fetchTelegramUpdates: async () => [],
+    fetchUpdates: async () => [],
     readPendingRecognitionBatches: async () => [
       {
         batchId: 'album-replay-counts',
