@@ -637,6 +637,7 @@ test('createRecognitionAiProvider attaches a configured fallback provider for im
       AI_API_KEY: 'primary-key',
       AI_BASE_URL: 'https://primary.example.com/v1',
       AI_MODEL: 'gpt-default',
+      AI_API_PROTOCOL: 'responses',
       TELEGRAM_RECOGNITION_MODEL: 'gpt-vision-fast',
       TELEGRAM_RECOGNITION_FALLBACK_API_KEY: 'fallback-key',
       TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: 'https://fallback.example.com/v1/',
@@ -647,6 +648,8 @@ test('createRecognitionAiProvider attaches a configured fallback provider for im
   );
 
   assert.equal(recognitionProvider.env.model, 'gpt-vision-fast');
+  assert.equal(recognitionProvider.env.apiProtocol, 'responses');
+  assert.equal(recognitionProvider.fallbackProvider.env.apiProtocol, 'chat_completions');
   assert.equal(recognitionProvider.fallbackProvider.env.baseUrl, 'https://fallback.example.com/v1');
   assert.equal(recognitionProvider.fallbackProvider.env.model, 'gpt-vision-backup');
   assert.equal(recognitionProvider.fallbackProvider.env.timeoutMs, 15000);
@@ -5781,7 +5784,7 @@ test('runTelegramSync falls back to inline image data when AI rejects a Telegram
         JSON.stringify({
           ok: true,
           result: {
-            file_path: 'photos/file_803.jpg',
+            file_path: 'photos/file_803',
           },
         }),
         {
@@ -5793,11 +5796,11 @@ test('runTelegramSync falls back to inline image data when AI rejects a Telegram
       );
     }
 
-    if (requestUrl.includes('/file/bottoken/photos/file_803.jpg')) {
+    if (requestUrl.includes('/file/bottoken/photos/file_803')) {
       return new Response(new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
         status: 200,
         headers: {
-          'content-type': 'image/jpeg',
+          'content-type': 'application/octet-stream',
         },
       });
     }
@@ -5807,7 +5810,7 @@ test('runTelegramSync falls back to inline image data when AI rejects a Telegram
       const imagePart = body.messages?.[1]?.content?.find((part) => part.type === 'image_url');
       const imageUrl = imagePart?.image_url?.url ?? '';
 
-      if (imageUrl === 'https://api.telegram.org/file/bottoken/photos/file_803.jpg') {
+      if (imageUrl === 'https://api.telegram.org/file/bottoken/photos/file_803') {
         remoteUrlAttempts += 1;
         return new Response(
           JSON.stringify({

@@ -676,6 +676,7 @@ function createRecognitionFallbackAiProvider(rawEnv) {
     AI_BASE_URL: baseUrl,
     AI_MODEL: model,
     AI_PROVIDER: rawEnv.TELEGRAM_RECOGNITION_FALLBACK_PROVIDER || rawEnv.AI_PROVIDER,
+    AI_API_PROTOCOL: rawEnv.TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL || 'chat_completions',
     AI_TIMEOUT_MS:
       (isAiSchedulerEnabled(rawEnv) ? rawEnv.AI_RECOGNITION_FALLBACK_TIMEOUT_MS : '') ||
       rawEnv.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS ||

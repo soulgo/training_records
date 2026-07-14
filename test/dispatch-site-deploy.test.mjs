@@ -68,6 +68,31 @@ test('dispatchSiteDeploy sends one workflow dispatch without polling for a run',
   });
 });
 
+test('dispatchSiteDeploy retries a transient GitHub 500 before succeeding', async () => {
+  const requests = [];
+
+  const result = await dispatchSiteDeploy({
+    repository: 'soulgo/training_records',
+    token: 'token',
+    workflowFile: 'deploy-cloudflare-pages-dev.yml',
+    ref: 'dev',
+    retryBaseDelayMs: 0,
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return requests.length === 1
+        ? new Response('temporary GitHub error', { status: 500 })
+        : new Response(null, { status: 204 });
+    },
+  });
+
+  assert.equal(requests.length, 2);
+  assert.deepEqual(result, {
+    dispatched: true,
+    workflowFile: 'deploy-cloudflare-pages-dev.yml',
+    ref: 'dev',
+  });
+});
+
 test('dispatchSiteDeploy rejects missing required dispatch configuration', async () => {
   await assert.rejects(
     dispatchSiteDeploy({ repository: '', token: '', workflowFile: '', ref: '' }),

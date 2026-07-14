@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- 修复 Telegram/飞书同步完成后派发站点部署时，GitHub workflow dispatch API 遇到瞬时 HTTP 5xx 就立即中断并向用户回报 Action 失败的问题；部署派发现在复用统一 HTTP 重试机制，对服务端瞬时错误最多尝试 3 次，永久错误仍立即失败。
 - 补充 dev `core.trainee_profile` 人工更新 SQL，修正脚本对不存在的 `training_app`、`training_maintenance`、`training_readonly` 角色的错误依赖；新表固定归属 `training_writer`，并继承现有事实表的只读授权。`/分析` 的 PostgreSQL schema 错误改为数据库失败，Action summary 同时展示业务状态和失败分类，不再把绿色 workflow conclusion 当作分析成功证明。
 
 ### Added

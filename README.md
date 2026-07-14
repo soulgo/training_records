@@ -142,7 +142,8 @@ npm run server
 | `TELEGRAM_RECOGNITION_MODEL` | 可选，仅覆盖 Telegram 图片识别模型 |
 | `TELEGRAM_SYNC_RUN_SLEEP_BACKFILL` | 可选，显式运行睡眠全量补偿；默认在 pending replay 或新存储的睡眠图片后触发 |
 | `AI_API_KEY` | AI 服务鉴权 |
-| `AI_BASE_URL` | Chat Completions base URL |
+| `AI_BASE_URL` | OpenAI-compatible base URL（通常以 `/v1` 结尾） |
+| `AI_API_PROTOCOL` | AI 请求协议：`chat_completions`（默认）或 `responses` |
 | `AI_MODEL` | AI 模型名 |
 | `AI_CONCURRENCY` | 图片识别并发数，默认 3 |
 | `AI_IMAGE_PROCESSING_ENABLED` | 是否启用图片旋转、缩放、增强和 JPEG 标准化；同步 workflow 默认启用 |

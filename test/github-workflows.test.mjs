@@ -532,6 +532,21 @@ test('action monitor reports completed business workflows asynchronously without
   }
 });
 
+test('all AI sync workflows inject the configured API protocol', async () => {
+  for (const workflowPath of [
+    '.github/workflows/sync.yml',
+    '.github/workflows/sync-dev.yml',
+    '.github/workflows/pending-replay.yml',
+  ]) {
+    const workflow = await readWorkflow(workflowPath);
+    assert.match(
+      workflow,
+      /AI_API_PROTOCOL:\s*\$\{\{\s*vars\.AI_API_PROTOCOL \|\| 'chat_completions'\s*\}\}/,
+      `${workflowPath} should explicitly select the AI API protocol`,
+    );
+  }
+});
+
 test('pending replay runs independently per source channel with scheduled claim mode', async () => {
   const workflow = await readWorkflow('.github/workflows/pending-replay.yml');
   const parsedWorkflow = parseYaml(workflow);

@@ -735,7 +735,7 @@ async function buildInlineImageUrl(fetchImageFileById, fileId, context = {}) {
     if (!(file?.data instanceof Uint8Array) || file.data.length === 0) {
       return inlineImageFailure('empty_data', 'inline image input is empty', { fileId, context });
     }
-    const contentType = normalizeInlineImageContentType(file);
+    const contentType = normalizeInlineImageContentType(file, context);
     if (!contentType) {
       return inlineImageFailure(
         'unsupported_type',
@@ -802,7 +802,7 @@ function attachSourceMessageId(recognition, message) {
   };
 }
 
-function normalizeInlineImageContentType(file) {
+function normalizeInlineImageContentType(file, context = {}) {
   const rawContentType = String(file?.contentType ?? '')
     .split(';', 1)[0]
     .trim()
@@ -834,6 +834,9 @@ function normalizeInlineImageContentType(file) {
     return 'image/tiff';
   }
   if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+    return 'image/jpeg';
+  }
+  if (context?.photo?.source === 'photo') {
     return 'image/jpeg';
   }
 

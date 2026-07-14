@@ -24,6 +24,7 @@ test('createAiProvider defaults to openai-compatible and trims the base url', ()
   assert.equal(provider.name, 'openai-compatible');
   assert.equal(provider.env.baseUrl, 'https://example.com/v1');
   assert.equal(provider.env.timeoutMs, 45000);
+  assert.equal(provider.env.apiProtocol, 'chat_completions');
   assert.deepEqual(provider.capabilities, {
     vision: true,
     jsonSchema: true,
@@ -101,6 +102,103 @@ test('createAiProvider sends the same chat completion shape used by analysis and
   assert.deepEqual(request.body.messages, [{ role: 'user', content: 'hello' }]);
   assert.equal(request.body.response_format.type, 'json_schema');
   assert.equal(response.ok, true);
+});
+
+test('createAiProvider adapts multimodal structured requests and responses for the Responses API', async () => {
+  let request = null;
+  const provider = createAiProvider({
+    AI_API_KEY: 'key',
+    AI_BASE_URL: 'https://example.com/v1',
+    AI_MODEL: 'gpt-test',
+    AI_API_PROTOCOL: 'responses',
+  });
+
+  const response = await provider.requestChatCompletion({
+    messages: [
+      { role: 'system', content: 'Return structured training data.' },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Read this screenshot.' },
+          {
+            type: 'image_url',
+            image_url: {
+              url: 'data:image/jpeg;base64,abc123',
+              detail: 'high',
+            },
+          },
+        ],
+      },
+    ],
+    responseFormat: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'telegram_training_image',
+        strict: true,
+        schema: { type: 'object' },
+      },
+    },
+    fetchImpl: async (url, init) => {
+      request = { url, body: JSON.parse(init.body) };
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            id: 'resp_123',
+            output: [
+              { type: 'reasoning', content: [] },
+              {
+                type: 'message',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: '{"records":[]}', annotations: [] }],
+              },
+            ],
+            usage: { input_tokens: 12, output_tokens: 7, total_tokens: 19 },
+          };
+        },
+      };
+    },
+  });
+
+  assert.equal(provider.env.apiProtocol, 'responses');
+  assert.equal(request.url, 'https://example.com/v1/responses');
+  assert.deepEqual(request.body, {
+    model: 'gpt-test',
+    store: false,
+    input: [
+      { role: 'system', content: 'Return structured training data.' },
+      {
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'Read this screenshot.' },
+          {
+            type: 'input_image',
+            image_url: 'data:image/jpeg;base64,abc123',
+            detail: 'high',
+          },
+        ],
+      },
+    ],
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'telegram_training_image',
+        strict: true,
+        schema: { type: 'object' },
+      },
+    },
+  });
+
+  const payload = await response.json();
+  assert.equal(payload.choices[0].message.content, '{"records":[]}');
+  assert.deepEqual(payload.usage, {
+    input_tokens: 12,
+    output_tokens: 7,
+    total_tokens: 19,
+    prompt_tokens: 12,
+    completion_tokens: 7,
+  });
 });
 
 test('createAiProvider forwards idempotency keys on chat completion requests', async () => {
@@ -183,6 +281,18 @@ test('createAiProvider uses configured AI_TIMEOUT_MS for request aborts', async 
   assert.ok(signal instanceof AbortSignal);
   assert.equal(signal.aborted, true);
   assert.match(String(signal.reason?.message ?? signal.reason), /timed out after 5ms/);
+});
+
+test('createAiProvider rejects unsupported API protocols instead of silently using chat completions', () => {
+  assert.throws(
+    () => createAiProvider({
+      AI_API_KEY: 'key',
+      AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test',
+      AI_API_PROTOCOL: 'legacy',
+    }),
+    /Unsupported AI API protocol: legacy/,
+  );
 });
 
 test('createAiProvider rejects unsupported providers with a typed adapter error', () => {

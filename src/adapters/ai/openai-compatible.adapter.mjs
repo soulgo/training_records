@@ -5,6 +5,7 @@ export function normalizeOpenAICompatibleProviderEnv(env = process.env) {
   const baseUrl = env.AI_BASE_URL;
   const model = env.AI_MODEL;
   const timeoutMs = normalizeTimeoutMs(env.AI_TIMEOUT_MS);
+  const apiProtocol = normalizeApiProtocol(env.AI_API_PROTOCOL);
 
   for (const [name, value] of [
     ['AI_API_KEY', apiKey],
@@ -21,6 +22,7 @@ export function normalizeOpenAICompatibleProviderEnv(env = process.env) {
     baseUrl: baseUrl.replace(/\/+$/, ''),
     model,
     timeoutMs,
+    apiProtocol,
   };
 }
 
@@ -43,12 +45,17 @@ export function createOpenAICompatibleProvider(env = process.env) {
 }
 
 async function requestOpenAICompatibleChatCompletion(env, input = {}) {
+  const usesResponsesApi = env.apiProtocol === 'responses';
   const response = await fetchWithRetry(
-    `${env.baseUrl}/chat/completions`,
+    `${env.baseUrl}/${usesResponsesApi ? 'responses' : 'chat/completions'}`,
     {
       method: 'POST',
       headers: buildChatCompletionRequestHeaders(env, input),
-      body: JSON.stringify(buildChatCompletionRequestBody(env, input)),
+      body: JSON.stringify(
+        usesResponsesApi
+          ? buildResponsesRequestBody(env, input)
+          : buildChatCompletionRequestBody(env, input),
+      ),
     },
     {
       fetchImpl: createTimeoutFetch(input.fetchImpl ?? fetch, env.timeoutMs),
@@ -60,7 +67,17 @@ async function requestOpenAICompatibleChatCompletion(env, input = {}) {
     },
   );
 
-  return response;
+  return usesResponsesApi && response.ok
+    ? adaptResponsesApiResponse(response)
+    : response;
+}
+
+function normalizeApiProtocol(value) {
+  const normalized = String(value ?? '').trim().toLowerCase() || 'chat_completions';
+  if (!['chat_completions', 'responses'].includes(normalized)) {
+    throw new Error(`Unsupported AI API protocol: ${normalized}`);
+  }
+  return normalized;
 }
 
 function normalizeCapability(value, fallback) {
@@ -91,6 +108,114 @@ function buildChatCompletionRequestBody(env, input) {
   }
 
   return body;
+}
+
+function buildResponsesRequestBody(env, input) {
+  const body = {
+    model: input.model ?? env.model,
+    store: input.store ?? false,
+    input: (input.messages ?? []).map(convertResponsesInputMessage),
+  };
+
+  const format = convertResponsesTextFormat(input.responseFormat);
+  if (format) {
+    body.text = { format };
+  }
+
+  return body;
+}
+
+function convertResponsesInputMessage(message) {
+  if (!Array.isArray(message?.content)) {
+    return message;
+  }
+
+  return {
+    ...message,
+    content: message.content.map(convertResponsesInputContent),
+  };
+}
+
+function convertResponsesInputContent(content) {
+  if (content?.type === 'text') {
+    return {
+      ...content,
+      type: 'input_text',
+    };
+  }
+  if (content?.type === 'image_url') {
+    const imageUrl = content.image_url;
+    return {
+      type: 'input_image',
+      image_url: typeof imageUrl === 'string' ? imageUrl : imageUrl?.url,
+      ...(typeof imageUrl === 'object' && imageUrl?.detail ? { detail: imageUrl.detail } : {}),
+    };
+  }
+  return content;
+}
+
+function convertResponsesTextFormat(responseFormat) {
+  if (!responseFormat) {
+    return null;
+  }
+  if (responseFormat.type === 'json_schema') {
+    return {
+      type: 'json_schema',
+      ...(responseFormat.json_schema ?? {}),
+    };
+  }
+  return responseFormat;
+}
+
+function adaptResponsesApiResponse(response) {
+  return {
+    ok: response.ok,
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+    url: response.url,
+    async json() {
+      return normalizeResponsesApiPayload(await response.json());
+    },
+  };
+}
+
+function normalizeResponsesApiPayload(payload) {
+  const usage = payload?.usage && typeof payload.usage === 'object'
+    ? {
+        ...payload.usage,
+        prompt_tokens: payload.usage.prompt_tokens ?? payload.usage.input_tokens,
+        completion_tokens: payload.usage.completion_tokens ?? payload.usage.output_tokens,
+      }
+    : payload?.usage;
+
+  return {
+    ...payload,
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: extractResponsesOutputText(payload),
+        },
+        finish_reason: payload?.status === 'incomplete' ? 'length' : 'stop',
+      },
+    ],
+    usage,
+  };
+}
+
+function extractResponsesOutputText(payload) {
+  if (typeof payload?.output_text === 'string') {
+    return payload.output_text;
+  }
+
+  return (payload?.output ?? [])
+    .filter((item) => item?.type === 'message')
+    .flatMap((item) => item.content ?? [])
+    .filter((content) => content?.type === 'output_text' && typeof content.text === 'string')
+    .map((content) => content.text)
+    .join('');
 }
 
 function createTimeoutFetch(fetchImpl, timeoutMs) {
