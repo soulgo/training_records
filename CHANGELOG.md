@@ -38,6 +38,11 @@
 
 ### Changed
 
+- 合并 PostgreSQL 持久化双层：连接配置与快照读实现从 `src/db/training` 迁入 `src/adapters/postgres`（`config.mjs` → `training-config.pg.mjs`，`read-queries/read-mapper/read-client.mjs` → `training-read-*.pg.mjs`），`adapters/postgres` 成为唯一 PostgreSQL 适配层落点且不再反向 import `db/training`；`db/training` 仅保留 `read`/`write`/`pending-recognition`/`consistency-check` 编排入口，单向依赖适配层。
+- 渠道无关同步编排去 telegram 化：`runMessageSync`、`createRecognitionAiProvider` 与共享子模块迁至 `src/app/use-cases/message-sync.use-case.mjs`、`message-sync/`、`message-sync-{env,timings,handlers,thoughts}.mjs`；`telegram-sync.use-case.mjs` 重建为仅含 `main`/`runTelegramSync`/CLI 的 Telegram 装配薄入口（`sync:telegram` 脚本不变）；`feishu-sync` 改为 import 中性模块，不再引用任何 telegram 命名模块。
+- 渠道无关符号统一 source/message 语义（一次性全量改名，无兼容 re-export）：`persistTelegramImageBatchIncremental` → `persistSourceImageBatchIncremental`、`shouldPersistTelegramArtifacts` → `shouldPersistMessageSyncArtifacts`、`notifyTelegramSyncResult` 等通知辅助 → `notifyMessageSyncResult` 等；`runMessageSync` 选项键 `sendTelegramMessage`/`fetchTelegramUpdates` → `sendMessage`/`fetchUpdates`。GitHub dispatch 载荷解析（`isDispatchEventName` 等）抽到 `src/shared/dispatch-payload.mjs`，telegram/feishu transport 与 action-monitor 工具统一从 shared 导入。
+- 纯物理拆分三个超大文件（行为不变）：`sync-batch-logic.adapter.mjs`（1857 行）拆出 `sync-commands.adapter.mjs`、`sync-analysis.adapter.mjs`；`telegram-sync.use-case.mjs`（1344 行）拆出 timings/env/handlers/thoughts；`image-recognition.use-case.mjs`（1168 行）拆出 parse/schema/provider，对外导出符号与签名全部保持不变。
+- 系统总览分层描述修正为与实际 `core → domain` 单向依赖一致（R2 方案 B，纯文档）。
 - main/dev 写连接统一使用 GitHub Settings 中的分支数据库 URL 和同一个 `training_writer` 账号；只读账号仅由各自 readonly URL 决定。移除无迁移执行器消费的 migration URL 参数健康项。
 - 图片识别 schema 升级到 v4，活动明细直接输出 `durationSeconds`、`calories`、`heartRate`、`distanceKm`、`avgSpeedKmh`；结构化字段优先进入 core，中文 `detail` 正则仅保留为旧结果兼容回退。
 - 同步主路径不再等待站点部署或同步拉取 Action jobs；deploy 与 monitor 独立通知失败，会话队列按稳定哈希分片，webhook 跳过 polling offset，新消息不再顺带消费 pending 队列。
@@ -60,6 +65,7 @@
 
 ### Removed
 
+- 删除 4 个纯 re-export shim：`src/db/training/archive.mjs`、`src/adapters/telegram/sync-batch.adapter.mjs`、`src/telegram/commands.mjs`、`src/telegram/index.mjs`，调用方改为直接 import 真实实现；`src/db/training/read.mjs` 尾部的快照读 re-export 块一并移除。新增 `sql/dev-sql/update-dev-sql/20260714_drop_legacy_telegram_tables.sql` 供人工清理 `ingest.telegram_*` 4 张遗留表与序列（不可逆 DROP，须用户批准后手动执行）。
 - 删除 `/action-monitor/` 的系统参数监控模块及其 registry、探测 workflow/CLI、业务用例、PostgreSQL 仓储、页面模板/脚本/样式和专属测试；dev/main canonical `monitor.sql` 同步移除 `monitor.system_config_parameters`、`monitor.system_config_parameter_checks` 及相关序列、索引和约束，dev 运行库通过 `20260713_remove_system_parameter_monitoring.sql` 清理遗留对象，Action 日志功能保持不变。
 - 删除 `docs/03_历史重构记录/` 整套旧分析、规划、TDD、审计和验收资料；仍有效的系统优化 0711 事实已写回当前 docs，历史过程改由 Git 追溯。
 - 删除已完成使命的 `sql/main-sql/align_to_dev.sql`，并将 schema 测试改为直接验证 dev/main 环境导出的表与字段结构一致。

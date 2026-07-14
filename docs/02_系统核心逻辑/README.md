@@ -21,8 +21,8 @@
 
 | 领域 | 源码入口 |
 | --- | --- |
-| Telegram 同步 | `src/app/use-cases/telegram-sync.use-case.mjs` |
-| 飞书同步 | `src/app/use-cases/feishu-sync.use-case.mjs` |
+| Telegram 同步 | `src/app/use-cases/telegram-sync.use-case.mjs`（CLI 装配入口）、`src/app/use-cases/message-sync.use-case.mjs`（渠道无关共享编排 `runMessageSync`） |
+| 飞书同步 | `src/app/use-cases/feishu-sync.use-case.mjs`（复用 `message-sync.use-case.mjs` 共享编排） |
 | 消息分组和命令解析 | `src/adapters/telegram/sync-batch-logic.adapter.mjs`、`src/adapters/feishu/sync-batch-logic.adapter.mjs` |
 | AI 图片识别 | `src/app/use-cases/image-recognition.use-case.mjs`、`src/adapters/image/sharp-image-processor.mjs`、`src/adapters/ocr/openai-compatible-ocr.adapter.mjs`、`src/core/ai/normalized-recognition.mjs` |
 | Prompt | `prompts/telegram-training-image-recognition.md`、`prompts/training-analysis.md` |

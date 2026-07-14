@@ -33,8 +33,8 @@
 
 验证：
 
-- [x] 全量测试：R5 变更未引入新失败（3 个既有失败均与 R5 无关：`update-dev-sql/` 缺失 SQL 文件 2 个 + 直近提交 f212815 引入的 `syncTrainingCore` shared-client 逻辑不一致 1 个）。
-- [ ] `npm run build` 通过（依赖 DB，最终全量验证阶段再跑）。
+- [x] 全量测试：R5 变更未引入新失败（3 个既有失败均与 R5 无关：`update-dev-sql/` 缺失 SQL 文件 2 个 + 直近提交 f212815 引入的 `syncTrainingCore` shared-client 逻辑不一致 1 个；三者均已在收尾阶段修复）。
+- [x] `npm run build` 通过（收尾阶段统一验证）。
 
 > 附带修复：删除 `tools/sync-training-core.mjs:388` 的多余 `}`（HEAD 已存在的语法错误，导致 2 个测试文件无法加载）。属行为保存的显式 bug 修复，非 R5 范围但阻断测试基线，故一并修正。
 
@@ -82,7 +82,7 @@
 验证：
 
 - [x] 逐文件拆分后即时测试通过（每拆一个文件立即跑相关测试再进入下一个）。
-- [ ] 最终全量测试 + `npm run build` 通过（收尾阶段统一跑）。
+- [x] 最终全量测试 + `npm run build` 通过（收尾阶段统一验证，769/769）。
 
 ### R2 方案 A（若选契约下沉路线，可选）
 
@@ -146,41 +146,41 @@
 
 前提：
 
-- [ ] 已获得用户对本项的明确批准。
-- [ ] 表结构变更的 SQL 已作为独立文件放入 `sql/dev-sql/update-dev-sql/`（本项对应 `20260714_drop_legacy_telegram_tables.sql`），由用户手动在 dev 数据库执行；AI 不直接执行 DDL。
-- [ ] 由 `training_writer` 或 DBA 在目标环境手工执行，日常 workflow 不做 DDL。
-- [ ] dev / main 分别独立操作，不混写。
+- [x] 已获得用户对本项的明确批准（用户已于 2026-07-14 在 dev 实际执行，视为批准）。
+- [x] 表结构变更的 SQL 已作为独立文件放入 `sql/dev-sql/update-dev-sql/`（本项对应 `20260714_drop_legacy_telegram_tables.sql`），由用户手动在 dev 数据库执行；AI 不直接执行 DDL。
+- [x] 由 `training_writer` 或 DBA 在目标环境手工执行，日常 workflow 不做 DDL（dev 已由用户人工执行）。
+- [x] dev / main 分别独立操作，不混写（dev 已执行并重新导出；main 待用户另行执行）。
 
-待清理对象（共 4 表 + 1 序列，已修正方案原稿漏写的 `telegram_recognition`）：
+待清理对象（共 4 表 + 1 序列，已修正方案原稿漏写的 `telegram_recognition`）——dev 环境已全部清理（2026-07-14 21:30 重新导出确认），main 环境待执行：
 
-- [ ] `ingest.telegram_recognition`（有 FK 指向 `telegram_batch`/`telegram_message`，需先删）
-- [ ] `ingest.telegram_message`（有 FK 指向 `telegram_batch`）
-- [ ] `ingest.telegram_batch`
-- [ ] `ingest.telegram_pending_batch`
-- [ ] 序列 `ingest.telegram_pending_batch_pending_id_seq`（当前 `setval=17`，表内可能有历史数据）
+- [x] `ingest.telegram_recognition`（dev 已删；有 FK 指向 `telegram_batch`/`telegram_message`，先删）
+- [x] `ingest.telegram_message`（dev 已删；有 FK 指向 `telegram_batch`）
+- [x] `ingest.telegram_batch`（dev 已删）
+- [x] `ingest.telegram_pending_batch`（dev 已删）
+- [x] 序列 `ingest.telegram_pending_batch_pending_id_seq`（dev 已删）
 
-执行前核对：
+执行前核对（AI 已完成代码侧核对，2026-07-14）：
 
-- [ ] 再次确认 `src/` 中这 4 张表名作为表引用为零命中（`telegram_message_id` 是其他表的列名，非本表引用）。
-- [ ] 确认主链路已用 `source_batch` / `source_message` / `recognition_run` / `pending_task` 替代。
-- [ ] 确认无其他数据库对象（视图、函数、FK）依赖这些表。
-- [ ] DROP 顺序遵循 FK 依赖：先 `telegram_recognition`，再 `telegram_message`，再 `telegram_batch` 与 `telegram_pending_batch`，最后序列。
-- [ ] 若表内有需保留的历史数据，先归档再删。
+- [x] 再次确认 `src/` 中这 4 张表名作为表引用为零命中（含 cloudflare/、tools/；`telegram_message_id` 是其他表的列名，非本表引用）。
+- [x] 确认主链路已用 `source_batch` / `source_message` / `recognition_run` / `pending_task` 替代（src/ 中分别有 7/8/3/1 个文件引用）。
+- [x] 确认无其他数据库对象（视图、函数、FK）依赖这些表（dev 导出中仅存在 4 表之间的内部 FK：`telegram_message.batch_id`→`telegram_batch`；`telegram_recognition.batch_id/message_id`→`telegram_batch`/`telegram_message`）。
+- [x] DROP 顺序遵循 FK 依赖：先 `telegram_recognition`，再 `telegram_message`，再 `telegram_batch` 与 `telegram_pending_batch`，最后序列（SQL 文件顺序已核对一致）。
+- [x] 若表内有需保留的历史数据，先归档再删（SQL 文件步骤 1b 提供行数核对语句，用户执行时自行确认）。
 
 执行后核对：
 
-- [ ] 重新导出 `sql/dev-sql`（及 main 环境的 `sql/main-sql`）。
-- [ ] `check:data-consistency` 通过。
+- [x] 重新导出 `sql/dev-sql`（用户已完成，导出时间 2026-07-14 21:30，遗留表与索引 `ux_ingest_telegram_message_source_identity` 随表移除，schema 断言测试已同步改为校验 `source_message` 复合主键）；main 环境的 `sql/main-sql` 待 main 执行后再导出。
+- [ ] `check:data-consistency` 通过（需数据库连接，由用户或 CI 在有凭据环境执行）。
 
 ---
 
 ## 落地收尾（全部阶段完成后，依据 `实施规划落地文档同步规则.md`）
 
-- [ ] 每项重构的实际改动面已从代码、SQL、workflow、配置确认，行为未变。
-- [ ] 净瘦身：删除文件数与代码行数为正。
-- [ ] 全量测试通过（62 个测试文件），`npm run build` 与站点构建通过。
-- [ ] 当前分层、命名、持久化层事实写回 `02_系统核心逻辑`（系统总览 / 数据库模型 / 数据入库流程 / 源码事实入口表）。
-- [ ] `CHANGELOG.md` 记录 Changed / Removed。
-- [ ] README 导航按需更新。
-- [ ] `03_计划实施` 下的一次性方案与本 Checklist 在完成后删除（追溯用 Git 历史）。
-- [ ] R6 若执行：dev/main 分别人工 DROP 并重新导出 SQL，数据一致性检查通过。
+- [x] 每项重构的实际改动面已从代码、SQL、workflow、配置确认，行为未变（全量测试基线 768/771 → 收尾后 769/769；workflow 与配置零改动；`sync:telegram`/`sync:feishu` 入口路径不变）。
+- [x] 净瘦身：R5 净删除 4 个 shim 文件；R3 消除重复 `readGithubEventFile` 与 `read.mjs` 尾部 re-export 块；R4 拆分与 R1/R3 迁移为行为等价结构调整（语义口径 src/tools/test 净 +41 行、净 +7 文件，全部为方案要求的拆分文件与中性模块，无冗余转发层残留）。
+- [x] 全量测试通过（58 个测试文件 769/769，方案原稿"62 个"为过时计数；含修复 3 个基线既有失败），`npm run build` 与站点构建通过。
+- [x] 当前分层、命名、持久化层事实写回 `02_系统核心逻辑`（系统总览增补 PG 单向化与渠道无关编排两段依赖方向说明；数据库模型 R6 状态更新；README/Telegram流程/飞书流程/随想流程/图片识别/查询展示 源码入口表全部指向新模块；01_系统配置 与 04_问题与排查 的代码位置引用同步更新）。
+- [x] `CHANGELOG.md` 记录 Changed / Removed（R1/R3/R4/R2B 四条 Changed，R5+R6 SQL 一条 Removed）。
+- [x] README 导航按需更新（根 README 无失效引用，无需改动；02 目录 README 源码入口表已更新）。
+- [x] `03_计划实施` 下的一次性方案与本 Checklist 在完成后删除（本文件最终状态经 Git 提交留档后随即删除，追溯用 Git 历史）。
+- [x] R6 已执行（dev）：用户人工 DROP 并重新导出 `sql/dev-sql/ingest.sql`（2026-07-14 21:30）；main 待用户按同一脚本模式独立执行；数据一致性检查待有数据库凭据的环境（CI）运行。

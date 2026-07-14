@@ -25,7 +25,7 @@
 
 1. 查 Worker secret 校验：`cloudflare/telegram-sync-dispatch-worker.mjs:126`。
 2. 查 webhook 配置构造：`src/adapters/telegram/webhook.transport.mjs:1-19`。
-3. 查同步 env 校验：`src/app/use-cases/telegram-sync.use-case.mjs:831-887`。
+3. 查同步 env 校验：`src/app/use-cases/message-sync-env.mjs`（`loadRequiredEnv`）。
 4. 查分组逻辑：`src/adapters/telegram/sync-batch-logic.adapter.mjs:95`。
 5. 查 Actions summary 中 `failed messageIds`、`failureCategory`。
 
