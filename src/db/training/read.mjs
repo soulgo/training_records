@@ -1,13 +1,11 @@
 import pg from 'pg';
 
 import { buildTrainingSnapshotFromDaily } from '../../domain/training/training-domain.mjs';
-import { resolveTrainingCoreConfig, resolveTrainingReadonlyConfig } from './config.mjs';
+import { resolveTrainingCoreConfig, resolveTrainingReadonlyConfig } from '../../adapters/postgres/training-config.pg.mjs';
 import {
-  readArchiveTrainingSnapshotFromDatabaseClient,
   readArchiveTrainingSnapshotFromDatabaseWithClients,
-  readTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabaseWithClients,
-} from './read-client.mjs';
+} from '../../adapters/postgres/training-read-client.pg.mjs';
 import { getLastProcessedTelegramUpdateId as getLastUpdateIdFromAdapter } from '../../adapters/postgres/source-batch-repository.pg.mjs';
 
 const { Client } = pg;
@@ -84,8 +82,3 @@ export async function getLastProcessedTelegramUpdateId(options = {}) {
     await client.end();
   }
 }
-
-export {
-  readArchiveTrainingSnapshotFromDatabaseClient,
-  readTrainingSnapshotFromDatabaseClient,
-};

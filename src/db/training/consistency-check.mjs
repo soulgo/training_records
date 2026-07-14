@@ -1,6 +1,6 @@
 import pg from 'pg';
 
-import { resolveTrainingReadonlyConfig } from './config.mjs';
+import { resolveTrainingReadonlyConfig } from '../../adapters/postgres/training-config.pg.mjs';
 
 const { Client } = pg;
 

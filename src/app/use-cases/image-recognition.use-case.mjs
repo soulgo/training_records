@@ -4,7 +4,7 @@ import {
   RECOGNITION_SCHEMA_VERSION,
 } from '../../core/ai/telegram-recognition-schema.mjs';
 import { buildNormalizedRecognition } from '../../core/ai/normalized-recognition.mjs';
-import { resolveTrainingCoreConfig } from '../../db/training/config.mjs';
+import { resolveTrainingCoreConfig } from '../../adapters/postgres/training-config.pg.mjs';
 import { createHash } from 'node:crypto';
 import { requestRecognitionWithProviderFallback } from './image-recognition-provider.mjs';
 

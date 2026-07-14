@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { resolveTrainingCoreConfig } from '../src/db/training/config.mjs';
+import { resolveTrainingCoreConfig } from '../src/adapters/postgres/training-config.pg.mjs';
 import { checkSleepDataConsistency } from './check-sleep-data-consistency.mjs';
 
 const { Client } = pg;

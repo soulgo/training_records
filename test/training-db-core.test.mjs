@@ -12,6 +12,8 @@ import {
 import {
   readArchiveTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabaseClient,
+} from '../src/adapters/postgres/training-read-client.pg.mjs';
+import {
   readTrainingSnapshotFromDatabase,
   getLastProcessedTelegramUpdateId,
 } from '../src/db/training/read.mjs';

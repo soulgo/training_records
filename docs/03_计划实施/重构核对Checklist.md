@@ -100,24 +100,24 @@
 
 改动点：
 
-- [ ] 以 `adapters/postgres` 为唯一 PG 适配层落点。
-- [ ] `db/training/write.mjs` 的连接/查询实现迁入或单向依赖适配层。
-- [ ] `db/training/read.mjs` 同上。
-- [ ] `db/training/archive.mjs` 已在 R5 删除，调用方直连适配层。
-- [ ] `db/training/config.mjs` 依赖方向理顺。
-- [ ] 消除反向 import：`adapters/postgres/core-day-repository.pg.mjs` → `db/training/read.mjs`。
-- [ ] 消除反向 import：`adapters/postgres/training-analysis-repository.pg.mjs` → `db/training/config.mjs`。
+- [x] 以 `adapters/postgres` 为唯一 PG 适配层落点（连接配置与快照读实现迁入：`config.mjs` → `training-config.pg.mjs`，`read-queries/read-mapper/read-client` → `training-read-queries/mapper/client.pg.mjs`，git mv 保留历史）。
+- [x] `db/training/write.mjs` 的连接/查询实现迁入或单向依赖适配层（config 与 archive 快照读改从适配层导入，单向依赖）。
+- [x] `db/training/read.mjs` 同上（改为单向依赖适配层；删除文件尾部对 `readTrainingSnapshotFromDatabaseClient` 等的纯 re-export 块，测试改为直连适配层）。
+- [x] `db/training/archive.mjs` 已在 R5 删除，调用方直连适配层。
+- [x] `db/training/config.mjs` 依赖方向理顺（整体迁入 `adapters/postgres/training-config.pg.mjs`，全部 13 个 import 方更新）。
+- [x] 消除反向 import：`adapters/postgres/core-day-repository.pg.mjs` → `db/training/read.mjs`（改为 `./training-read-client.pg.mjs`）。
+- [x] 消除反向 import：`adapters/postgres/training-analysis-repository.pg.mjs` → `db/training/config.mjs`（改为 `./training-config.pg.mjs`）。
 
 核对：
 
-- [ ] 全仓库搜索 `adapters/postgres` 已不 import `db/training`（单向）。
-- [ ] 入库/读取/分析/站点读取的所有 import 方路径已更新。
-- [ ] 行为不变：入库结果、读取结果、分析产物一致。
+- [x] 全仓库搜索 `adapters/postgres` 已不 import `db/training`（单向）。
+- [x] 入库/读取/分析/站点读取的所有 import 方路径已更新（src 4 处、db/training 内部 4 处、tools 5 处、test 1 处，旧路径全仓库零残留）。
+- [x] 行为不变：纯文件移动 + import 路径调整，无逻辑改动；`db/training` 留下 read/write/pending-recognition/consistency-check 四个编排入口。
 
 验证：
 
-- [ ] 入库、读取、分析、站点构建相关测试通过。
-- [ ] 全量测试 + `npm run build` 通过。
+- [x] 入库、读取、分析、站点构建相关测试通过（12 个相关测试文件 197/198，唯一失败为已记录的 `syncTrainingCore` 既有失败，与 R1 无关）。
+- [x] 全量测试通过（768/771，3 个失败均为基线已记录的既有失败）；`npm run build` 收尾阶段统一跑。
 
 ### R3 共享编排器去 telegram 化命名（一次性全量改名，不留兼容 re-export）
 

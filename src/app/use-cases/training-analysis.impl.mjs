@@ -12,7 +12,7 @@ import {
 import { buildTrainingAnalysisPrompt } from '../../core/ai/training-prompt.mjs';
 import { createAiProvider, isAiSchedulerEnabled } from '../../adapters/ai/ai-provider.factory.mjs';
 import { normalizeAiUsage } from '../../core/ai/schema-validator.mjs';
-import { resolveTrainingCoreConfig } from '../../db/training/config.mjs';
+import { resolveTrainingCoreConfig } from '../../adapters/postgres/training-config.pg.mjs';
 import { loadTrainingAnalysisContext as loadTrainingAnalysisContextFromDatabase } from '../../adapters/postgres/training-analysis-repository.pg.mjs';
 import { getAnalysisPromptMetadata } from '../../core/ai/prompt-generator.mjs';
 import {

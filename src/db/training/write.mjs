@@ -3,8 +3,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { parseTrainingRecord } from '../../domain/training/training-parser.mjs';
 import { mergeBatchIntoDay } from '../../core/services/training-merge-service.mjs';
-import { resolveTrainingCoreConfig } from './config.mjs';
-import { readArchiveTrainingSnapshotFromDatabaseClient } from './read.mjs';
+import { resolveTrainingCoreConfig } from '../../adapters/postgres/training-config.pg.mjs';
+import { readArchiveTrainingSnapshotFromDatabaseClient } from '../../adapters/postgres/training-read-client.pg.mjs';
 import {
   isThoughtBatchKind,
 } from '../../core/thought-modules.mjs';

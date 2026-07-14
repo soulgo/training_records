@@ -6,7 +6,7 @@ import { backfillThoughtsToCore } from './backfill-thoughts-to-core.mjs';
 import { reconcileTrainingMarkdownToCore } from './reconcile-training-markdown-to-core.mjs';
 import { checkSleepDataConsistency, extractTargetDatesFromConsistencyResult } from './check-sleep-data-consistency.mjs';
 import { checkCoreDataConsistency, extractBatchIdsFromConsistencyResult } from './check-core-data-consistency.mjs';
-import { resolveTrainingCoreConfig } from '../src/db/training/config.mjs';
+import { resolveTrainingCoreConfig } from '../src/adapters/postgres/training-config.pg.mjs';
 import {
   backfillCoreSleepFromIngestBatchesClient,
   backfillCoreFromLatestArchiveSnapshotClient,
