@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { backfillTrainingCoreFromArchive } from './backfill-training-core-from-archive.mjs';
 import { backfillThoughtsToCore } from './backfill-thoughts-to-core.mjs';
 import { reconcileTrainingMarkdownToCore } from './reconcile-training-markdown-to-core.mjs';
-import { checkSleepDataConsistency, extractTargetDatesFromConsistencyResult } from './check-sleep-data-consistency.mjs';
 import { checkCoreDataConsistency, extractBatchIdsFromConsistencyResult } from './check-core-data-consistency.mjs';
 import { resolveTrainingCoreConfig } from '../src/adapters/postgres/training-config.pg.mjs';
 import {
@@ -151,11 +150,19 @@ async function syncTrainingCoreDefault(options, stderr, phase) {
       result.ingest = await runPhase(
         'ingest',
         async () => {
-          // 执行全面数据一致性检查（包括 activities/measurements/meals/sleep）
+          // 执行全面数据一致性检查（包括 activities/measurements/meals/sleep），复用共享数据库客户端
           stderr.write('[sync-training-core:ingest] 检查所有数据类型一致性...\n');
           const consistencyResult = await checkCoreDataConsistency({
             env: options.env ?? process.env,
-            createClient,
+            createClient() {
+              return {
+                async connect() {},
+                async query(sql, params) {
+                  return client.query(sql, params);
+                },
+                async end() {},
+              };
+            },
           });
 
           if (consistencyResult.status === 'skipped') {
