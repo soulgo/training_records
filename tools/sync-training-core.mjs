@@ -12,7 +12,7 @@ import {
   backfillCoreFromLatestArchiveSnapshotClient,
   importTrainingMarkdownToDatabase,
 } from '../src/db/training/write.mjs';
-import { persistTelegramImageBatchIncremental } from '../src/adapters/postgres/incremental-write.pg.mjs';
+import { persistSourceImageBatchIncremental } from '../src/adapters/postgres/incremental-write.pg.mjs';
 import pg from 'pg';
 
 const { Client } = pg;
@@ -365,7 +365,7 @@ async function repairBatchIncremental(client, batchId, processedAt) {
   const payload = batch.payload_json;
 
   // 重新执行增量写入
-  await persistTelegramImageBatchIncremental(
+  await persistSourceImageBatchIncremental(
     client,
     {
       batchId: batch.batch_id,

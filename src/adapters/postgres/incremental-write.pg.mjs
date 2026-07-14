@@ -12,8 +12,8 @@ import {
   insertCoreSleep,
 } from './core-row-writer.pg.mjs';
 
-export async function persistTelegramImageBatchIncremental(client, batch, processedAt, writeOptions = {}) {
-  const day = buildTelegramImageBatchDay(batch);
+export async function persistSourceImageBatchIncremental(client, batch, processedAt, writeOptions = {}) {
+  const day = buildSourceImageBatchDay(batch);
   if (!day) {
     return;
   }
@@ -54,7 +54,7 @@ async function ensureCoreTrainingDayStub(client, archivedDate, batchId, processe
   );
 }
 
-function buildTelegramImageBatchDay(batch) {
+function buildSourceImageBatchDay(batch) {
   const archivedDate = normalizeDateKey(batch.archivedDate);
   if (!archivedDate) {
     return null;
@@ -300,7 +300,7 @@ function assertValidDateKey(dateKey, originalValue) {
 function normalizeRequiredSourceChannel(value) {
   const text = String(value ?? '').trim();
   if (!text) {
-    throw new Error('persistTelegramImageBatchIncremental: sourceChannel is required');
+    throw new Error('persistSourceImageBatchIncremental: sourceChannel is required');
   }
   return text;
 }

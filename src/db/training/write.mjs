@@ -17,7 +17,7 @@ import {
   replaceCoreDay,
   replaceCoreDays,
 } from '../../adapters/postgres/index.mjs';
-import { persistTelegramImageBatchIncremental } from '../../adapters/postgres/incremental-write.pg.mjs';
+import { persistSourceImageBatchIncremental } from '../../adapters/postgres/incremental-write.pg.mjs';
 
 const { Client } = pg;
 const SLEEP_HEALTH_FIELDS = [
@@ -157,7 +157,7 @@ async function persistNormalizedBatchAttempt(options) {
     if (isThoughtBatchKind(batch.kind) && batch.status === 'ready') {
       thoughtMirrorResult = await new PostgresThoughtRepository(observedClient).persistMirror(batch, processedAt);
     } else if (isTelegramImageBatch(batch) && batch.status === 'ready' && batch.archivedDate) {
-      await persistTelegramImageBatchIncremental(observedClient, batch, processedAt, { sourceChannel });
+      await persistSourceImageBatchIncremental(observedClient, batch, processedAt, { sourceChannel });
     } else if (batch.kind !== 'image' && batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
       const existingDay = await readCoreDay(observedClient, batch.archivedDate);
       const mergedDay = mergeBatchIntoDay(existingDay, batch);
