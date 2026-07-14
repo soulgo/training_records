@@ -49,6 +49,7 @@ dev 环境对应：
 | `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` | main 监控 API base URL | 可选 | 所有 workflow 都注入该变量；dev 分支不会优先使用它。 |
 | `TRAINING_SNAPSHOT_SOURCE` | `database` | 建议填 | 构建站点时从数据库还是 Markdown 生成快照。 |
 | `AI_PROVIDER` | `openai-compatible` | 建议填 | dev 与 main 共用的 AI provider。 |
+| `AI_API_PROTOCOL` | `chat_completions` / `responses` | 必填 | dev 与 main 共用的请求协议；必须与 `AI_MODEL` 实际支持的协议一致。 |
 | `AI_MODEL` | 例如 `gpt-4.1-mini` | 必填 | dev 与 main 共用的默认 AI 模型。 |
 | `AI_TIMEOUT_MS` | `60000` | 建议填 | dev 与 main 共用的 AI 请求超时。 |
 | `AI_CONCURRENCY` | `3` | 建议填 | dev 与 main 共用的图片识别并发数。 |
@@ -123,7 +124,8 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.dev.toml
 | 参数 | 来源 | 说明 |
 | --- | --- | --- |
 | `AI_API_KEY` | AI 服务商控制台 | GitHub Secret；dev 与 main 同时使用。 |
-| `AI_BASE_URL` | AI 服务商文档 | GitHub Secret；必须是 Chat Completions 兼容接口的 base URL。 |
+| `AI_BASE_URL` | AI 服务商文档 | GitHub Secret；OpenAI-compatible base URL，通常以 `/v1` 结尾。 |
+| `AI_API_PROTOCOL` | AI 服务商模型/API 文档 | GitHub Variable；`chat_completions` 请求 `/chat/completions`，`responses` 请求 `/responses`。 |
 | `AI_MODEL` | AI 服务商模型列表 | GitHub Variable；dev 与 main 的默认识别和分析模型。 |
 | `TELEGRAM_RECOGNITION_MODEL` | AI 服务商模型列表 | GitHub Variable；需要覆盖默认图片识别模型时再填。 |
 | `AI_SUPPORTS_VISION` / `AI_SUPPORTS_JSON_SCHEMA` / `AI_SUPPORTS_JSON_OBJECT` / `AI_SUPPORTS_TEXT_JSON` | AI 服务商能力说明 | 运行时代码支持，默认都为 `true`；当前 sync workflow 尚未注入这些变量，如需显式覆盖必须先同步修改 workflow。 |

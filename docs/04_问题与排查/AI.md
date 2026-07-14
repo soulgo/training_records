@@ -11,6 +11,7 @@
 ## 原因
 
 - `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 缺失。
+- `AI_API_PROTOCOL` 与模型不匹配，例如仅支持 Responses 的模型仍请求 `/chat/completions`。
 - Provider 能力配置与实际服务不一致，或不支持 vision / `json_schema` / `json_object` / 纯文本 JSON 中的某一种模式。
 - 识别 fallback 三项配置不完整。
 - AI 返回字段不满足 `telegram-recognition-schema`。
@@ -18,6 +19,7 @@
 
 ## 日志特征
 
+- `模型 ... 不支持 chat completions 协议`
 - `AI recognition failed with HTTP`
 - `recognition parse failure`
 - `fallback recognition AI provider is not configured completely`
@@ -26,18 +28,19 @@
 
 ## 排查步骤
 
-1. 查 provider 配置：`src/adapters/ai/openai-compatible.adapter.mjs:3-12`。
-2. 查 provider factory：`src/adapters/ai/ai-provider.factory.mjs:13-25`。
-3. 查识别请求：`src/app/use-cases/image-recognition.use-case.mjs:199`。
-4. 查 response format fallback：`src/app/use-cases/image-recognition.use-case.mjs:409`。
-5. 查 schema：`src/core/ai/telegram-recognition-schema.mjs`，当前版本应为 v4。
-6. 核对 `AI_SUPPORTS_VISION`、`AI_SUPPORTS_JSON_SCHEMA`、`AI_SUPPORTS_JSON_OBJECT`、`AI_SUPPORTS_TEXT_JSON`。
-6. 查分析：`src/app/use-cases/training-analysis.impl.mjs`。
-7. 查图片处理：`src/adapters/image/sharp-image-processor.mjs`；查 OCR：`src/adapters/ocr/openai-compatible-ocr.adapter.mjs`。
+1. 核对 `AI_API_PROTOCOL`：`chat_completions` 使用 `/chat/completions`，`responses` 使用 `/responses`；不要根据模型名在代码中猜协议。
+2. 查 provider 配置：`src/adapters/ai/openai-compatible.adapter.mjs`。
+3. 查 provider factory：`src/adapters/ai/ai-provider.factory.mjs:13-25`。
+4. 查识别请求：`src/app/use-cases/image-recognition.use-case.mjs:199`。
+5. 查 response format fallback：`src/app/use-cases/image-recognition.use-case.mjs:409`。
+6. 查 schema：`src/core/ai/telegram-recognition-schema.mjs`，当前版本应为 v4。
+7. 核对 `AI_SUPPORTS_VISION`、`AI_SUPPORTS_JSON_SCHEMA`、`AI_SUPPORTS_JSON_OBJECT`、`AI_SUPPORTS_TEXT_JSON`。
+8. 查分析：`src/app/use-cases/training-analysis.impl.mjs`。
+9. 查图片处理：`src/adapters/image/sharp-image-processor.mjs`；查 OCR：`src/adapters/ocr/openai-compatible-ocr.adapter.mjs`。
 
 ## 解决方案
 
-- 补齐通用 AI env。
+- 补齐通用 AI env，并把 `AI_API_PROTOCOL` 设置为模型真实支持的协议。
 - 按 Provider 真实能力设置 capability；代码只在声明允许时从 strict schema 降级到 `json_object` 或纯文本 JSON。
 - fallback provider 需要 API key、base URL、model 三项同时存在。
 - schema 变更必须同步 Prompt source、生成后的 Prompt、App Profile、测试 fixture 和 DB/core 映射。
