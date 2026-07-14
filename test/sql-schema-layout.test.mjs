@@ -33,7 +33,7 @@ test('dev and main exports expose the same table and column layout while dev upd
 
 function extractTableColumns(sql) {
   return Object.fromEntries(
-    [...sql.matchAll(/CREATE TABLE "([^"]+)"\."([^"]+)" \(([^;]+?)\n\)\n;/gs)]
+    [...sql.matchAll(/CREATE TABLE "([^"]+)"\."([^"]+)" \(([^;]+?)\r?\n\)\r?\n;/gs)]
       .map((match) => [
         `${match[1]}.${match[2]}`,
         [...match[3].matchAll(/^\s*"([^"]+)"/gm)].map((column) => column[1]).sort(),

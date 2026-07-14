@@ -13,6 +13,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复 `sync:db` 一致性检查在睡眠批次 `totalSleepMinutes` 为 JSON null、但 `records` 数组非空时报 `cannot cast jsonb null to type integer`、导致 ingest 阶段被 defer 的问题；`tools/check-sleep-data-consistency.mjs` 的 SELECT 改用 `->>` 文本抽取再 cast，与 WHERE 过滤条件保持一致，JSON null 归一为 SQL NULL 后安全转换。
+- 修复 `test/sql-schema-layout.test.mjs` 的建表正则只匹配 LF 行尾，导致 Windows 下 CRLF 检出的 SQL 文件解析出 0 张表、dev/main 结构差异被“空对象对空对象”掩盖成假通过的问题；正则改为 `\r?\n` 兼容 CRLF/LF，本地与 CI 现在都能真实比对表与列布局。
+
+### Removed
+
+- main 数据库已由用户手动执行 `ingest.telegram_batch`、`telegram_message`、`telegram_recognition`、`telegram_pending_batch` 4 张遗留表与序列的清理（对应 dev 侧 `20260714_drop_legacy_telegram_tables.sql` 的 R6 方案），并重新导出 `sql/main-sql/ingest.sql`；dev 与 main 的 ingest 结构恢复一致。
+
 ## [1.3.5] - 2026-07-15
 
 ### Fixed

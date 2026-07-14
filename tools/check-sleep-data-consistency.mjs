@@ -44,7 +44,7 @@ export async function checkSleepDataConsistency(options = {}) {
         b.archived_date,
         b.status,
         b.processed_at,
-        (b.payload_json->'sleep'->'totalSleepMinutes')::integer as total_sleep_minutes,
+        (b.payload_json->'sleep'->>'totalSleepMinutes')::integer as total_sleep_minutes,
         (b.payload_json->'sleep'->'records')::jsonb as sleep_records
       from ingest.source_batch b
       where b.status = 'ready'
