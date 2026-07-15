@@ -18,6 +18,10 @@
 - 修复 `sync:db` 一致性检查在睡眠批次 `totalSleepMinutes` 为 JSON null、但 `records` 数组非空时报 `cannot cast jsonb null to type integer`、导致 ingest 阶段被 defer 的问题；`tools/check-sleep-data-consistency.mjs` 的 SELECT 改用 `->>` 文本抽取再 cast，与 WHERE 过滤条件保持一致，JSON null 归一为 SQL NULL 后安全转换。
 - 修复 `test/sql-schema-layout.test.mjs` 的建表正则只匹配 LF 行尾，导致 Windows 下 CRLF 检出的 SQL 文件解析出 0 张表、dev/main 结构差异被“空对象对空对象”掩盖成假通过的问题；正则改为 `\r?\n` 兼容 CRLF/LF，本地与 CI 现在都能真实比对表与列布局。
 
+### Changed
+
+- 提高图片识别 AI 超时时间：主 AI `AI_TIMEOUT_MS` 45s → 60s，备 AI `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS` 30s → 90s（GitHub repository variable，dev/main 共用）。此前备 AI 作为主备兜底链的最后一道防线，超时（30s）反而比主 AI（45s）更短；睡眠截图字段密集（schema 26 个必填字段）、模型生成较慢，一次飞书睡眠图同步遇到主 AI 服务商 HTTP 500 上游故障后，切到备 AI 又因 30s 超时耗尽，最终返回 `AI 服务失败：AI recognition request failed`。主备切换与「两个 provider 都失败才报错」逻辑本身工作正常，本次仅放宽超时，让备 AI 有充裕时间兜住主 AI 故障。
+
 ### Removed
 
 - main 数据库已由用户手动执行 `ingest.telegram_batch`、`telegram_message`、`telegram_recognition`、`telegram_pending_batch` 4 张遗留表与序列的清理（对应 dev 侧 `20260714_drop_legacy_telegram_tables.sql` 的 R6 方案），并重新导出 `sql/main-sql/ingest.sql`；dev 与 main 的 ingest 结构恢复一致。
