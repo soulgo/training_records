@@ -48,14 +48,14 @@ main 环境对应：
 | Variable 名称 | 建议值 / 示例 | 是否必填 | 用途 |
 | --- | --- | --- | --- |
 | `TRAINING_DB_ENABLED` | `true` | 必填 | 是否启用生产 PostgreSQL。 |
-| `TRAINING_DB_TIMEOUT_MS` | `5000` | 建议填 | 数据库连接超时。 |
+| `TRAINING_DB_TIMEOUT_MS` | `5000` | 建议填 | 数据库连接超时；不同运行路径的未配置默认值不同，建议显式配置。 |
 | `TRAINING_DB_APP_NAME` | `sync-main` | 建议填 | PostgreSQL `application_name`，便于在 DB 侧区分来源。 |
 | `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` | main 监控 API base URL | 可选 | 本地或旧 workflow 使用 HTTP monitor server 时的兜底地址；当前 `Action Monitor Report` 直接写生产 PostgreSQL。当前 GitHub Settings 清单中缺少该项。 |
 | `GITHUB_ACTION_MONITOR_REPORT_URL` | 共享监控 API base URL | 可选 | main/dev 专用 URL 未配置时的共享兜底地址。当前 GitHub Settings 清单中缺少该项。 |
 | `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` | dev 监控 API base URL | 可选 | 所有 workflow 都注入该变量；main 分支不会优先使用它。当前 GitHub Settings 清单中缺少该项。 |
 | `TRAINING_SNAPSHOT_SOURCE` | `database` | 建议填 | 构建站点时从数据库还是 Markdown 生成快照。 |
 | `AI_PROVIDER` | `openai-compatible` | 建议填 | 当前代码支持 OpenAI-compatible provider；当前 GitHub Settings 清单中缺少该项，因此 workflow 使用 `openai-compatible` 默认值。 |
-| `AI_API_PROTOCOL` | `chat_completions` / `responses` | 必填 | 请求协议；必须与 `AI_MODEL` 实际支持的协议一致。 |
+| `AI_API_PROTOCOL` | `chat_completions` / `responses` | 建议填 | 未配置时 workflow 和运行时代码默认 `chat_completions`；需要 Responses API 时设为 `responses`，且必须与 `AI_MODEL` 实际支持的协议一致。 |
 | `AI_MODEL` | 例如 `gpt-4.1-mini` | 必填 | 默认 AI 模型。 |
 | `AI_TIMEOUT_MS` | `60000` | 建议填 | AI 请求超时。 |
 | `AI_CONCURRENCY` | `3` | 建议填 | 图片识别并发数。 |
@@ -74,8 +74,8 @@ main 环境对应：
 | `MARKDOWN_BACKUP_ENABLED` | `true` / `false` | 可选 | 是否启用定时 Markdown 备份。 |
 | `MARKDOWN_BACKUP_FREQUENCY` | `daily` / `weekly` | 可选 | 定时备份频率。 |
 | `MARKDOWN_BACKUP_BRANCH` | `main` | 可选 | Markdown 备份目标分支；只影响 checkout/push 目标，备份数据源仍固定为生产 `TRAINING_DB_*`。 |
-| `MARKDOWN_BACKUP_COMMIT` | `true` | 可选 | 备份有变更时是否自动提交。 |
-| `TRAINING_ANALYSIS_GOAL` | 自定义分析目标 | 可选 | 训练分析提示词目标。 |
+| `MARKDOWN_BACKUP_COMMIT` | `true` | 可选 | 备份有变更时是否自动提交；当前 GitHub Settings 清单中缺少该项，workflow 默认 `true`。 |
+| `TRAINING_ANALYSIS_GOAL` | 自定义分析目标 | 可选 | 训练分析提示词目标；当前 GitHub Settings 清单中缺少该项，运行时代码使用内置的“增肌减腹”目标。 |
 
 ## 2. Cloudflare 必填清单
 
@@ -127,7 +127,7 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 npx wrangler secret put FEISHU_ALLOWED_CHAT_IDS --config wrangler.toml
 ```
 
-`deploy-cloudflare-worker.yml` 当前会自动写入 `TELEGRAM_BOT_TOKEN` 和 `TELEGRAM_SECRET_TOKEN`，但 `GITHUB_TOKEN`、`FEISHU_ENCRYPT_KEY`、`FEISHU_VERIFICATION_TOKEN` 仍需要你在 Cloudflare Worker Secret 中配置。
+`deploy-cloudflare-worker.yml` 当前只会自动写入 `TELEGRAM_BOT_TOKEN` 和 `TELEGRAM_SECRET_TOKEN`。`GITHUB_TOKEN`、`TELEGRAM_ALLOWED_CHAT_IDS`、`FEISHU_ENCRYPT_KEY`、`FEISHU_VERIFICATION_TOKEN`、`FEISHU_ALLOWED_CHAT_IDS` 仍需要在 Cloudflare Worker Secret 中单独维护；两个白名单未配置时 Worker 会放行任意 chat。`FEISHU_APP_ID` / `FEISHU_APP_SECRET` 也不会自动同步，按需配置，用于 Worker 在派发失败时向飞书通知。
 
 ## 3. 参数从哪里查
 
@@ -137,7 +137,7 @@ npx wrangler secret put FEISHU_ALLOWED_CHAT_IDS --config wrangler.toml
 | --- | --- | --- |
 | `AI_API_KEY` | AI 服务商控制台 | Secret。只放 GitHub Secrets。 |
 | `AI_BASE_URL` | AI 服务商文档 | Secret。OpenAI-compatible base URL，通常以 `/v1` 结尾。 |
-| `AI_API_PROTOCOL` | AI 服务商模型/API 文档 | Variable；`chat_completions` 请求 `/chat/completions`，`responses` 请求 `/responses`。 |
+| `AI_API_PROTOCOL` | AI 服务商模型/API 文档 | Variable；未填默认 `chat_completions`；`chat_completions` 请求 `/chat/completions`，`responses` 请求 `/responses`。 |
 | `AI_MODEL` | AI 服务商模型列表 | Variable。默认识别和分析模型。 |
 | `TELEGRAM_RECOGNITION_MODEL` | AI 服务商模型列表 | Variable。只想让图片识别用另一个模型时再填；当前 GitHub Settings 清单中缺少该项。 |
 | `AI_SUPPORTS_VISION` / `AI_SUPPORTS_JSON_SCHEMA` / `AI_SUPPORTS_JSON_OBJECT` / `AI_SUPPORTS_TEXT_JSON` | AI 服务商能力说明 | 运行时代码支持，默认都为 `true`；当前 sync workflow 尚未注入这些变量，如需显式覆盖必须先同步修改 workflow。 |
