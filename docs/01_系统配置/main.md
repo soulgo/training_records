@@ -22,19 +22,26 @@ main 环境对应：
 | Secret 名称 | 是否必填 | 用途 |
 | --- | --- | --- |
 | `TRAINING_DB_URL` | 必填 | 使用与 dev 相同 `training_writer` 账号、但指向 main 数据库的 PostgreSQL 连接串；workflow 从 GitHub Secret 注入。 |
-| `TRAINING_DB_READONLY_URL` | 可选 | main 只读 PostgreSQL 连接串；只读账号名只存在于该 GitHub Secret 的 URL 中，读取任务优先使用，未配置时回退 `TRAINING_DB_URL`。 |
+| `TRAINING_DB_READONLY_URL` | 建议填 | main 只读 PostgreSQL 连接串；只读账号名只存在于该 GitHub Secret 的 URL 中，读取任务优先使用；运行时代码在空值时回退 `TRAINING_DB_URL`。当前 GitHub Settings 清单中缺少此项，应补齐或从 workflow 移除其读取。 |
 | `AI_API_KEY` | 必填 | AI 服务鉴权。 |
+| `AI_BASE_URL` | 必填 | OpenAI-compatible base URL。 |
 | `TELEGRAM_BOT_TOKEN` | 必填 | 生产 Telegram Bot token，用于拉取消息、下载图片、通知结果、刷新 webhook。 |
 | `TELEGRAM_SECRET_TOKEN` | 必填 | 生产 Telegram webhook secret。必须和 Cloudflare Worker Secret `TELEGRAM_SECRET_TOKEN` 的值一致。 |
 | `FEISHU_APP_ID` | 必填 | 生产飞书应用 App ID。 |
 | `FEISHU_APP_SECRET` | 必填 | 生产飞书应用 App Secret。 |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | 必填 | Telegram 白名单，多个 id 用逗号分隔。 |
+| `FEISHU_ALLOWED_CHAT_IDS` | 必填 | 飞书白名单。 |
 | `COS_SECRET_ID` | 启用 COS 时必填 | 生产腾讯云 COS SecretId。 |
 | `COS_SECRET_KEY` | 启用 COS 时必填 | 生产腾讯云 COS SecretKey。 |
+| `COS_BUCKET` | 启用 COS 时必填 | 生产 COS bucket。 |
+| `COS_DOMAIN` | 启用 COS 时必填 | 生产 COS 访问域名。 |
+| `COS_PATH_PREFIX` | 启用 COS 时必填 | 生产图片对象前缀。 |
 | `CLOUDFLARE_ACCOUNT_ID` | 部署 Cloudflare Worker 时必填 | Cloudflare account id。 |
-| `CLOUDFLARE_API_TOKEN` | 必填 | 部署 Worker、清理 Cloudflare 缓存；也可用于 Pages。 |
+| `CLOUDFLARE_API_TOKEN` | 部署 Worker 或清理缓存时必填 | 部署 Worker、清理 Cloudflare 缓存；也可作为 Pages 部署 token。 |
 | `CLOUDFLARE_PAGES_API_TOKEN` | 可选 | Pages / cache purge 专用 token；不填时使用 `CLOUDFLARE_API_TOKEN`。 |
-| `CLOUDFLARE_ZONE_ID` | 必填 | 生产站点发布后清理 Cloudflare 缓存。 |
-| `TELEGRAM_RECOGNITION_FALLBACK_API_KEY` | 可选 | 图片识别备用 AI provider 的 key。 |
+| `CLOUDFLARE_ZONE_ID` | 清理 Cloudflare 缓存时必填 | 生产站点发布后清理 Cloudflare 缓存。 |
+| `TELEGRAM_RECOGNITION_FALLBACK_API_KEY` | 启用备用识别时必填 | 图片识别备用 AI provider 的 key。当前 GitHub Settings 清单中缺少此项；空值时运行时不会创建备用 provider。 |
+| `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` | 启用备用识别时必填 | 备用 AI provider base URL；当前 GitHub Settings 清单中缺少此项。 |
 
 ### 1.2 Variables
 
@@ -43,37 +50,30 @@ main 环境对应：
 | `TRAINING_DB_ENABLED` | `true` | 必填 | 是否启用生产 PostgreSQL。 |
 | `TRAINING_DB_TIMEOUT_MS` | `5000` | 建议填 | 数据库连接超时。 |
 | `TRAINING_DB_APP_NAME` | `sync-main` | 建议填 | PostgreSQL `application_name`，便于在 DB 侧区分来源。 |
-| `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` | main 监控 API base URL | 可选 | 本地或旧 workflow 使用 HTTP monitor server 时的兜底地址；当前 `Action Monitor Report` 直接写生产 PostgreSQL。 |
-| `GITHUB_ACTION_MONITOR_REPORT_URL` | 共享监控 API base URL | 可选 | main/dev 专用 URL 未配置时的共享兜底地址。 |
-| `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` | dev 监控 API base URL | 可选 | 所有 workflow 都注入该变量；main 分支不会优先使用它。 |
+| `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` | main 监控 API base URL | 可选 | 本地或旧 workflow 使用 HTTP monitor server 时的兜底地址；当前 `Action Monitor Report` 直接写生产 PostgreSQL。当前 GitHub Settings 清单中缺少该项。 |
+| `GITHUB_ACTION_MONITOR_REPORT_URL` | 共享监控 API base URL | 可选 | main/dev 专用 URL 未配置时的共享兜底地址。当前 GitHub Settings 清单中缺少该项。 |
+| `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` | dev 监控 API base URL | 可选 | 所有 workflow 都注入该变量；main 分支不会优先使用它。当前 GitHub Settings 清单中缺少该项。 |
 | `TRAINING_SNAPSHOT_SOURCE` | `database` | 建议填 | 构建站点时从数据库还是 Markdown 生成快照。 |
-| `AI_PROVIDER` | `openai-compatible` | 建议填 | 当前代码支持 OpenAI-compatible provider。 |
-| `AI_BASE_URL` | `https://.../v1` | 必填 | OpenAI-compatible base URL。 |
+| `AI_PROVIDER` | `openai-compatible` | 建议填 | 当前代码支持 OpenAI-compatible provider；当前 GitHub Settings 清单中缺少该项，因此 workflow 使用 `openai-compatible` 默认值。 |
 | `AI_API_PROTOCOL` | `chat_completions` / `responses` | 必填 | 请求协议；必须与 `AI_MODEL` 实际支持的协议一致。 |
 | `AI_MODEL` | 例如 `gpt-4.1-mini` | 必填 | 默认 AI 模型。 |
 | `AI_TIMEOUT_MS` | `60000` | 建议填 | AI 请求超时。 |
 | `AI_CONCURRENCY` | `3` | 建议填 | 图片识别并发数。 |
-| `AI_OCR_ENABLED` | `false` / `true` | 按需 | 是否启用 OCR 文本与坐标提取。 |
-| `AI_OCR_FAILURE_MODE` | `best_effort` | 建议填 | OCR 失败时继续视觉识别或终止处理。 |
-| `TELEGRAM_RECOGNITION_MODEL` | 识别模型名 | 可选 | 只覆盖 Telegram/飞书图片识别模型；不填用 `AI_MODEL`。 |
+| `AI_OCR_ENABLED` | `false` / `true` | 按需 | 是否启用 OCR 文本与坐标提取。当前 GitHub Settings 清单中缺少该项。 |
+| `AI_OCR_FAILURE_MODE` | `best_effort` | 建议填 | OCR 失败时继续视觉识别或终止处理。当前 GitHub Settings 清单中缺少该项。 |
+| `TELEGRAM_RECOGNITION_MODEL` | 识别模型名 | 可选 | 只覆盖 Telegram/飞书图片识别模型；不填用 `AI_MODEL`。当前 GitHub Settings 清单中缺少该项。 |
 | `TELEGRAM_RECOGNITION_CACHE_ENABLED` | `true` | 建议填 | 是否启用识别结果缓存。 |
-| `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` | `https://.../v1` | 可选 | 备用 AI provider base URL。 |
 | `TELEGRAM_RECOGNITION_FALLBACK_MODEL` | 模型名 | 可选 | 备用 AI provider 模型。 |
 | `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS` | `60000` | 可选 | 备用 AI 请求超时。 |
-| `TELEGRAM_ALLOWED_CHAT_IDS` | 逗号分隔 chat id | 必填 | Telegram 白名单。 |
-| `TELEGRAM_POLL_LIMIT` | `20` | 可选 | poll 模式拉取数量；main workflow 当前固定 webhook 模式。 |
+| `TELEGRAM_POLL_LIMIT` | `20` | 当前 workflow 无需配置 | poll 模式拉取数量；main workflow 当前固定 webhook 模式，因此该值不会影响当前 GitHub 同步。 |
 | `TELEGRAM_WEBHOOK_URL` | `https://feishu.soulgo.chat/telegram` | 必填 | 刷新生产 Telegram webhook 的目标 URL。 |
-| `FEISHU_ALLOWED_CHAT_IDS` | 逗号分隔 chat id | 必填 | 飞书白名单。 |
 | `COS_ENABLED` | `true` / `false` | 按需 | 是否把随想图片上传生产 COS。 |
 | `COS_PROVIDER` | `tencent_cos` | 启用 COS 时填 | 图片存储 provider。 |
-| `COS_BUCKET` | bucket 名 | 启用 COS 时填 | 生产 COS bucket。 |
 | `COS_REGION` | 例如 `ap-guangzhou` | 启用 COS 时填 | 生产 COS 地域。 |
-| `COS_DOMAIN` | `https://...` | 启用 COS 时填 | 生产 COS 访问域名。 |
-| `COS_PATH_PREFIX` | 例如 `thoughts` | 启用 COS 时填 | 生产图片对象前缀。 |
 | `CLOUDFLARE_PAGES_BASE_URL` | `https://soulgo.chat` | 建议填 | 部署后页面验证使用；不填时 workflow 默认 `https://soulgo.chat`。 |
 | `MARKDOWN_BACKUP_ENABLED` | `true` / `false` | 可选 | 是否启用定时 Markdown 备份。 |
 | `MARKDOWN_BACKUP_FREQUENCY` | `daily` / `weekly` | 可选 | 定时备份频率。 |
-| `MARKDOWN_BACKUP_BRANCH` | `main` | 可选 | Markdown 备份目标分支。 |
+| `MARKDOWN_BACKUP_BRANCH` | `main` | 可选 | Markdown 备份目标分支；只影响 checkout/push 目标，备份数据源仍固定为生产 `TRAINING_DB_*`。 |
 | `MARKDOWN_BACKUP_COMMIT` | `true` | 可选 | 备份有变更时是否自动提交。 |
 | `TRAINING_ANALYSIS_GOAL` | 自定义分析目标 | 可选 | 训练分析提示词目标。 |
 
@@ -106,10 +106,12 @@ Cloudflare 里有两类配置：`wrangler.toml` 里的公开变量和 Durable Ob
 | `GITHUB_TOKEN` | 必填 | GitHub Personal Access Token | Worker 调 GitHub Actions API，触发 `sync.yml`。 |
 | `TELEGRAM_SECRET_TOKEN` | 必填 | 自己生成的随机字符串 | 校验 Telegram webhook header；值必须等于 GitHub Secret `TELEGRAM_SECRET_TOKEN`。 |
 | `TELEGRAM_BOT_TOKEN` | 建议填 | BotFather 的生产 bot token | Worker 需要直接回 Telegram 时使用，例如帮助文本或队列失败通知。 |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | 必填 | 生产 Telegram 白名单 | Worker 在进入 Durable Object 缓冲和触发 GitHub Actions 前校验；需单独写入 Cloudflare Worker Secret，不能仅依赖 GitHub Secret `TELEGRAM_ALLOWED_CHAT_IDS`。 |
 | `FEISHU_ENCRYPT_KEY` | 必填 | 飞书开放平台事件订阅配置 | 解密和校验飞书事件。 |
 | `FEISHU_VERIFICATION_TOKEN` | 必填 | 飞书开放平台事件订阅配置 | 校验飞书事件 token。 |
 | `FEISHU_APP_ID` | 建议填 | 生产飞书应用凭证 | Worker 需要直接回飞书时使用。 |
 | `FEISHU_APP_SECRET` | 建议填 | 生产飞书应用凭证 | Worker 需要直接回飞书时使用。 |
+| `FEISHU_ALLOWED_CHAT_IDS` | 必填 | 生产飞书白名单 | Worker 在进入 Durable Object 缓冲和触发 GitHub Actions 前校验；需单独写入 Cloudflare Worker Secret，不能仅依赖 GitHub Secret `FEISHU_ALLOWED_CHAT_IDS`。 |
 
 示例命令：
 
@@ -117,10 +119,12 @@ Cloudflare 里有两类配置：`wrangler.toml` 里的公开变量和 Durable Ob
 npx wrangler secret put GITHUB_TOKEN --config wrangler.toml
 npx wrangler secret put TELEGRAM_SECRET_TOKEN --config wrangler.toml
 npx wrangler secret put TELEGRAM_BOT_TOKEN --config wrangler.toml
+npx wrangler secret put TELEGRAM_ALLOWED_CHAT_IDS --config wrangler.toml
 npx wrangler secret put FEISHU_ENCRYPT_KEY --config wrangler.toml
 npx wrangler secret put FEISHU_VERIFICATION_TOKEN --config wrangler.toml
 npx wrangler secret put FEISHU_APP_ID --config wrangler.toml
 npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
+npx wrangler secret put FEISHU_ALLOWED_CHAT_IDS --config wrangler.toml
 ```
 
 `deploy-cloudflare-worker.yml` 当前会自动写入 `TELEGRAM_BOT_TOKEN` 和 `TELEGRAM_SECRET_TOKEN`，但 `GITHUB_TOKEN`、`FEISHU_ENCRYPT_KEY`、`FEISHU_VERIFICATION_TOKEN` 仍需要你在 Cloudflare Worker Secret 中配置。
@@ -135,7 +139,7 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 | `AI_BASE_URL` | AI 服务商文档 | Secret。OpenAI-compatible base URL，通常以 `/v1` 结尾。 |
 | `AI_API_PROTOCOL` | AI 服务商模型/API 文档 | Variable；`chat_completions` 请求 `/chat/completions`，`responses` 请求 `/responses`。 |
 | `AI_MODEL` | AI 服务商模型列表 | Variable。默认识别和分析模型。 |
-| `TELEGRAM_RECOGNITION_MODEL` | AI 服务商模型列表 | Variable。只想让图片识别用另一个模型时再填。 |
+| `TELEGRAM_RECOGNITION_MODEL` | AI 服务商模型列表 | Variable。只想让图片识别用另一个模型时再填；当前 GitHub Settings 清单中缺少该项。 |
 | `AI_SUPPORTS_VISION` / `AI_SUPPORTS_JSON_SCHEMA` / `AI_SUPPORTS_JSON_OBJECT` / `AI_SUPPORTS_TEXT_JSON` | AI 服务商能力说明 | 运行时代码支持，默认都为 `true`；当前 sync workflow 尚未注入这些变量，如需显式覆盖必须先同步修改 workflow。 |
 
 当前代码读取位置：`src/adapters/ai/openai-compatible.adapter.mjs`、`src/app/use-cases/message-sync.use-case.mjs`。
@@ -145,7 +149,7 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 | 参数 | 来源 | 说明 |
 | --- | --- | --- |
 | `TELEGRAM_BOT_TOKEN` | Telegram `@BotFather` | 生产 bot token。 |
-| `TELEGRAM_ALLOWED_CHAT_IDS` | Telegram 消息来源 chat id | 白名单，多个 id 用逗号分隔。 |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | Telegram 消息来源 chat id | GitHub Secret。白名单，多个 id 用逗号分隔。 |
 | `TELEGRAM_SECRET_TOKEN` | 自己生成 | 用于 `setWebhook`。必须和 Cloudflare Worker Secret `TELEGRAM_SECRET_TOKEN` 一致。 |
 | `TELEGRAM_WEBHOOK_URL` | 生产 Worker URL | 通常是 `https://feishu.soulgo.chat/telegram`。 |
 
@@ -157,7 +161,7 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 | --- | --- | --- |
 | `FEISHU_APP_ID` | 飞书开放平台应用凭证 | GitHub Secret，用于同步 workflow 调飞书 API。 |
 | `FEISHU_APP_SECRET` | 飞书开放平台应用凭证 | GitHub Secret，用于获取 tenant access token。 |
-| `FEISHU_ALLOWED_CHAT_IDS` | 飞书群 / 会话 id | GitHub Variable，限制允许处理的飞书会话。 |
+| `FEISHU_ALLOWED_CHAT_IDS` | 飞书群 / 会话 id | GitHub Secret，限制允许处理的飞书会话。 |
 | `FEISHU_ENCRYPT_KEY` | 飞书事件订阅安全设置 | Cloudflare Worker Secret，用于解密和签名校验。 |
 | `FEISHU_VERIFICATION_TOKEN` | 飞书事件订阅安全设置 | Cloudflare Worker Secret，用于事件 token 校验。 |
 
@@ -187,10 +191,10 @@ main 只有在 `COS_ENABLED=true` 时才需要配置 COS。
 | 参数 | 来源 | 说明 |
 | --- | --- | --- |
 | `COS_SECRET_ID` / `COS_SECRET_KEY` | 腾讯云 CAM 密钥 | 放 GitHub Secrets。 |
-| `COS_BUCKET` | 腾讯云 COS bucket | 生产 bucket。 |
+| `COS_BUCKET` | 腾讯云 COS bucket | GitHub Secret。生产 bucket。 |
 | `COS_REGION` | COS bucket 地域 | 例如 `ap-guangzhou`。 |
-| `COS_DOMAIN` | COS 默认域名或自定义域名 | 生产图片访问域名。 |
-| `COS_PATH_PREFIX` | 自定义 | 生产图片路径前缀。 |
+| `COS_DOMAIN` | COS 默认域名或自定义域名 | GitHub Secret。生产图片访问域名。 |
+| `COS_PATH_PREFIX` | 自定义 | GitHub Secret。生产图片路径前缀。 |
 
 当前 `sync.yml` 已把 `COS_*` 注入同步流程；不要再把 COS 写成“main 未使用”。
 

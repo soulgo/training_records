@@ -20,6 +20,7 @@
 
 ### Changed
 
+- 同步 GitHub Actions 与 Cloudflare Worker 配置文档：明确 14 个未接线 GitHub Settings 参数可删除、标出 workflow 仍引用但当前 Settings 缺失的参数，修正 dev/main COS、AI、白名单等 Secret/Variable 归属；同时说明 `Markdown Backup` 的目标分支不改变其固定的生产数据库数据源，并补充 Telegram/飞书 Worker 白名单需独立配置为 Cloudflare Secret。
 - 提高图片识别 AI 超时时间：主 AI `AI_TIMEOUT_MS` 45s → 60s，备 AI `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS` 30s → 90s（GitHub repository variable，dev/main 共用）。此前备 AI 作为主备兜底链的最后一道防线，超时（30s）反而比主 AI（45s）更短；睡眠截图字段密集（schema 26 个必填字段）、模型生成较慢，一次飞书睡眠图同步遇到主 AI 服务商 HTTP 500 上游故障后，切到备 AI 又因 30s 超时耗尽，最终返回 `AI 服务失败：AI recognition request failed`。主备切换与「两个 provider 都失败才报错」逻辑本身工作正常，本次仅放宽超时，让备 AI 有充裕时间兜住主 AI 故障。
 
 ### Removed
