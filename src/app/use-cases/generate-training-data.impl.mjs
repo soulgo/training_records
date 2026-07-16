@@ -9,8 +9,8 @@ import {
   appendTrainingArchiveFailureLog,
   persistTrainingArchive,
   resolveTrainingArchiveRuntimeContext,
-} from '../../db/training/archive.mjs';
-import { resolveTrainingCoreConfig } from '../../db/training/config.mjs';
+} from '../../adapters/postgres/archive-repository.pg.mjs';
+import { resolveTrainingCoreConfig } from '../../adapters/postgres/training-config.pg.mjs';
 import { canFallbackToMarkdownSnapshot, canUseDatabaseFallback } from '../../shared/snapshot-fallback.mjs';
 import { buildTrainingSnapshot } from '../../domain/training/training-snapshot.mjs';
 import {

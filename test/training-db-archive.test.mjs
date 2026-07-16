@@ -974,7 +974,7 @@ test('canonical SQL schemas use source identity for cross-channel message and th
     assert.match(ingest, /source_message_id/i, `${relativePath} should store source_message_id`);
     assert.match(
       ingest,
-      /ux_ingest_telegram_message_source_identity[\s\S]*source_channel[\s\S]*source_chat_id[\s\S]*source_message_id/i,
+      /source_message_pkey"?\s+PRIMARY\s+KEY\s+\("source_channel",\s*"source_chat_id",\s*"source_message_id"\)/i,
       `${relativePath} should uniquely key ingest messages by source identity`,
     );
     assert.doesNotMatch(

@@ -12,6 +12,8 @@ import {
 import {
   readArchiveTrainingSnapshotFromDatabaseClient,
   readTrainingSnapshotFromDatabaseClient,
+} from '../src/adapters/postgres/training-read-client.pg.mjs';
+import {
   readTrainingSnapshotFromDatabase,
   getLastProcessedTelegramUpdateId,
 } from '../src/db/training/read.mjs';
@@ -29,7 +31,7 @@ import {
   shouldQueueRecognitionFailure,
 } from '../src/db/training/pending-recognition.mjs';
 import {
-  persistTelegramImageBatchIncremental,
+  persistSourceImageBatchIncremental,
 } from '../src/adapters/postgres/incremental-write.pg.mjs';
 import { PostgresSourceBatchRepository } from '../src/adapters/postgres/source-batch-repository.pg.mjs';
 import { insertCoreSleep } from '../src/adapters/postgres/core-row-writer.pg.mjs';
@@ -1292,11 +1294,11 @@ test('persistNormalizedBatch stores Feishu image batches with nullable legacy ch
   assert.equal(summaryInsert[1][2], 'feishu');
 });
 
-test('persistTelegramImageBatchIncremental requires explicit sourceChannel', async () => {
+test('persistSourceImageBatchIncremental requires explicit sourceChannel', async () => {
   const { calls, client } = createIncrementalPersistClient();
 
   await assert.rejects(
-    persistTelegramImageBatchIncremental(client, normalizedBatch, new Date('2026-06-14T00:00:00.000Z')),
+    persistSourceImageBatchIncremental(client, normalizedBatch, new Date('2026-06-14T00:00:00.000Z')),
     /sourceChannel is required/i,
   );
   assert.equal(calls.length, 0);
@@ -1318,8 +1320,8 @@ test('core detail keys keep source-specific facts separate but canonicalize slee
     },
   };
 
-  await persistTelegramImageBatchIncremental(client, batch, processedAt, { sourceChannel: 'telegram' });
-  await persistTelegramImageBatchIncremental(client, batch, processedAt, { sourceChannel: 'feishu' });
+  await persistSourceImageBatchIncremental(client, batch, processedAt, { sourceChannel: 'telegram' });
+  await persistSourceImageBatchIncremental(client, batch, processedAt, { sourceChannel: 'feishu' });
 
   const [measurementKeys, activityKeys, mealKeys, sleepKeys] = [
     /insert into core\.measurement/i,
@@ -1463,7 +1465,7 @@ test('persistNormalizedBatch upserts measurement without deleting other core mod
   assert.equal(trainingDayInsert[1][10], false);
 });
 
-test('persistTelegramImageBatchIncremental rejects impossible archive dates before core writes', async () => {
+test('persistSourceImageBatchIncremental rejects impossible archive dates before core writes', async () => {
   const calls = [];
   const client = {
     async query(sql, params) {
@@ -1473,7 +1475,7 @@ test('persistTelegramImageBatchIncremental rejects impossible archive dates befo
   };
 
   await assert.rejects(
-    persistTelegramImageBatchIncremental(
+    persistSourceImageBatchIncremental(
       client,
       {
         ...normalizedBatch,

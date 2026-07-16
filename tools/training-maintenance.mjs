@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import pg from 'pg';
 
-import { resolveTrainingReadonlyConfig } from '../src/db/training/config.mjs';
+import { resolveTrainingReadonlyConfig } from '../src/adapters/postgres/training-config.pg.mjs';
 import { readPendingRecognitionSummary as readPendingBatchesDefault } from '../src/db/training/pending-recognition.mjs';
 import { exportDerivedTrainingMarkdown as exportDerivedTrainingMarkdownDefault } from './export-training-markdown.mjs';
 import { syncTrainingCore as syncTrainingCoreDefault } from './sync-training-core.mjs';

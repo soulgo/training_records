@@ -773,6 +773,75 @@ test('telegram-sync workflows share AI sources while isolating environment resou
   }
 });
 
+test('system configuration guides classify COS bucket, domain, and path prefix as GitHub Secrets', async () => {
+  const devGuide = await readRepoFile('docs/01_系统配置/dev.md');
+  const mainGuide = await readRepoFile('docs/01_系统配置/main.md');
+
+  for (const [guide, prefix] of [
+    [devGuide, 'DEV_'],
+    [mainGuide, ''],
+  ]) {
+    for (const name of ['COS_BUCKET', 'COS_DOMAIN', 'COS_PATH_PREFIX']) {
+      const match = guide.match(new RegExp(`\\| \\x60${prefix}${name}\\x60 \\|[^\\n]*`));
+      assert.ok(match, `${prefix}${name} should be documented`);
+      assert.doesNotMatch(match[0], /GitHub Variable/);
+    }
+  }
+});
+
+test('system configuration guides place GitHub Secrets in their Secrets tables', async () => {
+  const devGuide = await readRepoFile('docs/01_系统配置/dev.md');
+  const mainGuide = await readRepoFile('docs/01_系统配置/main.md');
+  const devSecrets = devGuide.slice(
+    devGuide.indexOf('### 1.1 Secrets'),
+    devGuide.indexOf('### 1.2 Variables'),
+  );
+  const mainSecrets = mainGuide.slice(
+    mainGuide.indexOf('### 1.1 Secrets'),
+    mainGuide.indexOf('### 1.2 Variables'),
+  );
+
+  for (const name of ['DEV_COS_BUCKET', 'DEV_COS_DOMAIN', 'DEV_COS_PATH_PREFIX']) {
+    assert.match(devSecrets, new RegExp(`\\x60${name}\\x60`));
+  }
+  for (const name of [
+    'AI_BASE_URL',
+    'TELEGRAM_ALLOWED_CHAT_IDS',
+    'FEISHU_ALLOWED_CHAT_IDS',
+    'COS_BUCKET',
+    'COS_DOMAIN',
+    'COS_PATH_PREFIX',
+    'TELEGRAM_RECOGNITION_FALLBACK_BASE_URL',
+  ]) {
+    assert.match(mainSecrets, new RegExp(`\\x60${name}\\x60`));
+  }
+});
+
+test('system configuration guides distinguish Markdown Backup target branch from its production database source', async () => {
+  const configIndex = await readRepoFile('docs/01_系统配置/README.md');
+  const devGuide = await readRepoFile('docs/01_系统配置/dev.md');
+
+  for (const guide of [configIndex, devGuide]) {
+    assert.match(guide, /Markdown Backup/);
+    assert.match(guide, /MARKDOWN_BACKUP_BRANCH/);
+    assert.match(guide, /TRAINING_DB_URL/);
+    assert.match(guide, /TRAINING_DB_READONLY_URL/);
+  }
+  assert.match(devGuide, /不能把该 workflow 当作 dev 数据库导出/);
+});
+
+test('system configuration guides require Cloudflare Worker allow-list secrets independently from GitHub Settings', async () => {
+  const devGuide = await readRepoFile('docs/01_系统配置/dev.md');
+  const mainGuide = await readRepoFile('docs/01_系统配置/main.md');
+
+  for (const guide of [devGuide, mainGuide]) {
+    for (const name of ['TELEGRAM_ALLOWED_CHAT_IDS', 'FEISHU_ALLOWED_CHAT_IDS']) {
+      assert.match(guide, new RegExp(`\\| \\x60${name}\\x60 \\| 必填 \\|[^\\n]*Cloudflare Worker Secret`));
+      assert.match(guide, new RegExp(`wrangler secret put ${name}`));
+    }
+  }
+});
+
 test('telegram-sync workflows treat stored thought batches as database content changes', async () => {
   const workflows = [
     await readWorkflow('.github/workflows/sync.yml'),

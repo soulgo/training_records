@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import frontMatter from 'hexo-front-matter';
 import pg from 'pg';
 
-import { resolveTrainingCoreConfig } from '../src/db/training/config.mjs';
+import { resolveTrainingCoreConfig } from '../src/adapters/postgres/training-config.pg.mjs';
 import { persistThoughtToCore } from '../src/db/training/write.mjs';
 import {
   getThoughtModuleTags,

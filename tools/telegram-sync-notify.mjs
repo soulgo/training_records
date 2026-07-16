@@ -2,7 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { sendTelegramMessage } from '../src/adapters/telegram/telegram-api.mjs';
-import { notifyMessageSyncResultFromFile } from '../src/app/use-cases/telegram-sync/status.mjs';
+import { notifyMessageSyncResultFromFile } from '../src/app/use-cases/message-sync/status.mjs';
 
 export async function main() {
   const result = await notifyTelegramSyncFromEnv({ env: process.env });

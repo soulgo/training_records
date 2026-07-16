@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { readTrainingSnapshotFromDatabaseClient } from '../../db/training/read.mjs';
+import { readTrainingSnapshotFromDatabaseClient } from './training-read-client.pg.mjs';
 import {
   insertArchiveSleep,
   insertCoreActivities,

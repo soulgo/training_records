@@ -15,11 +15,36 @@
 
 ### Fixed
 
+- 修复 `sync:db` 一致性检查在睡眠批次 `totalSleepMinutes` 为 JSON null、但 `records` 数组非空时报 `cannot cast jsonb null to type integer`、导致 ingest 阶段被 defer 的问题；`tools/check-sleep-data-consistency.mjs` 的 SELECT 改用 `->>` 文本抽取再 cast，与 WHERE 过滤条件保持一致，JSON null 归一为 SQL NULL 后安全转换。
+- 修复 `test/sql-schema-layout.test.mjs` 的建表正则只匹配 LF 行尾，导致 Windows 下 CRLF 检出的 SQL 文件解析出 0 张表、dev/main 结构差异被“空对象对空对象”掩盖成假通过的问题；正则改为 `\r?\n` 兼容 CRLF/LF，本地与 CI 现在都能真实比对表与列布局。
+
+### Changed
+
+- 同步 GitHub Actions 与 Cloudflare Worker 配置文档：明确 14 个未接线 GitHub Settings 参数可删除、标出 workflow 仍引用但当前 Settings 缺失的参数，修正 dev/main COS、AI、白名单等 Secret/Variable 归属；同时说明 `Markdown Backup` 的目标分支不改变其固定的生产数据库数据源，并补充 Telegram/飞书 Worker 白名单需独立配置为 Cloudflare Secret。
+- 提高图片识别 AI 超时时间：主 AI `AI_TIMEOUT_MS` 45s → 60s，备 AI `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS` 30s → 90s（GitHub repository variable，dev/main 共用）。此前备 AI 作为主备兜底链的最后一道防线，超时（30s）反而比主 AI（45s）更短；睡眠截图字段密集（schema 26 个必填字段）、模型生成较慢，一次飞书睡眠图同步遇到主 AI 服务商 HTTP 500 上游故障后，切到备 AI 又因 30s 超时耗尽，最终返回 `AI 服务失败：AI recognition request failed`。主备切换与「两个 provider 都失败才报错」逻辑本身工作正常，本次仅放宽超时，让备 AI 有充裕时间兜住主 AI 故障。
+
+### Removed
+
+- main 数据库已由用户手动执行 `ingest.telegram_batch`、`telegram_message`、`telegram_recognition`、`telegram_pending_batch` 4 张遗留表与序列的清理（对应 dev 侧 `20260714_drop_legacy_telegram_tables.sql` 的 R6 方案），并重新导出 `sql/main-sql/ingest.sql`；dev 与 main 的 ingest 结构恢复一致。
+
+## [1.3.5] - 2026-07-15
+
+### Fixed
+
+- **全面修复图片数据丢失问题（v1.3.5）**：针对 Telegram/飞书图片识别后，训练消耗（activities）、体脂秤（measurements）、饮食（meals）、睡眠（sleep）数据偶发丢失的问题，实施三项全面修复：
+  1. **主事务自动重试**：为 `persistNormalizedBatch` 增加最多 2 次重试机制，对可重试的数据库错误（连接中断、超时、死锁等）立即重试而非进入 pending 队列，减少用户等待时间从 30 分钟降至秒级。
+  2. **全类型数据一致性检查**：新增 `tools/check-core-data-consistency.mjs` 工具，检查所有数据类型（activities/measurements/meals/sleep）在 `ingest` 和 `core` 之间的一致性，替代仅检查睡眠数据的 v1.3.4 方案。
+  3. **自动修复集成**：`npm run sync:db` 现在会自动检查所有数据类型的一致性，发现不一致时从 `ingest.source_batch` 读取原始识别结果并重新执行增量写入到 `core.*` 表，确保数据最终一致性。
+- 修复睡眠数据回填（sleepBackfill）失败时静默丢失数据的问题（v1.3.4）：当 sleepBackfill 因数据库连接中断、超时等瞬时错误失败时，系统现在会自动将失败任务加入 `ingest.pending_task` 队列进行重试，而不是仅标记 `partialFailure` 后静默忽略，确保睡眠数据最终一致性。
+- 增强 sleepBackfill 的健壮性（v1.3.4）：在 `backfillCoreSleepFromIngestBatchesClient` 内部增加最多 3 次的自动重试机制，对可重试的数据库错误（连接中断、超时、死锁等）自动重试，减少瞬时错误导致的失败。
+- 优化睡眠数据去重逻辑（v1.3.4）：改进 `deleteCoreSleepRowsByIdentity` 的匹配算法，当 `bedtime` 或 `wakeTime` 为空时，额外匹配 `totalSleepMinutes` 以避免过于宽泛的删除，减少并发场景下的竞态条件。
 - 修复 Telegram/飞书同步完成后派发站点部署时，GitHub workflow dispatch API 遇到瞬时 HTTP 5xx 就立即中断并向用户回报 Action 失败的问题；部署派发现在复用统一 HTTP 重试机制，对服务端瞬时错误最多尝试 3 次，永久错误仍立即失败。
 - 补充 dev `core.trainee_profile` 人工更新 SQL，修正脚本对不存在的 `training_app`、`training_maintenance`、`training_readonly` 角色的错误依赖；新表固定归属 `training_writer`，并继承现有事实表的只读授权。`/分析` 的 PostgreSQL schema 错误改为数据库失败，Action summary 同时展示业务状态和失败分类，不再把绿色 workflow conclusion 当作分析成功证明。
 
 ### Added
 
+- 新增 `npm run check:core-consistency` 命令用于检查所有数据类型（activities/measurements/meals/sleep）的一致性，替代仅检查睡眠数据的 `check:sleep-consistency`。
+- 新增 `npm run check:sleep-consistency` 命令用于检查睡眠数据一致性（v1.3.4），`npm run backfill:sleep` 命令用于手动执行睡眠数据回填。
 - 新增当前 `/分析` 维护文档，记录单只读连接、近 28 天单 SQL 聚合、训练者画像和只读输出边界。
 - 新增异步 Action monitor、独立 pending replay，以及 `/分析` 单连接单 SQL 的只读 PostgreSQL repository。
 - 新增 DateAlignmentService、RecordGrouper、SemanticGate 和 Provider capability negotiation，覆盖完整日期、月日补年、睡眠归档、单锚点传播、多日期隔离、越界清洗、review 决策及 strict/json_object/text_json/vision 能力组合。
@@ -29,6 +54,12 @@
 
 ### Changed
 
+- 同步项目包版本号到 `1.3.5`。
+- 合并 PostgreSQL 持久化双层：连接配置与快照读实现从 `src/db/training` 迁入 `src/adapters/postgres`（`config.mjs` → `training-config.pg.mjs`，`read-queries/read-mapper/read-client.mjs` → `training-read-*.pg.mjs`），`adapters/postgres` 成为唯一 PostgreSQL 适配层落点且不再反向 import `db/training`；`db/training` 仅保留 `read`/`write`/`pending-recognition`/`consistency-check` 编排入口，单向依赖适配层。
+- 渠道无关同步编排去 telegram 化：`runMessageSync`、`createRecognitionAiProvider` 与共享子模块迁至 `src/app/use-cases/message-sync.use-case.mjs`、`message-sync/`、`message-sync-{env,timings,handlers,thoughts}.mjs`；`telegram-sync.use-case.mjs` 重建为仅含 `main`/`runTelegramSync`/CLI 的 Telegram 装配薄入口（`sync:telegram` 脚本不变）；`feishu-sync` 改为 import 中性模块，不再引用任何 telegram 命名模块。
+- 渠道无关符号统一 source/message 语义（一次性全量改名，无兼容 re-export）：`persistTelegramImageBatchIncremental` → `persistSourceImageBatchIncremental`、`shouldPersistTelegramArtifacts` → `shouldPersistMessageSyncArtifacts`、`notifyTelegramSyncResult` 等通知辅助 → `notifyMessageSyncResult` 等；`runMessageSync` 选项键 `sendTelegramMessage`/`fetchTelegramUpdates` → `sendMessage`/`fetchUpdates`。GitHub dispatch 载荷解析（`isDispatchEventName` 等）抽到 `src/shared/dispatch-payload.mjs`，telegram/feishu transport 与 action-monitor 工具统一从 shared 导入。
+- 纯物理拆分三个超大文件（行为不变）：`sync-batch-logic.adapter.mjs`（1857 行）拆出 `sync-commands.adapter.mjs`、`sync-analysis.adapter.mjs`；`telegram-sync.use-case.mjs`（1344 行）拆出 timings/env/handlers/thoughts；`image-recognition.use-case.mjs`（1168 行）拆出 parse/schema/provider，对外导出符号与签名全部保持不变。
+- 系统总览分层描述修正为与实际 `core → domain` 单向依赖一致（R2 方案 B，纯文档）。
 - main/dev 写连接统一使用 GitHub Settings 中的分支数据库 URL 和同一个 `training_writer` 账号；只读账号仅由各自 readonly URL 决定。移除无迁移执行器消费的 migration URL 参数健康项。
 - 图片识别 schema 升级到 v4，活动明细直接输出 `durationSeconds`、`calories`、`heartRate`、`distanceKm`、`avgSpeedKmh`；结构化字段优先进入 core，中文 `detail` 正则仅保留为旧结果兼容回退。
 - 同步主路径不再等待站点部署或同步拉取 Action jobs；deploy 与 monitor 独立通知失败，会话队列按稳定哈希分片，webhook 跳过 polling offset，新消息不再顺带消费 pending 队列。
@@ -51,6 +82,7 @@
 
 ### Removed
 
+- 删除 4 个纯 re-export shim：`src/db/training/archive.mjs`、`src/adapters/telegram/sync-batch.adapter.mjs`、`src/telegram/commands.mjs`、`src/telegram/index.mjs`，调用方改为直接 import 真实实现；`src/db/training/read.mjs` 尾部的快照读 re-export 块一并移除。新增 `sql/dev-sql/update-dev-sql/20260714_drop_legacy_telegram_tables.sql` 供人工清理 `ingest.telegram_*` 4 张遗留表与序列（不可逆 DROP，须用户批准后手动执行）。
 - 删除 `/action-monitor/` 的系统参数监控模块及其 registry、探测 workflow/CLI、业务用例、PostgreSQL 仓储、页面模板/脚本/样式和专属测试；dev/main canonical `monitor.sql` 同步移除 `monitor.system_config_parameters`、`monitor.system_config_parameter_checks` 及相关序列、索引和约束，dev 运行库通过 `20260713_remove_system_parameter_monitoring.sql` 清理遗留对象，Action 日志功能保持不变。
 - 删除 `docs/03_历史重构记录/` 整套旧分析、规划、TDD、审计和验收资料；仍有效的系统优化 0711 事实已写回当前 docs，历史过程改由 Git 追溯。
 - 删除已完成使命的 `sql/main-sql/align_to_dev.sql`，并将 schema 测试改为直接验证 dev/main 环境导出的表与字段结构一致。
@@ -648,7 +680,10 @@
 - 初始版本：发布训练记录看板、锻炼随想、杂七杂八与关于页面。
 - 支持从训练数据生成静态看板和日常记录概览。
 
-[Unreleased]: https://github.com/soulgo/training_records/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/soulgo/training_records/compare/v1.3.5...HEAD
+[1.3.5]: https://github.com/soulgo/training_records/compare/v1.3.3...v1.3.5
+[1.3.3]: https://github.com/soulgo/training_records/compare/v1.3.2...v1.3.3
+[1.3.2]: https://github.com/soulgo/training_records/compare/v1.3.1...v1.3.2
 [1.3.1]: https://github.com/soulgo/training_records/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/soulgo/training_records/compare/v1.2.9...v1.3.0
 [1.2.9]: https://github.com/soulgo/training_records/compare/v1.2.8...v1.2.9

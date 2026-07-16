@@ -30,10 +30,10 @@ flowchart TD
 | Telegram 帮助直接回复 | `cloudflare/telegram-sync-dispatch-worker.mjs:261-273` |
 | 相册缓冲 DO | `cloudflare/telegram-sync-dispatch-worker.mjs:24,173-175` |
 | dispatch GitHub | `cloudflare/telegram-sync-dispatch-worker.mjs:364-369`、`cloudflare/sync-dispatch-queue.mjs:375` |
-| 用例入口 | `src/app/use-cases/telegram-sync.use-case.mjs:85,95` |
-| 必需运行时 env | `src/app/use-cases/telegram-sync.use-case.mjs:831-887` |
+| 用例入口 | `src/app/use-cases/telegram-sync.use-case.mjs`（`main`/`runTelegramSync` 装配）→ `src/app/use-cases/message-sync.use-case.mjs`（共享编排 `runMessageSync`） |
+| 必需运行时 env | `src/app/use-cases/message-sync-env.mjs`（`loadRequiredEnv`） |
 | 消息分组 | `src/adapters/telegram/sync-batch-logic.adapter.mjs:95` |
-| 批次处理 | `src/app/use-cases/telegram-sync.use-case.mjs:234-410` |
+| 批次处理 | `src/app/use-cases/message-sync.use-case.mjs`（`runMessageSync` 主循环） |
 
 ## 批次类型
 

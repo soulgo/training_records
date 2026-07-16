@@ -5,7 +5,7 @@ import { sendTelegramMessage } from '../../../adapters/telegram/index.mjs';
 import { isThoughtBatchKind } from '../../../core/thought-modules.mjs';
 import { buildPersistenceSummary } from './persistence-summary.mjs';
 
-export function shouldPersistTelegramArtifacts({
+export function shouldPersistMessageSyncArtifacts({
   updatesFetched,
   changed,
   previousLastProcessedUpdateId,
@@ -439,7 +439,7 @@ function normalizeFailureDisposition(batch) {
   return 'none';
 }
 
-export function shouldNotifyTelegramSyncResult(rawEnv) {
+export function shouldNotifyMessageSyncResult(rawEnv) {
   const flag = String(rawEnv.TELEGRAM_SYNC_NOTIFY ?? '').trim().toLowerCase();
   if (['1', 'true', 'yes', 'on'].includes(flag)) {
     return true;
@@ -454,7 +454,7 @@ export function shouldNotifyTelegramSyncResult(rawEnv) {
   );
 }
 
-export function resolveTelegramSyncNotificationStage(rawEnv) {
+export function resolveMessageSyncNotificationStage(rawEnv) {
   const stage = String(rawEnv.TELEGRAM_SYNC_NOTIFY_STAGE ?? '').trim().toLowerCase();
   if (
     stage === 'after_action' ||
@@ -467,7 +467,7 @@ export function resolveTelegramSyncNotificationStage(rawEnv) {
   return 'inline';
 }
 
-export function resolveTelegramSyncResultPath(rawEnv, activeRootDir, explicitPath) {
+export function resolveMessageSyncResultPath(rawEnv, activeRootDir, explicitPath) {
   const candidate = String(explicitPath ?? rawEnv.TELEGRAM_SYNC_RESULT_PATH ?? '').trim();
   if (candidate) {
     return path.isAbsolute(candidate) ? candidate : path.resolve(activeRootDir, candidate);
@@ -503,16 +503,16 @@ export async function notifyMessageSyncResultFromReport({
   env = process.env,
   sendMessage = sendTelegramMessage,
 }) {
-  return notifyTelegramSyncResult({
+  return notifyMessageSyncResult({
     batches: report?.batches ?? [],
     env,
     sendMessage,
   });
 }
 
-export async function notifyTelegramSyncResult({ batches, env = process.env, sendMessage }) {
+export async function notifyMessageSyncResult({ batches, env = process.env, sendMessage }) {
   const messagesByChat = new Map();
-  const shouldNotify = shouldNotifyTelegramSyncResult(env);
+  const shouldNotify = shouldNotifyMessageSyncResult(env);
   if (!shouldNotify) {
     return { notified: false, reason: 'notification_disabled' };
   }

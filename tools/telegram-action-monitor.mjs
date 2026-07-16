@@ -5,7 +5,7 @@ import {
   isDispatchEventName,
   readInlineDispatchPayload,
   shouldReadDispatchEventFile,
-} from '../src/adapters/telegram/polling.transport.mjs';
+} from '../src/shared/dispatch-payload.mjs';
 
 const TELEGRAM_API_BASE_URL = 'https://api.telegram.org';
 

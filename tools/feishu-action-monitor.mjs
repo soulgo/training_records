@@ -6,7 +6,7 @@ import {
   resolveDispatchFeishuUpdates,
   sendFeishuMessage,
 } from '../src/adapters/feishu/index.mjs';
-import { isDispatchEventName } from '../src/adapters/telegram/polling.transport.mjs';
+import { isDispatchEventName } from '../src/shared/dispatch-payload.mjs';
 
 const stepLabels = [
   ['install', 'Install dependencies'],

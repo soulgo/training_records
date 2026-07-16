@@ -28,7 +28,7 @@
 ## 排查步骤
 
 1. 核对 workflow env：`sync.yml` / `sync-dev.yml` 中 `TRAINING_DB_*` 必须来自 GitHub Settings/Secrets；main/dev 写 URL 都使用 `training_writer`，但指向各自数据库。
-2. 核对代码读取：`src/db/training/config.mjs`。
+2. 核对代码读取：`src/adapters/postgres/training-config.pg.mjs`。
 3. 核对写入入口：`src/db/training/write.mjs:21`。
 4. 核对 schema：dev 使用 `sql/dev-sql/`，main 使用 `sql/main-sql/`。
 5. dev/main 已完成结构对齐；后续 schema 变化先在目标环境备份、独立执行和验收，再重新导出对应 `sql/<environment>-sql/` 文件。

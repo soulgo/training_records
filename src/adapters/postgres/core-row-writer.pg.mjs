@@ -448,19 +448,33 @@ async function deleteCoreSleepRowsByIdentity(client, rows) {
           $1::date[],
           $2::text[],
           $3::text[],
-          $4::text[]
-        ) as incoming(archived_date, sleep_type, bedtime, wake_time)
+          $4::text[],
+          $5::integer[]
+        ) as incoming(archived_date, sleep_type, bedtime, wake_time, total_sleep_minutes)
       ) incoming
       where existing.archived_date = incoming.archived_date
         and coalesce(existing.sleep_type, '夜间睡眠') = coalesce(incoming.sleep_type, '夜间睡眠')
-        and coalesce(existing.bedtime, '') = coalesce(incoming.bedtime, '')
-        and coalesce(existing.wake_time, '') = coalesce(incoming.wake_time, '')
+        and (
+          -- 精确匹配：如果 bedtime 和 wakeTime 都有值，按时间匹配
+          (incoming.bedtime is not null and incoming.bedtime != ''
+           and incoming.wake_time is not null and incoming.wake_time != ''
+           and coalesce(existing.bedtime, '') = coalesce(incoming.bedtime, '')
+           and coalesce(existing.wake_time, '') = coalesce(incoming.wake_time, ''))
+          or
+          -- 模糊匹配：如果时间缺失，额外匹配总睡眠时长
+          ((incoming.bedtime is null or incoming.bedtime = ''
+            or incoming.wake_time is null or incoming.wake_time = '')
+           and coalesce(existing.total_sleep_minutes, 0) = coalesce(incoming.total_sleep_minutes, 0)
+           and incoming.total_sleep_minutes is not null
+           and incoming.total_sleep_minutes > 0)
+        )
     `,
     [
       rows.map((row) => row.archivedDate),
       rows.map((row) => row.sleepType),
       rows.map((row) => row.bedtime),
       rows.map((row) => row.wakeTime),
+      rows.map((row) => row.totalSleepMinutes),
     ],
   );
 }

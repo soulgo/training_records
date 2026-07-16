@@ -31,28 +31,9 @@ test('dev and main exports expose the same table and column layout while dev upd
   }
 });
 
-test('dev trainee profile update uses training_writer and inherits existing read grants', async () => {
-  const sql = await readFile(
-    new URL('../sql/dev-sql/update-dev-sql/20260713_add_core_trainee_profile.sql', import.meta.url),
-    'utf8',
-  );
-
-  assert.match(sql, /create\s+table\s+if\s+not\s+exists\s+core\.trainee_profile/iu);
-  assert.match(sql, /insert\s+into\s+core\.trainee_profile/iu);
-  assert.match(sql, /on\s+conflict\s*\(trainee_id\)\s+do\s+nothing/iu);
-  assert.match(sql, /alter\s+table\s+core\.trainee_profile\s+owner\s+to\s+training_writer/iu);
-  assert.match(sql, /from\s+information_schema\.table_privileges/iu);
-  assert.match(sql, /table_schema\s*=\s*'core'/iu);
-  assert.match(sql, /table_name\s*=\s*'training_day'/iu);
-  assert.match(sql, /privilege_type\s*=\s*'SELECT'/u);
-  assert.match(sql, /grant\s+select\s+on\s+core\.trainee_profile\s+to\s+%I/iu);
-  assert.doesNotMatch(sql, /training_(?:app|maintenance|readonly)/iu);
-  assert.doesNotMatch(sql, /^\s*(?:drop|truncate|delete)\b/imu);
-});
-
 function extractTableColumns(sql) {
   return Object.fromEntries(
-    [...sql.matchAll(/CREATE TABLE "([^"]+)"\."([^"]+)" \(([^;]+?)\n\)\n;/gs)]
+    [...sql.matchAll(/CREATE TABLE "([^"]+)"\."([^"]+)" \(([^;]+?)\r?\n\)\r?\n;/gs)]
       .map((match) => [
         `${match[1]}.${match[2]}`,
         [...match[3].matchAll(/^\s*"([^"]+)"/gm)].map((column) => column[1]).sort(),

@@ -14,15 +14,15 @@ import {
   buildSafeSyncReport,
   createRecognitionAiProvider,
   runMessageSync,
-} from './telegram-sync.use-case.mjs';
+} from './message-sync.use-case.mjs';
 import {
   writeStartedRecognitionAiCallLog as writeStartedRecognitionAiCallLogToDatabase,
 } from '../../db/training/pending-recognition.mjs';
-import { recognizeBatch } from './telegram-sync/image-processing.mjs';
+import { recognizeBatch } from './message-sync/image-processing.mjs';
 import {
   notifyMessageSyncResultFromFile,
   notifyMessageSyncResultFromReport,
-} from './telegram-sync/status.mjs';
+} from './message-sync/status.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..', '..', '..');
@@ -108,7 +108,7 @@ export async function runFeishuSync(options = {}) {
       }),
     groupUpdates: groupFeishuUpdates,
     getLastProcessedUpdateId: options.getLastProcessedUpdateId ?? (async () => 0),
-    fetchTelegramUpdates: options.fetchTelegramUpdates ?? (async () => []),
+    fetchUpdates: options.fetchUpdates ?? (async () => []),
     recognizeBatch:
       options.recognizeBatch ??
       ((batch, env) => recognizeBatch(batch, env, {
@@ -120,7 +120,7 @@ export async function runFeishuSync(options = {}) {
       })),
     persistNormalizedBatch,
     writeStartedRecognitionAiCallLog,
-    sendTelegramMessage: sendMessage,
+    sendMessage,
     fetchMessageFile: fetchImageFileById,
     aiProvider,
     recognitionAiProvider,

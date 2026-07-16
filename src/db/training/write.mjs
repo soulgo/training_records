@@ -3,8 +3,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { parseTrainingRecord } from '../../domain/training/training-parser.mjs';
 import { mergeBatchIntoDay } from '../../core/services/training-merge-service.mjs';
-import { resolveTrainingCoreConfig } from './config.mjs';
-import { readArchiveTrainingSnapshotFromDatabaseClient } from './read.mjs';
+import { resolveTrainingCoreConfig } from '../../adapters/postgres/training-config.pg.mjs';
+import { readArchiveTrainingSnapshotFromDatabaseClient } from '../../adapters/postgres/training-read-client.pg.mjs';
 import {
   isThoughtBatchKind,
 } from '../../core/thought-modules.mjs';
@@ -17,7 +17,7 @@ import {
   replaceCoreDay,
   replaceCoreDays,
 } from '../../adapters/postgres/index.mjs';
-import { persistTelegramImageBatchIncremental } from '../../adapters/postgres/incremental-write.pg.mjs';
+import { persistSourceImageBatchIncremental } from '../../adapters/postgres/incremental-write.pg.mjs';
 
 const { Client } = pg;
 const SLEEP_HEALTH_FIELDS = [
@@ -52,6 +52,28 @@ const EMPTY_ROW_COUNTS = {
 };
 
 export async function persistNormalizedBatch(options) {
+  const maxRetries = options.maxRetries ?? 2;
+  const retryDelayMs = options.retryDelayMs ?? 500;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await persistNormalizedBatchAttempt(options);
+    } catch (error) {
+      if (attempt < maxRetries && isRetryableDatabaseError(error)) {
+        const delayMs = retryDelayMs * attempt;
+        process.stderr.write(
+          `[persist-batch] attempt ${attempt}/${maxRetries} failed, retrying in ${delayMs}ms: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error('persistNormalizedBatch: max retries exceeded');
+}
+
+async function persistNormalizedBatchAttempt(options) {
   const config = resolveTrainingCoreConfig(options.env);
   if (!config.enabled) {
     return {
@@ -135,7 +157,7 @@ export async function persistNormalizedBatch(options) {
     if (isThoughtBatchKind(batch.kind) && batch.status === 'ready') {
       thoughtMirrorResult = await new PostgresThoughtRepository(observedClient).persistMirror(batch, processedAt);
     } else if (isTelegramImageBatch(batch) && batch.status === 'ready' && batch.archivedDate) {
-      await persistTelegramImageBatchIncremental(observedClient, batch, processedAt, { sourceChannel });
+      await persistSourceImageBatchIncremental(observedClient, batch, processedAt, { sourceChannel });
     } else if (batch.kind !== 'image' && batch.kind !== 'thought' && batch.status === 'ready' && batch.archivedDate) {
       const existingDay = await readCoreDay(observedClient, batch.archivedDate);
       const mergedDay = mergeBatchIntoDay(existingDay, batch);
@@ -509,6 +531,48 @@ export async function importTrainingMarkdownToDatabase(options) {
 }
 
 export async function backfillCoreSleepFromIngestBatchesClient(client, options = {}) {
+  const processedAt = options.processedAt ?? new Date();
+  const maxRetries = options.maxRetries ?? 3;
+  const retryDelayMs = options.retryDelayMs ?? 1000;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await backfillCoreSleepFromIngestBatchesClientAttempt(client, { ...options, processedAt });
+    } catch (error) {
+      if (attempt < maxRetries && isRetryableDatabaseError(error)) {
+        const delayMs = retryDelayMs * attempt;
+        process.stderr.write(
+          `[sleep-backfill] attempt ${attempt}/${maxRetries} failed, retrying in ${delayMs}ms: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error('backfillCoreSleepFromIngestBatchesClient: max retries exceeded');
+}
+
+function isRetryableDatabaseError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const retryablePatterns = [
+    /connection.*terminated/i,
+    /connection.*reset/i,
+    /connection.*closed/i,
+    /timeout/i,
+    /timed out/i,
+    /deadlock/i,
+    /lock.*timeout/i,
+    /serialization.*failure/i,
+    /could not serialize/i,
+    /ECONNRESET/i,
+    /ETIMEDOUT/i,
+    /ECONNREFUSED/i,
+  ];
+  return retryablePatterns.some((pattern) => pattern.test(message));
+}
+
+async function backfillCoreSleepFromIngestBatchesClientAttempt(client, options = {}) {
   const processedAt = options.processedAt ?? new Date();
   const hasTargetArchivedDates = Object.hasOwn(options, 'targetArchivedDates');
   const targetArchivedDates = normalizeTargetArchivedDates(options.targetArchivedDates);

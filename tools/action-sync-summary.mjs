@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 import { buildFeishuSyncReport } from '../src/app/use-cases/feishu-sync.use-case.mjs';
-import { buildMessageSyncReport } from '../src/app/use-cases/telegram-sync.use-case.mjs';
+import { buildMessageSyncReport } from '../src/app/use-cases/message-sync.use-case.mjs';
 import {
   buildTraceContext,
   formatActionLogEvent,

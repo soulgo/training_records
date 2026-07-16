@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import pg from 'pg';
 
 import { normalizeAiUsage } from '../../core/ai/schema-validator.mjs';
-import { resolveTrainingCoreConfig, resolveTrainingReadonlyConfig } from './config.mjs';
+import { resolveTrainingCoreConfig, resolveTrainingReadonlyConfig } from '../../adapters/postgres/training-config.pg.mjs';
 
 const { Client } = pg;
 const DEFAULT_RETRY_DELAY_MINUTES = 10;

@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { notifyMessageSyncResultFromFile } from '../src/app/use-cases/telegram-sync/status.mjs';
+import { notifyMessageSyncResultFromFile } from '../src/app/use-cases/message-sync/status.mjs';
 import { notifyTelegramSyncFromEnv } from '../tools/telegram-sync-notify.mjs';
 
 test('telegram sync notifier reads the result file and sends the deferred success message', async () => {

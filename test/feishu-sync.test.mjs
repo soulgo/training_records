@@ -9,7 +9,7 @@ import {
   groupFeishuUpdates,
   normalizeFeishuMessage,
 } from '../src/adapters/feishu/index.mjs';
-import { recognizeBatch } from '../src/app/use-cases/telegram-sync/image-processing.mjs';
+import { recognizeBatch } from '../src/app/use-cases/message-sync/image-processing.mjs';
 import { notifyFeishuActionFailure } from '../tools/feishu-action-monitor.mjs';
 import { buildFeishuSyncReport, notifyFeishuSyncResultFromFile, runFeishuSync } from '../src/app/use-cases/feishu-sync.use-case.mjs';
 

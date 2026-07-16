@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { buildTrainingSnapshot } from '../src/domain/training/training-snapshot.mjs';
 import { parseTrainingRecord } from '../src/domain/training/training-parser.mjs';
 import { buildDashboardViewModel } from '../src/site/dashboard-view.mjs';
-import { createTelegramCommandResolver, isTelegramHelpText } from '../src/telegram/commands.mjs';
+import { createTelegramCommandResolver } from '../src/telegram/command-registry.mjs';
+import { isTelegramHelpText } from '../src/telegram/help.mjs';
 import { readTrainingSnapshotFromDatabase } from '../src/db/training/read.mjs';
 import { persistNormalizedBatch } from '../src/db/training/write.mjs';
 
