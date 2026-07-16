@@ -26,6 +26,20 @@ const SLEEP_RANGES = {
   averageRespiratoryRate: [4, 60],
 };
 
+const ACTIVITY_POSITIVE_FIELDS = [
+  'durationSeconds',
+  'calories',
+  'heartRate',
+  'distanceKm',
+  'avgSpeedKmh',
+];
+
+const WORKOUT_SUMMARY_POSITIVE_FIELDS = [
+  'activityCaloriesKcal',
+  'workoutDurationMinutes',
+  'activeHours',
+];
+
 export function applyRecognitionSemanticGate(payload) {
   if (!isPlainObject(payload)) {
     return payload;
@@ -36,6 +50,16 @@ export function applyRecognitionSemanticGate(payload) {
   const decisions = [];
   sanitizeRanges(payload.records?.measurement, gated.records?.measurement, MEASUREMENT_RANGES, 'measurement', warnings, decisions);
   sanitizeRanges(payload.records?.sleep, gated.records?.sleep, SLEEP_RANGES, 'sleep', warnings, decisions);
+  sanitizePositiveActivities(payload.records?.activities, gated.records?.activities, warnings, decisions);
+  sanitizePositiveObjectFields(
+    payload.records?.dailyWorkoutSummary,
+    gated.records?.dailyWorkoutSummary,
+    WORKOUT_SUMMARY_POSITIVE_FIELDS,
+    'dailyWorkoutSummary',
+    warnings,
+    decisions,
+  );
+  sanitizePositiveNutrition(payload.records, gated.records, warnings, decisions);
   addMeasurementReviews(payload.records?.measurement, warnings, decisions);
   addSleepReviews(payload.records?.sleep, warnings, decisions);
 
@@ -53,6 +77,48 @@ export function applyRecognitionSemanticGate(payload) {
       rawResult: structuredClone(payload),
     },
   };
+}
+
+function sanitizePositiveActivities(original, target, warnings, decisions) {
+  if (!Array.isArray(original) || !Array.isArray(target)) return;
+  for (let index = 0; index < original.length; index += 1) {
+    sanitizePositiveObjectFields(
+      original[index],
+      target[index],
+      ACTIVITY_POSITIVE_FIELDS,
+      `activities[${index}]`,
+      warnings,
+      decisions,
+    );
+  }
+}
+
+function sanitizePositiveNutrition(originalRecords, targetRecords, warnings, decisions) {
+  if (!isPlainObject(originalRecords) || !isPlainObject(targetRecords)) return;
+  if (isNonPositiveFiniteNumber(originalRecords.totalCalories)) {
+    targetRecords.totalCalories = null;
+    addPositiveSanitizeDecision('totalCalories', warnings, decisions);
+  }
+  if (!Array.isArray(originalRecords.meals) || !Array.isArray(targetRecords.meals)) return;
+  targetRecords.meals = targetRecords.meals.filter((meal, index) => {
+    if (!isNonPositiveFiniteNumber(originalRecords.meals[index]?.calories)) return true;
+    addPositiveSanitizeDecision(`meals[${index}].calories`, warnings, decisions);
+    return false;
+  });
+}
+
+function sanitizePositiveObjectFields(original, target, fields, namespace, warnings, decisions) {
+  if (!isPlainObject(original) || !isPlainObject(target)) return;
+  for (const field of fields) {
+    if (!isNonPositiveFiniteNumber(original[field])) continue;
+    target[field] = null;
+    addPositiveSanitizeDecision(`${namespace}.${field}`, warnings, decisions);
+  }
+}
+
+function addPositiveSanitizeDecision(path, warnings, decisions) {
+  warnings.add(`semantic:${path.replace(/\[\d+\]/gu, '[]')} must be positive`);
+  decisions.push({ action: 'sanitize', path, reason: 'non_positive' });
 }
 
 function addMeasurementReviews(measurement, warnings, decisions) {
@@ -114,6 +180,10 @@ function sanitizeRanges(original, target, ranges, namespace, warnings, decisions
 
 function isOutsideRange(value, min, max) {
   return isFiniteNumber(value) && (value < min || value > max);
+}
+
+function isNonPositiveFiniteNumber(value) {
+  return isFiniteNumber(value) && value <= 0;
 }
 
 function isFiniteNumber(value) {

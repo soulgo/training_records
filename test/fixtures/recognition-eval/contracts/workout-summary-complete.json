@@ -1,0 +1,16 @@
+{
+  "sampleId": "workout-summary-complete",
+  "imageType": "workout",
+  "scenario": "hard_complete",
+  "recognition": {
+    "imageType": "workout",
+    "records": {
+      "activities": [],
+      "dailyWorkoutSummary": { "activityCaloriesKcal": 520, "workoutDurationMinutes": 45, "activeHours": 8 }
+    }
+  },
+  "expected": {
+    "stored": true,
+    "completeness": { "status": "complete" }
+  }
+}

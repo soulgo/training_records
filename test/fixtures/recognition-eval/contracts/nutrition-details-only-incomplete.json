@@ -1,0 +1,21 @@
+{
+  "sampleId": "nutrition-details-only-incomplete",
+  "imageType": "nutrition",
+  "scenario": "hard_incomplete",
+  "recognition": {
+    "imageType": "nutrition",
+    "records": {
+      "meals": [],
+      "totalCalories": null,
+      "details": ["早餐：燕麦", "午餐：鸡胸肉"]
+    }
+  },
+  "expected": {
+    "stored": false,
+    "completeness": {
+      "status": "incomplete",
+      "requiresFallback": true,
+      "missingFields": ["records.totalCalories"]
+    }
+  }
+}

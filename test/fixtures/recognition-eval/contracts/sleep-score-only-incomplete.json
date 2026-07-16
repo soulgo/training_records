@@ -1,0 +1,19 @@
+{
+  "sampleId": "sleep-score-only-incomplete",
+  "imageType": "sleep",
+  "scenario": "hard_incomplete",
+  "recognition": {
+    "imageType": "sleep",
+    "records": {
+      "sleep": { "totalSleepMinutes": null, "nightSleepMinutes": null, "sleepScore": 88 }
+    }
+  },
+  "expected": {
+    "stored": false,
+    "completeness": {
+      "status": "incomplete",
+      "requiresFallback": true,
+      "missingFields": ["records.sleep.duration"]
+    }
+  }
+}

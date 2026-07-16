@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { parseTrainingRecord } from '../src/domain/training/training-parser.mjs';
 import { parseWeightKg } from '../src/domain/training/training-domain.mjs';
+import { normalizeActivities } from '../src/adapters/telegram/sync-analysis.adapter.mjs';
 import {
   importTelegramCommandRegistry,
   importTelegramSyncLib,
@@ -11,6 +12,150 @@ import {
   telegramPhoto,
   telegramUpdate,
 } from './helpers/telegram-sync-fixtures.mjs';
+
+test('normalizeActivities preserves structured workout metrics and fills duplicate gaps', async () => {
+  const activities = normalizeActivities([
+    {
+      time: '07:30',
+      type: '户外跑步',
+      detail: '晨跑',
+      durationSeconds: 1670,
+      calories: null,
+      heartRate: 129,
+      distanceKm: 5.12,
+      avgSpeedKmh: null,
+    },
+    {
+      time: '07:30',
+      type: '户外跑步',
+      detail: '晨跑',
+      durationSeconds: null,
+      calories: 368,
+      heartRate: null,
+      distanceKm: null,
+      avgSpeedKmh: 11.04,
+    },
+  ]);
+
+  assert.deepEqual(activities, [
+    {
+      time: '07:30',
+      type: '户外跑步',
+      detail: '晨跑',
+      durationSeconds: 1670,
+      calories: 368,
+      heartRate: 129,
+      distanceKm: 5.12,
+      avgSpeedKmh: 11.04,
+    },
+  ]);
+});
+
+test('normalizeActivities rejects conflicting structured metrics for the same activity identity', () => {
+  assert.throws(() => normalizeActivities([
+    { time: '07:30', type: '户外跑步', detail: '晨跑', calories: 368 },
+    { time: '07:30', type: '户外跑步', detail: '晨跑', calories: 420 },
+  ]), /activity metric conflict.*calories/i);
+});
+
+test('analyzeTelegramBatch maps duplicate activity metric conflicts to a manual business conflict', async () => {
+  const lib = await importTelegramSyncLib();
+  const [batch] = lib.groupTelegramUpdates([
+    telegramUpdate(105, { messageId: 5, telegram: { media_group_id: 'activity-conflict', photo: [telegramPhoto({ fileId: 'a', fileUniqueId: 'a' })] } }),
+    telegramUpdate(106, { messageId: 6, telegram: { media_group_id: 'activity-conflict', photo: [telegramPhoto({ fileId: 'b', fileUniqueId: 'b' })] } }),
+  ]);
+  const makeRecognition = (messageId, calories) => ({
+    messageId, imageType: 'workout', detectedApp: '华为健康', detectedDate: '2026-07-16',
+    dateEvidence: 'image header', confidence: 0.95, warnings: [],
+    records: {
+      measurement: null,
+      activities: [{ time: '07:30', type: '跑步', detail: '晨跑', durationSeconds: 1800, calories, heartRate: null, distanceKm: null, avgSpeedKmh: null }],
+      meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null,
+    },
+    completeness: { status: 'complete', version: 'v1', missingFields: [], conditionalFields: [], reviewFields: [] },
+    reconciliation: { status: 'primary', conflictFields: [] },
+  });
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [makeRecognition(5, 300), makeRecognition(6, 420)]);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.equal(analyzed.failureCategory, 'business_incomplete');
+  assert.equal(analyzed.failureDisposition, 'manual_intervention');
+  assert.deepEqual(analyzed.conflictFields, ['records.activities[].calories']);
+});
+
+test('analyzeTelegramBatch keeps unknown recognition unmapped instead of returning ready', async () => {
+  const lib = await importTelegramSyncLib();
+  const [batch] = lib.groupTelegramUpdates([
+    telegramUpdate(103, {
+      messageId: 3,
+      telegram: { photo: [telegramPhoto({ fileId: 'unknown-file', fileUniqueId: 'unknown-unique' })] },
+    }),
+  ]);
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [{
+    messageId: 3,
+    imageType: 'unknown',
+    detectedApp: null,
+    detectedDate: '2026-07-16',
+    dateEvidence: 'image header',
+    confidence: 0.95,
+    warnings: [],
+    records: { measurement: null, activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null },
+    completeness: { status: 'complete', version: 'v1', missingFields: [], conditionalFields: [], reviewFields: [], evidenceCodes: ['unknown_type'] },
+    reconciliation: { status: 'primary', filledFields: [], agreedFields: [], conflictFields: [] },
+  }]);
+
+  assert.equal(analyzed.status, 'skipped');
+  assert.equal(analyzed.failureCategory, 'user_input');
+  assert.match(analyzed.reason, /unmapped|unknown/i);
+});
+
+test('analyzeTelegramBatch blocks final incomplete, conflict, and fallback-unavailable recognitions', async () => {
+  const lib = await importTelegramSyncLib();
+  const [batch] = lib.groupTelegramUpdates([
+    telegramUpdate(104, {
+      messageId: 4,
+      telegram: { photo: [telegramPhoto({ fileId: 'gate-file', fileUniqueId: 'gate-unique' })] },
+    }),
+  ]);
+  const base = {
+    messageId: 4,
+    imageType: 'measurement',
+    detectedApp: '华为健康',
+    detectedDate: '2026-07-16',
+    dateEvidence: 'image header',
+    confidence: 0.95,
+    warnings: [],
+    records: { measurement: { weightKg: null }, activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null },
+  };
+
+  for (const reconciliationStatus of ['incomplete', 'conflict', 'fallback_unavailable']) {
+    const analyzed = lib.analyzeTelegramBatch(batch, [{
+      ...base,
+      completeness: {
+        status: reconciliationStatus === 'conflict' ? 'needs_review' : 'incomplete',
+        version: 'v1',
+        missingFields: ['records.measurement.weightKg'],
+        conditionalFields: [],
+        reviewFields: reconciliationStatus === 'conflict' ? ['records.measurement.weightKg'] : [],
+        evidenceCodes: [],
+      },
+      reconciliation: {
+        status: reconciliationStatus,
+        filledFields: [],
+        agreedFields: [],
+        conflictFields: reconciliationStatus === 'conflict' ? ['records.measurement.weightKg'] : [],
+      },
+    }]);
+
+    assert.equal(analyzed.status, 'skipped');
+    assert.equal(analyzed.failureCategory, 'business_incomplete');
+    assert.equal(analyzed.failureDisposition, 'manual_intervention');
+    assert.equal(analyzed.reconciliationStatus, reconciliationStatus);
+    assert.doesNotMatch(analyzed.reason, /72\.4|OCR|prompt/i);
+  }
+});
 
 test('groups album document images and applies filename date when screenshots are undated', async () => {
   const lib = await importTelegramSyncLib();

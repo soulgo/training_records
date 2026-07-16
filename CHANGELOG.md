@@ -13,8 +13,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增图片识别完整性门禁与主备 AI 确定性比对。`src/core/ai/recognition-completeness.mjs` 实现两级完整性合同（硬完整性 + OCR/App Profile 条件字段证据），输出 `complete/incomplete/needs_review`、安全字段路径与版本 `v1`；`src/core/ai/recognition-reconciliation.mjs` 实现字段级补全、活动/餐次按业务键合并、集中式数值容差与关键字段冲突阻断。主 AI 业务完整时直接采用、不调用备 AI；Schema 合法但硬/条件字段缺失或 SemanticGate `needs_review` 时才调用备 AI，合并后再次通过 Schema、SemanticGate 与完整性门禁才允许写入 `core.*`；主备仍不完整、关键字段冲突或备 AI 未配置时进入可审计的 `skipped`/`manual_intervention`，不再把技术成功伪装为“解析成功/已入库”。Telegram、飞书与 pending replay 共用同一套合同。
+- 识别评估新增完整性契约 fixture 与指标。`test/fixtures/recognition-eval/contracts/` 覆盖硬不完整、条件可见缺失、备 AI 补全、关键冲突与 meal 确定性求和等场景；`npm run eval:recognition` 用真实完整性/合并函数校验并输出 `stored/blocked-incomplete/blocked-conflict/fallback-completed/silent-store` 指标，出现 silent-store 或契约不符即非零退出。
+
+### Changed
+
+- 缓存命中后重新执行 Schema、SemanticGate 与完整性门禁，并把 `RECOGNITION_COMPLETENESS_VERSION` 纳入 cache key，旧的业务不完整缓存不再直接返回成功；`ingest.recognition_run.status` 按最终业务状态写 `succeeded/incomplete/conflict/unmapped`，并在 JSONB 审计中保存 completeness/reconciliation 安全元数据（不含健康数值）。
+- 修复活动结构化字段在 `normalizeActivities()` 归一化阶段被丢弃的问题：`durationSeconds/calories/heartRate/distanceKm/avgSpeedKmh` 从识别、主备合并、batch 归一化到 PostgreSQL writer 全链路保留；同键多结果按非空补全并按容差检测冲突。
+- Bot 回执与失败理由改用安全中文标签（如“体重/体脂率/活动热量/睡眠时长/睡眠评分”），区分“备 AI 补全成功 / 仍不完整 / 关键字段冲突 / 备用识别未配置”，不输出健康数值、OCR 原文或 Prompt。
+- `.github/workflows/pending-replay.yml` 注入与正常同步一致的识别主备、timeout 与缓存配置，确保 pending replay 与实时同步使用相同的完整性门禁和主备能力。
+
 ### Fixed
 
+- 修复 `readRecognitionFromDatabaseCache` 在数据库行缺少 `cache_key` 时向识别结果注入 `cacheKey: null`、污染缓存载荷的问题；仅在存在实际 cache_key 时附加。
 - 修复 `sync:db` 一致性检查在睡眠批次 `totalSleepMinutes` 为 JSON null、但 `records` 数组非空时报 `cannot cast jsonb null to type integer`、导致 ingest 阶段被 defer 的问题；`tools/check-sleep-data-consistency.mjs` 的 SELECT 改用 `->>` 文本抽取再 cast，与 WHERE 过滤条件保持一致，JSON null 归一为 SQL NULL 后安全转换。
 - 修复 `test/sql-schema-layout.test.mjs` 的建表正则只匹配 LF 行尾，导致 Windows 下 CRLF 检出的 SQL 文件解析出 0 张表、dev/main 结构差异被“空对象对空对象”掩盖成假通过的问题；正则改为 `\r?\n` 兼容 CRLF/LF，本地与 CI 现在都能真实比对表与列布局。
 

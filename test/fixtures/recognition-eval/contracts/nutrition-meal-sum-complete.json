@@ -1,0 +1,20 @@
+{
+  "sampleId": "nutrition-meal-sum-complete",
+  "imageType": "nutrition",
+  "scenario": "deterministic_meal_sum",
+  "recognition": {
+    "imageType": "nutrition",
+    "records": {
+      "meals": [
+        { "name": "早餐", "calories": 320 },
+        { "name": "午餐", "calories": 540 }
+      ],
+      "totalCalories": null,
+      "details": []
+    }
+  },
+  "expected": {
+    "stored": true,
+    "completeness": { "status": "complete" }
+  }
+}

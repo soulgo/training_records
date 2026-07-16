@@ -4,11 +4,22 @@ import {
   RECOGNITION_SCHEMA_VERSION,
 } from '../../core/ai/telegram-recognition-schema.mjs';
 import { buildNormalizedRecognition } from '../../core/ai/normalized-recognition.mjs';
+import {
+  evaluateRecognitionCompleteness,
+  RECOGNITION_COMPLETENESS_VERSION,
+} from '../../core/ai/recognition-completeness.mjs';
+import { loadStructuredSource } from '../../core/ai/prompt-generator.mjs';
 import { resolveTrainingCoreConfig } from '../../adapters/postgres/training-config.pg.mjs';
 import { createHash } from 'node:crypto';
-import { requestRecognitionWithProviderFallback } from './image-recognition-provider.mjs';
+import {
+  requestRecognitionWithProvider,
+  requestRecognitionWithProviderFallback,
+} from './image-recognition-provider.mjs';
+import { parseRecognitionContent } from './image-recognition-parse.mjs';
+import { reconcileRecognitionResults } from '../../core/ai/recognition-reconciliation.mjs';
 
 const { Client } = pg;
+let appProfilesPromise = null;
 
 export function isRecognitionCacheEnabled(env = process.env) {
   return ['1', 'true', 'yes', 'on'].includes(
@@ -35,6 +46,8 @@ export function buildRecognitionCacheKey({
     promptVersion,
     'schema',
     schemaVersion,
+    'completeness',
+    RECOGNITION_COMPLETENESS_VERSION,
     'model',
     model,
     'capability',
@@ -67,6 +80,7 @@ export async function recognizeTelegramImageMessage({
   extractOcr,
   onCacheReadStage,
   onAiCallLog,
+  appProfiles,
 }) {
   const schemaName = promptMetadata?.schemaName ?? RECOGNITION_SCHEMA_NAME;
   const schemaVersion = promptMetadata?.schemaVersion ?? RECOGNITION_SCHEMA_VERSION;
@@ -82,15 +96,40 @@ export async function recognizeTelegramImageMessage({
     schemaVersion,
     model,
   });
+  const fallbackModel = aiProvider?.fallbackProvider?.env?.model ?? null;
+  const reconciledCacheKey = fallbackModel
+    ? buildRecognitionCacheKey({
+        sourceChannel,
+        fileUniqueId,
+        promptVersion,
+        schemaVersion,
+        model: `${model}+${fallbackModel}`,
+        capabilityMode: 'reconciled',
+      })
+    : null;
+  const cacheKeys = [...new Set([cacheKey, reconciledCacheKey].filter(Boolean))];
+  const cacheEnabled = Boolean(cacheKey && isRecognitionCacheEnabled(env));
+  const idempotencyKey = buildRecognitionIdempotencyKey({
+    message,
+    imageUrl,
+    promptVersion,
+    schemaName,
+    schemaVersion,
+    model,
+  });
+  const resolvedAppProfiles = await resolveRecognitionAppProfiles(appProfiles);
+  let cachedPrimary = null;
+  let cachedEnvelope = null;
 
-  if (cacheKey && isRecognitionCacheEnabled(env)) {
+  if (cacheEnabled) {
     const cacheStartedAt = Date.now();
-    let cached = null;
+    let cachedCandidates = [];
     try {
-      cached = await readCachedRecognition({
+      cachedCandidates = await readCachedRecognition({
         env,
         readRecognitionCache,
         cacheKey,
+        cacheKeys,
         fileUniqueId,
         promptVersion,
         schemaVersion,
@@ -114,27 +153,48 @@ export async function recognizeTelegramImageMessage({
         failureReason: message,
       });
     }
-    if (cached) {
-      const cacheStatus = 'hit';
-      const provider = aiProvider?.name ?? 'openai-compatible';
-      return {
-        ...cached,
-        messageId: message.messageId,
-        cacheKey,
-        cacheStatus,
-        normalizedRecognition: buildNormalizedRecognition({
-          payload: cached,
-          runtime: {
-            schemaName,
-            schemaVersion,
-            provider,
-            model,
-            promptVersion,
-            cacheKey,
-            cacheStatus,
-          },
-        }),
-      };
+    for (const cached of cachedCandidates) {
+      try {
+        const candidate = revalidateRecognitionPayload(cached, { schemaName, schemaVersion });
+        const cachedOcr = cached.normalizedRecognition?.evidence?.ocr ?? null;
+        const completeness = evaluateRecognitionCompleteness({
+          recognition: candidate,
+          ocrDocument: cachedOcr,
+          appProfiles: resolvedAppProfiles,
+        });
+        if (completeness.status === 'complete') {
+          return buildRecognitionOutput({
+            message,
+            payload: candidate,
+            ocrDocument: cachedOcr,
+            imageMetadata: cached.normalizedRecognition?.evidence?.image ?? null,
+            runtime: {
+              schemaName,
+              schemaVersion,
+              provider: cached.provider ?? cached.normalizedRecognition?.runtime?.provider ?? aiProvider?.name ?? 'openai-compatible',
+              model: cached.model ?? cached.normalizedRecognition?.runtime?.model ?? model,
+              promptVersion,
+              cacheKey: cached.cacheKey ?? cached.normalizedRecognition?.runtime?.cacheKey ?? cacheKey,
+              cacheStatus: 'hit',
+            },
+            completeness,
+            reconciliation: cached.reconciliation ?? cached.normalizedRecognition?.runtime?.reconciliation ?? primaryReconciliation(),
+            aiAttemptKind: 'cache',
+            aiIdempotencyKey: cached.aiIdempotencyKey ?? null,
+            aiUsage: cached.aiUsage ?? null,
+            fallbackModel: cached.fallbackModel ?? cached.normalizedRecognition?.runtime?.fallbackModel ?? null,
+          });
+        }
+        if (!cachedPrimary) {
+          cachedEnvelope = cached;
+          cachedPrimary = candidate;
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        process.stderr.write(
+          `[telegram-sync] recognition cache validation failed for ${fileUniqueId}: ${errorMessage}; continuing with other cache candidates\n`,
+        );
+      }
     }
   }
 
@@ -148,29 +208,58 @@ export async function recognizeTelegramImageMessage({
     ? await extractOcr({ imageUrl: processedImage.imageUrl, message })
     : null;
 
-  const recognitionResult = await requestRecognitionWithProviderFallback({
-    aiProvider,
-    imageUrl: processedImage.imageUrl,
+  const primaryResult = cachedPrimary
+    ? null
+    : await requestRecognitionWithProviderFallback({
+        aiProvider,
+        imageUrl: processedImage.imageUrl,
+        ocrDocument,
+        message,
+        systemPrompt,
+        promptVersion,
+        schemaName,
+        schemaVersion,
+        env,
+        onAiCallLog,
+        idempotencyKey,
+      });
+  const parsed = cachedPrimary ?? primaryResult.value;
+  const primaryCompleteness = evaluateRecognitionCompleteness({
+    recognition: parsed,
     ocrDocument,
-    message,
-    systemPrompt,
-    promptVersion,
-    schemaName,
-    schemaVersion,
-    env,
-    onAiCallLog,
-    idempotencyKey: buildRecognitionIdempotencyKey({
+    appProfiles: resolvedAppProfiles,
+  });
+  const primaryUsedTechnicalFallback = primaryResult?.attemptKind === 'fallback';
+
+  if (primaryCompleteness.status !== 'complete' && !primaryUsedTechnicalFallback) {
+    return completeRecognitionWithBusinessFallback({
+      aiProvider,
+      primary: parsed,
+      primaryCompleteness,
+      cachedEnvelope,
       message,
-      imageUrl,
+      processedImage,
+      ocrDocument,
+      systemPrompt,
       promptVersion,
       schemaName,
       schemaVersion,
-      model,
-    }),
-  });
-  const parsed = recognitionResult.value;
-  const usedModel = recognitionResult.aiProvider?.env?.model ?? model;
-  const usedCapabilityMode = resolveRecognitionCapabilityMode(recognitionResult.aiProvider?.capabilities);
+      env,
+      onAiCallLog,
+      idempotencyKey,
+      appProfiles: resolvedAppProfiles,
+      sourceChannel,
+      fileUniqueId,
+      primaryModel: model,
+      primaryProvider: aiProvider?.name ?? 'openai-compatible',
+      cacheKey,
+      cacheStatus: cachedPrimary ? 'hit_incomplete' : (cacheEnabled ? 'miss' : 'disabled'),
+      primaryResult,
+    });
+  }
+
+  const usedModel = primaryResult?.aiProvider?.env?.model ?? model;
+  const usedCapabilityMode = resolveRecognitionCapabilityMode(primaryResult?.aiProvider?.capabilities);
   const effectiveCacheKey = usedModel === model && usedCapabilityMode === capabilityMode
     ? cacheKey
     : buildRecognitionCacheKey({
@@ -181,12 +270,16 @@ export async function recognizeTelegramImageMessage({
         model: usedModel,
         capabilityMode: usedCapabilityMode,
       });
-  const cacheStatus = cacheKey && isRecognitionCacheEnabled(env) ? 'miss' : 'disabled';
-  const provider = recognitionResult.aiProvider?.name ?? 'openai-compatible';
-  const normalizedRecognition = buildNormalizedRecognition({
+  const cacheStatus = cacheEnabled ? 'miss' : 'disabled';
+  const provider = primaryResult?.aiProvider?.name ?? 'openai-compatible';
+  const finalSingleReconciliation = primaryCompleteness.status === 'complete'
+    ? primaryReconciliation(primaryUsedTechnicalFallback ? 'fallback' : 'primary')
+    : incompleteReconciliation(primaryUsedTechnicalFallback ? 'fallback_incomplete' : 'primary_incomplete');
+  return buildRecognitionOutput({
+    message,
     payload: parsed,
-    ocr: ocrDocument,
-    image: processedImage.metadata ?? null,
+    ocrDocument,
+    imageMetadata: processedImage.metadata ?? null,
     runtime: {
       schemaName,
       schemaVersion,
@@ -196,29 +289,276 @@ export async function recognizeTelegramImageMessage({
       cacheKey: effectiveCacheKey,
       cacheStatus,
     },
+    completeness: primaryCompleteness,
+    reconciliation: finalSingleReconciliation,
+    aiAttemptKind: primaryResult?.attemptKind ?? 'normal',
+    aiIdempotencyKey: primaryResult?.idempotencyKey,
+    aiUsage: primaryResult?.aiUsage,
   });
+}
 
-  return {
-    messageId: message.messageId,
-    ...parsed,
-    aiAttemptKind: recognitionResult.attemptKind ?? 'normal',
-    aiIdempotencyKey: recognitionResult.idempotencyKey,
-    aiUsage: recognitionResult.aiUsage,
-    provider,
+async function completeRecognitionWithBusinessFallback({
+  aiProvider,
+  primary,
+  primaryCompleteness,
+  cachedEnvelope,
+  message,
+  processedImage,
+  ocrDocument,
+  systemPrompt,
+  promptVersion,
+  schemaName,
+  schemaVersion,
+  env,
+  onAiCallLog,
+  idempotencyKey,
+  appProfiles,
+  sourceChannel,
+  fileUniqueId,
+  primaryModel,
+  primaryProvider,
+  cacheKey,
+  cacheStatus,
+  primaryResult,
+}) {
+  const fallbackProvider = aiProvider?.fallbackProvider;
+  if (!fallbackProvider) {
+    return buildRecognitionOutput({
+      message,
+      payload: primary,
+      ocrDocument,
+      imageMetadata: processedImage.metadata ?? null,
+      runtime: {
+        schemaName,
+        schemaVersion,
+        provider: cachedEnvelope?.provider ?? primaryResult?.aiProvider?.name ?? primaryProvider,
+        model: cachedEnvelope?.model ?? primaryResult?.aiProvider?.env?.model ?? primaryModel,
+        promptVersion,
+        cacheKey,
+        cacheStatus,
+      },
+      completeness: primaryCompleteness,
+      reconciliation: fallbackUnavailableReconciliation(),
+      aiAttemptKind: cachedEnvelope ? 'cache_incomplete' : (primaryResult?.attemptKind ?? 'normal'),
+      aiIdempotencyKey: cachedEnvelope?.aiIdempotencyKey ?? primaryResult?.idempotencyKey ?? null,
+      aiUsage: cachedEnvelope?.aiUsage ?? primaryResult?.aiUsage ?? null,
+    });
+  }
+
+  const fallbackResult = await requestRecognitionWithProvider({
+    aiProvider: fallbackProvider,
+    imageUrl: processedImage.imageUrl,
+    ocrDocument,
+    message,
+    systemPrompt,
     promptVersion,
     schemaName,
     schemaVersion,
-    model: usedModel,
-    cacheKey: effectiveCacheKey,
-    cacheStatus,
+    env,
+    onAiCallLog,
+    idempotencyKey,
+  });
+  const reconciled = reconcileRecognitionResults({ primary, fallback: fallbackResult.value });
+  if (!reconciled.value) {
+    const finalCompleteness = reconciled.status === 'conflict'
+      ? { ...primaryCompleteness, status: 'needs_review', requiresFallback: false }
+      : primaryCompleteness;
+    return buildRecognitionOutput({
+      message,
+      payload: primary,
+      ocrDocument,
+      imageMetadata: processedImage.metadata ?? null,
+      runtime: {
+        schemaName,
+        schemaVersion,
+        provider: primaryProvider,
+        model: primaryModel,
+        promptVersion,
+        cacheKey,
+        cacheStatus,
+      },
+      completeness: finalCompleteness,
+      reconciliation: reconciled,
+      aiAttemptKind: 'fallback_business_completion',
+      aiIdempotencyKey: idempotencyKey,
+      aiUsage: combineAiUsage(primaryResult?.aiUsage, fallbackResult.aiUsage),
+      fallbackModel: fallbackProvider?.env?.model ?? null,
+    });
+  }
+
+  const finalPayload = revalidateRecognitionPayload(reconciled.value, { schemaName, schemaVersion });
+  const finalCompleteness = evaluateRecognitionCompleteness({
+    recognition: finalPayload,
+    ocrDocument,
+    appProfiles,
+  });
+  const finalReconciliation = finalCompleteness.status === 'complete'
+    ? reconciled
+    : { ...reconciled, status: 'incomplete', value: null };
+  const fallbackModel = fallbackProvider?.env?.model ?? null;
+  const effectiveCacheKey = buildRecognitionCacheKey({
+    sourceChannel,
+    fileUniqueId,
+    promptVersion,
+    schemaVersion,
+    model: `${primaryModel}+${fallbackModel}`,
+    capabilityMode: 'reconciled',
+  });
+
+  return buildRecognitionOutput({
+    message,
+    payload: finalPayload,
+    ocrDocument,
+    imageMetadata: processedImage.metadata ?? null,
+    runtime: {
+      schemaName,
+      schemaVersion,
+      provider: primaryProvider,
+      model: `${primaryModel}+${fallbackModel}`,
+      promptVersion,
+      cacheKey: effectiveCacheKey,
+      cacheStatus,
+    },
+    completeness: finalCompleteness,
+    reconciliation: finalReconciliation,
+    aiAttemptKind: 'fallback_business_completion',
+    aiIdempotencyKey: idempotencyKey,
+    aiUsage: combineAiUsage(primaryResult?.aiUsage, fallbackResult.aiUsage),
+    fallbackModel,
+  });
+}
+
+function buildRecognitionOutput({
+  message,
+  payload,
+  ocrDocument,
+  imageMetadata,
+  runtime,
+  completeness,
+  reconciliation,
+  aiAttemptKind,
+  aiIdempotencyKey,
+  aiUsage,
+  fallbackModel = null,
+}) {
+  const safeReconciliation = sanitizeReconciliationMetadata(reconciliation);
+  const normalizedRecognition = buildNormalizedRecognition({
+    payload,
+    ocr: ocrDocument,
+    image: imageMetadata,
+    runtime: {
+      ...runtime,
+      completeness,
+      reconciliation: safeReconciliation,
+      fallbackModel,
+    },
+  });
+  return {
+    messageId: message.messageId,
+    ...payload,
+    completeness,
+    reconciliation: safeReconciliation,
+    aiAttemptKind,
+    aiIdempotencyKey,
+    aiUsage,
+    provider: runtime.provider,
+    promptVersion: runtime.promptVersion,
+    schemaName: runtime.schemaName,
+    schemaVersion: runtime.schemaVersion,
+    model: runtime.model,
+    fallbackModel,
+    cacheKey: runtime.cacheKey,
+    cacheStatus: runtime.cacheStatus,
     normalizedRecognition,
   };
+}
+
+function revalidateRecognitionPayload(payload, { schemaName, schemaVersion }) {
+  const candidate = stripRecognitionRuntimeMetadata(payload);
+  return parseRecognitionContent(JSON.stringify(candidate), { schemaName, schemaVersion });
+}
+
+async function resolveRecognitionAppProfiles(appProfiles) {
+  if (appProfiles) return appProfiles;
+  appProfilesPromise ??= loadStructuredSource('app-profiles').catch(() => null);
+  return appProfilesPromise;
+}
+
+function primaryReconciliation(finalSource = 'primary') {
+  return {
+    status: 'primary',
+    filledFields: [],
+    agreedFields: [],
+    conflictFields: [],
+    fieldSources: {},
+    finalSource,
+  };
+}
+
+function incompleteReconciliation(finalSource) {
+  return {
+    status: 'incomplete',
+    filledFields: [],
+    agreedFields: [],
+    conflictFields: [],
+    fieldSources: {},
+    finalSource,
+  };
+}
+
+function fallbackUnavailableReconciliation() {
+  return {
+    status: 'fallback_unavailable',
+    filledFields: [],
+    agreedFields: [],
+    conflictFields: [],
+    fieldSources: {},
+    finalSource: 'primary_incomplete',
+  };
+}
+
+function combineAiUsage(primary, fallback) {
+  const result = {};
+  for (const field of ['promptTokens', 'completionTokens', 'totalTokens', 'costUsd']) {
+    const values = [primary?.[field], fallback?.[field]].filter((value) => Number.isFinite(value));
+    result[field] = values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null;
+  }
+  return result;
+}
+
+function sanitizeReconciliationMetadata(reconciliation) {
+  const value = reconciliation && typeof reconciliation === 'object' ? reconciliation : {};
+  const safe = {
+    status: String(value.status ?? 'incomplete'),
+    filledFields: sanitizeFieldPaths(value.filledFields),
+    agreedFields: sanitizeFieldPaths(value.agreedFields),
+    conflictFields: sanitizeFieldPaths(value.conflictFields),
+    fieldSources: sanitizeFieldSources(value.fieldSources),
+  };
+  if (value.finalSource) {
+    safe.finalSource = String(value.finalSource);
+  }
+  return safe;
+}
+
+function sanitizeFieldPaths(value) {
+  return Array.isArray(value)
+    ? [...new Set(value.map((field) => String(field ?? '').trim()).filter(Boolean))]
+    : [];
+}
+
+function sanitizeFieldSources(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value)
+    .map(([field, source]) => [String(field).trim(), String(source ?? '').trim()])
+    .filter(([field, source]) => field && ['primary', 'fallback', 'reconciled'].includes(source)));
 }
 
 async function readCachedRecognition({
   env,
   readRecognitionCache,
   cacheKey,
+  cacheKeys,
   fileUniqueId,
   promptVersion,
   schemaVersion,
@@ -226,26 +566,32 @@ async function readCachedRecognition({
 }) {
   const cached =
     readRecognitionCache
-      ? await readRecognitionCache({ cacheKey, fileUniqueId, promptVersion, schemaVersion, model })
+      ? await readRecognitionCache({ cacheKey, cacheKeys, fileUniqueId, promptVersion, schemaVersion, model })
       : await readRecognitionFromDatabaseCache({
           env,
           cacheKey,
+          cacheKeys,
           fileUniqueId,
           promptVersion,
           schemaVersion,
           model,
+          returnCandidates: true,
         });
 
-  if (!cached) {
-    return null;
-  }
+  return normalizeCachedRecognitionCandidates(cached);
+}
 
-  return stripRecognitionRuntimeMetadata(cached);
+function normalizeCachedRecognitionCandidates(cached) {
+  const values = Array.isArray(cached) ? cached : cached ? [cached] : [];
+  return values
+    .map((candidate) => candidate?.recognition ?? candidate?.recognition_json ?? candidate)
+    .filter((candidate) => candidate && typeof candidate === 'object' && !Array.isArray(candidate));
 }
 
 export async function readRecognitionFromDatabaseCache(options = {}) {
   const config = resolveTrainingCoreConfig(options.env);
-  if (!config.enabled || !config.url || !options.cacheKey) {
+  const cacheKeys = [...new Set((options.cacheKeys ?? [options.cacheKey]).filter(Boolean))];
+  if (!config.enabled || !config.url || cacheKeys.length === 0) {
     return null;
   }
 
@@ -263,15 +609,21 @@ export async function readRecognitionFromDatabaseCache(options = {}) {
     await client.connect();
     const result = await client.query(
       `
-        select r.raw_result_json as recognition_json
+        select r.cache_key, r.raw_result_json as recognition_json
         from ingest.recognition_run r
-        where r.cache_key = $1
-        order by r.updated_at desc
-        limit 1
+        where r.cache_key = any($1::text[])
+        order by array_position($1::text[], r.cache_key), r.updated_at desc
       `,
-      [options.cacheKey],
+      [cacheKeys],
     );
-    return result.rows[0]?.recognition_json ?? null;
+    const candidates = result.rows
+      .map((row) => {
+        if (!row?.recognition_json) return null;
+        const cacheKey = row.recognition_json.cacheKey ?? row.cache_key ?? null;
+        return cacheKey ? { ...row.recognition_json, cacheKey } : row.recognition_json;
+      })
+      .filter(Boolean);
+    return options.returnCandidates ? candidates : (candidates[0] ?? null);
   } finally {
     await client.end();
   }
@@ -330,6 +682,14 @@ function stripRecognitionRuntimeMetadata(recognition) {
     model,
     cacheKey,
     cacheStatus,
+    completeness,
+    reconciliation,
+    aiAttemptKind,
+    aiIdempotencyKey,
+    aiUsage,
+    provider,
+    fallbackModel,
+    normalizedRecognition,
     ...payload
   } = recognition;
   return payload;

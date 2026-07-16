@@ -310,7 +310,10 @@ test('PostgresSourceBatchRepository stores sanitized fields separately from the 
 
   const [row] = JSON.parse(calls[0][1][0]);
   assert.deepEqual(row.fields_json, { measurement: { weightKg: null } });
-  assert.deepEqual(row.raw_result_json, rawResult);
+  // raw_result_json 现在保存完整识别信封（供缓存复用与审计），
+  // 但净化前的原始 AI 结果仍通过 semanticGate.rawResult 分离保留。
+  assert.deepEqual(row.raw_result_json.records, { measurement: { weightKg: null } });
+  assert.deepEqual(row.raw_result_json.semanticGate.rawResult, rawResult);
 });
 
 test('PostgresThoughtRepository persists thought mirror batches through core.thought SQL', async () => {

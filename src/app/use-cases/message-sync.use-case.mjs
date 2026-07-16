@@ -342,7 +342,34 @@ export async function runMessageSync(options = {}) {
     );
 
     if (persistedBatch.status !== 'ready') {
-      batches.push(persistedBatch);
+      if (persistedBatch.kind === 'image' && persistedBatch.failureCategory === 'business_incomplete') {
+        try {
+          const persistResult = await measureSyncStage(timings, 'persist', () =>
+            persistBatch({
+              batch: persistedBatch,
+              processedAt: now,
+              sourceChannel: persistedBatch.sourceChannel ?? sourceChannel,
+              env: options.env ?? process.env,
+            }),
+          );
+          batches.push({
+            ...persistedBatch,
+            persistenceStatus: persistResult.status,
+            persistenceResult: buildPersistenceSummary(persistResult),
+          });
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          batches.push({
+            ...persistedBatch,
+            persistenceStatus: 'pending_replay',
+            persistenceError: errorMessage,
+            failureCategory: 'database',
+            failureReason: errorMessage,
+          });
+        }
+      } else {
+        batches.push(persistedBatch);
+      }
       continue;
     }
 

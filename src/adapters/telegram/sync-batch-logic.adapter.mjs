@@ -319,6 +319,69 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       continue;
     }
 
+    if (recognition.imageType === 'unknown') {
+      const reason = `unmapped recognition for message ${message.messageId}: unknown image type`;
+      return {
+        ...buildSkippedBatchResult(batch, {
+          reason,
+          warnings,
+          issues: [...issues, reason],
+          dateSources: [...dateSources, {
+            messageId: message.messageId,
+            detectedDate: recognition.detectedDate ?? null,
+            dateEvidence: recognition.dateEvidence ?? null,
+            source: 'unmapped',
+          }],
+          detectedApp: normalizeDetectedApp(recognition.detectedApp),
+          sourceImageCount,
+          recognizedImageCount: recognizedImageCount + 1,
+          failedImageCount: Math.max(1, failedMessageIds.length + 1),
+          failureCategory: 'user_input',
+        }),
+        recognitionStatus: 'unmapped',
+      };
+    }
+
+    const reconciliationStatus = recognition.reconciliation?.status ?? null;
+    const completenessStatus = recognition.completeness?.status ?? null;
+    if (
+      completenessStatus === 'incomplete' ||
+      completenessStatus === 'needs_review' ||
+      reconciliationStatus === 'incomplete' ||
+      reconciliationStatus === 'conflict' ||
+      reconciliationStatus === 'fallback_unavailable'
+    ) {
+      const missingFields = [
+        ...(recognition.completeness?.missingFields ?? []),
+        ...(recognition.completeness?.conditionalFields ?? []),
+        ...(recognition.completeness?.reviewFields ?? []),
+      ];
+      const conflictFields = recognition.reconciliation?.conflictFields ?? [];
+      const reason = buildRecognitionBusinessFailureReason({
+        reconciliationStatus,
+        missingFields,
+        conflictFields,
+      });
+      return {
+        ...buildSkippedBatchResult(batch, {
+          reason,
+          warnings,
+          issues: [...issues, ...missingFields, ...conflictFields],
+          dateSources,
+          detectedApp: normalizeDetectedApp(recognition.detectedApp),
+          sourceImageCount,
+          recognizedImageCount,
+          failedImageCount: Math.max(1, failedMessageIds.length),
+          failureCategory: 'business_incomplete',
+        }),
+        failureDisposition: 'manual_intervention',
+        completenessStatus,
+        missingFields: [...new Set(missingFields)],
+        reconciliationStatus,
+        conflictFields: [...new Set(conflictFields)],
+      };
+    }
+
     recognizedImageCount += 1;
     detectedApp ??= normalizeDetectedApp(recognition.detectedApp);
     const normalizedDetectedDate = normalizeRecognitionDate(recognition, message);
@@ -512,7 +575,33 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     mergeMeasurementCandidates(measurementCandidates),
     archivedDate,
   );
-  const normalizedActivities = normalizeActivities(activities);
+  let normalizedActivities;
+  try {
+    normalizedActivities = normalizeActivities(activities);
+  } catch (error) {
+    if (error?.code !== 'ACTIVITY_METRIC_CONFLICT') throw error;
+    const conflictFields = [error.fieldPath].filter(Boolean);
+    const conflictLabels = describeRecognitionFieldLabels(conflictFields);
+    return {
+      ...buildSkippedBatchResult(batch, {
+        reason: conflictLabels.length > 0
+          ? `主备识别的关键字段不一致（${conflictLabels.join('、')}），需要人工核对`
+          : '主备识别的关键字段不一致，需要人工核对',
+        warnings,
+        issues: [...issues, ...conflictFields],
+        dateSources,
+        detectedApp,
+        sourceImageCount,
+        recognizedImageCount,
+        failedImageCount: Math.max(1, failedMessageIds.length),
+        failureCategory: 'business_incomplete',
+      }),
+      failureDisposition: 'manual_intervention',
+      completenessStatus: 'needs_review',
+      reconciliationStatus: 'conflict',
+      conflictFields,
+    };
+  }
   const normalizedNutrition = normalizeNutrition(nutritionMeals, nutritionTotalCalories, nutritionDetails);
   const normalizedSleep = normalizeSleepRecords(sleepRecords, archivedDate);
   const dateConfidence = classifyDateConfidence({
@@ -556,6 +645,76 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       nutrition: normalizedNutrition,
     }),
   };
+}
+
+function buildRecognitionBusinessFailureReason({ reconciliationStatus, missingFields, conflictFields }) {
+  if (reconciliationStatus === 'conflict') {
+    const labels = describeRecognitionFieldLabels(conflictFields);
+    return labels.length > 0
+      ? `主备识别的关键字段不一致（${labels.join('、')}），需要人工核对`
+      : '主备识别的关键字段不一致，需要人工核对';
+  }
+  if (reconciliationStatus === 'fallback_unavailable') {
+    const labels = describeRecognitionFieldLabels(missingFields);
+    return labels.length > 0
+      ? `主识别缺少必要字段（${labels.join('、')}），备用识别未配置`
+      : '主识别缺少必要字段，备用识别未配置';
+  }
+  const labels = describeRecognitionFieldLabels(missingFields);
+  return labels.length > 0
+    ? `识别结果仍缺少必要字段（${labels.join('、')}）`
+    : '识别结果仍缺少必要字段';
+}
+
+const RECOGNITION_FIELD_LABELS = new Map([
+  ['records.measurement', '体测数据'],
+  ['records.measurement.weightKg', '体重'],
+  ['records.measurement.bodyFatPct', '体脂率'],
+  ['records.measurement.fatFreeMassKg', '去脂体重'],
+  ['records.activities', '活动明细'],
+  ['records.workout.calories', '活动热量'],
+  ['records.dailyWorkoutSummary.activityCaloriesKcal', '活动热量'],
+  ['records.totalCalories', '总热量'],
+  ['records.sleep', '睡眠数据'],
+  ['records.sleep.duration', '睡眠时长'],
+  ['records.sleep.totalSleepMinutes', '睡眠时长'],
+  ['records.sleep.sleepScore', '睡眠评分'],
+  ['records.sleep.stageMinutes', '睡眠阶段时长'],
+]);
+
+const ACTIVITY_METRIC_LABELS = new Map([
+  ['calories', '活动热量'],
+  ['durationSeconds', '活动时长'],
+  ['heartRate', '心率'],
+  ['distanceKm', '距离'],
+  ['avgSpeedKmh', '速度'],
+]);
+
+// 把内部字段路径映射为安全的中文标签，仅暴露字段含义，不输出任何健康数值或 OCR 原文。
+function describeRecognitionFieldLabels(paths) {
+  const labels = [];
+  const seen = new Set();
+  for (const path of paths ?? []) {
+    const label = resolveRecognitionFieldLabel(path);
+    if (label && !seen.has(label)) {
+      seen.add(label);
+      labels.push(label);
+    }
+  }
+  return labels;
+}
+
+function resolveRecognitionFieldLabel(path) {
+  const normalized = String(path ?? '').trim();
+  if (!normalized) return null;
+  if (RECOGNITION_FIELD_LABELS.has(normalized)) return RECOGNITION_FIELD_LABELS.get(normalized);
+  const indexed = normalized.replace(/\[\d+\]/g, '[]');
+  if (RECOGNITION_FIELD_LABELS.has(indexed)) return RECOGNITION_FIELD_LABELS.get(indexed);
+  const activityMetric = indexed.match(/^records\.activities\[\]\.(\w+)$/);
+  if (activityMetric && ACTIVITY_METRIC_LABELS.has(activityMetric[1])) {
+    return ACTIVITY_METRIC_LABELS.get(activityMetric[1]);
+  }
+  return null;
 }
 
 export function processTelegramBatch(batch, recognitions, options = {}) {

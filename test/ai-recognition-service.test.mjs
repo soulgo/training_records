@@ -8,6 +8,8 @@ import {
   readRecognitionFromDatabaseCache,
   recognizeTelegramImageMessage,
 } from '../src/app/use-cases/image-recognition.use-case.mjs';
+import { requestRecognitionWithProvider } from '../src/app/use-cases/image-recognition-provider.mjs';
+import { RECOGNITION_COMPLETENESS_VERSION } from '../src/core/ai/recognition-completeness.mjs';
 
 const promptMetadata = {
   version: '2026-05-24',
@@ -15,12 +17,54 @@ const promptMetadata = {
   schemaVersion: 'v2',
 };
 
+test('requestRecognitionWithProvider performs one provider attempt without implicit fallback', async () => {
+  const calls = [];
+  const result = await requestRecognitionWithProvider({
+    aiProvider: {
+      env: { model: 'gpt-primary' },
+      fallbackProvider: {
+        async requestChatCompletion() {
+          calls.push('fallback');
+          throw new Error('must not run');
+        },
+      },
+      async requestChatCompletion() {
+        calls.push('primary');
+        return {
+          ok: true,
+          async json() {
+            return { choices: [{ message: { content: JSON.stringify({
+              ...validRecognitionPayload(),
+              records: {
+                ...validRecognitionPayload().records,
+                dailyWorkoutSummary: { activityCaloriesKcal: 520, workoutDurationMinutes: 64, activeHours: 8 },
+              },
+            }) } }] };
+          },
+        };
+      },
+    },
+    imageUrl: 'data:image/png;base64,AA==',
+    ocrDocument: null,
+    message: { messageId: 1 },
+    systemPrompt: 'extract',
+    promptVersion: promptMetadata.version,
+    schemaName: promptMetadata.schemaName,
+    schemaVersion: promptMetadata.schemaVersion,
+    env: {},
+    idempotencyKey: 'recognition:test',
+  });
+
+  assert.deepEqual(calls, ['primary']);
+  assert.equal(result.value.records.dailyWorkoutSummary.activityCaloriesKcal, 520);
+});
+
 async function loadRecognitionFixture(name) {
   const fixtureUrl = new URL(`./fixtures/telegram-recognition/${name}.json`, import.meta.url);
   return JSON.parse(await readFile(fixtureUrl, 'utf8'));
 }
 
-test('recognition cache key includes file id, prompt version, schema version, and model', () => {
+test('recognition cache key includes file id, prompt, schema, completeness version, and model', () => {
   const key = buildRecognitionCacheKey({
     sourceChannel: 'telegram',
     fileUniqueId: 'file-1',
@@ -29,7 +73,7 @@ test('recognition cache key includes file id, prompt version, schema version, an
     model: 'gpt-test',
   });
 
-  assert.equal(key, 'telegram:file_unique_id:file-1:prompt:2026-05-24:schema:v1:model:gpt-test:capability:strict_schema');
+  assert.equal(key, `telegram:file_unique_id:file-1:prompt:2026-05-24:schema:v1:completeness:${RECOGNITION_COMPLETENESS_VERSION}:model:gpt-test:capability:strict_schema`);
   assert.equal(
     buildRecognitionCacheKey({
       sourceChannel: 'feishu',
@@ -38,7 +82,7 @@ test('recognition cache key includes file id, prompt version, schema version, an
       schemaVersion: 'v1',
       model: 'gpt-test',
     }),
-    'feishu:file_unique_id:file-1:prompt:2026-05-24:schema:v1:model:gpt-test:capability:strict_schema',
+    `feishu:file_unique_id:file-1:prompt:2026-05-24:schema:v1:completeness:${RECOGNITION_COMPLETENESS_VERSION}:model:gpt-test:capability:strict_schema`,
   );
   assert.equal(buildRecognitionCacheKey({ fileUniqueId: '', promptVersion: '1', schemaVersion: 'v1', model: 'm' }), null);
 });
@@ -141,7 +185,28 @@ function validRecognitionPayload() {
       details: [],
       dailyWorkoutSummary: null,
       sleep: null,
+      sleep: null,
+      sleep: null,
     },
+  };
+}
+
+function validMeasurement(weightKg, bodyFatPct = null) {
+  return {
+    measuredAt: null,
+    bodyScore: null,
+    weightKg,
+    bmi: null,
+    bodyFatPct,
+    skeletalMuscleKg: null,
+    visceralFatLevel: null,
+    basalMetabolismKcal: null,
+    bodyWaterPct: null,
+    proteinPct: null,
+    boneMassKg: null,
+    fatFreeMassKg: null,
+    bodyAge: null,
+    bodyType: null,
   };
 }
 
@@ -581,14 +646,17 @@ test('recognizeTelegramImageMessage preserves detectedApp and visible non-Huawei
       image: null,
     },
     runtime: {
-      pipelineVersion: 'v1',
+      pipelineVersion: 'v2',
       schemaName: 'telegram_training_image',
       schemaVersion: 'v2',
       provider: 'openai-compatible',
       model: 'gpt-test',
       promptVersion: '2026-05-24',
-      cacheKey: 'telegram:file_unique_id:apple-health-sleep-file:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema',
+      cacheKey: `telegram:file_unique_id:apple-health-sleep-file:prompt:2026-05-24:schema:v2:completeness:${RECOGNITION_COMPLETENESS_VERSION}:model:gpt-test:capability:strict_schema`,
       cacheStatus: 'disabled',
+      completeness: result.completeness,
+      reconciliation: result.reconciliation,
+      fallbackModel: null,
     },
   });
 });
@@ -666,7 +734,7 @@ test('recognizeTelegramImageMessage normalizes incomplete Huawei sleep payloads 
   assert.deepEqual(result.records.sleep.sleepStageDetail, []);
 });
 
-test('recognizeTelegramImageMessage hits cache when versioned metadata matches', async () => {
+test('recognizeTelegramImageMessage revalidates and hits complete versioned cache entries', async () => {
   let requestCount = 0;
   const cached = {
     imageType: 'measurement',
@@ -676,12 +744,13 @@ test('recognizeTelegramImageMessage hits cache when versioned metadata matches',
     warnings: [],
     detectedApp: '华为健康',
     records: {
-      measurement: null,
+      measurement: validMeasurement(72.4, 18.6),
       activities: [],
       meals: [],
       totalCalories: null,
       details: [],
       dailyWorkoutSummary: null,
+      sleep: null,
     },
   };
 
@@ -707,7 +776,7 @@ test('recognizeTelegramImageMessage hits cache when versioned metadata matches',
       TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true',
     },
     readRecognitionCache: async ({ cacheKey, promptVersion, schemaVersion, model }) => {
-      assert.equal(cacheKey, 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema');
+      assert.equal(cacheKey, `telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:completeness:${RECOGNITION_COMPLETENESS_VERSION}:model:gpt-test:capability:strict_schema`);
       assert.equal(promptVersion, '2026-05-24');
       assert.equal(schemaVersion, 'v2');
       assert.equal(model, 'gpt-test');
@@ -717,11 +786,11 @@ test('recognizeTelegramImageMessage hits cache when versioned metadata matches',
 
   assert.equal(requestCount, 0);
   assert.equal(result.cacheStatus, 'hit');
-  assert.equal(result.cacheKey, 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema');
+  assert.equal(result.cacheKey, `telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:completeness:${RECOGNITION_COMPLETENESS_VERSION}:model:gpt-test:capability:strict_schema`);
   assert.equal(result.imageType, 'measurement');
   assert.equal(result.detectedApp, '华为健康');
   assert.equal(result.messageId, 78);
-  assert.equal(result.promptVersion, undefined);
+  assert.equal(result.promptVersion, '2026-05-24');
   assert.deepEqual(result.normalizedRecognition, {
     sourceApp: '华为健康',
     dataType: 'measurement',
@@ -735,16 +804,194 @@ test('recognizeTelegramImageMessage hits cache when versioned metadata matches',
       image: null,
     },
     runtime: {
-      pipelineVersion: 'v1',
+      pipelineVersion: 'v2',
       schemaName: 'telegram_training_image',
       schemaVersion: 'v2',
       provider: 'openai-compatible',
       model: 'gpt-test',
       promptVersion: '2026-05-24',
-      cacheKey: 'telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema',
+      cacheKey: `telegram:file_unique_id:file-2:prompt:2026-05-24:schema:v2:completeness:${RECOGNITION_COMPLETENESS_VERSION}:model:gpt-test:capability:strict_schema`,
       cacheStatus: 'hit',
+      completeness: result.completeness,
+      reconciliation: result.reconciliation,
+      fallbackModel: null,
     },
   });
+});
+
+test('recognizeTelegramImageMessage does not let incomplete cache entries bypass the fallback gate', async () => {
+  const calls = [];
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      env: { model: 'gpt-primary' },
+      fallbackProvider: {
+        env: { model: 'gpt-fallback' },
+        async requestChatCompletion() {
+          calls.push('fallback');
+          return {
+            ok: true,
+            async json() {
+              return { choices: [{ message: { content: JSON.stringify({
+                imageType: 'measurement', detectedApp: '华为健康', detectedDate: '2026-05-24',
+                dateEvidence: 'image header', confidence: 0.95, warnings: [],
+                records: {
+                  measurement: validMeasurement(72.4), activities: [], meals: [], totalCalories: null,
+                  details: [], dailyWorkoutSummary: null, sleep: null,
+                },
+              }) } }] };
+            },
+          };
+        },
+      },
+      async requestChatCompletion() {
+        calls.push('primary');
+        throw new Error('complete cache replacement should use fallback without rerunning primary');
+      },
+    },
+    message: { messageId: 79, photos: [{ fileUniqueId: 'file-incomplete-cache' }] },
+    imageUrl: 'data:image/png;base64,AA==',
+    systemPrompt: 'extract',
+    promptMetadata,
+    env: { AI_MODEL: 'gpt-primary', TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true' },
+    readRecognitionCache: async () => ({
+      imageType: 'measurement', detectedApp: '华为健康', detectedDate: '2026-05-24',
+      dateEvidence: 'image header', confidence: 0.99, warnings: [],
+      records: {
+        measurement: validMeasurement(null), activities: [], meals: [], totalCalories: null,
+        details: [], dailyWorkoutSummary: null, sleep: null,
+      },
+    }),
+  });
+
+  assert.deepEqual(calls, ['fallback']);
+  assert.equal(result.records.measurement.weightKg, 72.4);
+  assert.equal(result.completeness.status, 'complete');
+  assert.equal(result.reconciliation.status, 'fallback_completed');
+});
+
+test('recognizeTelegramImageMessage reuses a complete reconciled cache entry on the next delivery', async () => {
+  const readKeys = [];
+  let requestCount = 0;
+  const cached = {
+    imageType: 'measurement', detectedApp: '华为健康', detectedDate: '2026-05-24',
+    dateEvidence: 'image header', confidence: 0.99, warnings: [],
+    provider: 'openai-compatible', model: 'gpt-primary+gpt-fallback', fallbackModel: 'gpt-fallback',
+    cacheKey: `telegram:file_unique_id:file-reconciled-cache:prompt:2026-05-24:schema:v2:completeness:${RECOGNITION_COMPLETENESS_VERSION}:model:gpt-primary+gpt-fallback:capability:reconciled`,
+    completeness: { status: 'complete', version: RECOGNITION_COMPLETENESS_VERSION },
+    reconciliation: { status: 'fallback_completed', filledFields: ['records.measurement.weightKg'], finalSource: 'merged' },
+    records: {
+      measurement: validMeasurement(72.4), activities: [], meals: [], totalCalories: null,
+      details: [], dailyWorkoutSummary: null, sleep: null,
+    },
+  };
+
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      env: { model: 'gpt-primary' },
+      fallbackProvider: { env: { model: 'gpt-fallback' } },
+      async requestChatCompletion() {
+        requestCount += 1;
+        throw new Error('reconciled cache should avoid provider calls');
+      },
+    },
+    message: { messageId: 790, photos: [{ fileUniqueId: 'file-reconciled-cache' }] },
+    imageUrl: 'data:image/png;base64,AA==',
+    systemPrompt: 'extract',
+    promptMetadata,
+    env: { AI_MODEL: 'gpt-primary', TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true' },
+    readRecognitionCache: async ({ cacheKeys }) => {
+      readKeys.push(...cacheKeys);
+      return cacheKeys.includes(cached.cacheKey) ? cached : null;
+    },
+  });
+
+  assert.equal(requestCount, 0);
+  assert.equal(readKeys.length, 2);
+  assert.equal(result.cacheStatus, 'hit');
+  assert.equal(result.cacheKey, cached.cacheKey);
+  assert.equal(result.reconciliation.status, 'fallback_completed');
+  assert.equal(result.reconciliation.finalSource, 'merged');
+});
+
+test('recognizeTelegramImageMessage chooses a complete reconciled cache over an incomplete primary cache candidate', async () => {
+  const calls = [];
+  const primaryCache = {
+    imageType: 'measurement', detectedApp: '华为健康', detectedDate: '2026-05-24', dateEvidence: 'image header',
+    confidence: 0.99, warnings: [],
+    records: { measurement: validMeasurement(null), activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null },
+  };
+  const reconciledCache = {
+    imageType: 'measurement', detectedApp: '华为健康', detectedDate: '2026-05-24', dateEvidence: 'image header',
+    confidence: 0.99, warnings: [], model: 'gpt-primary+gpt-fallback', fallbackModel: 'gpt-fallback',
+    completeness: { status: 'complete', version: RECOGNITION_COMPLETENESS_VERSION },
+    reconciliation: { status: 'fallback_completed', filledFields: ['records.measurement.weightKg'], finalSource: 'merged' },
+    records: { measurement: validMeasurement(72.4), activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null },
+  };
+
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      env: { model: 'gpt-primary' },
+      fallbackProvider: { env: { model: 'gpt-fallback' } },
+      async requestChatCompletion() { calls.push('provider'); throw new Error('no provider call expected'); },
+    },
+    message: { messageId: 792, photos: [{ fileUniqueId: 'file-two-cache-candidates' }] },
+    imageUrl: 'data:image/png;base64,AA==',
+    systemPrompt: 'extract',
+    promptMetadata,
+    env: { AI_MODEL: 'gpt-primary', TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true' },
+    readRecognitionCache: async ({ cacheKeys }) => [
+      { cacheKey: cacheKeys[0], recognition: primaryCache },
+      { cacheKey: cacheKeys[1], recognition: { ...reconciledCache, cacheKey: cacheKeys[1] } },
+    ],
+  });
+
+  assert.deepEqual(calls, []);
+  assert.equal(result.records.measurement.weightKg, 72.4);
+  assert.equal(result.reconciliation.status, 'fallback_completed');
+});
+
+test('recognition output exposes only safe reconciliation metadata', async () => {
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      env: { model: 'gpt-primary' },
+      fallbackProvider: {
+        env: { model: 'gpt-fallback' },
+        async requestChatCompletion() {
+          return {
+            ok: true,
+            async json() {
+              return { choices: [{ message: { content: JSON.stringify({
+                imageType: 'measurement', detectedApp: '华为健康', detectedDate: '2026-05-29',
+                dateEvidence: 'image header', confidence: 0.94, warnings: [],
+                records: { measurement: validMeasurement(72.4), activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null },
+              }) } }] };
+            },
+          };
+        },
+      },
+      async requestChatCompletion() {
+        return {
+          ok: true,
+          async json() {
+            return { choices: [{ message: { content: JSON.stringify({
+              imageType: 'measurement', detectedApp: '华为健康', detectedDate: '2026-05-29',
+              dateEvidence: 'image header', confidence: 0.96, warnings: [],
+              records: { measurement: validMeasurement(null), activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null },
+            }) } }] };
+          },
+        };
+      },
+    },
+    message: { messageId: 791, photos: [{ fileUniqueId: 'file-safe-reconciliation' }] },
+    imageUrl: 'data:image/png;base64,AA==',
+    systemPrompt: 'extract',
+    promptMetadata,
+    env: { AI_MODEL: 'gpt-primary', TELEGRAM_RECOGNITION_CACHE_ENABLED: '' },
+  });
+
+  assert.equal(Object.hasOwn(result.reconciliation, 'value'), false);
+  assert.equal(Object.hasOwn(result.normalizedRecognition.runtime.reconciliation, 'value'), false);
+  assert.doesNotMatch(JSON.stringify(result.reconciliation), /72\.4/);
 });
 
 test('recognizeTelegramImageMessage keeps Feishu recognition cache keys channel-scoped', async () => {
@@ -808,7 +1055,7 @@ test('recognizeTelegramImageMessage keeps Feishu recognition cache keys channel-
   });
 
   assert.equal(requestCount, 1);
-  assert.equal(observedCacheKey, 'feishu:file_unique_id:shared-image-id:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema');
+  assert.equal(observedCacheKey, `feishu:file_unique_id:shared-image-id:prompt:2026-05-24:schema:v2:completeness:${RECOGNITION_COMPLETENESS_VERSION}:model:gpt-test:capability:strict_schema`);
   assert.equal(result.cacheKey, observedCacheKey);
   assert.equal(result.cacheStatus, 'miss');
 });
@@ -854,11 +1101,11 @@ test('readRecognitionFromDatabaseCache reads by the exact source-scoped cache ke
   assert.ok(cacheQuery, 'expected cache read from ingest.recognition_run');
   assert.doesNotMatch(cacheQuery[0], /join ingest\.source_message/i);
   assert.match(cacheQuery[0], /raw_result_json as recognition_json/i);
-  assert.match(cacheQuery[0], /r\.cache_key = \$1/i);
+  assert.match(cacheQuery[0], /r\.cache_key = any\(\$1::text\[\]\)/i);
   assert.doesNotMatch(cacheQuery[0], /recognition_json->>'cacheKey'/i);
-  assert.deepEqual(cacheQuery[1], [
+  assert.deepEqual(cacheQuery[1], [[
     'feishu:file_unique_id:file-legacy-cache:prompt:2026-05-24:schema:v2:model:gpt-test:capability:strict_schema',
-  ]);
+  ]]);
 });
 
 test('recognizeTelegramImageMessage misses cache when prompt version changes', async () => {
@@ -1650,11 +1897,9 @@ test('recognizeTelegramImageMessage retries once with strict JSON guidance when 
   assert.equal(result.records.totalCalories, 868);
 });
 
-test('recognizeTelegramImageMessage does not fallback after strict JSON retry keeps failing', async () => {
+test('recognizeTelegramImageMessage uses technical fallback after strict JSON retry keeps failing', async () => {
   const calls = [];
-  await assert.rejects(
-    () =>
-      recognizeTelegramImageMessage({
+  const result = await recognizeTelegramImageMessage({
         aiProvider: {
           env: { model: 'gpt-primary' },
           fallbackProvider: {
@@ -1680,7 +1925,11 @@ test('recognizeTelegramImageMessage does not fallback after strict JSON retry ke
                               meals: [],
                               totalCalories: null,
                               details: [],
-                              dailyWorkoutSummary: null,
+                              dailyWorkoutSummary: {
+                                activityCaloriesKcal: 520,
+                                workoutDurationMinutes: 64,
+                                activeHours: 8,
+                              },
                             },
                           }),
                         },
@@ -1722,15 +1971,11 @@ test('recognizeTelegramImageMessage does not fallback after strict JSON retry ke
           AI_MODEL: 'gpt-primary',
           TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
         },
-      }),
-    (error) => {
-      assert.equal(error.name, 'AiSchemaError');
-      assert.match(error.message, /invalid JSON/);
-      return true;
-    },
-  );
+      });
 
-  assert.deepEqual(calls, ['primary', 'primary']);
+  assert.deepEqual(calls, ['primary', 'primary', 'fallback']);
+  assert.equal(result.model, 'gpt-fallback');
+  assert.equal(result.completeness.status, 'complete');
 });
 
 test('recognizeTelegramImageMessage lowers confidence when measurement payload has no measurement data', async () => {
@@ -1788,7 +2033,7 @@ test('recognizeTelegramImageMessage lowers confidence when measurement payload h
   assert.match(result.warnings.join('\n'), /measurement image missing measurement data/i);
 });
 
-test('recognizeTelegramImageMessage does not fallback for business-incomplete measurement payloads', async () => {
+test('recognizeTelegramImageMessage uses fallback to complete business-incomplete measurement payloads', async () => {
   const calls = [];
   const result = await recognizeTelegramImageMessage({
     aiProvider: {
@@ -1797,7 +2042,34 @@ test('recognizeTelegramImageMessage does not fallback for business-incomplete me
         env: { model: 'gpt-fallback' },
         async requestChatCompletion() {
           calls.push('fallback');
-          throw new Error('fallback should not be called for business validation failures');
+          return {
+            ok: true,
+            async json() {
+              return {
+                choices: [{
+                  message: {
+                    content: JSON.stringify({
+                      imageType: 'measurement',
+                      detectedApp: '华为健康',
+                      detectedDate: '2026-05-29',
+                      dateEvidence: 'image header: 2026-05-29',
+                      confidence: 0.94,
+                      warnings: [],
+                      records: {
+                        measurement: validMeasurement(72.4),
+                        activities: [],
+                        meals: [],
+                        totalCalories: null,
+                        details: [],
+                        dailyWorkoutSummary: null,
+                        sleep: null,
+                      },
+                    }),
+                  },
+                }],
+              };
+            },
+          };
         },
       },
       async requestChatCompletion() {
@@ -1846,9 +2118,10 @@ test('recognizeTelegramImageMessage does not fallback for business-incomplete me
     },
   });
 
-  assert.deepEqual(calls, ['primary']);
-  assert.equal(result.model, 'gpt-primary');
-  assert.equal(result.aiAttemptKind, 'normal');
-  assert.equal(result.confidence < 0.75, true);
-  assert.match(result.warnings.join('\n'), /measurement image missing measurement data/i);
+  assert.deepEqual(calls, ['primary', 'fallback']);
+  assert.equal(result.records.measurement.weightKg, 72.4);
+  assert.equal(result.aiAttemptKind, 'fallback_business_completion');
+  assert.equal(result.completeness.status, 'complete');
+  assert.equal(result.reconciliation.status, 'fallback_completed');
+  assert.deepEqual(result.reconciliation.filledFields, ['records.measurement.weightKg']);
 });

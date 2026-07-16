@@ -704,10 +704,66 @@ test('persistNormalizedBatch writes ingest and core records in one transaction',
   assert.equal(recognitionJson.aiAttemptKind, 'normal');
   assert.ok(calls.some(([sql]) => /insert into core\.training_day/i.test(sql)));
   assert.ok(calls.some(([sql]) => /insert into core\.measurement/i.test(sql)));
-  assert.ok(calls.some(([sql]) => /insert into core\.activity/i.test(sql)));
+  const activityCall = calls.find(([sql]) => /insert into core\.activity/i.test(sql));
+  assert.ok(activityCall);
+  assert.deepEqual(
+    [activityCall[1][8][0], activityCall[1][9][0], activityCall[1][10][0], activityCall[1][11][0], activityCall[1][13][0]],
+    [241, 129, 3.45, 7.44, 1670],
+  );
   assert.ok(calls.some(([sql]) => /insert into core\.meal/i.test(sql)));
   assert.equal(calls.at(-2)[0], 'COMMIT');
   assert.equal(calls.at(-1)[0], 'end');
+});
+
+test('persistNormalizedBatch audits incomplete recognition without writing core tables', async () => {
+  const calls = [];
+  const fakeClient = {
+    async connect() { calls.push(['connect']); },
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [], rowCount: 1 };
+    },
+    async end() { calls.push(['end']); },
+  };
+
+  const result = await persistNormalizedBatch({
+    batch: {
+      ...normalizedBatch,
+      status: 'skipped',
+      reason: 'recognition incomplete: records.measurement.weightKg',
+      failureCategory: 'business_incomplete',
+      failureDisposition: 'manual_intervention',
+      completenessStatus: 'incomplete',
+      reconciliationStatus: 'fallback_unavailable',
+      measurement: null,
+      activities: [],
+      workoutDailySummary: null,
+      nutrition: { meals: [], totalCalories: null, details: [] },
+      sleep: null,
+      recognitions: [{
+        ...normalizedBatch.recognitions[0],
+        imageType: 'measurement',
+        completeness: { status: 'incomplete', version: 'v1', missingFields: ['records.measurement.weightKg'] },
+        reconciliation: { status: 'fallback_unavailable', conflictFields: [] },
+        records: { measurement: { weightKg: null }, activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null },
+      }],
+    },
+    env: {
+      TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    createClient() { return fakeClient; },
+    processedAt: new Date('2026-07-16T00:00:00.000Z'),
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.ok(calls.some(([sql]) => /insert into ingest\.source_batch/i.test(sql)));
+  assert.ok(calls.some(([sql]) => /insert into ingest\.recognition_run/i.test(sql)));
+  assert.equal(calls.some(([sql]) => /insert into core\./i.test(sql)), false);
+  const recognitionCall = calls.find(([sql]) => /insert into ingest\.recognition_run/i.test(sql));
+  const recognitionRow = JSON.parse(recognitionCall[1][0])[0];
+  assert.equal(recognitionRow.status, 'incomplete');
+  assert.equal(recognitionRow.raw_result_json.reconciliation.status, 'fallback_unavailable');
 });
 
 test('persistNormalizedBatch returns safe persistence summary with row counts and slow queries', async () => {
@@ -2148,6 +2204,23 @@ test('backfillCoreSleepFromIngestBatchesClient filters the persisted payload_jso
   const [candidateSql] = calls[0];
   assert.match(candidateSql, /b\.payload_json->'sleep' is not null/i);
   assert.doesNotMatch(candidateSql, /b\.batch_payload_json/i);
+});
+
+test('backfillCoreSleepFromIngestBatchesClient excludes legacy sleep payloads without a positive duration', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      calls.push([sql, params]);
+      return { rows: [] };
+    },
+  };
+
+  await backfillCoreSleepFromIngestBatchesClient(client);
+
+  const [candidateSql] = calls[0];
+  assert.match(candidateSql, /totalSleepMinutes/i);
+  assert.match(candidateSql, /nightSleepMinutes/i);
+  assert.match(candidateSql, />\s*0/i);
 });
 
 test('backfillCoreSleepFromIngestBatchesClient limits ingest and archive candidates to target dates', async () => {

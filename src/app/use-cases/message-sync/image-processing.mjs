@@ -451,6 +451,7 @@ function normalizePendingRecognitionBatchEntry(entry) {
   return {
     kind: batch.kind ?? 'image',
     batchId: batch.batchId,
+    sourceChannel: batch.sourceChannel ?? entry?.sourceChannel ?? entry?.source_channel ?? 'telegram',
     messages: batch.messages,
   };
 }
@@ -463,7 +464,19 @@ function normalizePendingPersistenceBatchEntry(entry) {
   if (!batch?.batchId || batch.status !== 'ready') {
     return null;
   }
+  if ((batch.kind ?? 'image') === 'image' && !isCompleteImagePersistenceBatch(batch)) {
+    return null;
+  }
   return batch;
+}
+
+function isCompleteImagePersistenceBatch(batch) {
+  const recognitions = Array.isArray(batch.recognitions) ? batch.recognitions : [];
+  return recognitions.length > 0 && recognitions.every((recognition) =>
+    recognition?.imageType !== 'unknown' &&
+    recognition?.completeness?.status === 'complete' &&
+    !['incomplete', 'conflict', 'fallback_unavailable'].includes(recognition?.reconciliation?.status)
+  );
 }
 
 function attachFailureMetadata(batch) {
@@ -655,14 +668,30 @@ export async function replayPendingRecognitionBatches({
     });
 
     if (persistedBatch.status !== 'ready') {
-      await queueRecognitionFailureIfNeeded({
-        batch: persistedBatch,
-        appendPendingRecognitionBatch,
-        now,
-        immediateRetry: false,
-        nextRetryAt: new Date(now.getTime() + 10 * 60 * 1000),
-      });
-      batches.push(persistedBatch);
+      if (persistedBatch.kind === 'image' && persistedBatch.failureCategory === 'business_incomplete') {
+        const persistResult = await persistBatch({
+          batch: persistedBatch,
+          processedAt: now,
+        });
+        const resolvedResult = await markPendingRecognitionResolved({
+          batchId: persistedBatch.batchId,
+          sourceChannel: persistedBatch.sourceChannel ?? 'telegram',
+        });
+        batches.push({
+          ...persistedBatch,
+          persistenceStatus: persistResult.status,
+          recognitionPendingStatus: resolvedResult.status,
+        });
+      } else {
+        await queueRecognitionFailureIfNeeded({
+          batch: persistedBatch,
+          appendPendingRecognitionBatch,
+          now,
+          immediateRetry: false,
+          nextRetryAt: new Date(now.getTime() + 10 * 60 * 1000),
+        });
+        batches.push(persistedBatch);
+      }
       continue;
     }
 

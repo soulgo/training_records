@@ -405,6 +405,9 @@ function normalizeSyncRetryCount(batch) {
 }
 
 function normalizeFailureDisposition(batch) {
+  if (batch.failureDisposition) {
+    return batch.failureDisposition;
+  }
   if (batch.persistenceStatus === 'abandoned') {
     return 'manual_intervention';
   }
@@ -428,6 +431,9 @@ function normalizeFailureDisposition(batch) {
     return 'auto_retry';
   }
   if (batch.failureCategory === 'user_input') {
+    return 'manual_intervention';
+  }
+  if (batch.failureCategory === 'business_incomplete') {
     return 'manual_intervention';
   }
   if (batch.status === 'skipped' || batch.status === 'ignored') {

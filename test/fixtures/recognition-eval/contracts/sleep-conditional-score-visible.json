@@ -1,0 +1,20 @@
+{
+  "sampleId": "sleep-conditional-score-visible",
+  "imageType": "sleep",
+  "scenario": "conditional_visible_missing",
+  "recognition": {
+    "imageType": "sleep",
+    "records": {
+      "sleep": { "totalSleepMinutes": 428, "nightSleepMinutes": 428, "sleepScore": null }
+    }
+  },
+  "ocr": { "text": "睡眠时长 7小时8分\n睡眠评分 --" },
+  "expected": {
+    "stored": false,
+    "completeness": {
+      "status": "incomplete",
+      "requiresFallback": true,
+      "conditionalFields": ["records.sleep.sleepScore"]
+    }
+  }
+}

@@ -25,6 +25,11 @@ export const normalizedBatch = {
       time: '19:13',
       type: '力量训练',
       detail: '总消耗241千卡，时长00:27:50，平均心率129次/分钟',
+      durationSeconds: 1670,
+      calories: 241,
+      heartRate: 129,
+      distanceKm: 3.45,
+      avgSpeedKmh: 7.44,
     },
   ],
   workoutDailySummary: {

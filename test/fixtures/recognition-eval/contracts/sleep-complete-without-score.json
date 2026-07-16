@@ -1,0 +1,15 @@
+{
+  "sampleId": "sleep-complete-without-score",
+  "imageType": "sleep",
+  "scenario": "optional_field_absent",
+  "recognition": {
+    "imageType": "sleep",
+    "records": {
+      "sleep": { "totalSleepMinutes": 428, "nightSleepMinutes": 428, "sleepScore": null }
+    }
+  },
+  "expected": {
+    "stored": true,
+    "completeness": { "status": "complete" }
+  }
+}
