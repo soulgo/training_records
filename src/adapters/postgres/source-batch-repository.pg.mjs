@@ -211,7 +211,7 @@ export class PostgresSourceBatchRepository {
         source_message_id: identity.sourceMessageId,
         batch_id: batch.batchId,
         cache_key: runtime.cacheKey ?? recognition.cacheKey ?? null,
-        status: normalized?.dataType === 'unknown' ? 'unmapped' : 'succeeded',
+        status: resolveRecognitionStatus(recognition, normalized),
         source_app: normalized?.sourceApp ?? recognition.detectedApp ?? null,
         data_type: normalized?.dataType ?? recognition.imageType ?? 'unknown',
         fields_json: normalized?.fields ?? recognition.records ?? {},
@@ -225,7 +225,7 @@ export class PostgresSourceBatchRepository {
         provider: runtime.provider ?? recognition.provider ?? null,
         model: runtime.model ?? recognition.model ?? null,
         prompt_version: runtime.promptVersion ?? recognition.promptVersion ?? null,
-        raw_result_json: recognition.semanticGate?.rawResult ?? recognition,
+        raw_result_json: recognition,
         created_at: processedAt.toISOString(),
         updated_at: processedAt.toISOString(),
       };
@@ -392,6 +392,24 @@ export class PostgresSourceBatchRepository {
   async getLastProcessedTelegramUpdateId() {
     return getLastProcessedTelegramUpdateId(this.client);
   }
+}
+
+function resolveRecognitionStatus(recognition, normalized) {
+  if ((normalized?.dataType ?? recognition.imageType) === 'unknown') {
+    return 'unmapped';
+  }
+  if (recognition.reconciliation?.status === 'conflict') {
+    return 'conflict';
+  }
+  if (
+    recognition.completeness?.status === 'incomplete' ||
+    recognition.completeness?.status === 'needs_review' ||
+    recognition.reconciliation?.status === 'incomplete' ||
+    recognition.reconciliation?.status === 'fallback_unavailable'
+  ) {
+    return 'incomplete';
+  }
+  return 'succeeded';
 }
 
 export async function getLastProcessedTelegramUpdateId(client) {

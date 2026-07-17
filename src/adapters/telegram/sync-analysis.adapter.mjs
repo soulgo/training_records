@@ -14,6 +14,7 @@ import {
 } from '../../domain/training/training-domain.mjs';
 import { extractCaloriesToken } from './sync-markdown.adapter.mjs';
 import { normalizeMessageId } from './sync-commands.adapter.mjs';
+import { RECOGNITION_RECONCILIATION_TOLERANCES } from '../../core/ai/recognition-reconciliation.mjs';
 
 export function batchLikelyLostOriginalFilename(batch) {
   return (batch.messages ?? []).some((message) =>
@@ -348,9 +349,46 @@ export function normalizeActivities(activities) {
       continue;
     }
     const key = `${time}|${type}|${detail}`;
-    deduped.set(key, { time, type, detail });
+    const current = deduped.get(key);
+    const structured = {
+      durationSeconds: toNullableNumber(activity.durationSeconds),
+      calories: toNullableNumber(activity.calories),
+      heartRate: toNullableNumber(activity.heartRate),
+      distanceKm: toNullableNumber(activity.distanceKm),
+      avgSpeedKmh: toNullableNumber(activity.avgSpeedKmh),
+    };
+    if (current) {
+      for (const [field, value] of Object.entries(structured)) {
+        if (activityMetricValuesConflict(field, current[field], value)) {
+          const error = new Error(`activity metric conflict for ${key}: ${field}`);
+          error.code = 'ACTIVITY_METRIC_CONFLICT';
+          error.fieldPath = `records.activities[].${field}`;
+          throw error;
+        }
+      }
+    }
+    deduped.set(key, current
+      ? Object.fromEntries(
+          Object.entries({ ...current, ...structured }).map(([field, value]) => [
+            field,
+            value ?? current[field] ?? null,
+          ]),
+        )
+      : { time, type, detail, ...structured });
   }
   return [...deduped.values()].sort((left, right) => left.time.localeCompare(right.time));
+}
+
+function activityMetricValuesConflict(field, left, right) {
+  if (left === null || left === undefined || right === null || right === undefined) return false;
+  const tolerance = {
+    durationSeconds: RECOGNITION_RECONCILIATION_TOLERANCES.DURATION_SECONDS,
+    calories: RECOGNITION_RECONCILIATION_TOLERANCES.KCAL,
+    heartRate: RECOGNITION_RECONCILIATION_TOLERANCES.HEART_RATE_BPM,
+    distanceKm: RECOGNITION_RECONCILIATION_TOLERANCES.DISTANCE_KM,
+    avgSpeedKmh: RECOGNITION_RECONCILIATION_TOLERANCES.SPEED_KMH,
+  }[field] ?? 0;
+  return Math.abs(left - right) > tolerance;
 }
 
 export function mergeWorkoutDailySummary(current, incoming) {

@@ -26,6 +26,20 @@ const SLEEP_RANGES = {
   averageRespiratoryRate: [4, 60],
 };
 
+const ACTIVITY_POSITIVE_FIELDS = [
+  'durationSeconds',
+  'calories',
+  'heartRate',
+  'distanceKm',
+  'avgSpeedKmh',
+];
+
+const WORKOUT_SUMMARY_POSITIVE_FIELDS = [
+  'activityCaloriesKcal',
+  'workoutDurationMinutes',
+  'activeHours',
+];
+
 export function applyRecognitionSemanticGate(payload) {
   if (!isPlainObject(payload)) {
     return payload;
@@ -36,7 +50,17 @@ export function applyRecognitionSemanticGate(payload) {
   const decisions = [];
   sanitizeRanges(payload.records?.measurement, gated.records?.measurement, MEASUREMENT_RANGES, 'measurement', warnings, decisions);
   sanitizeRanges(payload.records?.sleep, gated.records?.sleep, SLEEP_RANGES, 'sleep', warnings, decisions);
-  addMeasurementReviews(payload.records?.measurement, warnings, decisions);
+  sanitizePositiveActivities(payload.records?.activities, gated.records?.activities, warnings, decisions);
+  sanitizePositiveObjectFields(
+    payload.records?.dailyWorkoutSummary,
+    gated.records?.dailyWorkoutSummary,
+    WORKOUT_SUMMARY_POSITIVE_FIELDS,
+    'dailyWorkoutSummary',
+    warnings,
+    decisions,
+  );
+  sanitizePositiveNutrition(payload.records, gated.records, warnings, decisions);
+  addMeasurementReviews(payload.records?.measurement, gated.records?.measurement, warnings, decisions);
   addSleepReviews(payload.records?.sleep, warnings, decisions);
 
   const result = {
@@ -55,7 +79,49 @@ export function applyRecognitionSemanticGate(payload) {
   };
 }
 
-function addMeasurementReviews(measurement, warnings, decisions) {
+function sanitizePositiveActivities(original, target, warnings, decisions) {
+  if (!Array.isArray(original) || !Array.isArray(target)) return;
+  for (let index = 0; index < original.length; index += 1) {
+    sanitizePositiveObjectFields(
+      original[index],
+      target[index],
+      ACTIVITY_POSITIVE_FIELDS,
+      `activities[${index}]`,
+      warnings,
+      decisions,
+    );
+  }
+}
+
+function sanitizePositiveNutrition(originalRecords, targetRecords, warnings, decisions) {
+  if (!isPlainObject(originalRecords) || !isPlainObject(targetRecords)) return;
+  if (isNonPositiveFiniteNumber(originalRecords.totalCalories)) {
+    targetRecords.totalCalories = null;
+    addPositiveSanitizeDecision('totalCalories', warnings, decisions);
+  }
+  if (!Array.isArray(originalRecords.meals) || !Array.isArray(targetRecords.meals)) return;
+  targetRecords.meals = targetRecords.meals.filter((meal, index) => {
+    if (!isNonPositiveFiniteNumber(originalRecords.meals[index]?.calories)) return true;
+    addPositiveSanitizeDecision(`meals[${index}].calories`, warnings, decisions);
+    return false;
+  });
+}
+
+function sanitizePositiveObjectFields(original, target, fields, namespace, warnings, decisions) {
+  if (!isPlainObject(original) || !isPlainObject(target)) return;
+  for (const field of fields) {
+    if (!isNonPositiveFiniteNumber(original[field])) continue;
+    target[field] = null;
+    addPositiveSanitizeDecision(`${namespace}.${field}`, warnings, decisions);
+  }
+}
+
+function addPositiveSanitizeDecision(path, warnings, decisions) {
+  warnings.add(`semantic:${path.replace(/\[\d+\]/gu, '[]')} must be positive`);
+  decisions.push({ action: 'sanitize', path, reason: 'non_positive' });
+}
+
+function addMeasurementReviews(measurement, target, warnings, decisions) {
   if (!isPlainObject(measurement)) {
     return;
   }
@@ -66,13 +132,20 @@ function addMeasurementReviews(measurement, warnings, decisions) {
     }
   }
 
+  // 去脂体重物理上必然小于体重；主识别给出 fatFreeMassKg > weightKg 说明其中一个被误读。
+  // 体重是硬完整性字段、也是页面主展示值，去脂体重是非关键派生字段，因此清空存疑的去脂体重、
+  // 保留体重继续入库，而不是把整条体测判为需复核并强制备用识别（备用未配置时会导致体重已识别
+  // 成功的体测图整条无法入库）。与其它超范围体测值一样按 sanitize 处理，保持一致。
   if (
     isFiniteNumber(measurement.fatFreeMassKg) &&
     isFiniteNumber(measurement.weightKg) &&
     measurement.fatFreeMassKg > measurement.weightKg
   ) {
+    if (isPlainObject(target)) {
+      target.fatFreeMassKg = null;
+    }
     warnings.add('semantic:measurement.fatFreeMassKg exceeds weightKg');
-    decisions.push({ action: 'review', path: 'measurement.fatFreeMassKg', reason: 'exceeds_weight' });
+    decisions.push({ action: 'sanitize', path: 'measurement.fatFreeMassKg', reason: 'exceeds_weight' });
   }
 }
 
@@ -114,6 +187,10 @@ function sanitizeRanges(original, target, ranges, namespace, warnings, decisions
 
 function isOutsideRange(value, min, max) {
   return isFiniteNumber(value) && (value < min || value > max);
+}
+
+function isNonPositiveFiniteNumber(value) {
+  return isFiniteNumber(value) && value <= 0;
 }
 
 function isFiniteNumber(value) {

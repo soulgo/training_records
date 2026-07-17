@@ -29,4 +29,11 @@ test('eval:recognition reports fixture contracts without claiming natural-sample
   assert.equal(report.tokens.status, 'not_measured');
   assert.equal(report.latency.status, 'not_measured');
   assert.equal(typeof report.semanticWarningCount, 'number');
+
+  const contracts = report.completenessContract;
+  assert.ok(contracts.total >= 8, 'expected completeness contract scenarios');
+  assert.deepEqual(contracts.failures, [], 'completeness contract fixtures must match the implementation');
+  assert.equal(contracts.silentStore, 0, 'no incomplete/conflict scenario may be silently stored');
+  assert.ok(contracts.blockedConflict >= 1, 'expected at least one critical-conflict scenario blocked');
+  assert.ok(contracts.fallbackCompleted >= 1, 'expected at least one fallback-completed scenario');
 });

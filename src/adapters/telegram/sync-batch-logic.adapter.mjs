@@ -293,6 +293,9 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   let detectedApp = null;
   const failedMessageIds = [];
   const dataIssues = [];
+  // 记录「图片可见但本次未识别到」的字段，用于诚实回执；不影响是否入库。
+  let businessIncomplete = false;
+  const incompleteFieldPaths = new Set();
 
   for (const message of batch.messages) {
     const recognition = recognitionMap.get(message.messageId);
@@ -317,6 +320,74 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
         source: 'low_confidence',
       });
       continue;
+    }
+
+    if (recognition.imageType === 'unknown') {
+      const reason = `unmapped recognition for message ${message.messageId}: unknown image type`;
+      return {
+        ...buildSkippedBatchResult(batch, {
+          reason,
+          warnings,
+          issues: [...issues, reason],
+          dateSources: [...dateSources, {
+            messageId: message.messageId,
+            detectedDate: recognition.detectedDate ?? null,
+            dateEvidence: recognition.dateEvidence ?? null,
+            source: 'unmapped',
+          }],
+          detectedApp: normalizeDetectedApp(recognition.detectedApp),
+          sourceImageCount,
+          recognizedImageCount: recognizedImageCount + 1,
+          failedImageCount: Math.max(1, failedMessageIds.length + 1),
+          failureCategory: 'user_input',
+        }),
+        recognitionStatus: 'unmapped',
+      };
+    }
+
+    const reconciliationStatus = recognition.reconciliation?.status ?? null;
+    const completenessStatus = recognition.completeness?.status ?? null;
+    const missingFields = [
+      ...(recognition.completeness?.missingFields ?? []),
+      ...(recognition.completeness?.conditionalFields ?? []),
+      ...(recognition.completeness?.reviewFields ?? []),
+    ];
+    const conflictFields = recognition.reconciliation?.conflictFields ?? [];
+    // 只在两种情况拒绝入库：主备关键字段确定性冲突（需人工核对），或本张图片没有任何可写入的数据。
+    // 其余「主识别有可写入数据、只是 schema 未覆盖全部字段」按“只识别并写入图片上确有的数据”继续入库，
+    // 不再因缺条件字段或存疑复核而整条拒绝；备用识别（若已配置）仍会在识别阶段尽量补全可见字段。
+    if (reconciliationStatus === 'conflict' || !recognitionHasStorableData(recognition)) {
+      const reason = buildRecognitionBusinessFailureReason({
+        reconciliationStatus,
+        missingFields,
+        conflictFields,
+      });
+      return {
+        ...buildSkippedBatchResult(batch, {
+          reason,
+          warnings,
+          issues: [...issues, ...missingFields, ...conflictFields],
+          dateSources,
+          detectedApp: normalizeDetectedApp(recognition.detectedApp),
+          sourceImageCount,
+          recognizedImageCount,
+          failedImageCount: Math.max(1, failedMessageIds.length),
+          failureCategory: 'business_incomplete',
+        }),
+        failureDisposition: 'manual_intervention',
+        completenessStatus,
+        missingFields: [...new Set(missingFields)],
+        reconciliationStatus,
+        conflictFields: [...new Set(conflictFields)],
+      };
+    }
+    // OCR/证据表明字段在图片中可见、但本次未识别到：不阻断入库，仅记录用于诚实回执与后续补识别。
+    const visibleButMissed = recognition.completeness?.conditionalFields ?? [];
+    if (visibleButMissed.length > 0) {
+      businessIncomplete = true;
+      for (const path of visibleButMissed) {
+        incompleteFieldPaths.add(path);
+      }
     }
 
     recognizedImageCount += 1;
@@ -512,7 +583,33 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     mergeMeasurementCandidates(measurementCandidates),
     archivedDate,
   );
-  const normalizedActivities = normalizeActivities(activities);
+  let normalizedActivities;
+  try {
+    normalizedActivities = normalizeActivities(activities);
+  } catch (error) {
+    if (error?.code !== 'ACTIVITY_METRIC_CONFLICT') throw error;
+    const conflictFields = [error.fieldPath].filter(Boolean);
+    const conflictLabels = describeRecognitionFieldLabels(conflictFields);
+    return {
+      ...buildSkippedBatchResult(batch, {
+        reason: conflictLabels.length > 0
+          ? `主备识别的关键字段不一致（${conflictLabels.join('、')}），需要人工核对`
+          : '主备识别的关键字段不一致，需要人工核对',
+        warnings,
+        issues: [...issues, ...conflictFields],
+        dateSources,
+        detectedApp,
+        sourceImageCount,
+        recognizedImageCount,
+        failedImageCount: Math.max(1, failedMessageIds.length),
+        failureCategory: 'business_incomplete',
+      }),
+      failureDisposition: 'manual_intervention',
+      completenessStatus: 'needs_review',
+      reconciliationStatus: 'conflict',
+      conflictFields,
+    };
+  }
   const normalizedNutrition = normalizeNutrition(nutritionMeals, nutritionTotalCalories, nutritionDetails);
   const normalizedSleep = normalizeSleepRecords(sleepRecords, archivedDate);
   const dateConfidence = classifyDateConfidence({
@@ -547,6 +644,10 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     sourceImageCount,
     recognizedImageCount,
     failedImageCount: failedMessageIds.length,
+    businessIncomplete,
+    incompleteFieldLabels: businessIncomplete
+      ? describeRecognitionFieldLabels([...incompleteFieldPaths])
+      : [],
     confidence: calculateBatchConfidence(recognitions),
     fingerprints: buildFingerprints({
       archivedDate,
@@ -556,6 +657,144 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
       nutrition: normalizedNutrition,
     }),
   };
+}
+
+function buildRecognitionBusinessFailureReason({ reconciliationStatus, missingFields, conflictFields }) {
+  if (reconciliationStatus === 'conflict') {
+    const labels = describeRecognitionFieldLabels(conflictFields);
+    return labels.length > 0
+      ? `主备识别的关键字段不一致（${labels.join('、')}），需要人工核对`
+      : '主备识别的关键字段不一致，需要人工核对';
+  }
+  if (reconciliationStatus === 'fallback_unavailable') {
+    const labels = describeRecognitionFieldLabels(missingFields);
+    return labels.length > 0
+      ? `主识别缺少必要字段（${labels.join('、')}），备用识别未配置`
+      : '主识别缺少必要字段，备用识别未配置';
+  }
+  const labels = describeRecognitionFieldLabels(missingFields);
+  return labels.length > 0
+    ? `识别结果仍缺少必要字段（${labels.join('、')}）`
+    : '识别结果仍缺少必要字段';
+}
+
+const RECOGNITION_FIELD_LABELS = new Map([
+  ['records.measurement', '体测数据'],
+  ['records.measurement.weightKg', '体重'],
+  ['records.measurement.bodyFatPct', '体脂率'],
+  ['records.measurement.fatFreeMassKg', '去脂体重'],
+  ['records.activities', '活动明细'],
+  ['records.workout.calories', '活动热量'],
+  ['records.dailyWorkoutSummary.activityCaloriesKcal', '活动热量'],
+  ['records.totalCalories', '总热量'],
+  ['records.sleep', '睡眠数据'],
+  ['records.sleep.duration', '睡眠时长'],
+  ['records.sleep.totalSleepMinutes', '睡眠时长'],
+  ['records.sleep.sleepScore', '睡眠评分'],
+  ['records.sleep.stageMinutes', '睡眠阶段时长'],
+]);
+
+const ACTIVITY_METRIC_LABELS = new Map([
+  ['calories', '活动热量'],
+  ['durationSeconds', '活动时长'],
+  ['heartRate', '心率'],
+  ['distanceKm', '距离'],
+  ['avgSpeedKmh', '速度'],
+]);
+
+// 把内部字段路径映射为安全的中文标签，仅暴露字段含义，不输出任何健康数值或 OCR 原文。
+function describeRecognitionFieldLabels(paths) {
+  const labels = [];
+  const seen = new Set();
+  for (const path of paths ?? []) {
+    const label = resolveRecognitionFieldLabel(path);
+    if (label && !seen.has(label)) {
+      seen.add(label);
+      labels.push(label);
+    }
+  }
+  return labels;
+}
+
+function resolveRecognitionFieldLabel(path) {
+  const normalized = String(path ?? '').trim();
+  if (!normalized) return null;
+  if (RECOGNITION_FIELD_LABELS.has(normalized)) return RECOGNITION_FIELD_LABELS.get(normalized);
+  const indexed = normalized.replace(/\[\d+\]/g, '[]');
+  if (RECOGNITION_FIELD_LABELS.has(indexed)) return RECOGNITION_FIELD_LABELS.get(indexed);
+  const activityMetric = indexed.match(/^records\.activities\[\]\.(\w+)$/);
+  if (activityMetric && ACTIVITY_METRIC_LABELS.has(activityMetric[1])) {
+    return ACTIVITY_METRIC_LABELS.get(activityMetric[1]);
+  }
+  return null;
+}
+
+const MEASUREMENT_VALUE_FIELDS = [
+  'bodyScore',
+  'weightKg',
+  'bmi',
+  'bodyFatPct',
+  'skeletalMuscleKg',
+  'visceralFatLevel',
+  'basalMetabolismKcal',
+  'bodyWaterPct',
+  'proteinPct',
+  'boneMassKg',
+  'fatFreeMassKg',
+  'bodyAge',
+];
+
+// 判断本张识别结果是否含有「图片上确有、可写入」的数据。用户口径：只识别并写入图片上有的数据，
+// 图片没有的 schema 字段不强求；但若整张图什么都没识别到，则没有可入库内容，进入业务不完整。
+function recognitionHasStorableData(recognition) {
+  const records = recognition?.records ?? {};
+  switch (recognition?.imageType) {
+    case 'measurement': {
+      const measurement = records.measurement;
+      if (!isPlainObjectValue(measurement)) return false;
+      if (MEASUREMENT_VALUE_FIELDS.some((field) => isFiniteNumberValue(measurement[field]))) return true;
+      return nonEmptyStringValue(measurement.bodyType);
+    }
+    case 'workout': {
+      const activities = Array.isArray(records.activities) ? records.activities : [];
+      const hasActivity = activities.some((activity) => isPlainObjectValue(activity)
+        && (nonEmptyStringValue(activity.type)
+          || nonEmptyStringValue(activity.detail)
+          || isFiniteNumberValue(activity.calories)
+          || isFiniteNumberValue(activity.durationSeconds)
+          || isFiniteNumberValue(activity.distanceKm)));
+      const summary = records.dailyWorkoutSummary;
+      const hasSummary = isPlainObjectValue(summary)
+        && ['activityCaloriesKcal', 'workoutDurationMinutes', 'activeHours'].some((field) => isFiniteNumberValue(summary[field]));
+      return hasActivity || hasSummary;
+    }
+    case 'nutrition': {
+      const meals = Array.isArray(records.meals) ? records.meals : [];
+      const hasMeal = meals.some((meal) => isPlainObjectValue(meal)
+        && (nonEmptyStringValue(meal.name) || isFiniteNumberValue(meal.calories)));
+      const hasDetails = Array.isArray(records.details) && records.details.some((detail) => nonEmptyStringValue(detail));
+      return isFiniteNumberValue(records.totalCalories) || hasMeal || hasDetails;
+    }
+    case 'sleep': {
+      // 睡眠由下方专门的 normalizeSleepRecord/normalizeSleepRecords 逻辑处理（含数组多段睡眠与
+      // 空睡眠→missing records.sleep 的既有分类），这里不预先拦截，交由其判断是否有可写入内容。
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
+function isPlainObjectValue(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFiniteNumberValue(value) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function nonEmptyStringValue(value) {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 export function processTelegramBatch(batch, recognitions, options = {}) {

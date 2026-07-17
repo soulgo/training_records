@@ -13,6 +13,186 @@ import {
   RECOGNITION_SCHEMA_VERSION,
 } from '../src/core/ai/telegram-recognition-schema.mjs';
 import { applyRecognitionSemanticGate } from '../src/core/ai/recognition-semantic-validator.mjs';
+import {
+  evaluateRecognitionCompleteness,
+  RECOGNITION_COMPLETENESS_VERSION,
+} from '../src/core/ai/recognition-completeness.mjs';
+
+function recognitionFor(imageType, records, overrides = {}) {
+  return {
+    imageType,
+    detectedApp: null,
+    detectedDate: '2026-07-16',
+    dateEvidence: 'image header',
+    confidence: 0.95,
+    warnings: [],
+    records: {
+      measurement: null,
+      activities: [],
+      meals: [],
+      totalCalories: null,
+      details: [],
+      dailyWorkoutSummary: null,
+      sleep: null,
+      ...records,
+    },
+    ...overrides,
+  };
+}
+
+test('recognition completeness enforces four hard contracts without channel state', () => {
+  const cases = [
+    [recognitionFor('measurement', { measurement: { weightKg: 72.4 } }), 'complete', []],
+    [recognitionFor('measurement', { measurement: { weightKg: null } }), 'incomplete', ['records.measurement.weightKg']],
+    [recognitionFor('workout', { activities: [{ time: '07:30', type: '跑步', detail: '晨跑' }] }), 'complete', []],
+    [recognitionFor('workout', { dailyWorkoutSummary: { activityCaloriesKcal: 520 } }), 'complete', []],
+    [recognitionFor('workout', {}), 'incomplete', ['records.activities', 'records.dailyWorkoutSummary.activityCaloriesKcal']],
+    [recognitionFor('nutrition', { totalCalories: 868 }), 'complete', []],
+    [recognitionFor('nutrition', { meals: [{ name: '晚餐', calories: 868 }] }), 'complete', []],
+    [recognitionFor('nutrition', { details: ['晚餐'] }), 'incomplete', ['records.totalCalories']],
+    [recognitionFor('sleep', { sleep: { totalSleepMinutes: 438, nightSleepMinutes: null } }), 'complete', []],
+    [recognitionFor('sleep', { sleep: { totalSleepMinutes: null, nightSleepMinutes: null, sleepScore: 90 } }), 'incomplete', ['records.sleep.duration']],
+  ];
+
+  for (const [recognition, status, missingFields] of cases) {
+    const result = evaluateRecognitionCompleteness({ recognition });
+    assert.equal(result.status, status);
+    assert.equal(result.version, RECOGNITION_COMPLETENESS_VERSION);
+    assert.deepEqual(result.missingFields, missingFields);
+  }
+});
+
+test('recognition completeness only requires conditional fields backed by visible evidence', () => {
+  const measurement = recognitionFor('measurement', {
+    measurement: { weightKg: 72.4, bodyFatPct: null },
+  });
+
+  assert.equal(evaluateRecognitionCompleteness({ recognition: measurement }).status, 'complete');
+  const visible = evaluateRecognitionCompleteness({
+    recognition: measurement,
+    ocrDocument: { text: '体重 72.4 kg\n体脂率', blocks: [] },
+  });
+  assert.equal(visible.status, 'incomplete');
+  assert.deepEqual(visible.conditionalFields, ['records.measurement.bodyFatPct']);
+  assert.ok(visible.evidenceCodes.includes('ocr:records.measurement.bodyFatPct'));
+
+  const sleep = recognitionFor('sleep', {
+    sleep: { totalSleepMinutes: 438, nightSleepMinutes: null, sleepScore: null },
+  });
+  assert.equal(evaluateRecognitionCompleteness({ recognition: sleep }).status, 'complete');
+  assert.equal(evaluateRecognitionCompleteness({
+    recognition: sleep,
+    ocrDocument: { text: 'Sleep Score', blocks: [] },
+  }).status, 'incomplete');
+});
+
+test('recognition completeness does not infer conditional fields from a generic app profile alone', () => {
+  const measurement = recognitionFor('measurement', {
+    measurement: { weightKg: 72.4, bodyFatPct: null },
+  }, { detectedApp: 'Apple Health' });
+  const appProfiles = {
+    profiles: [{
+      appName: 'Apple Health',
+      appAliases: ['Apple 健康'],
+      pageTypes: { measurement: ['Body Measurements', 'Weight', 'Body Fat Percentage'] },
+      fieldAliases: {
+        'records.measurement.bodyFatPct': ['Body Fat Percentage'],
+      },
+    }],
+  };
+
+  const result = evaluateRecognitionCompleteness({ recognition: measurement, appProfiles });
+
+  assert.equal(result.status, 'complete');
+  assert.deepEqual(result.conditionalFields, []);
+  assert.equal(result.evidenceCodes.some((code) => code.startsWith('app_profile:')), false);
+});
+
+test('recognition completeness ignores model-declared app profile evidence', () => {
+  const recognition = recognitionFor('measurement', {
+    measurement: { weightKg: 72.4, bodyFatPct: null },
+  }, {
+    detectedApp: 'Apple Health',
+    appProfileEvidence: { visibleLabels: ['Body Fat Percentage'] },
+  });
+  const appProfiles = {
+    profiles: [{
+      appName: 'Apple Health',
+      pageTypes: { measurement: ['Weight', 'Body Fat Percentage'] },
+      fieldAliases: { 'records.measurement.bodyFatPct': ['Body Fat Percentage'] },
+    }],
+  };
+
+  const result = evaluateRecognitionCompleteness({ recognition, appProfiles });
+
+  assert.equal(result.status, 'complete');
+  assert.deepEqual(result.conditionalFields, []);
+});
+
+test('recognition completeness matches short English labels by word boundary', () => {
+  const recognition = recognitionFor('workout', {
+    activities: [{ time: '07:30', type: 'Walking', detail: 'Movement trends', calories: null }],
+  });
+
+  const result = evaluateRecognitionCompleteness({
+    recognition,
+    ocrDocument: { text: 'Movement trends', blocks: [] },
+  });
+
+  assert.equal(result.status, 'complete');
+  assert.deepEqual(result.conditionalFields, []);
+});
+
+test('recognition completeness rejects non-positive business quantities', () => {
+  const cases = [
+    recognitionFor('workout', { dailyWorkoutSummary: { activityCaloriesKcal: -1 } }),
+    recognitionFor('nutrition', { totalCalories: -1 }),
+    recognitionFor('nutrition', { meals: [{ name: '晚餐', calories: -1 }] }),
+    recognitionFor('sleep', { sleep: { totalSleepMinutes: -1, nightSleepMinutes: null } }),
+  ];
+
+  for (const recognition of cases) {
+    assert.equal(evaluateRecognitionCompleteness({ recognition }).status, 'incomplete');
+  }
+});
+
+test('recognition semantic gate clears non-positive workout and nutrition metrics without deleting activity identity', () => {
+  const gated = applyRecognitionSemanticGate(recognitionFor('workout', {
+    activities: [{
+      time: '07:30', type: '跑步', detail: '晨跑', durationSeconds: 0, calories: 0,
+      heartRate: 0, distanceKm: 0, avgSpeedKmh: 0,
+    }],
+    dailyWorkoutSummary: { activityCaloriesKcal: 0, workoutDurationMinutes: 0, activeHours: 0 },
+  }));
+
+  assert.equal(gated.records.activities.length, 1);
+  assert.deepEqual(gated.records.activities[0], {
+    time: '07:30', type: '跑步', detail: '晨跑', durationSeconds: null, calories: null,
+    heartRate: null, distanceKm: null, avgSpeedKmh: null,
+  });
+  assert.deepEqual(gated.records.dailyWorkoutSummary, {
+    activityCaloriesKcal: null, workoutDurationMinutes: null, activeHours: null,
+  });
+  assert.ok(gated.warnings.includes('semantic:activities[].calories must be positive'));
+});
+
+test('recognition completeness preserves semantic review and unknown behavior', () => {
+  const needsReview = evaluateRecognitionCompleteness({
+    recognition: recognitionFor('sleep', {
+      sleep: { totalSleepMinutes: 438, nightSleepMinutes: null },
+    }, {
+      semanticGate: { status: 'needs_review', decisions: [{ action: 'review', path: 'sleep.totalSleepMinutes' }] },
+    }),
+  });
+  assert.equal(needsReview.status, 'needs_review');
+  assert.deepEqual(needsReview.reviewFields, ['records.sleep.totalSleepMinutes']);
+  assert.equal(needsReview.requiresFallback, true);
+
+  const unknown = evaluateRecognitionCompleteness({ recognition: recognitionFor('unknown', {}) });
+  assert.equal(unknown.status, 'complete');
+  assert.equal(unknown.requiresFallback, false);
+  assert.ok(unknown.evidenceCodes.includes('unknown_type'));
+});
 
 test('recognition schema version is bumped for required records.sleep contract', () => {
   assert.equal(RECOGNITION_SCHEMA_VERSION, 'v4');
@@ -337,4 +517,35 @@ test('recognition semantic gate sanitizes impossible fields and marks relational
   assert.ok(validated.warnings.includes('semantic:sleep.totalSleepMinutes conflicts with component sleep minutes'));
   assert.ok(validated.warnings.includes('semantic:sleep.stageMinutes exceed totalSleepMinutes'));
   assert.doesNotMatch(JSON.stringify(validated.warnings), /1000|800|1200|300/);
+});
+
+test('semantic gate sanitizes fat-free mass exceeding weight and keeps the measurement complete', () => {
+  const payload = {
+    imageType: 'measurement',
+    records: {
+      measurement: { weightKg: 70, bodyFatPct: 22, fatFreeMassKg: 90 },
+      activities: [],
+      meals: [],
+      totalCalories: null,
+      details: [],
+      dailyWorkoutSummary: null,
+      sleep: null,
+    },
+  };
+
+  const validated = applyRecognitionSemanticGate(payload);
+
+  assert.equal(validated.records.measurement.weightKg, 70);
+  assert.equal(validated.records.measurement.bodyFatPct, 22);
+  assert.equal(validated.records.measurement.fatFreeMassKg, null);
+  assert.equal(validated.semanticGate.status, 'sanitized');
+  assert.ok(validated.semanticGate.decisions.some(
+    (decision) => decision.action === 'sanitize' && decision.path === 'measurement.fatFreeMassKg',
+  ));
+  assert.ok(!validated.semanticGate.decisions.some((decision) => decision.action === 'review'));
+  assert.ok(validated.warnings.includes('semantic:measurement.fatFreeMassKg exceeds weightKg'));
+
+  const completeness = evaluateRecognitionCompleteness({ recognition: validated });
+  assert.equal(completeness.status, 'complete');
+  assert.equal(completeness.requiresFallback, false);
 });

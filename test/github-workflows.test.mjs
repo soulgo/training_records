@@ -562,6 +562,24 @@ test('pending replay runs independently per source channel with scheduled claim 
   assert.equal(parsedWorkflow.jobs.replay.concurrency.group, 'pending-replay-dev-${{ matrix.channel }}');
 });
 
+test('pending replay injects the same recognition fallback and cache configuration as normal sync', async () => {
+  const workflow = await readWorkflow('.github/workflows/pending-replay.yml');
+
+  for (const variable of [
+    'AI_IMAGE_PROCESSING_ENABLED',
+    'AI_OCR_ENABLED',
+    'AI_OCR_FAILURE_MODE',
+    'TELEGRAM_RECOGNITION_MODEL',
+    'TELEGRAM_RECOGNITION_FALLBACK_API_KEY',
+    'TELEGRAM_RECOGNITION_FALLBACK_BASE_URL',
+    'TELEGRAM_RECOGNITION_FALLBACK_MODEL',
+    'TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS',
+    'TELEGRAM_RECOGNITION_CACHE_ENABLED',
+  ]) {
+    assert.match(workflow, new RegExp(`\\b${variable}:`), `${variable} should be injected for pending replay`);
+  }
+});
+
 test('site deploy workflows notify the originating channel on asynchronous failure', async () => {
   for (const [workflowPath, telegramSecret, feishuIdSecret] of [
     ['.github/workflows/deploy-pages.yml', 'TELEGRAM_BOT_TOKEN', 'FEISHU_APP_ID'],

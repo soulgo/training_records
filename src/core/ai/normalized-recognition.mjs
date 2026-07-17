@@ -1,4 +1,4 @@
-export const RECOGNITION_PIPELINE_VERSION = 'v1';
+export const RECOGNITION_PIPELINE_VERSION = 'v2';
 
 export function buildNormalizedRecognition({ payload, runtime, ocr = null, image = null }) {
   return {
@@ -22,6 +22,9 @@ export function buildNormalizedRecognition({ payload, runtime, ocr = null, image
       promptVersion: runtime?.promptVersion ?? null,
       cacheKey: runtime?.cacheKey ?? null,
       cacheStatus: runtime?.cacheStatus ?? 'disabled',
+      completeness: runtime?.completeness ?? null,
+      reconciliation: runtime?.reconciliation ?? null,
+      fallbackModel: runtime?.fallbackModel ?? null,
     },
   };
 }

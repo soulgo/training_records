@@ -1,0 +1,20 @@
+{
+  "sampleId": "measurement-conditional-bodyfat-visible",
+  "imageType": "measurement",
+  "scenario": "conditional_visible_missing",
+  "recognition": {
+    "imageType": "measurement",
+    "records": {
+      "measurement": { "weightKg": 72.4, "bmi": 23.1, "bodyFatPct": null }
+    }
+  },
+  "ocr": { "text": "体重 72.4kg\n体脂率 --" },
+  "expected": {
+    "stored": false,
+    "completeness": {
+      "status": "incomplete",
+      "requiresFallback": true,
+      "conditionalFields": ["records.measurement.bodyFatPct"]
+    }
+  }
+}

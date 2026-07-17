@@ -25,8 +25,8 @@
 `tools/action-sync-summary.mjs` 生成安全摘要，重点包含：
 
 - Run context：workflow、runId、traceId、queueTaskId、channel。
-- Batch results：任务状态、`businessStatus`、`failureCategory`、识别结果、归档日期和通知状态。
-- AI：provider、model、promptVersion、token/latency/fallback 的安全统计。
+- Batch results：任务状态、`businessStatus`、`failureCategory`、识别结果、归档日期和通知状态；图片批次还含 `completenessStatus`、`missingFields`、`reconciliationStatus`、`conflictFields` 等安全字段（只有字段路径与数量，不含健康数值）。
+- AI：provider、model、promptVersion、token/latency/fallback 的安全统计；`recognitionAttemptKinds` 区分主识别、技术 fallback（`fallback`）和业务补全（`fallback_business_completion`）。
 - Database：status、transactionId、rowCounts、duration、pendingStatus、rollbackStatus。
 - Slow queries：只记录 `queryOrdinal`、operation、table、durationMs、thresholdMs，不输出 SQL 或参数。
 - Deploy dispatch：是否成功提交目标 workflow、ref 和必要的 thought 校验输入；不包含 deploy run 结论。
@@ -86,6 +86,7 @@ workflow 根据被监控 run 的 `head_branch` 选择 `DEV_TRAINING_DB_URL` 或 
 | `syncStages` | resolve、recognition、persist、notify 等同步阶段。 |
 | `dateConfidence` / `dateStages` | 日期可信度和批次日期决策过程。 |
 | `partialFailure` | 主业务写入已完成，但识别或睡眠回填等后续阶段不完整；必须结合 warnings 继续处理。 |
+| `completenessStatus` / `reconciliationStatus` | 图片识别业务完整性与主备合并结论；`reconciliationStatus=conflict` 或 `failureCategory=business_incomplete` 时 `failureDisposition=manual_intervention`，该批次 `core.*` 零写入。 |
 
 ## 安全数据库修复与维护命令
 

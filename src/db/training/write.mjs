@@ -595,6 +595,29 @@ async function backfillCoreSleepFromIngestBatchesClientAttempt(client, options =
     where b.status = 'ready'
       and b.archived_date is not null
       and b.payload_json->'sleep' is not null
+      and (
+        case
+          when jsonb_typeof(b.payload_json->'sleep'->'totalSleepMinutes') = 'number'
+            then (b.payload_json->'sleep'->>'totalSleepMinutes')::numeric > 0
+          else false
+        end
+        or case
+          when jsonb_typeof(b.payload_json->'sleep'->'nightSleepMinutes') = 'number'
+            then (b.payload_json->'sleep'->>'nightSleepMinutes')::numeric > 0
+          else false
+        end
+        or exists (
+          select 1
+          from jsonb_array_elements(coalesce(b.payload_json->'sleep'->'records', '[]'::jsonb)) record
+          where (
+            case when jsonb_typeof(record->'totalSleepMinutes') = 'number'
+              then (record->>'totalSleepMinutes')::numeric > 0 else false end
+          ) or (
+            case when jsonb_typeof(record->'nightSleepMinutes') = 'number'
+              then (record->>'nightSleepMinutes')::numeric > 0 else false end
+          )
+        )
+      )
 ${targetDateFilter}
     order by b.processed_at asc, b.batch_id asc
   `, targetDateParams);
@@ -1048,23 +1071,18 @@ function hasValidSnapshotDays(snapshot) {
 }
 
 function hasSleepPayload(sleep) {
-  return Boolean(sleep && [
-    sleep.records?.length,
-    sleep.totalSleepMinutes,
-    sleep.nightSleepMinutes,
-    sleep.napMinutes,
-    sleep.bedtime,
-    sleep.wakeTime,
-    sleep.sleepStartTime,
-    sleep.sleepEndTime,
-    sleep.deepSleepMinutes,
-    sleep.lightSleepMinutes,
-    sleep.remSleepMinutes,
-    sleep.awakeMinutes,
-    sleep.sleepStageText,
-    sleep.sleepStageDetail,
-    ...SLEEP_HEALTH_FIELDS.map((field) => sleep[field]),
-  ].some((value) => value !== null && value !== undefined && value !== '' && value !== 0));
+  if (!sleep) return false;
+  if (isPositiveNumber(sleep.totalSleepMinutes) || isPositiveNumber(sleep.nightSleepMinutes)) {
+    return true;
+  }
+  return (sleep.records ?? []).some((record) =>
+    isPositiveNumber(record?.totalSleepMinutes) || isPositiveNumber(record?.nightSleepMinutes)
+  );
+}
+
+function isPositiveNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0;
 }
 
 function isTelegramImageBatch(batch) {
@@ -1076,4 +1094,3 @@ function isTelegramImageBatch(batch) {
   }
   return (batch?.messages ?? []).some((message) => (message?.photos ?? []).length > 0);
 }
-

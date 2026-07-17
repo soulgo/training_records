@@ -40,7 +40,7 @@ main 环境对应：
 | `CLOUDFLARE_API_TOKEN` | 部署 Worker 或清理缓存时必填 | 部署 Worker、清理 Cloudflare 缓存；也可作为 Pages 部署 token。 |
 | `CLOUDFLARE_PAGES_API_TOKEN` | 可选 | Pages / cache purge 专用 token；不填时使用 `CLOUDFLARE_API_TOKEN`。 |
 | `CLOUDFLARE_ZONE_ID` | 清理 Cloudflare 缓存时必填 | 生产站点发布后清理 Cloudflare 缓存。 |
-| `TELEGRAM_RECOGNITION_FALLBACK_API_KEY` | 启用备用识别时必填 | 图片识别备用 AI provider 的 key。当前 GitHub Settings 清单中缺少此项；空值时运行时不会创建备用 provider。 |
+| `TELEGRAM_RECOGNITION_FALLBACK_API_KEY` | 启用备用识别时必填 | 图片识别备用 AI provider 的 key。当前 GitHub Settings 清单中缺少此项；空值时运行时不会创建备用 provider，主识别缺字段将无法补全，但图片上已有的数据仍按“只写入图片上确有的数据”正常入库。 |
 | `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` | 启用备用识别时必填 | 备用 AI provider base URL；当前 GitHub Settings 清单中缺少此项。 |
 
 ### 1.2 Variables
@@ -48,14 +48,14 @@ main 环境对应：
 | Variable 名称 | 建议值 / 示例 | 是否必填 | 用途 |
 | --- | --- | --- | --- |
 | `TRAINING_DB_ENABLED` | `true` | 必填 | 是否启用生产 PostgreSQL。 |
-| `TRAINING_DB_TIMEOUT_MS` | `5000` | 建议填 | 数据库连接超时。 |
+| `TRAINING_DB_TIMEOUT_MS` | `5000` | 建议填 | 数据库连接超时；不同运行路径的未配置默认值不同，建议显式配置。 |
 | `TRAINING_DB_APP_NAME` | `sync-main` | 建议填 | PostgreSQL `application_name`，便于在 DB 侧区分来源。 |
 | `GITHUB_ACTION_MONITOR_REPORT_URL_MAIN` | main 监控 API base URL | 可选 | 本地或旧 workflow 使用 HTTP monitor server 时的兜底地址；当前 `Action Monitor Report` 直接写生产 PostgreSQL。当前 GitHub Settings 清单中缺少该项。 |
 | `GITHUB_ACTION_MONITOR_REPORT_URL` | 共享监控 API base URL | 可选 | main/dev 专用 URL 未配置时的共享兜底地址。当前 GitHub Settings 清单中缺少该项。 |
 | `GITHUB_ACTION_MONITOR_REPORT_URL_DEV` | dev 监控 API base URL | 可选 | 所有 workflow 都注入该变量；main 分支不会优先使用它。当前 GitHub Settings 清单中缺少该项。 |
 | `TRAINING_SNAPSHOT_SOURCE` | `database` | 建议填 | 构建站点时从数据库还是 Markdown 生成快照。 |
 | `AI_PROVIDER` | `openai-compatible` | 建议填 | 当前代码支持 OpenAI-compatible provider；当前 GitHub Settings 清单中缺少该项，因此 workflow 使用 `openai-compatible` 默认值。 |
-| `AI_API_PROTOCOL` | `chat_completions` / `responses` | 必填 | 请求协议；必须与 `AI_MODEL` 实际支持的协议一致。 |
+| `AI_API_PROTOCOL` | `chat_completions` / `responses` | 建议填 | 未配置时 workflow 和运行时代码默认 `chat_completions`；需要 Responses API 时设为 `responses`，且必须与 `AI_MODEL` 实际支持的协议一致。 |
 | `AI_MODEL` | 例如 `gpt-4.1-mini` | 必填 | 默认 AI 模型。 |
 | `AI_TIMEOUT_MS` | `60000` | 建议填 | AI 请求超时。 |
 | `AI_CONCURRENCY` | `3` | 建议填 | 图片识别并发数。 |
@@ -64,7 +64,7 @@ main 环境对应：
 | `TELEGRAM_RECOGNITION_MODEL` | 识别模型名 | 可选 | 只覆盖 Telegram/飞书图片识别模型；不填用 `AI_MODEL`。当前 GitHub Settings 清单中缺少该项。 |
 | `TELEGRAM_RECOGNITION_CACHE_ENABLED` | `true` | 建议填 | 是否启用识别结果缓存。 |
 | `TELEGRAM_RECOGNITION_FALLBACK_MODEL` | 模型名 | 可选 | 备用 AI provider 模型。 |
-| `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS` | `60000` | 可选 | 备用 AI 请求超时。 |
+| `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS` | `90000` | 可选 | 备用 AI 请求超时。备 AI 作为主 AI 故障与业务补全的最后防线，超时不应短于主 AI；睡眠等字段密集截图生成较慢，建议 90s。 |
 | `TELEGRAM_POLL_LIMIT` | `20` | 当前 workflow 无需配置 | poll 模式拉取数量；main workflow 当前固定 webhook 模式，因此该值不会影响当前 GitHub 同步。 |
 | `TELEGRAM_WEBHOOK_URL` | `https://feishu.soulgo.chat/telegram` | 必填 | 刷新生产 Telegram webhook 的目标 URL。 |
 | `COS_ENABLED` | `true` / `false` | 按需 | 是否把随想图片上传生产 COS。 |
@@ -74,8 +74,8 @@ main 环境对应：
 | `MARKDOWN_BACKUP_ENABLED` | `true` / `false` | 可选 | 是否启用定时 Markdown 备份。 |
 | `MARKDOWN_BACKUP_FREQUENCY` | `daily` / `weekly` | 可选 | 定时备份频率。 |
 | `MARKDOWN_BACKUP_BRANCH` | `main` | 可选 | Markdown 备份目标分支；只影响 checkout/push 目标，备份数据源仍固定为生产 `TRAINING_DB_*`。 |
-| `MARKDOWN_BACKUP_COMMIT` | `true` | 可选 | 备份有变更时是否自动提交。 |
-| `TRAINING_ANALYSIS_GOAL` | 自定义分析目标 | 可选 | 训练分析提示词目标。 |
+| `MARKDOWN_BACKUP_COMMIT` | `true` | 可选 | 备份有变更时是否自动提交；当前 GitHub Settings 清单中缺少该项，workflow 默认 `true`。 |
+| `TRAINING_ANALYSIS_GOAL` | 自定义分析目标 | 可选 | 训练分析提示词目标；当前 GitHub Settings 清单中缺少该项，运行时代码使用内置的“增肌减腹”目标。 |
 
 ## 2. Cloudflare 必填清单
 
@@ -127,7 +127,7 @@ npx wrangler secret put FEISHU_APP_SECRET --config wrangler.toml
 npx wrangler secret put FEISHU_ALLOWED_CHAT_IDS --config wrangler.toml
 ```
 
-`deploy-cloudflare-worker.yml` 当前会自动写入 `TELEGRAM_BOT_TOKEN` 和 `TELEGRAM_SECRET_TOKEN`，但 `GITHUB_TOKEN`、`FEISHU_ENCRYPT_KEY`、`FEISHU_VERIFICATION_TOKEN` 仍需要你在 Cloudflare Worker Secret 中配置。
+`deploy-cloudflare-worker.yml` 当前只会自动写入 `TELEGRAM_BOT_TOKEN` 和 `TELEGRAM_SECRET_TOKEN`。`GITHUB_TOKEN`、`TELEGRAM_ALLOWED_CHAT_IDS`、`FEISHU_ENCRYPT_KEY`、`FEISHU_VERIFICATION_TOKEN`、`FEISHU_ALLOWED_CHAT_IDS` 仍需要在 Cloudflare Worker Secret 中单独维护；两个白名单未配置时 Worker 会放行任意 chat。`FEISHU_APP_ID` / `FEISHU_APP_SECRET` 也不会自动同步，按需配置，用于 Worker 在派发失败时向飞书通知。
 
 ## 3. 参数从哪里查
 
@@ -137,12 +137,14 @@ npx wrangler secret put FEISHU_ALLOWED_CHAT_IDS --config wrangler.toml
 | --- | --- | --- |
 | `AI_API_KEY` | AI 服务商控制台 | Secret。只放 GitHub Secrets。 |
 | `AI_BASE_URL` | AI 服务商文档 | Secret。OpenAI-compatible base URL，通常以 `/v1` 结尾。 |
-| `AI_API_PROTOCOL` | AI 服务商模型/API 文档 | Variable；`chat_completions` 请求 `/chat/completions`，`responses` 请求 `/responses`。 |
+| `AI_API_PROTOCOL` | AI 服务商模型/API 文档 | Variable；未填默认 `chat_completions`；`chat_completions` 请求 `/chat/completions`，`responses` 请求 `/responses`。 |
 | `AI_MODEL` | AI 服务商模型列表 | Variable。默认识别和分析模型。 |
 | `TELEGRAM_RECOGNITION_MODEL` | AI 服务商模型列表 | Variable。只想让图片识别用另一个模型时再填；当前 GitHub Settings 清单中缺少该项。 |
 | `AI_SUPPORTS_VISION` / `AI_SUPPORTS_JSON_SCHEMA` / `AI_SUPPORTS_JSON_OBJECT` / `AI_SUPPORTS_TEXT_JSON` | AI 服务商能力说明 | 运行时代码支持，默认都为 `true`；当前 sync workflow 尚未注入这些变量，如需显式覆盖必须先同步修改 workflow。 |
 
 当前代码读取位置：`src/adapters/ai/openai-compatible.adapter.mjs`、`src/app/use-cases/message-sync.use-case.mjs`。
+
+图片识别完整性门禁始终启用（无功能开关）：主识别业务字段完整时不调用备 AI；`incomplete`/`needs_review` 且已配置 `TELEGRAM_RECOGNITION_FALLBACK_*` 三项时才调用备 AI 尽量补全图片可见字段。`.github/workflows/sync.yml` 与 `.github/workflows/pending-replay.yml` 注入同一套识别主备、超时和缓存配置，确保实时同步与 pending 重放使用相同的完整性门禁和主备能力。完整性门禁只决定是否触发备 AI，不决定是否入库，入库口径见 [数据入库流程](../02_系统核心逻辑/数据入库流程.md)。
 
 ### 3.2 Telegram
 

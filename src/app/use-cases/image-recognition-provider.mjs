@@ -75,6 +75,17 @@ export async function requestRecognitionWithProviderFallback(input) {
   }
 }
 
+export async function requestRecognitionWithProvider(input) {
+  const result = await requestRecognition(input);
+  return {
+    value: result.value,
+    aiUsage: result.aiUsage,
+    aiProvider: input.aiProvider,
+    attemptKind: result.attemptKind,
+    idempotencyKey: input.idempotencyKey,
+  };
+}
+
 function attachRecognitionAiAudit(error, { aiProvider, attemptKind, idempotencyKey, promptVersion }) {
   if (!error || typeof error !== 'object') {
     return;
@@ -89,7 +100,7 @@ function attachRecognitionAiAudit(error, { aiProvider, attemptKind, idempotencyK
 }
 
 function shouldRetryWithFallbackProvider(error) {
-  if (error instanceof AiProviderError) {
+  if (error instanceof AiProviderError || error instanceof AiSchemaError) {
     return true;
   }
   if (error?.status && RECOGNITION_RETRYABLE_STATUSES.has(Number(error.status))) {

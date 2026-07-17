@@ -1,0 +1,27 @@
+{
+  "sampleId": "workout-fallback-completed",
+  "imageType": "workout",
+  "scenario": "fallback_completed",
+  "recognition": {
+    "imageType": "workout",
+    "records": {
+      "activities": [],
+      "dailyWorkoutSummary": { "activityCaloriesKcal": null, "workoutDurationMinutes": 45, "activeHours": 8 }
+    }
+  },
+  "fallback": {
+    "imageType": "workout",
+    "records": {
+      "activities": [],
+      "dailyWorkoutSummary": { "activityCaloriesKcal": 520, "workoutDurationMinutes": 45, "activeHours": 8 }
+    }
+  },
+  "expected": {
+    "stored": true,
+    "completeness": { "status": "complete" },
+    "reconciliation": {
+      "status": "fallback_completed",
+      "filledFields": ["records.dailyWorkoutSummary.activityCaloriesKcal"]
+    }
+  }
+}

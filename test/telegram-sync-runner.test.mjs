@@ -17,6 +17,7 @@ import {
 import { runTelegramSync } from '../src/app/use-cases/telegram-sync.use-case.mjs';
 import {
   recognizeBatch,
+  replayPendingRecognitionBatches,
   resolveRecognitionImageInputMode,
 } from '../src/app/use-cases/message-sync/image-processing.mjs';
 import { notifyTelegramActionFailure } from '../tools/telegram-action-monitor.mjs';
@@ -532,7 +533,7 @@ test('recognition cache key changes with prompt schema and model versions', () =
       model: 'gpt-test',
       capabilityMode: 'strict_schema',
     }),
-    'telegram:file_unique_id:uniq-a:prompt:2026-05-24:schema:v1:model:gpt-test:capability:strict_schema',
+    'telegram:file_unique_id:uniq-a:prompt:2026-05-24:schema:v1:completeness:v1:model:gpt-test:capability:strict_schema',
   );
   assert.equal(buildRecognitionCacheKey({ fileUniqueId: 'uniq-a' }), null);
   assert.equal(isRecognitionCacheEnabled({ TELEGRAM_RECOGNITION_CACHE_ENABLED: 'true' }), true);
@@ -794,6 +795,12 @@ test('runTelegramSync persists ready image batches to the database without writi
         dateEvidence: 'image header',
         confidence: 0.96,
         warnings: [],
+        completeness: {
+          status: 'complete', version: 'v1', missingFields: [], conditionalFields: [], reviewFields: [], evidenceCodes: [],
+        },
+        reconciliation: {
+          status: 'primary', filledFields: [], agreedFields: [], conflictFields: [], fieldSources: {}, finalSource: 'primary',
+        },
         records: {
           measurement: null,
           activities: [],
@@ -801,6 +808,7 @@ test('runTelegramSync persists ready image batches to the database without writi
           totalCalories: 1593,
           details: ['晚餐 1065 千卡'],
           dailyWorkoutSummary: null,
+          sleep: null,
         },
       },
     ],
@@ -1449,6 +1457,12 @@ test('runTelegramSync queues database replay when image persistence fails', asyn
         dateEvidence: 'image header',
         confidence: 0.96,
         warnings: [],
+        completeness: {
+          status: 'complete', version: 'v1', missingFields: [], conditionalFields: [], reviewFields: [], evidenceCodes: [],
+        },
+        reconciliation: {
+          status: 'primary', filledFields: [], agreedFields: [], conflictFields: [], fieldSources: {}, finalSource: 'primary',
+        },
         records: {
           measurement: null,
           activities: [],
@@ -1456,6 +1470,7 @@ test('runTelegramSync queues database replay when image persistence fails', asyn
           totalCalories: 1593,
           details: ['晚餐 1065 千卡'],
           dailyWorkoutSummary: null,
+          sleep: null,
         },
       },
     ],
@@ -1571,6 +1586,12 @@ test('runTelegramSync replays a ready batch from pending after database recovery
         dateEvidence: 'image header',
         confidence: 0.96,
         warnings: [],
+        completeness: {
+          status: 'complete', version: 'v1', missingFields: [], conditionalFields: [], reviewFields: [], evidenceCodes: [],
+        },
+        reconciliation: {
+          status: 'primary', filledFields: [], agreedFields: [], conflictFields: [], fieldSources: {}, finalSource: 'primary',
+        },
         records: {
           measurement: null,
           activities: [],
@@ -1578,6 +1599,7 @@ test('runTelegramSync replays a ready batch from pending after database recovery
           totalCalories: 1593,
           details: ['晚餐 1065 千卡'],
           dailyWorkoutSummary: null,
+          sleep: null,
         },
       },
     ],
@@ -1595,6 +1617,8 @@ test('runTelegramSync replays a ready batch from pending after database recovery
   assert.equal(pendingRows.length, 1);
   assert.equal(pendingRows[0].batch.batchId, 'album-1');
   assert.equal(pendingRows[0].batch.nutrition.totalCalories, 1593);
+  assert.equal(pendingRows[0].batch.recognitions[0].completeness.status, 'complete');
+  assert.equal(pendingRows[0].batch.recognitions[0].reconciliation.status, 'primary');
 
   const secondRun = await runTelegramSync({
     rootDir: tempRoot,
@@ -2705,6 +2729,158 @@ test('runTelegramSync skips an undated single nutrition screenshot without a fil
   assert.match(result.batches[0].warnings.join('\n'), /photo 形式发送/);
   assert.equal(buildMessageSyncReport(result).batches[0].failureDisposition, 'manual_intervention');
   assert.doesNotMatch(await readFile(path.join(tempRoot, '训练记录.md'), 'utf8'), /晚餐：465千卡/);
+});
+
+test('pending replay persists business-incomplete audit, resolves the task, and preserves Feishu source identity', async () => {
+  const persisted = [];
+  const resolved = [];
+  const queued = [];
+  const result = await replayPendingRecognitionBatches({
+    entries: [{
+      batchId: 'feishu-pending-incomplete',
+      failureCategory: 'ai_service',
+      batch: {
+        kind: 'image',
+        batchId: 'feishu-pending-incomplete',
+        sourceChannel: 'feishu',
+        messages: [{ messageId: 91, sourceChannel: 'feishu', sourceMessageId: 'om_91', photos: [{ fileId: 'img_91' }] }],
+      },
+    }],
+    recognizeBatchRunner: async () => ({
+      recognitions: [{
+        messageId: 91, sourceMessageId: 'om_91', imageType: 'measurement', detectedApp: '华为健康',
+        detectedDate: '2026-07-16', dateEvidence: 'image header', confidence: 0.95, warnings: [],
+        records: { measurement: { weightKg: null }, activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null },
+        completeness: { status: 'incomplete', version: 'v1', missingFields: ['records.measurement.weightKg'], conditionalFields: [], reviewFields: [] },
+        reconciliation: { status: 'fallback_unavailable', conflictFields: [] },
+      }],
+      recognitionErrors: [],
+    }),
+    persistBatch: async ({ batch }) => {
+      persisted.push(batch);
+      return { status: 'stored' };
+    },
+    appendPendingRecognitionBatch: async (entry) => {
+      queued.push(entry);
+      return { status: 'queued' };
+    },
+    markPendingRecognitionResolved: async (entry) => {
+      resolved.push(entry);
+      return { status: 'resolved' };
+    },
+    now: new Date('2026-07-16T10:00:00.000Z'),
+    env: {},
+  });
+
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0].status, 'skipped');
+  assert.equal(persisted[0].sourceChannel, 'feishu');
+  assert.equal(persisted[0].failureCategory, 'business_incomplete');
+  assert.deepEqual(resolved, [{ batchId: 'feishu-pending-incomplete', sourceChannel: 'feishu' }]);
+  assert.equal(queued.length, 0);
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].recognitionPendingStatus, 'resolved');
+});
+
+test('pending database replay refuses stale ready image batches that lack a complete recognition contract', async () => {
+  const persisted = [];
+  let recognitionCount = 0;
+  const resolved = [];
+  const result = await replayPendingRecognitionBatches({
+    entries: [{
+      failureCategory: 'database',
+      batch: {
+        kind: 'image',
+        batchId: 'stale-ready-image',
+        sourceChannel: 'telegram',
+        status: 'ready',
+        archivedDate: '2026-07-16',
+        messages: [{ messageId: 92, photos: [{ fileId: 'img_92' }] }],
+        recognitions: [{
+          messageId: 92, imageType: 'measurement',
+          records: { measurement: { weightKg: null }, activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null },
+        }],
+      },
+    }],
+    recognizeBatchRunner: async () => {
+      recognitionCount += 1;
+      return {
+        recognitions: [{
+          messageId: 92, imageType: 'measurement', detectedApp: '华为健康', detectedDate: '2026-07-16',
+          dateEvidence: 'image header', confidence: 0.95, warnings: [],
+          records: { measurement: { weightKg: null }, activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null },
+          completeness: { status: 'incomplete', version: 'v1', missingFields: ['records.measurement.weightKg'], conditionalFields: [], reviewFields: [] },
+          reconciliation: { status: 'fallback_unavailable', conflictFields: [] },
+        }],
+        recognitionErrors: [],
+      };
+    },
+    persistBatch: async ({ batch }) => { persisted.push(batch); return { status: 'stored' }; },
+    appendPendingRecognitionBatch: async () => ({ status: 'queued' }),
+    markPendingRecognitionResolved: async (entry) => { resolved.push(entry); return { status: 'resolved' }; },
+    now: new Date('2026-07-16T10:00:00.000Z'),
+    env: {},
+  });
+
+  assert.equal(recognitionCount, 1);
+  assert.equal(persisted.length, 1);
+  assert.equal(persisted[0].status, 'skipped');
+  assert.deepEqual(resolved, [{ batchId: 'stale-ready-image', sourceChannel: 'telegram' }]);
+  assert.equal(result.batches[0].status, 'skipped');
+  assert.equal(result.batches[0].failureCategory, 'business_incomplete');
+});
+
+test('runTelegramSync persists incomplete recognition audit without queuing retry or writing business success', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-incomplete-audit-'));
+  const persistedBatches = [];
+  const queued = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'token', AI_API_KEY: 'key', AI_BASE_URL: 'https://example.com/v1',
+      AI_MODEL: 'gpt-test', TELEGRAM_ALLOWED_CHAT_IDS: '42', TRAINING_DB_ENABLED: 'true',
+      TRAINING_DB_URL: 'postgresql://training_writer:secret@example.com:5432/training_records',
+    },
+    getLastProcessedUpdateId: async () => 900,
+    fetchUpdates: async () => [{
+      update_id: 901,
+      message: {
+        message_id: 382,
+        date: Math.floor(new Date('2026-07-16T03:00:00Z').getTime() / 1000),
+        chat: { id: 42 },
+        photo: [{ file_id: 'file-measurement', file_unique_id: 'uniq-measurement' }],
+      },
+    }],
+    recognizeBatch: async () => ({
+      recognitions: [{
+        messageId: 382,
+        imageType: 'measurement', detectedApp: '华为健康', detectedDate: '2026-07-16',
+        dateEvidence: 'image header', confidence: 0.95, warnings: [],
+        records: { measurement: { weightKg: null }, activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null },
+        completeness: { status: 'incomplete', version: 'v1', missingFields: ['records.measurement.weightKg'], conditionalFields: [], reviewFields: [] },
+        reconciliation: { status: 'fallback_unavailable', conflictFields: [] },
+      }],
+      recognitionErrors: [],
+    }),
+    persistNormalizedBatch: async ({ batch }) => {
+      persistedBatches.push(batch);
+      return { status: 'stored', archivedDate: null };
+    },
+    appendPendingRecognitionBatch: async (entry) => {
+      queued.push(entry);
+      return { status: 'queued' };
+    },
+    buildTrainingSnapshot: async () => { throw new Error('should not rebuild for audit-only batch'); },
+  });
+
+  assert.equal(persistedBatches.length, 1);
+  assert.equal(persistedBatches[0].status, 'skipped');
+  assert.equal(persistedBatches[0].failureDisposition, 'manual_intervention');
+  assert.equal(queued.length, 0);
+  assert.equal(result.changed, false);
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
+  assert.equal(buildMessageSyncReport(result).batches[0].failureDisposition, 'manual_intervention');
 });
 
 test('runTelegramSync skips polling when webhook mode is enabled without dispatch payload', async () => {
