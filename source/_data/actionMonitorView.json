@@ -1,0 +1,37 @@
+{
+  "title": "action 监控",
+  "environment": "dev",
+  "generatedAt": "2026-07-17T02:10:17.520Z",
+  "updatedTime": "10:10",
+  "summaryCards": [
+    {
+      "label": "最近运行",
+      "value": "0 次",
+      "hint": "暂无 Action 数据"
+    },
+    {
+      "label": "成功率",
+      "value": "0%",
+      "hint": "暂无完成记录"
+    },
+    {
+      "label": "失败",
+      "value": "0 次",
+      "hint": "当前无失败记录"
+    },
+    {
+      "label": "平均耗时",
+      "value": "—",
+      "hint": "暂无耗时"
+    }
+  ],
+  "recentWindowLabel": "全部 Action 日志",
+  "historyTitle": "Action 日志",
+  "historyPageSize": 15,
+  "historyTotal": 0,
+  "historyStatus": "0 / 共 0 次",
+  "recentRuns": [],
+  "historyRuns": [],
+  "runs": [],
+  "allRuns": []
+}

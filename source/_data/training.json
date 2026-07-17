@@ -1,106 +1,202 @@
 {
-  "generatedAt": "2026-07-11T09:10:04.691Z",
+  "generatedAt": "2026-07-17T02:10:17.520Z",
   "latest": {
     "measurement": {
-      "archivedDate": "2026-07-09",
-      "measuredAt": "2026-07-09",
+      "archivedDate": "2026-07-15",
+      "measuredAt": "2026-07-15",
       "bodyScore": null,
-      "weightKg": 142.4,
-      "bmi": 22.9,
-      "bodyFatPct": 21.3,
-      "skeletalMuscleKg": 60.7,
+      "weightKg": 141.7,
+      "bmi": 22.8,
+      "bodyFatPct": 21.8,
+      "skeletalMuscleKg": 59.9,
       "visceralFatLevel": 8,
-      "basalMetabolismKcal": 1577,
-      "bodyWaterPct": 51,
-      "proteinPct": 23.6,
-      "boneMassKg": 5.87,
-      "fatFreeMassKg": 112,
+      "basalMetabolismKcal": 1560,
+      "bodyWaterPct": 50.3,
+      "proteinPct": 23.8,
+      "boneMassKg": 5.79,
+      "fatFreeMassKg": 110.6,
       "bodyAge": 30,
       "bodyType": "标准型"
     },
     "daily": {
-      "date": "2026-07-09",
+      "date": "2026-07-15",
       "measurement": {
-        "archivedDate": "2026-07-09",
-        "measuredAt": "2026-07-09",
+        "archivedDate": "2026-07-15",
+        "measuredAt": "2026-07-15",
         "bodyScore": null,
-        "weightKg": 142.4,
-        "bmi": 22.9,
-        "bodyFatPct": 21.3,
-        "skeletalMuscleKg": 60.7,
+        "weightKg": 141.7,
+        "bmi": 22.8,
+        "bodyFatPct": 21.8,
+        "skeletalMuscleKg": 59.9,
         "visceralFatLevel": 8,
-        "basalMetabolismKcal": 1577,
-        "bodyWaterPct": 51,
-        "proteinPct": 23.6,
-        "boneMassKg": 5.87,
-        "fatFreeMassKg": 112,
+        "basalMetabolismKcal": 1560,
+        "bodyWaterPct": 50.3,
+        "proteinPct": 23.8,
+        "boneMassKg": 5.79,
+        "fatFreeMassKg": 110.6,
         "bodyAge": 30,
         "bodyType": "标准型"
       },
       "measurements": [
         {
-          "archivedDate": "2026-07-09",
-          "measuredAt": "2026-07-09",
+          "archivedDate": "2026-07-15",
+          "measuredAt": "2026-07-15",
           "bodyScore": null,
-          "weightKg": 142.4,
-          "bmi": 22.9,
-          "bodyFatPct": 21.3,
-          "skeletalMuscleKg": 60.7,
+          "weightKg": 141.7,
+          "bmi": 22.8,
+          "bodyFatPct": 21.8,
+          "skeletalMuscleKg": 59.9,
           "visceralFatLevel": 8,
-          "basalMetabolismKcal": 1577,
-          "bodyWaterPct": 51,
-          "proteinPct": 23.6,
-          "boneMassKg": 5.87,
-          "fatFreeMassKg": 112,
+          "basalMetabolismKcal": 1560,
+          "bodyWaterPct": 50.3,
+          "proteinPct": 23.8,
+          "boneMassKg": 5.79,
+          "fatFreeMassKg": 110.6,
           "bodyAge": 30,
           "bodyType": "标准型"
         }
       ],
       "activities": [
         {
-          "time": "08:12",
+          "time": "08:04",
           "type": "户外骑行",
           "rawType": "户外骑行",
-          "detail": "距离3.06公里，时长00:13:27，均速13.65公里/小时",
-          "durationText": "00:13:27",
-          "durationSeconds": 807,
+          "detail": "3.17 公里",
+          "durationText": null,
+          "durationSeconds": 0,
           "calories": null,
-          "distanceKm": 3.06,
-          "avgSpeedKmh": 13.65,
+          "distanceKm": 3.17,
+          "avgSpeedKmh": null,
           "heartRate": null
         },
         {
-          "time": "08:28",
+          "time": "08:04",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "3.17公里，时长 00:15:07，平均速度 12.58公里/小时",
+          "durationText": "00:15:07",
+          "durationSeconds": 907,
+          "calories": null,
+          "distanceKm": 3.17,
+          "avgSpeedKmh": 12.58,
+          "heartRate": null
+        },
+        {
+          "time": "08:21",
           "type": "爬楼",
           "rawType": "爬楼",
-          "detail": "总消耗40千卡，时长00:03:49，151次/分钟",
-          "durationText": "00:03:49",
-          "durationSeconds": 229,
-          "calories": 40,
+          "detail": "总消耗（千卡）",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
           "distanceKm": null,
           "avgSpeedKmh": null,
           "heartRate": null
         },
         {
-          "time": "11:35",
-          "type": "户外骑行",
-          "rawType": "户外骑行",
-          "detail": "距离3.14公里，时长00:15:42，均速12.00公里/小时",
-          "durationText": "00:15:42",
-          "durationSeconds": 942,
-          "calories": null,
-          "distanceKm": 3.14,
-          "avgSpeedKmh": 12,
+          "time": "08:21",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "总消耗 71千卡，时长 00:10:04，119次/分钟",
+          "durationText": "00:10:04",
+          "durationSeconds": 604,
+          "calories": 71,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
           "heartRate": null
         },
         {
-          "time": "20:18",
-          "type": "哑铃力量训练",
-          "rawType": "哑铃力量训练",
-          "detail": "总消耗272千卡，时长00:52:40，103次/分钟",
-          "durationText": "00:52:40",
-          "durationSeconds": 3160,
-          "calories": 272,
+          "time": "11:34",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "3.01公里，时长 00:14:45，平均速度 12.24公里/小时",
+          "durationText": "00:14:45",
+          "durationSeconds": 885,
+          "calories": null,
+          "distanceKm": 3.01,
+          "avgSpeedKmh": 12.24,
+          "heartRate": null
+        },
+        {
+          "time": "11:34",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "3.01 公里",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": 3.01,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "13:50",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "3.19公里，时长 00:14:32，平均速度 13.17公里/小时",
+          "durationText": "00:14:32",
+          "durationSeconds": 872,
+          "calories": null,
+          "distanceKm": 3.19,
+          "avgSpeedKmh": 13.17,
+          "heartRate": null
+        },
+        {
+          "time": "13:50",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "3.19 公里",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": 3.19,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "18:06",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "2.99 公里",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": 2.99,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "18:06",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "2.99公里，时长 00:17:01，平均速度 10.54公里/小时",
+          "durationText": "00:17:01",
+          "durationSeconds": 1021,
+          "calories": null,
+          "distanceKm": 2.99,
+          "avgSpeedKmh": 10.54,
+          "heartRate": null
+        },
+        {
+          "time": "20:29",
+          "type": "弹力带胸部力量训练",
+          "rawType": "弹力带胸部力量训练",
+          "detail": "总消耗（千卡）",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "20:29",
+          "type": "弹力带胸部力量训练",
+          "rawType": "弹力带胸部力量训练",
+          "detail": "总消耗 149千卡，时长 00:30:04，100次/分钟",
+          "durationText": "00:30:04",
+          "durationSeconds": 1804,
+          "calories": 149,
           "distanceKm": null,
           "avgSpeedKmh": null,
           "heartRate": null
@@ -109,138 +205,138 @@
       "sleep": [
         {
           "sleepType": "夜间睡眠",
-          "bedtime": "23:20",
-          "wakeTime": "06:57",
-          "nightSleepMinutes": 392,
-          "totalSleepMinutes": 392,
+          "bedtime": "23:09",
+          "wakeTime": "07:00",
+          "nightSleepMinutes": 441,
+          "totalSleepMinutes": 441,
           "napMinutes": null,
-          "deepSleepMinutes": 178,
-          "lightSleepMinutes": 133,
-          "remSleepMinutes": 101,
+          "deepSleepMinutes": 90,
+          "lightSleepMinutes": 195,
+          "remSleepMinutes": 96,
           "awakeMinutes": null,
-          "sleepStageText": "深睡 2小时58分钟、浅睡 2小时53分钟、快速眼动 1小时41分钟",
+          "sleepStageText": "深睡 2小时30分钟，浅睡 3小时19分钟，快速眼动 1小时32分钟",
           "sleepStageDetail": null,
-          "sleepScore": 89,
-          "sleepScorePercentile": 99,
-          "deepSleepRatioPct": 39,
-          "lightSleepRatioPct": 38,
-          "remSleepRatioPct": 23,
-          "deepSleepContinuityScore": 79,
-          "wakeCount": 2,
+          "sleepScore": 87,
+          "sleepScorePercentile": 98,
+          "deepSleepRatioPct": 34,
+          "lightSleepRatioPct": 45,
+          "remSleepRatioPct": 21,
+          "deepSleepContinuityScore": 90,
+          "wakeCount": 1,
           "breathingQualityScore": 98,
-          "averageHeartRateBpm": 75,
-          "hrvMs": 35,
+          "averageHeartRateBpm": 74,
+          "hrvMs": 41,
           "averageSpo2Pct": 97,
           "averageRespiratoryRate": 14,
-          "analysisText": "睡眠质量良好，然而睡眠用时偏短，睡眠可能没有得到充分恢复。最近7天若无太多重复发生该问题，睡眠时间平均仍处于较低水平。",
-          "suggestionText": "睡前不要过量饮水，以免导致起夜，降低深睡眠比例，影响睡眠质量。",
-          "sleepStartTime": "23:20",
-          "sleepEndTime": "06:57"
+          "analysisText": "睡眠质量良好，睡眠时长7小时21分钟，在正常范围内。良好的睡眠，可以改善脑部活力，注意保持正常血氧水平更重要。",
+          "suggestionText": "建议睡前洗热水澡，有利于放松身心，舒缓压力，帮助入睡并改善睡眠质量。",
+          "sleepStartTime": "23:09",
+          "sleepEndTime": "07:00"
         }
       ],
       "sleepSummary": {
         "records": [
           {
             "sleepType": "夜间睡眠",
-            "bedtime": "23:20",
-            "wakeTime": "06:57",
-            "nightSleepMinutes": 392,
-            "totalSleepMinutes": 392,
+            "bedtime": "23:09",
+            "wakeTime": "07:00",
+            "nightSleepMinutes": 441,
+            "totalSleepMinutes": 441,
             "napMinutes": null,
-            "deepSleepMinutes": 178,
-            "lightSleepMinutes": 133,
-            "remSleepMinutes": 101,
+            "deepSleepMinutes": 90,
+            "lightSleepMinutes": 195,
+            "remSleepMinutes": 96,
             "awakeMinutes": null,
-            "sleepStageText": "深睡 2小时58分钟、浅睡 2小时53分钟、快速眼动 1小时41分钟",
+            "sleepStageText": "深睡 2小时30分钟，浅睡 3小时19分钟，快速眼动 1小时32分钟",
             "sleepStageDetail": null,
-            "sleepScore": 89,
-            "sleepScorePercentile": 99,
-            "deepSleepRatioPct": 39,
-            "lightSleepRatioPct": 38,
-            "remSleepRatioPct": 23,
-            "deepSleepContinuityScore": 79,
-            "wakeCount": 2,
+            "sleepScore": 87,
+            "sleepScorePercentile": 98,
+            "deepSleepRatioPct": 34,
+            "lightSleepRatioPct": 45,
+            "remSleepRatioPct": 21,
+            "deepSleepContinuityScore": 90,
+            "wakeCount": 1,
             "breathingQualityScore": 98,
-            "averageHeartRateBpm": 75,
-            "hrvMs": 35,
+            "averageHeartRateBpm": 74,
+            "hrvMs": 41,
             "averageSpo2Pct": 97,
             "averageRespiratoryRate": 14,
-            "analysisText": "睡眠质量良好，然而睡眠用时偏短，睡眠可能没有得到充分恢复。最近7天若无太多重复发生该问题，睡眠时间平均仍处于较低水平。",
-            "suggestionText": "睡前不要过量饮水，以免导致起夜，降低深睡眠比例，影响睡眠质量。",
-            "sleepStartTime": "23:20",
-            "sleepEndTime": "06:57"
+            "analysisText": "睡眠质量良好，睡眠时长7小时21分钟，在正常范围内。良好的睡眠，可以改善脑部活力，注意保持正常血氧水平更重要。",
+            "suggestionText": "建议睡前洗热水澡，有利于放松身心，舒缓压力，帮助入睡并改善睡眠质量。",
+            "sleepStartTime": "23:09",
+            "sleepEndTime": "07:00"
           }
         ],
-        "totalSleepMinutes": 392,
-        "nightSleepMinutes": 392,
+        "totalSleepMinutes": 441,
+        "nightSleepMinutes": 441,
         "napMinutes": null,
-        "sleepStartTime": "23:20",
-        "sleepEndTime": "06:57",
-        "deepSleepMinutes": 178,
-        "lightSleepMinutes": 133,
-        "remSleepMinutes": 101,
+        "sleepStartTime": "23:09",
+        "sleepEndTime": "07:00",
+        "deepSleepMinutes": 90,
+        "lightSleepMinutes": 195,
+        "remSleepMinutes": 96,
         "awakeMinutes": null,
-        "sleepScore": 89,
-        "sleepScorePercentile": 99,
-        "deepSleepRatioPct": 39,
-        "lightSleepRatioPct": 38,
-        "remSleepRatioPct": 23,
-        "deepSleepContinuityScore": 79,
-        "wakeCount": 2,
+        "sleepScore": 87,
+        "sleepScorePercentile": 98,
+        "deepSleepRatioPct": 34,
+        "lightSleepRatioPct": 45,
+        "remSleepRatioPct": 21,
+        "deepSleepContinuityScore": 90,
+        "wakeCount": 1,
         "breathingQualityScore": 98,
-        "averageHeartRateBpm": 75,
-        "hrvMs": 35,
+        "averageHeartRateBpm": 74,
+        "hrvMs": 41,
         "averageSpo2Pct": 97,
         "averageRespiratoryRate": 14,
-        "analysisText": "睡眠质量良好，然而睡眠用时偏短，睡眠可能没有得到充分恢复。最近7天若无太多重复发生该问题，睡眠时间平均仍处于较低水平。",
-        "suggestionText": "睡前不要过量饮水，以免导致起夜，降低深睡眠比例，影响睡眠质量。"
+        "analysisText": "睡眠质量良好，睡眠时长7小时21分钟，在正常范围内。良好的睡眠，可以改善脑部活力，注意保持正常血氧水平更重要。",
+        "suggestionText": "建议睡前洗热水澡，有利于放松身心，舒缓压力，帮助入睡并改善睡眠质量。"
       },
       "workoutSummary": {
-        "totalActivities": 4,
-        "totalDurationSeconds": 5138,
-        "trainingCalories": 312,
-        "workoutDurationMinutes": 82,
-        "activeHours": 13,
-        "cyclingDistanceKm": 6.2,
+        "totalActivities": 12,
+        "totalDurationSeconds": 6093,
+        "trainingCalories": 220,
+        "workoutDurationMinutes": 81,
+        "activeHours": 12,
+        "cyclingDistanceKm": 24.72,
         "countsByType": {
-          "户外骑行": 2,
-          "爬楼": 1,
-          "哑铃力量训练": 1
+          "户外骑行": 8,
+          "爬楼": 2,
+          "弹力带胸部力量训练": 2
         }
       },
       "nutrition": {
         "meals": [
           {
             "name": "早餐",
-            "calories": 419,
-            "recommendedMin": 498,
-            "recommendedMax": 726
+            "calories": 607,
+            "recommendedMin": 495,
+            "recommendedMax": 722
           },
           {
             "name": "午餐",
-            "calories": 273,
-            "recommendedMin": 601,
-            "recommendedMax": 829
+            "calories": 1224,
+            "recommendedMin": 598,
+            "recommendedMax": 825
           },
           {
             "name": "晚餐",
-            "calories": 1849,
-            "recommendedMin": 560,
-            "recommendedMax": 746
+            "calories": 1113,
+            "recommendedMin": 557,
+            "recommendedMax": 742
           }
         ],
-        "totalCalories": 2541,
+        "totalCalories": 2944,
         "details": [
-          "馒头 0.6个 67千卡",
-          "包菜粉丝 0.7盘 260千卡",
-          "甜玉米 1根 92千卡",
+          "鸡蛋灌饼 1个 270千卡",
+          "茶叶蛋 2个 141千卡",
+          "烤肠 0.5根 196千卡",
           "凉拌黄瓜 1盘 126千卡",
-          "浆水面 1份 147千卡",
-          "烤羊肉串 5份 893千卡",
-          "炒面片 350克 536千卡",
-          "青椒 30克 10千卡",
-          "西葫芦 40克 6千卡",
-          "牛肉丝 20克 32千卡",
+          "手擀面（含汤底、葱花、酸菜等配料） 450克 1098千卡",
+          "椒盐掌中宝 3串 35千卡",
+          "烤牛肉串 3大串 133千卡",
+          "卫龙小鸡腿 100克 204千卡",
+          "羊肉串(烤) 3串 185千卡",
+          "甜玉米 2根 184千卡",
           "康比特 炽金 分离乳清蛋白(酸奶味) 100克 372千卡",
           "康比特 肌酸粉 100克 0千卡"
         ]
@@ -325,8 +421,12 @@
             "recommendedMax": 709
           }
         ],
-        "totalCalories": 1062,
-        "details": []
+        "totalCalories": 2124,
+        "details": [
+          "兰州拉面（早餐，1碗）510千卡",
+          "炒拉条（午餐，1盘）360千卡",
+          "青椒炒茄子（晚餐，1盘）192千卡"
+        ]
       }
     },
     {
@@ -448,7 +548,10 @@
           }
         ],
         "totalCalories": 588,
-        "details": []
+        "details": [
+          "浆水面 1碗 420千卡",
+          "火锅鸡 1份 168千卡"
+        ]
       }
     },
     {
@@ -3006,12 +3109,24 @@
           "time": "08:04",
           "type": "户外骑行",
           "rawType": "户外骑行",
-          "detail": "距离3.18公里，时长00:12:47，均速14.93公里/小时",
+          "detail": "3.18 公里，00:12:47，14.93 公里/小时",
           "durationText": "00:12:47",
           "durationSeconds": 767,
           "calories": null,
           "distanceKm": 3.18,
-          "avgSpeedKmh": 14.93,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "08:04",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "Outdoor cycling, 3.18 km, 14.93 km/h",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
           "heartRate": null
         },
         {
@@ -3027,6 +3142,42 @@
           "heartRate": 134
         },
         {
+          "time": "08:17",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "83 总消耗(千卡)，00:09:07，134 次/分钟",
+          "durationText": "00:09:07",
+          "durationSeconds": 547,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "08:17",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "Climbing stairs, 83 kcal, 134 steps/min",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "10:15",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "70 总消耗(千卡)，00:08:15，128 次/分钟",
+          "durationText": "00:08:15",
+          "durationSeconds": 495,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
           "time": "10:15",
           "type": "爬楼",
           "rawType": "爬楼",
@@ -3039,15 +3190,39 @@
           "heartRate": 128
         },
         {
+          "time": "10:15",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "Climbing stairs, 70 kcal, 128 steps/min",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
           "time": "11:35",
           "type": "户外骑行",
           "rawType": "户外骑行",
-          "detail": "距离3.04公里，时长00:16:39，均速10.95公里/小时",
+          "detail": "3.04 公里，00:16:39，10.95 公里/小时",
           "durationText": "00:16:39",
           "durationSeconds": 999,
           "calories": null,
           "distanceKm": 3.04,
-          "avgSpeedKmh": 10.95,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "11:35",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "Outdoor cycling, 3.04 km, 10.95 km/h",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
           "heartRate": null
         },
         {
@@ -3060,6 +3235,42 @@
           "calories": null,
           "distanceKm": 3.14,
           "avgSpeedKmh": 13.65,
+          "heartRate": null
+        },
+        {
+          "time": "13:39",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "Outdoor cycling, 3.14 km, 13.65 km/h",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "13:52",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "57千卡，00:06:48，127次/分钟",
+          "durationText": "00:06:48",
+          "durationSeconds": 408,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "13:52",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "Climbing stairs, 57 kcal, 127 steps/min",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
           "heartRate": null
         },
         {
@@ -3087,6 +3298,18 @@
           "heartRate": null
         },
         {
+          "time": "18:21",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "Outdoor cycling, 4.49 km, 12.84 km/h",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
           "time": "18:57",
           "type": "户外骑行",
           "rawType": "户外骑行",
@@ -3096,6 +3319,18 @@
           "calories": null,
           "distanceKm": 3.79,
           "avgSpeedKmh": 15.36,
+          "heartRate": null
+        },
+        {
+          "time": "18:57",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "Outdoor cycling, 3.79 km, 15.36 km/h",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
           "heartRate": null
         }
       ],
@@ -3127,15 +3362,15 @@
         "suggestionText": null
       },
       "workoutSummary": {
-        "totalActivities": 8,
-        "totalDurationSeconds": 6191,
-        "trainingCalories": 210,
-        "workoutDurationMinutes": null,
-        "activeHours": null,
+        "totalActivities": 19,
+        "totalDurationSeconds": 7641,
+        "trainingCalories": 420,
+        "workoutDurationMinutes": 97,
+        "activeHours": 11,
         "cyclingDistanceKm": 17.64,
         "countsByType": {
-          "户外骑行": 5,
-          "爬楼": 3
+          "户外骑行": 10,
+          "爬楼": 9
         }
       },
       "nutrition": {
@@ -3159,44 +3394,51 @@
             "recommendedMax": 721
           }
         ],
-        "totalCalories": 969,
-        "details": []
+        "totalCalories": 1938,
+        "details": [
+          "早餐：粗粮粥 1碗 108千卡",
+          "午餐：辣椒土豆丝 1盘 396千卡",
+          "晚餐：牛肉板面 1碗 465千卡",
+          "早餐建议范围：515-927千卡",
+          "午餐建议范围：618-1030千卡",
+          "晚餐建议范围：309-721千卡"
+        ]
       }
     },
     {
       "date": "2026-05-14",
       "measurement": {
         "archivedDate": "2026-05-14",
-        "measuredAt": "2026-05-14",
-        "bodyScore": null,
-        "weightKg": 72.95,
-        "bmi": 23.5,
+        "measuredAt": "2026-05-14 06:23",
+        "bodyScore": 73,
+        "weightKg": 73.65,
+        "bmi": 23.7,
         "bodyFatPct": 24.1,
-        "skeletalMuscleKg": 30.45,
-        "visceralFatLevel": 8,
-        "basalMetabolismKcal": 1588,
-        "bodyWaterPct": 48.4,
-        "proteinPct": 23.5,
-        "boneMassKg": 2.94,
-        "fatFreeMassKg": 55.4,
+        "skeletalMuscleKg": 30.7,
+        "visceralFatLevel": 9,
+        "basalMetabolismKcal": 1601,
+        "bodyWaterPct": 48.6,
+        "proteinPct": 23.3,
+        "boneMassKg": 2.965,
+        "fatFreeMassKg": 55.9,
         "bodyAge": 32,
         "bodyType": "肥胖型"
       },
       "measurements": [
         {
           "archivedDate": "2026-05-14",
-          "measuredAt": "2026-05-14",
-          "bodyScore": null,
-          "weightKg": 72.95,
-          "bmi": 23.5,
+          "measuredAt": "2026-05-14 06:23",
+          "bodyScore": 73,
+          "weightKg": 73.65,
+          "bmi": 23.7,
           "bodyFatPct": 24.1,
-          "skeletalMuscleKg": 30.45,
-          "visceralFatLevel": 8,
-          "basalMetabolismKcal": 1588,
-          "bodyWaterPct": 48.4,
-          "proteinPct": 23.5,
-          "boneMassKg": 2.94,
-          "fatFreeMassKg": 55.4,
+          "skeletalMuscleKg": 30.7,
+          "visceralFatLevel": 9,
+          "basalMetabolismKcal": 1601,
+          "bodyWaterPct": 48.6,
+          "proteinPct": 23.3,
+          "boneMassKg": 2.965,
+          "fatFreeMassKg": 55.9,
           "bodyAge": 32,
           "bodyType": "肥胖型"
         }
@@ -3305,9 +3547,9 @@
       "workoutSummary": {
         "totalActivities": 6,
         "totalDurationSeconds": 5648,
-        "trainingCalories": 796,
-        "workoutDurationMinutes": 89,
-        "activeHours": 11,
+        "trainingCalories": 1214,
+        "workoutDurationMinutes": 60,
+        "activeHours": 3,
         "cyclingDistanceKm": 6.22,
         "countsByType": {
           "燃脂训练": 1,
@@ -3319,19 +3561,32 @@
         "meals": [
           {
             "name": "早餐",
-            "calories": 460,
-            "recommendedMin": 519,
-            "recommendedMax": 934
+            "calories": 108,
+            "recommendedMin": 515,
+            "recommendedMax": 927
           },
           {
             "name": "午餐",
             "calories": 1386,
             "recommendedMin": 623,
             "recommendedMax": 1038
+          },
+          {
+            "name": "晚餐",
+            "calories": 465,
+            "recommendedMin": 309,
+            "recommendedMax": 721
           }
         ],
-        "totalCalories": 1846,
-        "details": []
+        "totalCalories": 969,
+        "details": [
+          "早餐：粗粮粥 1碗 108千卡",
+          "午餐：辣椒土豆丝 1盘 396千卡",
+          "晚餐：牛肉板面 1碗 465千卡",
+          "早餐建议范围：515-927千卡",
+          "午餐建议范围：618-1030千卡",
+          "晚餐建议范围：309-721千卡"
+        ]
       }
     },
     {
@@ -3521,7 +3776,11 @@
           }
         ],
         "totalCalories": 978,
-        "details": []
+        "details": [
+          "NS糯玉米200g，1袋，372千卡",
+          "康比特奶味分离乳清蛋白粉750g，1勺，114千卡",
+          "牛肉炒面条，1盘，492千卡"
+        ]
       }
     },
     {
@@ -3621,7 +3880,12 @@
           }
         ],
         "totalCalories": 1328,
-        "details": []
+        "details": [
+          "西红柿炖牛腩（午餐，1碗）410千卡",
+          "凉拌素三丝（下午加餐，1盘）288千卡",
+          "西红柿炖牛腩（晚餐，1碗）410千卡",
+          "蜜蜜雪糕（晚上加餐，65克）220千卡"
+        ]
       }
     },
     {
@@ -3736,7 +4000,11 @@
           }
         ],
         "totalCalories": 675,
-        "details": []
+        "details": [
+          "康比特奶味分离乳清蛋白粉750g，1勺，114千卡",
+          "西红柿炖牛腩，1碗，410千卡",
+          "周黑鸭鸭头198g，1个，151千卡"
+        ]
       }
     },
     {
@@ -3883,7 +4151,12 @@
           }
         ],
         "totalCalories": 1392,
-        "details": []
+        "details": [
+          "粗粮粥 1碗 108千卡",
+          "凉皮 1盘 760千卡",
+          "康比特奶味分离乳清蛋白粉750g 1勺 114千卡",
+          "西红柿炖牛腩 1碗 410千卡"
+        ]
       }
     },
     {
@@ -4084,7 +4357,13 @@
           }
         ],
         "totalCalories": 833,
-        "details": []
+        "details": [
+          "粗粮粥 1碗 108千卡",
+          "荔枝 10个 104千卡",
+          "馒头 1个 223千卡",
+          "土豆丝炒韭菜 1盘 284千卡",
+          "康比特奶味分离乳清蛋白粉750g 1勺 114千卡"
+        ]
       }
     },
     {
@@ -4229,9 +4508,9 @@
       "workoutSummary": {
         "totalActivities": 6,
         "totalDurationSeconds": 6874,
-        "trainingCalories": 437,
-        "workoutDurationMinutes": null,
-        "activeHours": null,
+        "trainingCalories": 874,
+        "workoutDurationMinutes": 98,
+        "activeHours": 16,
         "cyclingDistanceKm": 11.1,
         "countsByType": {
           "HIIT": 1,
@@ -4260,8 +4539,17 @@
             "recommendedMax": 104
           }
         ],
-        "totalCalories": 2377,
-        "details": []
+        "totalCalories": 4754,
+        "details": [
+          "粗粮粥 1碗 111千卡",
+          "康比特奶味分离乳清蛋白粉750g 1勺 114千卡",
+          "康比特肌酸250g 12克 0千卡",
+          "肉末炒面片 1盘 724千卡",
+          "凉拌黄瓜 180克 56千卡",
+          "烤牛蹄筋 10串 624千卡",
+          "孜然烤羊排 250克 455千卡",
+          "凉拌乌鸡爪 200克 296千卡"
+        ]
       }
     },
     {
@@ -4418,7 +4706,7 @@
       "workoutSummary": {
         "totalActivities": 7,
         "totalDurationSeconds": 6382,
-        "trainingCalories": 510,
+        "trainingCalories": 1020,
         "workoutDurationMinutes": null,
         "activeHours": null,
         "cyclingDistanceKm": 11.74,
@@ -4588,7 +4876,7 @@
       "workoutSummary": {
         "totalActivities": 7,
         "totalDurationSeconds": 9687,
-        "trainingCalories": 1077,
+        "trainingCalories": 1322,
         "workoutDurationMinutes": 148,
         "activeHours": 14,
         "cyclingDistanceKm": 12.77,
@@ -4615,7 +4903,14 @@
           }
         ],
         "totalCalories": 1385,
-        "details": []
+        "details": [
+          "粗粮粥 1碗 111千卡",
+          "NS糯玉米200g 1袋 372千卡",
+          "康比特奶味分离乳清蛋白粉750g 1勺 114千卡",
+          "康比特肌酸250g 3克 0千卡",
+          "卤面条 1碗 240千卡",
+          "尖椒炒肉 1盘 548千卡"
+        ]
       }
     },
     {
@@ -4730,7 +5025,16 @@
           }
         ],
         "totalCalories": 1645,
-        "details": []
+        "details": [
+          "康师傅香辣牛肉面 1袋 431千卡",
+          "土豆炖排骨 1份 480千卡",
+          "炒空心菜 1盘 188千卡",
+          "米饭（蒸） 1碗 232千卡",
+          "水煮青菜 1盘 76千卡",
+          "水煮虾 11个 124千卡",
+          "康比特奶味分离乳清蛋白粉750g 1勺 114千卡",
+          "康比特肌酸250g 3克 0千卡"
+        ]
       }
     },
     {
@@ -4844,8 +5148,15 @@
             "recommendedMax": 719
           }
         ],
-        "totalCalories": 938,
-        "details": []
+        "totalCalories": 1876,
+        "details": [
+          "康比特奶味分离乳清蛋白粉750g，1勺，114千卡",
+          "康比特肌酸250g，3克，0千卡",
+          "茄辣西，1盘，128千卡",
+          "油泼扯面，1盘，452千卡",
+          "水煮青菜，1盘，76千卡",
+          "水煮虾，15个，168千卡"
+        ]
       }
     },
     {
@@ -5059,7 +5370,14 @@
           }
         ],
         "totalCalories": 1516,
-        "details": []
+        "details": [
+          "甜玉米 1根 279千卡",
+          "康比特奶味分离乳清蛋白粉750g 1勺 114千卡",
+          "康比特肌酸250g 3克 0千卡",
+          "煮面条 1份 107千卡",
+          "茄辣西 1盘 128千卡",
+          "驴肉火烧 2个 888千卡"
+        ]
       }
     },
     {
@@ -5248,7 +5566,11 @@
           }
         ],
         "totalCalories": 1881,
-        "details": []
+        "details": [
+          "早餐：粗粮粥 1碗，111千卡；NS糙玉米200g 1袋，372千卡；康比特奶味分离乳清蛋白粉750g 1勺，114千卡；康比特肌酸250g 3克，0千卡",
+          "午餐：辣椒土豆丝 1盘，396千卡",
+          "晚餐：驴肉火烧 2个，888千卡"
+        ]
       }
     },
     {
@@ -5306,6 +5628,18 @@
           "time": "08:26",
           "type": "爬楼",
           "rawType": "爬楼",
+          "detail": "时长00:04:49，消耗44 kcal，平均心率136次/分钟",
+          "durationText": "00:04:49",
+          "durationSeconds": 289,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": 136
+        },
+        {
+          "time": "08:26",
+          "type": "爬楼",
+          "rawType": "爬楼",
           "detail": "00:04:49，消耗44千卡，平均心率136次/分钟",
           "durationText": "00:04:49",
           "durationSeconds": 289,
@@ -5318,12 +5652,12 @@
           "time": "11:36",
           "type": "户外骑行",
           "rawType": "户外骑行",
-          "detail": "3.00公里，00:15:57，配速/速度11.29公里/小时",
+          "detail": "距离3.00公里，时长00:15:57，均速11.29公里/小时",
           "durationText": "00:15:57",
           "durationSeconds": 957,
           "calories": null,
           "distanceKm": 3,
-          "avgSpeedKmh": null,
+          "avgSpeedKmh": 11.29,
           "heartRate": null
         },
         {
@@ -5337,6 +5671,18 @@
           "distanceKm": 3.07,
           "avgSpeedKmh": null,
           "heartRate": null
+        },
+        {
+          "time": "14:09",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "时长00:07:16，消耗54 kcal，平均心率120次/分钟",
+          "durationText": "00:07:16",
+          "durationSeconds": 436,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": 120
         },
         {
           "time": "14:09",
@@ -5361,6 +5707,18 @@
           "distanceKm": 2.91,
           "avgSpeedKmh": null,
           "heartRate": null
+        },
+        {
+          "time": "18:51",
+          "type": "力量训练",
+          "rawType": "力量训练",
+          "detail": "时长00:20:03，消耗131 kcal，平均心率112次/分钟",
+          "durationText": "00:20:03",
+          "durationSeconds": 1203,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": 112
         },
         {
           "time": "18:51",
@@ -5403,16 +5761,16 @@
         "suggestionText": null
       },
       "workoutSummary": {
-        "totalActivities": 7,
-        "totalDurationSeconds": 5284,
+        "totalActivities": 10,
+        "totalDurationSeconds": 7212,
         "trainingCalories": 577,
         "workoutDurationMinutes": 79,
         "activeHours": 13,
         "cyclingDistanceKm": 12.07,
         "countsByType": {
           "户外骑行": 4,
-          "爬楼": 2,
-          "力量训练": 1
+          "爬楼": 4,
+          "力量训练": 2
         }
       },
       "nutrition": {
@@ -5437,7 +5795,15 @@
           }
         ],
         "totalCalories": 1526,
-        "details": []
+        "details": [
+          "早餐：大米粥 1碗，177千卡",
+          "午餐：蒜薹炒土豆 1盘，368千卡",
+          "晚餐：豌杂面 1碗，535千卡",
+          "晚餐：把子肉 1份，266千卡",
+          "晚餐：双汇香卤鸡蛋30g 1个，66千卡",
+          "晚餐：康比特奶味分离乳清蛋白粉750g 1勺，114千卡",
+          "晚餐：康比特肌酸250g 3克，0千卡"
+        ]
       }
     },
     {
@@ -5614,7 +5980,14 @@
           }
         ],
         "totalCalories": 1620,
-        "details": []
+        "details": [
+          "红豆粥 1碗 114千卡",
+          "康比特奶味分离乳清蛋白粉750g 1勺 114千卡",
+          "康比特肌酸250g 3克 0千卡",
+          "蒜薹炒土豆 1盘 368千卡",
+          "红油拉皮 1盘 788千卡",
+          "酸辣象拔蚌 1盘 236千卡"
+        ]
       }
     },
     {
@@ -5660,6 +6033,18 @@
           "time": "06:39",
           "type": "HIIT",
           "rawType": "HIIT",
+          "detail": "时长00:28:39，消耗203 kcal，平均心率122次/分钟",
+          "durationText": "00:28:39",
+          "durationSeconds": 1719,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": 122
+        },
+        {
+          "time": "06:39",
+          "type": "HIIT",
+          "rawType": "HIIT",
           "detail": "时长00:28:39，消耗203千卡，平均心率122次/分钟",
           "durationText": "00:28:39",
           "durationSeconds": 1719,
@@ -5676,6 +6061,18 @@
           "durationText": "00:27:50",
           "durationSeconds": 1670,
           "calories": 185,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": 111
+        },
+        {
+          "time": "18:55",
+          "type": "力量训练",
+          "rawType": "力量训练",
+          "detail": "时长00:27:50，消耗185 kcal，平均心率111次/分钟",
+          "durationText": "00:27:50",
+          "durationSeconds": 1670,
+          "calories": null,
           "distanceKm": null,
           "avgSpeedKmh": null,
           "heartRate": 111
@@ -5709,15 +6106,15 @@
         "suggestionText": null
       },
       "workoutSummary": {
-        "totalActivities": 2,
-        "totalDurationSeconds": 3389,
+        "totalActivities": 4,
+        "totalDurationSeconds": 6778,
         "trainingCalories": 804,
         "workoutDurationMinutes": 71,
         "activeHours": 15,
         "cyclingDistanceKm": 0,
         "countsByType": {
-          "HIIT": 1,
-          "力量训练": 1
+          "HIIT": 2,
+          "力量训练": 2
         }
       },
       "nutrition": {
@@ -5742,7 +6139,11 @@
           }
         ],
         "totalCalories": 851,
-        "details": []
+        "details": [
+          "早餐：粗粮粥 1碗，111千卡；康比特奶味分离乳清蛋白粉750g 1勺，114千卡；康比特肌酸250g 3克，0千卡。",
+          "午餐：炸鸡排 2份，266千卡。",
+          "晚餐：炒拉条 1盘，360千卡。"
+        ]
       }
     },
     {
@@ -5836,7 +6237,10 @@
           }
         ],
         "totalCalories": 1180,
-        "details": []
+        "details": [
+          "午餐：凉皮 1盘，760 千卡",
+          "晚餐：浆水面 1碗，420 千卡"
+        ]
       }
     },
     {
@@ -5921,8 +6325,8 @@
       "workoutSummary": {
         "totalActivities": 1,
         "totalDurationSeconds": 3037,
-        "trainingCalories": 874,
-        "workoutDurationMinutes": 58,
+        "trainingCalories": 349,
+        "workoutDurationMinutes": 51,
         "activeHours": 15,
         "cyclingDistanceKm": 0,
         "countsByType": {
@@ -5944,8 +6348,11 @@
             "recommendedMax": 768
           }
         ],
-        "totalCalories": 868,
-        "details": []
+        "totalCalories": 1736,
+        "details": [
+          "午餐：羊肉（羊肉手抓）4块，264千卡；羊肉面1碗，490千卡。",
+          "晚餐：康比特奶味分离乳清蛋白750g 1勺，114千卡；康比特肌酸250g 3克，0千卡。"
+        ]
       }
     },
     {
@@ -6134,7 +6541,11 @@
           }
         ],
         "totalCalories": 2421,
-        "details": []
+        "details": [
+          "早餐：煎饼果子 1小个 121千卡；康比特奶味分离乳清蛋白粉750g 1勺 114千卡；康比特肌酸250g 3克 0千卡",
+          "午餐：浆水面 1碗 420千卡",
+          "晚餐：蛋糕 1块 348千卡；梅菜扣肉 1份 382千卡；小炒肉 1盘 516千卡；酸菜粉条 1盘 428千卡；米饭（蒸）1份 58千卡"
+        ]
       }
     },
     {
@@ -6234,7 +6645,11 @@
           }
         ],
         "totalCalories": 1259,
-        "details": []
+        "details": [
+          "早餐：粗粮粥 1碗，111千卡；蛋糕 1块，348千卡",
+          "午餐：羊肉（羊肉手抓）2块，132千卡；浆水面 1碗，420千卡",
+          "晚餐：西瓜 4块，38千卡；浆水面 0.5碗，210千卡"
+        ]
       }
     },
     {
@@ -6391,7 +6806,7 @@
       "workoutSummary": {
         "totalActivities": 7,
         "totalDurationSeconds": 4283,
-        "trainingCalories": 764,
+        "trainingCalories": 162,
         "workoutDurationMinutes": 78,
         "activeHours": 13,
         "cyclingDistanceKm": 13.23,
@@ -6422,7 +6837,11 @@
           }
         ],
         "totalCalories": 2050,
-        "details": []
+        "details": [
+          "早餐：清炒土豆丝 1份 83千卡；兰州拉面 1碗 510千卡；五香茶叶蛋 1个 83千卡",
+          "午餐：浆水面 1碗 420千卡",
+          "晚餐：羊肉串（烤）15串 464千卡；羊肉面 1碗 490千卡"
+        ]
       }
     },
     {
@@ -6611,8 +7030,12 @@
             "recommendedMax": 762
           }
         ],
-        "totalCalories": 1298,
-        "details": []
+        "totalCalories": 2596,
+        "details": [
+          "早餐：康比特奶味分离乳清蛋白粉750g 1勺，114千卡；康比特肌酸250g 3克，0千卡",
+          "午餐：西瓜 5块，48千卡；浆水面 1碗，420千卡",
+          "晚餐：西瓜 5块，48千卡；饺子（猪肉虾仁馅）10个，668千卡"
+        ]
       }
     },
     {
@@ -6867,7 +7290,7 @@
       "workoutSummary": {
         "totalActivities": 5,
         "totalDurationSeconds": 3887,
-        "trainingCalories": 422,
+        "trainingCalories": 114,
         "workoutDurationMinutes": 63,
         "activeHours": 13,
         "cyclingDistanceKm": 12.4,
@@ -6891,7 +7314,7 @@
             "recommendedMax": 1025
           }
         ],
-        "totalCalories": 582,
+        "totalCalories": 1164,
         "details": [
           "早餐：虎皮尖椒 1盘，172 千卡",
           "午餐：西瓜 8块，76 千卡；土豆片夹馍 1个，334 千卡"
@@ -6907,13 +7330,13 @@
         "weightKg": 70.9,
         "bmi": 22.8,
         "bodyFatPct": 22.1,
-        "skeletalMuscleKg": 29.85,
+        "skeletalMuscleKg": 59.7,
         "visceralFatLevel": 8,
         "basalMetabolismKcal": 1556,
         "bodyWaterPct": 50,
         "proteinPct": 23.9,
         "boneMassKg": 5.77,
-        "fatFreeMassKg": 55.58,
+        "fatFreeMassKg": 110.4,
         "bodyAge": 30,
         "bodyType": "标准型"
       },
@@ -6925,13 +7348,13 @@
           "weightKg": 70.9,
           "bmi": 22.8,
           "bodyFatPct": 22.1,
-          "skeletalMuscleKg": 29.85,
+          "skeletalMuscleKg": 59.7,
           "visceralFatLevel": 8,
           "basalMetabolismKcal": 1556,
           "bodyWaterPct": 50,
           "proteinPct": 23.9,
           "boneMassKg": 5.77,
-          "fatFreeMassKg": 55.58,
+          "fatFreeMassKg": 110.4,
           "bodyAge": 30,
           "bodyType": "标准型"
         }
@@ -7114,7 +7537,7 @@
       "workoutSummary": {
         "totalActivities": 2,
         "totalDurationSeconds": 8153,
-        "trainingCalories": 663,
+        "trainingCalories": 782,
         "workoutDurationMinutes": 99,
         "activeHours": 13,
         "cyclingDistanceKm": 0,
@@ -7144,11 +7567,13 @@
             "recommendedMax": 109
           }
         ],
-        "totalCalories": 1192,
+        "totalCalories": 2384,
         "details": [
-          "早餐：康比特奶味分离乳清蛋白粉750g 1勺，114千卡；康比特肌酸250g 3克，0千卡",
-          "午餐：火锅(荤1素4) 1份，408千卡；猪蹄（熟）0.5只，224千卡",
-          "晚上加餐：红糖发糕 200克，446千卡"
+          "康比特奶味分离乳清蛋白粉750g 1勺 114千卡",
+          "康比特肌酸250g 3克 0千卡",
+          "火锅(荤1素4) 1份 408千卡",
+          "猪蹄（熟）0.5只 224千卡",
+          "红糖发糕 200克 446千卡"
         ]
       }
     },
@@ -7356,7 +7781,7 @@
       "workoutSummary": {
         "totalActivities": 1,
         "totalDurationSeconds": 2632,
-        "trainingCalories": 284,
+        "trainingCalories": 652,
         "workoutDurationMinutes": 34,
         "activeHours": 6,
         "cyclingDistanceKm": 0,
@@ -7385,7 +7810,7 @@
             "recommendedMax": 757
           }
         ],
-        "totalCalories": 1166,
+        "totalCalories": 2332,
         "details": [
           "早餐：康比特奶味分离乳清蛋白粉750g 1勺，114千卡；康比特肌酸250g 3克，0千卡。",
           "午餐：米饭（蒸）1碗，232千卡；清炒小白菜1盘，136千卡；猪蹄（熟）0.5只，224千卡。",
@@ -7609,7 +8034,7 @@
       "workoutSummary": {
         "totalActivities": 7,
         "totalDurationSeconds": 7158,
-        "trainingCalories": 496,
+        "trainingCalories": 992,
         "workoutDurationMinutes": 119,
         "activeHours": 16,
         "cyclingDistanceKm": 12.22,
@@ -7634,7 +8059,7 @@
             "recommendedMax": 774
           }
         ],
-        "totalCalories": 1581,
+        "totalCalories": 3162,
         "details": [
           "午餐：虎皮辣椒炒肉 326 千卡，浆水面 147 千卡",
           "晚餐：西瓜 10 千卡，饺子（猪肉虾仁馅）10个 668 千卡，康比特奶味分离乳清蛋白粉750g 1勺 114 千卡，康比特肌酸250g 3克 0 千卡，农家扯面 扯面 100克 316 千卡"
@@ -8062,36 +8487,6 @@
           "suggestionText": "长时间睡眠后容易产生疲乏、焦虑等负面情绪，进一步影响睡眠质量。建议在睡前3小时内避免剧烈运动。",
           "sleepStartTime": "00:08",
           "sleepEndTime": "06:08"
-        },
-        {
-          "sleepType": "夜间睡眠",
-          "bedtime": "00:08",
-          "wakeTime": "06:08",
-          "nightSleepMinutes": 354,
-          "totalSleepMinutes": 354,
-          "napMinutes": null,
-          "deepSleepMinutes": null,
-          "lightSleepMinutes": null,
-          "remSleepMinutes": null,
-          "awakeMinutes": null,
-          "sleepStageText": "深睡 1小时19分钟，浅睡 3小时46分钟，快速眼动 49分钟",
-          "sleepStageDetail": null,
-          "sleepScore": 76,
-          "sleepScorePercentile": 44,
-          "deepSleepRatioPct": 22,
-          "lightSleepRatioPct": 64,
-          "remSleepRatioPct": 14,
-          "deepSleepContinuityScore": 66,
-          "wakeCount": 2,
-          "breathingQualityScore": 98,
-          "averageHeartRateBpm": 65,
-          "hrvMs": 48,
-          "averageSpo2Pct": 97,
-          "averageRespiratoryRate": 14,
-          "analysisText": "睡眠质量一般，睡眠期间醒了2次，略高于正常范围。存在睡眠问题，长眠睡眠，容易出现睡醒后体力恢复不佳的情况，导致日间疲劳、工作效率降低。",
-          "suggestionText": "建议在睡觉或清晨提早30分钟，适当的有氧运动不仅能够促进新陈代谢，还能舒缓压力，提升睡眠质量；注意不要在睡前3小时之内进行剧烈运动。",
-          "sleepStartTime": "00:08",
-          "sleepEndTime": "06:08"
         }
       ],
       "sleepSummary": {
@@ -8125,39 +8520,9 @@
             "suggestionText": "长时间睡眠后容易产生疲乏、焦虑等负面情绪，进一步影响睡眠质量。建议在睡前3小时内避免剧烈运动。",
             "sleepStartTime": "00:08",
             "sleepEndTime": "06:08"
-          },
-          {
-            "sleepType": "夜间睡眠",
-            "bedtime": "00:08",
-            "wakeTime": "06:08",
-            "nightSleepMinutes": 354,
-            "totalSleepMinutes": 354,
-            "napMinutes": null,
-            "deepSleepMinutes": null,
-            "lightSleepMinutes": null,
-            "remSleepMinutes": null,
-            "awakeMinutes": null,
-            "sleepStageText": "深睡 1小时19分钟，浅睡 3小时46分钟，快速眼动 49分钟",
-            "sleepStageDetail": null,
-            "sleepScore": 76,
-            "sleepScorePercentile": 44,
-            "deepSleepRatioPct": 22,
-            "lightSleepRatioPct": 64,
-            "remSleepRatioPct": 14,
-            "deepSleepContinuityScore": 66,
-            "wakeCount": 2,
-            "breathingQualityScore": 98,
-            "averageHeartRateBpm": 65,
-            "hrvMs": 48,
-            "averageSpo2Pct": 97,
-            "averageRespiratoryRate": 14,
-            "analysisText": "睡眠质量一般，睡眠期间醒了2次，略高于正常范围。存在睡眠问题，长眠睡眠，容易出现睡醒后体力恢复不佳的情况，导致日间疲劳、工作效率降低。",
-            "suggestionText": "建议在睡觉或清晨提早30分钟，适当的有氧运动不仅能够促进新陈代谢，还能舒缓压力，提升睡眠质量；注意不要在睡前3小时之内进行剧烈运动。",
-            "sleepStartTime": "00:08",
-            "sleepEndTime": "06:08"
           }
         ],
-        "totalSleepMinutes": 354,
+        "totalSleepMinutes": 381,
         "nightSleepMinutes": 354,
         "napMinutes": null,
         "sleepStartTime": "00:08",
@@ -8176,10 +8541,10 @@
         "breathingQualityScore": 98,
         "averageHeartRateBpm": 65,
         "hrvMs": 48,
-        "averageSpo2Pct": 97,
+        "averageSpo2Pct": null,
         "averageRespiratoryRate": 14,
-        "analysisText": "睡眠质量一般，睡眠期间醒了2次，略高于正常范围。存在睡眠问题，长眠睡眠，容易出现睡醒后体力恢复不佳的情况，导致日间疲劳、工作效率降低。",
-        "suggestionText": "建议在睡觉或清晨提早30分钟，适当的有氧运动不仅能够促进新陈代谢，还能舒缓压力，提升睡眠质量；注意不要在睡前3小时之内进行剧烈运动。"
+        "analysisText": "睡眠质量一般，睡眠期间醒了2次，总体处于正常范围内，存在轻微问题。",
+        "suggestionText": "长时间睡眠后容易产生疲乏、焦虑等负面情绪，进一步影响睡眠质量。建议在睡前3小时内避免剧烈运动。"
       },
       "workoutSummary": {
         "totalActivities": 8,
@@ -8367,36 +8732,6 @@
           "suggestionText": "建议睡前洗热水澡，洗热水澡有利于舒缓心情，消除疲劳，进而促进睡眠。",
           "sleepStartTime": "23:42",
           "sleepEndTime": "05:54"
-        },
-        {
-          "sleepType": "夜间睡眠",
-          "bedtime": "23:42",
-          "wakeTime": "05:54",
-          "nightSleepMinutes": 372,
-          "totalSleepMinutes": null,
-          "napMinutes": null,
-          "deepSleepMinutes": 109,
-          "lightSleepMinutes": 175,
-          "remSleepMinutes": 88,
-          "awakeMinutes": null,
-          "sleepStageText": "深睡 1小时49分钟，浅睡 2小时55分钟，快速眼动 1小时25分钟",
-          "sleepStageDetail": null,
-          "sleepScore": 78,
-          "sleepScorePercentile": 57,
-          "deepSleepRatioPct": 29,
-          "lightSleepRatioPct": 48,
-          "remSleepRatioPct": 23,
-          "deepSleepContinuityScore": 70,
-          "wakeCount": 0,
-          "breathingQualityScore": 98,
-          "averageHeartRateBpm": 67,
-          "hrvMs": 43,
-          "averageSpo2Pct": 96,
-          "averageRespiratoryRate": 14,
-          "analysisText": "睡眠质量一般，睡眠时长6小时12分钟，在正常范围内。优质的睡眠能力皮肤提供给足足的营养，让皮肤变得光滑而有弹性。",
-          "suggestionText": "建议睡前洗热水澡，洗热水澡有利于舒缓心情，消除疲劳，进而促进睡眠。",
-          "sleepStartTime": "23:42",
-          "sleepEndTime": "05:54"
         }
       ],
       "sleepSummary": {
@@ -8407,36 +8742,6 @@
             "wakeTime": "05:54",
             "nightSleepMinutes": 372,
             "totalSleepMinutes": 372,
-            "napMinutes": null,
-            "deepSleepMinutes": 109,
-            "lightSleepMinutes": 175,
-            "remSleepMinutes": 88,
-            "awakeMinutes": null,
-            "sleepStageText": "深睡 1小时49分钟，浅睡 2小时55分钟，快速眼动 1小时25分钟",
-            "sleepStageDetail": null,
-            "sleepScore": 78,
-            "sleepScorePercentile": 57,
-            "deepSleepRatioPct": 29,
-            "lightSleepRatioPct": 48,
-            "remSleepRatioPct": 23,
-            "deepSleepContinuityScore": 70,
-            "wakeCount": 0,
-            "breathingQualityScore": 98,
-            "averageHeartRateBpm": 67,
-            "hrvMs": 43,
-            "averageSpo2Pct": 96,
-            "averageRespiratoryRate": 14,
-            "analysisText": "睡眠质量一般，睡眠时长6小时12分钟，在正常范围内。优质的睡眠能力皮肤提供给足足的营养，让皮肤变得光滑而有弹性。",
-            "suggestionText": "建议睡前洗热水澡，洗热水澡有利于舒缓心情，消除疲劳，进而促进睡眠。",
-            "sleepStartTime": "23:42",
-            "sleepEndTime": "05:54"
-          },
-          {
-            "sleepType": "夜间睡眠",
-            "bedtime": "23:42",
-            "wakeTime": "05:54",
-            "nightSleepMinutes": 372,
-            "totalSleepMinutes": null,
             "napMinutes": null,
             "deepSleepMinutes": 109,
             "lightSleepMinutes": 175,
@@ -9376,7 +9681,7 @@
             "recommendedMax": 790
           }
         ],
-        "totalCalories": 1415,
+        "totalCalories": 2830,
         "details": [
           "早餐：煎饼果子 1.5份，367千卡",
           "午餐：西瓜 6块 282千卡；清炒白菜 0.5盘 47千卡；清炒塌棵菜 0.8份 70千卡；米饭 1小碗 174千卡；糖醋里脊 0.5份 117千卡",
@@ -9818,7 +10123,7 @@
       "workoutSummary": {
         "totalActivities": 7,
         "totalDurationSeconds": 8575,
-        "trainingCalories": 581,
+        "trainingCalories": 1162,
         "workoutDurationMinutes": 141,
         "activeHours": 14,
         "cyclingDistanceKm": 12.6,
@@ -9945,7 +10250,7 @@
       "workoutSummary": {
         "totalActivities": 1,
         "totalDurationSeconds": 986,
-        "trainingCalories": 99,
+        "trainingCalories": 198,
         "workoutDurationMinutes": 44,
         "activeHours": 18,
         "cyclingDistanceKm": 0,
@@ -9974,7 +10279,7 @@
             "recommendedMax": 746
           }
         ],
-        "totalCalories": 1071,
+        "totalCalories": 2142,
         "details": [
           "早餐：康比特 炽金 分离乳清蛋白（酸奶味）100克，372千卡；康比特 肌酸粉 100克，0千卡",
           "午餐：臊子面 1份，213千卡",
@@ -10106,7 +10411,7 @@
             "recommendedMax": 734
           }
         ],
-        "totalCalories": 1538,
+        "totalCalories": 3076,
         "details": [
           "牛肉粉丝 1碗 952千卡",
           "馒头（高GI）1个 112千卡",
@@ -10225,7 +10530,7 @@
       "workoutSummary": {
         "totalActivities": 1,
         "totalDurationSeconds": 1471,
-        "trainingCalories": 391,
+        "trainingCalories": 270,
         "workoutDurationMinutes": 27,
         "activeHours": 11,
         "cyclingDistanceKm": 0,
@@ -11066,7 +11371,7 @@
       "workoutSummary": {
         "totalActivities": 8,
         "totalDurationSeconds": 8548,
-        "trainingCalories": 801,
+        "trainingCalories": 494,
         "workoutDurationMinutes": 131,
         "activeHours": 14,
         "cyclingDistanceKm": 12.6,
@@ -11560,7 +11865,7 @@
       "workoutSummary": {
         "totalActivities": 5,
         "totalDurationSeconds": 8963,
-        "trainingCalories": 843,
+        "trainingCalories": null,
         "workoutDurationMinutes": 125,
         "activeHours": 16,
         "cyclingDistanceKm": 9.32,
@@ -14354,6 +14659,1208 @@
           "康比特 肌酸粉 100克 0千卡"
         ]
       }
+    },
+    {
+      "date": "2026-07-10",
+      "measurement": {
+        "archivedDate": "2026-07-10",
+        "measuredAt": "2026-07-10",
+        "bodyScore": null,
+        "weightKg": 70.85,
+        "bmi": 22.8,
+        "bodyFatPct": 21.2,
+        "skeletalMuscleKg": 30.2,
+        "visceralFatLevel": 8,
+        "basalMetabolismKcal": 1571,
+        "bodyWaterPct": 51,
+        "proteinPct": 23.6,
+        "boneMassKg": 2.92,
+        "fatFreeMassKg": null,
+        "bodyAge": 30,
+        "bodyType": "标准型"
+      },
+      "measurements": [
+        {
+          "archivedDate": "2026-07-10",
+          "measuredAt": "2026-07-10",
+          "bodyScore": null,
+          "weightKg": 70.85,
+          "bmi": 22.8,
+          "bodyFatPct": 21.2,
+          "skeletalMuscleKg": 30.2,
+          "visceralFatLevel": 8,
+          "basalMetabolismKcal": 1571,
+          "bodyWaterPct": 51,
+          "proteinPct": 23.6,
+          "boneMassKg": 2.92,
+          "fatFreeMassKg": null,
+          "bodyAge": 30,
+          "bodyType": "标准型"
+        }
+      ],
+      "activities": [
+        {
+          "time": "08:24",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "总消耗56千卡，时长00:07:59，平均心率121次/分钟",
+          "durationText": "00:07:59",
+          "durationSeconds": 479,
+          "calories": 56,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": 121
+        },
+        {
+          "time": "15:04",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "总消耗31千卡，时长00:03:32，平均心率140次/分钟",
+          "durationText": "00:03:32",
+          "durationSeconds": 212,
+          "calories": 31,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": 140
+        },
+        {
+          "time": "18:29",
+          "type": "力量训练",
+          "rawType": "力量训练",
+          "detail": "总消耗216千卡，时长00:40:04，平均心率104次/分钟",
+          "durationText": "00:40:04",
+          "durationSeconds": 2404,
+          "calories": 216,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": 104
+        }
+      ],
+      "sleep": [
+        {
+          "sleepType": "夜间睡眠",
+          "bedtime": "22:38",
+          "wakeTime": "07:41",
+          "nightSleepMinutes": 512,
+          "totalSleepMinutes": 512,
+          "napMinutes": null,
+          "deepSleepMinutes": 148,
+          "lightSleepMinutes": 255,
+          "remSleepMinutes": 109,
+          "awakeMinutes": null,
+          "sleepStageText": "深睡 2小时28分钟，浅睡 4小时15分钟，快速眼动 1小时49分钟",
+          "sleepStageDetail": null,
+          "sleepScore": 87,
+          "sleepScorePercentile": 98,
+          "deepSleepRatioPct": 29,
+          "lightSleepRatioPct": 50,
+          "remSleepRatioPct": 21,
+          "deepSleepContinuityScore": 72,
+          "wakeCount": 2,
+          "breathingQualityScore": 98,
+          "averageHeartRateBpm": 68,
+          "hrvMs": 39,
+          "averageSpo2Pct": 97,
+          "averageRespiratoryRate": 13,
+          "analysisText": "睡眠质量良好。然而，睡眠期间醒了2次，略高于正常范围。存在易醒问题，最近7天有多天重复发生该问题，长期可能影响睡眠质量。",
+          "suggestionText": "睡前不要过量饮水，以免导致起夜，降低深睡比例，影响睡眠质量。",
+          "sleepStartTime": "22:38",
+          "sleepEndTime": "07:41"
+        }
+      ],
+      "sleepSummary": {
+        "records": [
+          {
+            "sleepType": "夜间睡眠",
+            "bedtime": "22:38",
+            "wakeTime": "07:41",
+            "nightSleepMinutes": 512,
+            "totalSleepMinutes": 512,
+            "napMinutes": null,
+            "deepSleepMinutes": 148,
+            "lightSleepMinutes": 255,
+            "remSleepMinutes": 109,
+            "awakeMinutes": null,
+            "sleepStageText": "深睡 2小时28分钟，浅睡 4小时15分钟，快速眼动 1小时49分钟",
+            "sleepStageDetail": null,
+            "sleepScore": 87,
+            "sleepScorePercentile": 98,
+            "deepSleepRatioPct": 29,
+            "lightSleepRatioPct": 50,
+            "remSleepRatioPct": 21,
+            "deepSleepContinuityScore": 72,
+            "wakeCount": 2,
+            "breathingQualityScore": 98,
+            "averageHeartRateBpm": 68,
+            "hrvMs": 39,
+            "averageSpo2Pct": 97,
+            "averageRespiratoryRate": 13,
+            "analysisText": "睡眠质量良好。然而，睡眠期间醒了2次，略高于正常范围。存在易醒问题，最近7天有多天重复发生该问题，长期可能影响睡眠质量。",
+            "suggestionText": "睡前不要过量饮水，以免导致起夜，降低深睡比例，影响睡眠质量。",
+            "sleepStartTime": "22:38",
+            "sleepEndTime": "07:41"
+          }
+        ],
+        "totalSleepMinutes": 512,
+        "nightSleepMinutes": 512,
+        "napMinutes": null,
+        "sleepStartTime": "22:38",
+        "sleepEndTime": "07:41",
+        "deepSleepMinutes": 148,
+        "lightSleepMinutes": 255,
+        "remSleepMinutes": 109,
+        "awakeMinutes": null,
+        "sleepScore": 87,
+        "sleepScorePercentile": 98,
+        "deepSleepRatioPct": 29,
+        "lightSleepRatioPct": 50,
+        "remSleepRatioPct": 21,
+        "deepSleepContinuityScore": 72,
+        "wakeCount": 2,
+        "breathingQualityScore": 98,
+        "averageHeartRateBpm": 68,
+        "hrvMs": 39,
+        "averageSpo2Pct": 97,
+        "averageRespiratoryRate": 13,
+        "analysisText": "睡眠质量良好。然而，睡眠期间醒了2次，略高于正常范围。存在易醒问题，最近7天有多天重复发生该问题，长期可能影响睡眠质量。",
+        "suggestionText": "睡前不要过量饮水，以免导致起夜，降低深睡比例，影响睡眠质量。"
+      },
+      "workoutSummary": {
+        "totalActivities": 3,
+        "totalDurationSeconds": 3095,
+        "trainingCalories": 303,
+        "workoutDurationMinutes": 39,
+        "activeHours": 11,
+        "cyclingDistanceKm": 0,
+        "countsByType": {
+          "爬楼": 2,
+          "力量训练": 1
+        }
+      },
+      "nutrition": {
+        "meals": [
+          {
+            "name": "早餐",
+            "calories": 386,
+            "recommendedMin": 498,
+            "recommendedMax": 726
+          },
+          {
+            "name": "午餐",
+            "calories": 0,
+            "recommendedMin": 601,
+            "recommendedMax": 829
+          },
+          {
+            "name": "晚餐",
+            "calories": 1236,
+            "recommendedMin": 560,
+            "recommendedMax": 746
+          }
+        ],
+        "totalCalories": 1622,
+        "details": [
+          "茶叶蛋 2个",
+          "煎饼果子 1份",
+          "康比特 肌酸粉 100克",
+          "麻辣烫（半荤半素，均值） 1大碗",
+          "康比特 炫金 分离乳清蛋白（酸奶味） 100克"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-12",
+      "measurement": {
+        "archivedDate": "2026-07-12",
+        "measuredAt": "2026-07-12",
+        "bodyScore": null,
+        "weightKg": 70.9,
+        "bmi": 22.8,
+        "bodyFatPct": 21,
+        "skeletalMuscleKg": 30.3,
+        "visceralFatLevel": 8,
+        "basalMetabolismKcal": 1576,
+        "bodyWaterPct": 51.3,
+        "proteinPct": 23.6,
+        "boneMassKg": 2.935,
+        "fatFreeMassKg": 56,
+        "bodyAge": 29,
+        "bodyType": "标准型"
+      },
+      "measurements": [
+        {
+          "archivedDate": "2026-07-12",
+          "measuredAt": "2026-07-12",
+          "bodyScore": null,
+          "weightKg": 70.9,
+          "bmi": 22.8,
+          "bodyFatPct": 21,
+          "skeletalMuscleKg": 30.3,
+          "visceralFatLevel": 8,
+          "basalMetabolismKcal": 1576,
+          "bodyWaterPct": 51.3,
+          "proteinPct": 23.6,
+          "boneMassKg": 2.935,
+          "fatFreeMassKg": 56,
+          "bodyAge": 29,
+          "bodyType": "标准型"
+        }
+      ],
+      "activities": [
+        {
+          "time": "16:42",
+          "type": "Tabata哑铃胸肌训练",
+          "rawType": "Tabata哑铃胸肌训练",
+          "detail": "Tabata哑铃胸肌训练，总消耗252千卡，心率89次/分钟",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": 252,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": 89
+        }
+      ],
+      "sleep": [
+        {
+          "sleepType": "夜间睡眠",
+          "bedtime": "23:18",
+          "wakeTime": "05:35",
+          "nightSleepMinutes": 374,
+          "totalSleepMinutes": 374,
+          "napMinutes": null,
+          "deepSleepMinutes": 100,
+          "lightSleepMinutes": 169,
+          "remSleepMinutes": 105,
+          "awakeMinutes": null,
+          "sleepStageText": "深睡 1小时40分钟 浅睡 2小时49分钟 快速眼动 1小时45分钟",
+          "sleepStageDetail": null,
+          "sleepScore": 80,
+          "sleepScorePercentile": 71,
+          "deepSleepRatioPct": 27,
+          "lightSleepRatioPct": 45,
+          "remSleepRatioPct": 28,
+          "deepSleepContinuityScore": 71,
+          "wakeCount": 1,
+          "breathingQualityScore": 98,
+          "averageHeartRateBpm": 69,
+          "hrvMs": 38,
+          "averageSpo2Pct": 96,
+          "averageRespiratoryRate": 14,
+          "analysisText": "睡眠质量良好。睡眠时长6小时14分钟，在正常范围内。保证充足的睡眠不仅能提升记忆力，更是增强学习能力的重要武器。",
+          "suggestionText": "检测到昨天总共小睡84分钟，小睡过长可能影响夜间睡眠。建议控制午睡时间，午睡超过30分钟易造成作息紊乱，从而影响夜间睡眠。",
+          "sleepStartTime": "23:18",
+          "sleepEndTime": "05:35"
+        }
+      ],
+      "sleepSummary": {
+        "records": [
+          {
+            "sleepType": "夜间睡眠",
+            "bedtime": "23:18",
+            "wakeTime": "05:35",
+            "nightSleepMinutes": 374,
+            "totalSleepMinutes": 374,
+            "napMinutes": null,
+            "deepSleepMinutes": 100,
+            "lightSleepMinutes": 169,
+            "remSleepMinutes": 105,
+            "awakeMinutes": null,
+            "sleepStageText": "深睡 1小时40分钟 浅睡 2小时49分钟 快速眼动 1小时45分钟",
+            "sleepStageDetail": null,
+            "sleepScore": 80,
+            "sleepScorePercentile": 71,
+            "deepSleepRatioPct": 27,
+            "lightSleepRatioPct": 45,
+            "remSleepRatioPct": 28,
+            "deepSleepContinuityScore": 71,
+            "wakeCount": 1,
+            "breathingQualityScore": 98,
+            "averageHeartRateBpm": 69,
+            "hrvMs": 38,
+            "averageSpo2Pct": 96,
+            "averageRespiratoryRate": 14,
+            "analysisText": "睡眠质量良好。睡眠时长6小时14分钟，在正常范围内。保证充足的睡眠不仅能提升记忆力，更是增强学习能力的重要武器。",
+            "suggestionText": "检测到昨天总共小睡84分钟，小睡过长可能影响夜间睡眠。建议控制午睡时间，午睡超过30分钟易造成作息紊乱，从而影响夜间睡眠。",
+            "sleepStartTime": "23:18",
+            "sleepEndTime": "05:35"
+          }
+        ],
+        "totalSleepMinutes": 374,
+        "nightSleepMinutes": 374,
+        "napMinutes": null,
+        "sleepStartTime": "23:18",
+        "sleepEndTime": "05:35",
+        "deepSleepMinutes": 100,
+        "lightSleepMinutes": 169,
+        "remSleepMinutes": 105,
+        "awakeMinutes": null,
+        "sleepScore": 80,
+        "sleepScorePercentile": 71,
+        "deepSleepRatioPct": 27,
+        "lightSleepRatioPct": 45,
+        "remSleepRatioPct": 28,
+        "deepSleepContinuityScore": 71,
+        "wakeCount": 1,
+        "breathingQualityScore": 98,
+        "averageHeartRateBpm": 69,
+        "hrvMs": 38,
+        "averageSpo2Pct": 96,
+        "averageRespiratoryRate": 14,
+        "analysisText": "睡眠质量良好。睡眠时长6小时14分钟，在正常范围内。保证充足的睡眠不仅能提升记忆力，更是增强学习能力的重要武器。",
+        "suggestionText": "检测到昨天总共小睡84分钟，小睡过长可能影响夜间睡眠。建议控制午睡时间，午睡超过30分钟易造成作息紊乱，从而影响夜间睡眠。"
+      },
+      "workoutSummary": {
+        "totalActivities": 1,
+        "totalDurationSeconds": 0,
+        "trainingCalories": 252,
+        "workoutDurationMinutes": 55,
+        "activeHours": 13,
+        "cyclingDistanceKm": 0,
+        "countsByType": {
+          "Tabata哑铃胸肌训练": 1
+        }
+      },
+      "nutrition": {
+        "meals": [
+          {
+            "name": "早餐",
+            "calories": 733,
+            "recommendedMin": 489,
+            "recommendedMax": 714
+          },
+          {
+            "name": "午餐",
+            "calories": 337,
+            "recommendedMin": 591,
+            "recommendedMax": 816
+          },
+          {
+            "name": "晚餐",
+            "calories": 873,
+            "recommendedMin": 551,
+            "recommendedMax": 734
+          },
+          {
+            "name": "加餐",
+            "calories": 355,
+            "recommendedMin": 0,
+            "recommendedMax": 306
+          }
+        ],
+        "totalCalories": 2298,
+        "details": [
+          "牛肉面 1份 733千卡",
+          "哈密瓜 0.3个 167千卡",
+          "西瓜 0.3中个 170千卡",
+          "农家扯面 扯面 100克 316千卡",
+          "鲜椒大盘鸡 1份 185千卡",
+          "康比特 炽金 分离乳清蛋白(酸奶味) 100克 372千卡",
+          "康比特 肌酸粉 100克 0千卡",
+          "香草冰淇淋 120克 228千卡",
+          "鲜奶油 30克 95千卡",
+          "巧克力酱 15克 17千卡",
+          "碎坚果（疑似花生或杏仁） 10克 15千卡"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-13",
+      "measurement": {
+        "archivedDate": "2026-07-13",
+        "measuredAt": "2026-07-13",
+        "bodyScore": null,
+        "weightKg": 70.55,
+        "bmi": 22.7,
+        "bodyFatPct": 21.4,
+        "skeletalMuscleKg": 30,
+        "visceralFatLevel": 8,
+        "basalMetabolismKcal": 1560,
+        "bodyWaterPct": 50.7,
+        "proteinPct": 23.8,
+        "boneMassKg": 2.9,
+        "fatFreeMassKg": 110.8,
+        "bodyAge": 30,
+        "bodyType": "标准型"
+      },
+      "measurements": [
+        {
+          "archivedDate": "2026-07-13",
+          "measuredAt": "2026-07-13",
+          "bodyScore": null,
+          "weightKg": 70.55,
+          "bmi": 22.7,
+          "bodyFatPct": 21.4,
+          "skeletalMuscleKg": 30,
+          "visceralFatLevel": 8,
+          "basalMetabolismKcal": 1560,
+          "bodyWaterPct": 50.7,
+          "proteinPct": 23.8,
+          "boneMassKg": 2.9,
+          "fatFreeMassKg": 110.8,
+          "bodyAge": 30,
+          "bodyType": "标准型"
+        }
+      ],
+      "activities": [
+        {
+          "time": "06:15",
+          "type": "HIIT",
+          "rawType": "HIIT",
+          "detail": "总消耗（千卡），139次/分钟",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "08:12",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "3.18 公里",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": 3.18,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "08:26",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "总消耗（千卡）",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "11:39",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "2.98公里",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": 2.98,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "18:54",
+          "type": "户外步行",
+          "rawType": "户外步行",
+          "detail": "1.54 公里",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": 1.54,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "20:11",
+          "type": "哑铃手臂训练",
+          "rawType": "哑铃手臂训练",
+          "detail": "总消耗（千卡），113次/分钟",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        }
+      ],
+      "sleep": [
+        {
+          "sleepType": "夜间睡眠",
+          "bedtime": "23:30",
+          "wakeTime": "07:18",
+          "nightSleepMinutes": 438,
+          "totalSleepMinutes": 438,
+          "napMinutes": null,
+          "deepSleepMinutes": 161,
+          "lightSleepMinutes": 206,
+          "remSleepMinutes": 61,
+          "awakeMinutes": null,
+          "sleepStageText": "深睡 2小时41分钟，浅睡 3小时36分钟，快速眼动 1小时1分钟",
+          "sleepStageDetail": null,
+          "sleepScore": 82,
+          "sleepScorePercentile": 82,
+          "deepSleepRatioPct": 37,
+          "lightSleepRatioPct": 49,
+          "remSleepRatioPct": 14,
+          "deepSleepContinuityScore": 95,
+          "wakeCount": 5,
+          "breathingQualityScore": 98,
+          "averageHeartRateBpm": 69,
+          "hrvMs": 35,
+          "averageSpo2Pct": 97,
+          "averageRespiratoryRate": 14,
+          "analysisText": "睡眠质量良好，然而，睡眠期间出现了5次，高于正常范围，易醒醒和频繁的夜醒可能导致睡眠不佳。最近7天有多次重复发生该问题，长期易醒会造成身体恢复不佳，可能会增加高血压等心血管疾病的患病风险。",
+          "suggestionText": "建议睡前做一节正念冥想课程，这样可以有效地维持身心健康，加速入眠，提升睡眠质量。",
+          "sleepStartTime": "23:30",
+          "sleepEndTime": "07:18"
+        }
+      ],
+      "sleepSummary": {
+        "records": [
+          {
+            "sleepType": "夜间睡眠",
+            "bedtime": "23:30",
+            "wakeTime": "07:18",
+            "nightSleepMinutes": 438,
+            "totalSleepMinutes": 438,
+            "napMinutes": null,
+            "deepSleepMinutes": 161,
+            "lightSleepMinutes": 206,
+            "remSleepMinutes": 61,
+            "awakeMinutes": null,
+            "sleepStageText": "深睡 2小时41分钟，浅睡 3小时36分钟，快速眼动 1小时1分钟",
+            "sleepStageDetail": null,
+            "sleepScore": 82,
+            "sleepScorePercentile": 82,
+            "deepSleepRatioPct": 37,
+            "lightSleepRatioPct": 49,
+            "remSleepRatioPct": 14,
+            "deepSleepContinuityScore": 95,
+            "wakeCount": 5,
+            "breathingQualityScore": 98,
+            "averageHeartRateBpm": 69,
+            "hrvMs": 35,
+            "averageSpo2Pct": 97,
+            "averageRespiratoryRate": 14,
+            "analysisText": "睡眠质量良好，然而，睡眠期间出现了5次，高于正常范围，易醒醒和频繁的夜醒可能导致睡眠不佳。最近7天有多次重复发生该问题，长期易醒会造成身体恢复不佳，可能会增加高血压等心血管疾病的患病风险。",
+            "suggestionText": "建议睡前做一节正念冥想课程，这样可以有效地维持身心健康，加速入眠，提升睡眠质量。",
+            "sleepStartTime": "23:30",
+            "sleepEndTime": "07:18"
+          }
+        ],
+        "totalSleepMinutes": 438,
+        "nightSleepMinutes": 438,
+        "napMinutes": null,
+        "sleepStartTime": "23:30",
+        "sleepEndTime": "07:18",
+        "deepSleepMinutes": 161,
+        "lightSleepMinutes": 206,
+        "remSleepMinutes": 61,
+        "awakeMinutes": null,
+        "sleepScore": 82,
+        "sleepScorePercentile": 82,
+        "deepSleepRatioPct": 37,
+        "lightSleepRatioPct": 49,
+        "remSleepRatioPct": 14,
+        "deepSleepContinuityScore": 95,
+        "wakeCount": 5,
+        "breathingQualityScore": 98,
+        "averageHeartRateBpm": 69,
+        "hrvMs": 35,
+        "averageSpo2Pct": 97,
+        "averageRespiratoryRate": 14,
+        "analysisText": "睡眠质量良好，然而，睡眠期间出现了5次，高于正常范围，易醒醒和频繁的夜醒可能导致睡眠不佳。最近7天有多次重复发生该问题，长期易醒会造成身体恢复不佳，可能会增加高血压等心血管疾病的患病风险。",
+        "suggestionText": "建议睡前做一节正念冥想课程，这样可以有效地维持身心健康，加速入眠，提升睡眠质量。"
+      },
+      "workoutSummary": {
+        "totalActivities": 6,
+        "totalDurationSeconds": 0,
+        "trainingCalories": 904,
+        "workoutDurationMinutes": 136,
+        "activeHours": 15,
+        "cyclingDistanceKm": 6.16,
+        "countsByType": {
+          "HIIT": 1,
+          "户外骑行": 2,
+          "爬楼": 1,
+          "户外步行": 1,
+          "哑铃手臂训练": 1
+        }
+      },
+      "nutrition": {
+        "meals": [
+          {
+            "name": "早餐",
+            "calories": 464,
+            "recommendedMin": 522,
+            "recommendedMax": 761
+          },
+          {
+            "name": "午餐",
+            "calories": 278,
+            "recommendedMin": 630,
+            "recommendedMax": 869
+          },
+          {
+            "name": "晚餐",
+            "calories": 381,
+            "recommendedMin": 587,
+            "recommendedMax": 782
+          }
+        ],
+        "totalCalories": 2246,
+        "details": [
+          "甜玉米 1根 92千卡",
+          "康比特 炫金 分离乳清蛋白(酸奶味) 100克 372千卡",
+          "康比特 肌酸粉 100克 0千卡",
+          "大盘鸡 0.5碗 278千卡",
+          "烤羊肉串 3小串 54千卡",
+          "羊肉炒面 1盘 327千卡"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-14",
+      "measurement": {
+        "archivedDate": "2026-07-14",
+        "measuredAt": "2026-07-14",
+        "bodyScore": null,
+        "weightKg": 142.9,
+        "bmi": 23,
+        "bodyFatPct": 21.4,
+        "skeletalMuscleKg": 60.4,
+        "visceralFatLevel": 8,
+        "basalMetabolismKcal": 1573,
+        "bodyWaterPct": 50.9,
+        "proteinPct": 23.6,
+        "boneMassKg": 5.84,
+        "fatFreeMassKg": 112.4,
+        "bodyAge": 30,
+        "bodyType": "标准型"
+      },
+      "measurements": [
+        {
+          "archivedDate": "2026-07-14",
+          "measuredAt": "2026-07-14",
+          "bodyScore": null,
+          "weightKg": 142.9,
+          "bmi": 23,
+          "bodyFatPct": 21.4,
+          "skeletalMuscleKg": 60.4,
+          "visceralFatLevel": 8,
+          "basalMetabolismKcal": 1573,
+          "bodyWaterPct": 50.9,
+          "proteinPct": 23.6,
+          "boneMassKg": 5.84,
+          "fatFreeMassKg": 112.4,
+          "bodyAge": 30,
+          "bodyType": "标准型"
+        }
+      ],
+      "activities": [
+        {
+          "time": "08:02",
+          "type": "户外步行",
+          "rawType": "户外步行",
+          "detail": "户外步行",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "08:35",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "爬楼",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "18:12",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "户外骑行",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "20:05",
+          "type": "Tabata哑铃背部训练",
+          "rawType": "Tabata哑铃背部训练",
+          "detail": "Tabata哑铃背部训练",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        }
+      ],
+      "sleep": [
+        {
+          "sleepType": "夜间睡眠",
+          "bedtime": "23:03",
+          "wakeTime": "06:35",
+          "nightSleepMinutes": 423,
+          "totalSleepMinutes": 460,
+          "napMinutes": 37,
+          "deepSleepMinutes": 96,
+          "lightSleepMinutes": 207,
+          "remSleepMinutes": 120,
+          "awakeMinutes": 37,
+          "sleepStageText": "深睡 1小时38分钟，浅睡 3小时27分钟，快速眼动 1小时58分钟",
+          "sleepStageDetail": null,
+          "sleepScore": 77,
+          "sleepScorePercentile": 51,
+          "deepSleepRatioPct": 23,
+          "lightSleepRatioPct": 49,
+          "remSleepRatioPct": 28,
+          "deepSleepContinuityScore": 72,
+          "wakeCount": 1,
+          "breathingQualityScore": 98,
+          "averageHeartRateBpm": 70,
+          "hrvMs": 40,
+          "averageSpo2Pct": 97,
+          "averageRespiratoryRate": 13,
+          "analysisText": "睡眠质量一般般。睡眠时长7小时3分钟，在正常范围内。良好的睡眠是有效的“养颜”药方，可以防止视力下降和延缓“老花眼”的到来。",
+          "suggestionText": "睡眠质量一般般。睡眠时长7小时3分钟，在正常范围内。良好的睡眠是有效的“养颜”药方，可以防止视力下降和延缓“老花眼”的到来。",
+          "sleepStartTime": "23:03",
+          "sleepEndTime": "06:35"
+        }
+      ],
+      "sleepSummary": {
+        "records": [
+          {
+            "sleepType": "夜间睡眠",
+            "bedtime": "23:03",
+            "wakeTime": "06:35",
+            "nightSleepMinutes": 423,
+            "totalSleepMinutes": 460,
+            "napMinutes": 37,
+            "deepSleepMinutes": 96,
+            "lightSleepMinutes": 207,
+            "remSleepMinutes": 120,
+            "awakeMinutes": 37,
+            "sleepStageText": "深睡 1小时38分钟，浅睡 3小时27分钟，快速眼动 1小时58分钟",
+            "sleepStageDetail": null,
+            "sleepScore": 77,
+            "sleepScorePercentile": 51,
+            "deepSleepRatioPct": 23,
+            "lightSleepRatioPct": 49,
+            "remSleepRatioPct": 28,
+            "deepSleepContinuityScore": 72,
+            "wakeCount": 1,
+            "breathingQualityScore": 98,
+            "averageHeartRateBpm": 70,
+            "hrvMs": 40,
+            "averageSpo2Pct": 97,
+            "averageRespiratoryRate": 13,
+            "analysisText": "睡眠质量一般般。睡眠时长7小时3分钟，在正常范围内。良好的睡眠是有效的“养颜”药方，可以防止视力下降和延缓“老花眼”的到来。",
+            "suggestionText": "睡眠质量一般般。睡眠时长7小时3分钟，在正常范围内。良好的睡眠是有效的“养颜”药方，可以防止视力下降和延缓“老花眼”的到来。",
+            "sleepStartTime": "23:03",
+            "sleepEndTime": "06:35"
+          }
+        ],
+        "totalSleepMinutes": 460,
+        "nightSleepMinutes": 423,
+        "napMinutes": 37,
+        "sleepStartTime": "23:03",
+        "sleepEndTime": "06:35",
+        "deepSleepMinutes": 96,
+        "lightSleepMinutes": 207,
+        "remSleepMinutes": 120,
+        "awakeMinutes": 37,
+        "sleepScore": 77,
+        "sleepScorePercentile": 51,
+        "deepSleepRatioPct": 23,
+        "lightSleepRatioPct": 49,
+        "remSleepRatioPct": 28,
+        "deepSleepContinuityScore": 72,
+        "wakeCount": 1,
+        "breathingQualityScore": 98,
+        "averageHeartRateBpm": 70,
+        "hrvMs": 40,
+        "averageSpo2Pct": 97,
+        "averageRespiratoryRate": 13,
+        "analysisText": "睡眠质量一般般。睡眠时长7小时3分钟，在正常范围内。良好的睡眠是有效的“养颜”药方，可以防止视力下降和延缓“老花眼”的到来。",
+        "suggestionText": "睡眠质量一般般。睡眠时长7小时3分钟，在正常范围内。良好的睡眠是有效的“养颜”药方，可以防止视力下降和延缓“老花眼”的到来。"
+      },
+      "workoutSummary": {
+        "totalActivities": 4,
+        "totalDurationSeconds": 0,
+        "trainingCalories": 552,
+        "workoutDurationMinutes": 79,
+        "activeHours": 15,
+        "cyclingDistanceKm": 0,
+        "countsByType": {
+          "户外步行": 1,
+          "爬楼": 1,
+          "户外骑行": 1,
+          "Tabata哑铃背部训练": 1
+        }
+      },
+      "nutrition": {
+        "meals": [
+          {
+            "name": "早餐",
+            "calories": 650,
+            "recommendedMin": 490,
+            "recommendedMax": 715
+          },
+          {
+            "name": "午餐",
+            "calories": 441,
+            "recommendedMin": 592,
+            "recommendedMax": 817
+          },
+          {
+            "name": "晚餐",
+            "calories": 1138,
+            "recommendedMin": 552,
+            "recommendedMax": 735
+          }
+        ],
+        "totalCalories": 4458,
+        "details": [
+          "早餐：烤肠 0.5根 196千卡",
+          "早餐：茶叶蛋 2个 141千卡",
+          "早餐：烧拌辣椒 0.3盘 43千卡",
+          "早餐：鸡蛋灌饼 1个 270千卡",
+          "午餐：浆水面 1.5碗 441千卡",
+          "晚餐：锅盔 0.5份 228千卡",
+          "晚餐：盛田 撒尿牛丸 100克 145千卡",
+          "晚餐：牛肉酸辣粉 1碗 393千卡",
+          "晚餐：康比特 炽金 分离乳清蛋白(酸奶味) 100克 372千卡",
+          "晚餐：康比特 肌酸粉 100克 0千卡"
+        ]
+      }
+    },
+    {
+      "date": "2026-07-15",
+      "measurement": {
+        "archivedDate": "2026-07-15",
+        "measuredAt": "2026-07-15",
+        "bodyScore": null,
+        "weightKg": 141.7,
+        "bmi": 22.8,
+        "bodyFatPct": 21.8,
+        "skeletalMuscleKg": 59.9,
+        "visceralFatLevel": 8,
+        "basalMetabolismKcal": 1560,
+        "bodyWaterPct": 50.3,
+        "proteinPct": 23.8,
+        "boneMassKg": 5.79,
+        "fatFreeMassKg": 110.6,
+        "bodyAge": 30,
+        "bodyType": "标准型"
+      },
+      "measurements": [
+        {
+          "archivedDate": "2026-07-15",
+          "measuredAt": "2026-07-15",
+          "bodyScore": null,
+          "weightKg": 141.7,
+          "bmi": 22.8,
+          "bodyFatPct": 21.8,
+          "skeletalMuscleKg": 59.9,
+          "visceralFatLevel": 8,
+          "basalMetabolismKcal": 1560,
+          "bodyWaterPct": 50.3,
+          "proteinPct": 23.8,
+          "boneMassKg": 5.79,
+          "fatFreeMassKg": 110.6,
+          "bodyAge": 30,
+          "bodyType": "标准型"
+        }
+      ],
+      "activities": [
+        {
+          "time": "08:04",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "3.17 公里",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": 3.17,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "08:04",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "3.17公里，时长 00:15:07，平均速度 12.58公里/小时",
+          "durationText": "00:15:07",
+          "durationSeconds": 907,
+          "calories": null,
+          "distanceKm": 3.17,
+          "avgSpeedKmh": 12.58,
+          "heartRate": null
+        },
+        {
+          "time": "08:21",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "总消耗（千卡）",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "08:21",
+          "type": "爬楼",
+          "rawType": "爬楼",
+          "detail": "总消耗 71千卡，时长 00:10:04，119次/分钟",
+          "durationText": "00:10:04",
+          "durationSeconds": 604,
+          "calories": 71,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "11:34",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "3.01公里，时长 00:14:45，平均速度 12.24公里/小时",
+          "durationText": "00:14:45",
+          "durationSeconds": 885,
+          "calories": null,
+          "distanceKm": 3.01,
+          "avgSpeedKmh": 12.24,
+          "heartRate": null
+        },
+        {
+          "time": "11:34",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "3.01 公里",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": 3.01,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "13:50",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "3.19公里，时长 00:14:32，平均速度 13.17公里/小时",
+          "durationText": "00:14:32",
+          "durationSeconds": 872,
+          "calories": null,
+          "distanceKm": 3.19,
+          "avgSpeedKmh": 13.17,
+          "heartRate": null
+        },
+        {
+          "time": "13:50",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "3.19 公里",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": 3.19,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "18:06",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "2.99 公里",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": 2.99,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "18:06",
+          "type": "户外骑行",
+          "rawType": "户外骑行",
+          "detail": "2.99公里，时长 00:17:01，平均速度 10.54公里/小时",
+          "durationText": "00:17:01",
+          "durationSeconds": 1021,
+          "calories": null,
+          "distanceKm": 2.99,
+          "avgSpeedKmh": 10.54,
+          "heartRate": null
+        },
+        {
+          "time": "20:29",
+          "type": "弹力带胸部力量训练",
+          "rawType": "弹力带胸部力量训练",
+          "detail": "总消耗（千卡）",
+          "durationText": null,
+          "durationSeconds": 0,
+          "calories": null,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        },
+        {
+          "time": "20:29",
+          "type": "弹力带胸部力量训练",
+          "rawType": "弹力带胸部力量训练",
+          "detail": "总消耗 149千卡，时长 00:30:04，100次/分钟",
+          "durationText": "00:30:04",
+          "durationSeconds": 1804,
+          "calories": 149,
+          "distanceKm": null,
+          "avgSpeedKmh": null,
+          "heartRate": null
+        }
+      ],
+      "sleep": [
+        {
+          "sleepType": "夜间睡眠",
+          "bedtime": "23:09",
+          "wakeTime": "07:00",
+          "nightSleepMinutes": 441,
+          "totalSleepMinutes": 441,
+          "napMinutes": null,
+          "deepSleepMinutes": 90,
+          "lightSleepMinutes": 195,
+          "remSleepMinutes": 96,
+          "awakeMinutes": null,
+          "sleepStageText": "深睡 2小时30分钟，浅睡 3小时19分钟，快速眼动 1小时32分钟",
+          "sleepStageDetail": null,
+          "sleepScore": 87,
+          "sleepScorePercentile": 98,
+          "deepSleepRatioPct": 34,
+          "lightSleepRatioPct": 45,
+          "remSleepRatioPct": 21,
+          "deepSleepContinuityScore": 90,
+          "wakeCount": 1,
+          "breathingQualityScore": 98,
+          "averageHeartRateBpm": 74,
+          "hrvMs": 41,
+          "averageSpo2Pct": 97,
+          "averageRespiratoryRate": 14,
+          "analysisText": "睡眠质量良好，睡眠时长7小时21分钟，在正常范围内。良好的睡眠，可以改善脑部活力，注意保持正常血氧水平更重要。",
+          "suggestionText": "建议睡前洗热水澡，有利于放松身心，舒缓压力，帮助入睡并改善睡眠质量。",
+          "sleepStartTime": "23:09",
+          "sleepEndTime": "07:00"
+        }
+      ],
+      "sleepSummary": {
+        "records": [
+          {
+            "sleepType": "夜间睡眠",
+            "bedtime": "23:09",
+            "wakeTime": "07:00",
+            "nightSleepMinutes": 441,
+            "totalSleepMinutes": 441,
+            "napMinutes": null,
+            "deepSleepMinutes": 90,
+            "lightSleepMinutes": 195,
+            "remSleepMinutes": 96,
+            "awakeMinutes": null,
+            "sleepStageText": "深睡 2小时30分钟，浅睡 3小时19分钟，快速眼动 1小时32分钟",
+            "sleepStageDetail": null,
+            "sleepScore": 87,
+            "sleepScorePercentile": 98,
+            "deepSleepRatioPct": 34,
+            "lightSleepRatioPct": 45,
+            "remSleepRatioPct": 21,
+            "deepSleepContinuityScore": 90,
+            "wakeCount": 1,
+            "breathingQualityScore": 98,
+            "averageHeartRateBpm": 74,
+            "hrvMs": 41,
+            "averageSpo2Pct": 97,
+            "averageRespiratoryRate": 14,
+            "analysisText": "睡眠质量良好，睡眠时长7小时21分钟，在正常范围内。良好的睡眠，可以改善脑部活力，注意保持正常血氧水平更重要。",
+            "suggestionText": "建议睡前洗热水澡，有利于放松身心，舒缓压力，帮助入睡并改善睡眠质量。",
+            "sleepStartTime": "23:09",
+            "sleepEndTime": "07:00"
+          }
+        ],
+        "totalSleepMinutes": 441,
+        "nightSleepMinutes": 441,
+        "napMinutes": null,
+        "sleepStartTime": "23:09",
+        "sleepEndTime": "07:00",
+        "deepSleepMinutes": 90,
+        "lightSleepMinutes": 195,
+        "remSleepMinutes": 96,
+        "awakeMinutes": null,
+        "sleepScore": 87,
+        "sleepScorePercentile": 98,
+        "deepSleepRatioPct": 34,
+        "lightSleepRatioPct": 45,
+        "remSleepRatioPct": 21,
+        "deepSleepContinuityScore": 90,
+        "wakeCount": 1,
+        "breathingQualityScore": 98,
+        "averageHeartRateBpm": 74,
+        "hrvMs": 41,
+        "averageSpo2Pct": 97,
+        "averageRespiratoryRate": 14,
+        "analysisText": "睡眠质量良好，睡眠时长7小时21分钟，在正常范围内。良好的睡眠，可以改善脑部活力，注意保持正常血氧水平更重要。",
+        "suggestionText": "建议睡前洗热水澡，有利于放松身心，舒缓压力，帮助入睡并改善睡眠质量。"
+      },
+      "workoutSummary": {
+        "totalActivities": 12,
+        "totalDurationSeconds": 6093,
+        "trainingCalories": 220,
+        "workoutDurationMinutes": 81,
+        "activeHours": 12,
+        "cyclingDistanceKm": 24.72,
+        "countsByType": {
+          "户外骑行": 8,
+          "爬楼": 2,
+          "弹力带胸部力量训练": 2
+        }
+      },
+      "nutrition": {
+        "meals": [
+          {
+            "name": "早餐",
+            "calories": 607,
+            "recommendedMin": 495,
+            "recommendedMax": 722
+          },
+          {
+            "name": "午餐",
+            "calories": 1224,
+            "recommendedMin": 598,
+            "recommendedMax": 825
+          },
+          {
+            "name": "晚餐",
+            "calories": 1113,
+            "recommendedMin": 557,
+            "recommendedMax": 742
+          }
+        ],
+        "totalCalories": 2944,
+        "details": [
+          "鸡蛋灌饼 1个 270千卡",
+          "茶叶蛋 2个 141千卡",
+          "烤肠 0.5根 196千卡",
+          "凉拌黄瓜 1盘 126千卡",
+          "手擀面（含汤底、葱花、酸菜等配料） 450克 1098千卡",
+          "椒盐掌中宝 3串 35千卡",
+          "烤牛肉串 3大串 133千卡",
+          "卫龙小鸡腿 100克 204千卡",
+          "羊肉串(烤) 3串 185千卡",
+          "甜玉米 2根 184千卡",
+          "康比特 炽金 分离乳清蛋白(酸奶味) 100克 372千卡",
+          "康比特 肌酸粉 100克 0千卡"
+        ]
+      }
     }
   ],
   "charts": {
@@ -14392,7 +15899,7 @@
       },
       {
         "date": "2026-05-14",
-        "value": 72.95
+        "value": 73.65
       },
       {
         "date": "2026-05-15",
@@ -14585,6 +16092,26 @@
       {
         "date": "2026-07-09",
         "value": 142.4
+      },
+      {
+        "date": "2026-07-10",
+        "value": 70.85
+      },
+      {
+        "date": "2026-07-12",
+        "value": 70.9
+      },
+      {
+        "date": "2026-07-13",
+        "value": 70.55
+      },
+      {
+        "date": "2026-07-14",
+        "value": 142.9
+      },
+      {
+        "date": "2026-07-15",
+        "value": 141.7
       }
     ],
     "bodyFatPct": [
@@ -14815,6 +16342,26 @@
       {
         "date": "2026-07-09",
         "value": 21.3
+      },
+      {
+        "date": "2026-07-10",
+        "value": 21.2
+      },
+      {
+        "date": "2026-07-12",
+        "value": 21
+      },
+      {
+        "date": "2026-07-13",
+        "value": 21.4
+      },
+      {
+        "date": "2026-07-14",
+        "value": 21.4
+      },
+      {
+        "date": "2026-07-15",
+        "value": 21.8
       }
     ],
     "skeletalMuscleKg": [
@@ -14852,7 +16399,7 @@
       },
       {
         "date": "2026-05-14",
-        "value": 30.45
+        "value": 30.7
       },
       {
         "date": "2026-05-15",
@@ -14944,7 +16491,7 @@
       },
       {
         "date": "2026-06-06",
-        "value": 29.85
+        "value": 59.7
       },
       {
         "date": "2026-06-07",
@@ -15045,6 +16592,26 @@
       {
         "date": "2026-07-09",
         "value": 60.7
+      },
+      {
+        "date": "2026-07-10",
+        "value": 30.2
+      },
+      {
+        "date": "2026-07-12",
+        "value": 30.3
+      },
+      {
+        "date": "2026-07-13",
+        "value": 30
+      },
+      {
+        "date": "2026-07-14",
+        "value": 60.4
+      },
+      {
+        "date": "2026-07-15",
+        "value": 59.9
       }
     ],
     "basalMetabolism": [
@@ -15082,7 +16649,7 @@
       },
       {
         "date": "2026-05-14",
-        "value": 1588
+        "value": 1601
       },
       {
         "date": "2026-05-15",
@@ -15275,6 +16842,26 @@
       {
         "date": "2026-07-09",
         "value": 1577
+      },
+      {
+        "date": "2026-07-10",
+        "value": 1571
+      },
+      {
+        "date": "2026-07-12",
+        "value": 1576
+      },
+      {
+        "date": "2026-07-13",
+        "value": 1560
+      },
+      {
+        "date": "2026-07-14",
+        "value": 1573
+      },
+      {
+        "date": "2026-07-15",
+        "value": 1560
       }
     ],
     "visceralFatLevel": [
@@ -15312,7 +16899,7 @@
       },
       {
         "date": "2026-05-14",
-        "value": 8
+        "value": 9
       },
       {
         "date": "2026-05-15",
@@ -15505,12 +17092,32 @@
       {
         "date": "2026-07-09",
         "value": 8
+      },
+      {
+        "date": "2026-07-10",
+        "value": 8
+      },
+      {
+        "date": "2026-07-12",
+        "value": 8
+      },
+      {
+        "date": "2026-07-13",
+        "value": 8
+      },
+      {
+        "date": "2026-07-14",
+        "value": 8
+      },
+      {
+        "date": "2026-07-15",
+        "value": 8
       }
     ],
     "intakeCalories": [
       {
         "date": "2026-04-03",
-        "value": 1062
+        "value": 2124
       },
       {
         "date": "2026-04-10",
@@ -15546,11 +17153,11 @@
       },
       {
         "date": "2026-05-13",
-        "value": 969
+        "value": 1938
       },
       {
         "date": "2026-05-14",
-        "value": 1846
+        "value": 969
       },
       {
         "date": "2026-05-15",
@@ -15574,7 +17181,7 @@
       },
       {
         "date": "2026-05-20",
-        "value": 2377
+        "value": 4754
       },
       {
         "date": "2026-05-22",
@@ -15586,7 +17193,7 @@
       },
       {
         "date": "2026-05-24",
-        "value": 938
+        "value": 1876
       },
       {
         "date": "2026-05-25",
@@ -15614,7 +17221,7 @@
       },
       {
         "date": "2026-05-31",
-        "value": 868
+        "value": 1736
       },
       {
         "date": "2026-06-01",
@@ -15630,23 +17237,23 @@
       },
       {
         "date": "2026-06-04",
-        "value": 1298
+        "value": 2596
       },
       {
         "date": "2026-06-05",
-        "value": 582
+        "value": 1164
       },
       {
         "date": "2026-06-06",
-        "value": 1192
+        "value": 2384
       },
       {
         "date": "2026-06-07",
-        "value": 1166
+        "value": 2332
       },
       {
         "date": "2026-06-08",
-        "value": 1581
+        "value": 3162
       },
       {
         "date": "2026-06-09",
@@ -15674,7 +17281,7 @@
       },
       {
         "date": "2026-06-15",
-        "value": 1415
+        "value": 2830
       },
       {
         "date": "2026-06-16",
@@ -15682,11 +17289,11 @@
       },
       {
         "date": "2026-06-18",
-        "value": 1071
+        "value": 2142
       },
       {
         "date": "2026-06-19",
-        "value": 1538
+        "value": 3076
       },
       {
         "date": "2026-06-20",
@@ -15763,6 +17370,26 @@
       {
         "date": "2026-07-09",
         "value": 2541
+      },
+      {
+        "date": "2026-07-10",
+        "value": 1622
+      },
+      {
+        "date": "2026-07-12",
+        "value": 2298
+      },
+      {
+        "date": "2026-07-13",
+        "value": 2246
+      },
+      {
+        "date": "2026-07-14",
+        "value": 4458
+      },
+      {
+        "date": "2026-07-15",
+        "value": 2944
       }
     ],
     "trainingCalories": [
@@ -15892,11 +17519,11 @@
       },
       {
         "date": "2026-05-13",
-        "value": 210
+        "value": 420
       },
       {
         "date": "2026-05-14",
-        "value": 796
+        "value": 1214
       },
       {
         "date": "2026-05-15",
@@ -15920,15 +17547,15 @@
       },
       {
         "date": "2026-05-20",
-        "value": 437
+        "value": 874
       },
       {
         "date": "2026-05-21",
-        "value": 510
+        "value": 1020
       },
       {
         "date": "2026-05-22",
-        "value": 1077
+        "value": 1322
       },
       {
         "date": "2026-05-23",
@@ -15964,7 +17591,7 @@
       },
       {
         "date": "2026-05-31",
-        "value": 874
+        "value": 349
       },
       {
         "date": "2026-06-01",
@@ -15976,7 +17603,7 @@
       },
       {
         "date": "2026-06-03",
-        "value": 764
+        "value": 162
       },
       {
         "date": "2026-06-04",
@@ -15984,19 +17611,19 @@
       },
       {
         "date": "2026-06-05",
-        "value": 422
+        "value": 114
       },
       {
         "date": "2026-06-06",
-        "value": 663
+        "value": 782
       },
       {
         "date": "2026-06-07",
-        "value": 284
+        "value": 652
       },
       {
         "date": "2026-06-08",
-        "value": 496
+        "value": 992
       },
       {
         "date": "2026-06-09",
@@ -16028,15 +17655,15 @@
       },
       {
         "date": "2026-06-17",
-        "value": 581
+        "value": 1162
       },
       {
         "date": "2026-06-18",
-        "value": 99
+        "value": 198
       },
       {
         "date": "2026-06-20",
-        "value": 391
+        "value": 270
       },
       {
         "date": "2026-06-21",
@@ -16052,15 +17679,11 @@
       },
       {
         "date": "2026-06-24",
-        "value": 801
+        "value": 494
       },
       {
         "date": "2026-06-25",
         "value": 198
-      },
-      {
-        "date": "2026-06-26",
-        "value": 843
       },
       {
         "date": "2026-06-27",
@@ -16109,6 +17732,26 @@
       {
         "date": "2026-07-09",
         "value": 312
+      },
+      {
+        "date": "2026-07-10",
+        "value": 303
+      },
+      {
+        "date": "2026-07-12",
+        "value": 252
+      },
+      {
+        "date": "2026-07-13",
+        "value": 904
+      },
+      {
+        "date": "2026-07-14",
+        "value": 552
+      },
+      {
+        "date": "2026-07-15",
+        "value": 220
       }
     ],
     "cyclingDistanceKm": [
@@ -16299,6 +17942,14 @@
       {
         "date": "2026-07-09",
         "value": 6.2
+      },
+      {
+        "date": "2026-07-13",
+        "value": 6.16
+      },
+      {
+        "date": "2026-07-15",
+        "value": 24.72
       }
     ],
     "sleepMinutes": [
@@ -16324,7 +17975,7 @@
       },
       {
         "date": "2026-06-10",
-        "value": 354
+        "value": 381
       },
       {
         "date": "2026-06-11",
@@ -16437,117 +18088,28 @@
       {
         "date": "2026-07-09",
         "value": 392
+      },
+      {
+        "date": "2026-07-10",
+        "value": 512
+      },
+      {
+        "date": "2026-07-12",
+        "value": 374
+      },
+      {
+        "date": "2026-07-13",
+        "value": 438
+      },
+      {
+        "date": "2026-07-14",
+        "value": 460
+      },
+      {
+        "date": "2026-07-15",
+        "value": 441
       }
     ]
   },
-  "bodyFeedback": [
-    {
-      "date": "2026-05-15",
-      "time": "19:33",
-      "body": "今天早上Hiit练完以后背稍微有点酸",
-      "telegramMessageId": 112,
-      "telegramChatId": 6314355239,
-      "sourceChannel": "telegram",
-      "sourceMessageId": null,
-      "sourceChatId": null,
-      "markdownPath": "source/_posts/2026-05-15-telegram-thought-112.md",
-      "source": "markdown"
-    },
-    {
-      "date": "2026-05-24",
-      "time": "18:03",
-      "body": "右臂肱二头肌区域展开整个手臂以后出现轻微疼痛，无红肿及发热症状。按压及锻炼过程中无明显痛感，仅在训练结束后略有不适。该症状自今晨开始出现。",
-      "telegramMessageId": 210,
-      "telegramChatId": 6314355239,
-      "sourceChannel": "telegram",
-      "sourceMessageId": null,
-      "sourceChatId": null,
-      "markdownPath": "source/_posts/2026-05-24-telegram-thought-210.md",
-      "source": "markdown"
-    },
-    {
-      "date": "2026-05-26",
-      "time": "00:10",
-      "body": "今天右臂肱二头肌区域展开不疼了，但是后背脖子和脖子以下那块区域有点累，不知道是不是训练哑铃后背肌肉的缘故",
-      "telegramMessageId": 250,
-      "telegramChatId": 6314355239,
-      "sourceChannel": "telegram",
-      "sourceMessageId": null,
-      "sourceChatId": null,
-      "markdownPath": "source/_posts/2026-05-26-telegram-thought-250.md",
-      "source": "markdown"
-    },
-    {
-      "date": "2026-05-26",
-      "time": "17:54",
-      "body": "左膝盖有点疼，只是有点疼的感觉",
-      "telegramMessageId": 273,
-      "telegramChatId": 6314355239,
-      "sourceChannel": "telegram",
-      "sourceMessageId": null,
-      "sourceChatId": null,
-      "markdownPath": "source/_posts/2026-05-26-telegram-thought-273.md",
-      "source": "markdown"
-    },
-    {
-      "date": "2026-05-27",
-      "time": "05:04",
-      "body": "现在左膝盖和右膝盖上楼都有点疼，坐下的时候膝盖也有点小疼！",
-      "telegramMessageId": 288,
-      "telegramChatId": 6314355239,
-      "sourceChannel": "telegram",
-      "sourceMessageId": null,
-      "sourceChatId": null,
-      "markdownPath": "source/_posts/2026-05-27-telegram-thought-288.md",
-      "source": "markdown"
-    },
-    {
-      "date": "2026-05-27",
-      "time": "17:12",
-      "body": "昨晚睡了一觉，起来膝盖又不疼了！！只是两只胳膊向后耸肩的时候有点小疼！",
-      "telegramMessageId": 295,
-      "telegramChatId": 6314355239,
-      "sourceChannel": "telegram",
-      "sourceMessageId": null,
-      "sourceChatId": null,
-      "markdownPath": "source/_posts/2026-05-27-telegram-thought-295.md",
-      "source": "markdown"
-    },
-    {
-      "date": "2026-06-03",
-      "time": "01:09",
-      "body": "这2天手臂连接肩膀那里手臂向后摆的时候有点疼！",
-      "telegramMessageId": 435,
-      "telegramChatId": 6314355239,
-      "sourceChannel": "telegram",
-      "sourceMessageId": null,
-      "sourceChatId": null,
-      "markdownPath": "source/_posts/2026-06-03-telegram-thought-435.md",
-      "source": "markdown"
-    },
-    {
-      "date": "2026-07-01",
-      "time": "19:19",
-      "body": "今天进行弹力带训练和哑铃训练，胳膊那里特别酸痛，所以今天只进行了一组弹力带训练，胳膊实在拉不动！",
-      "telegramMessageId": 2573145683652917,
-      "telegramChatId": null,
-      "sourceChannel": "feishu",
-      "sourceMessageId": null,
-      "sourceChatId": null,
-      "markdownPath": "source/_posts/2026-07-01-feishu-thought-2573145683652917.md",
-      "source": "markdown"
-    },
-    {
-      "date": "2026-07-01",
-      "time": "21:12",
-      "body": "今天左右小腿都有点酸痛 有点累！",
-      "telegramMessageId": 753,
-      "telegramChatId": 6314355239,
-      "sourceChannel": "telegram",
-      "sourceMessageId": null,
-      "sourceChatId": null,
-      "markdownPath": "source/_posts/2026-07-01-telegram-thought-753.md",
-      "source": "markdown"
-    }
-  ]
+  "bodyFeedback": []
 }
