@@ -518,3 +518,34 @@ test('recognition semantic gate sanitizes impossible fields and marks relational
   assert.ok(validated.warnings.includes('semantic:sleep.stageMinutes exceed totalSleepMinutes'));
   assert.doesNotMatch(JSON.stringify(validated.warnings), /1000|800|1200|300/);
 });
+
+test('semantic gate sanitizes fat-free mass exceeding weight and keeps the measurement complete', () => {
+  const payload = {
+    imageType: 'measurement',
+    records: {
+      measurement: { weightKg: 70, bodyFatPct: 22, fatFreeMassKg: 90 },
+      activities: [],
+      meals: [],
+      totalCalories: null,
+      details: [],
+      dailyWorkoutSummary: null,
+      sleep: null,
+    },
+  };
+
+  const validated = applyRecognitionSemanticGate(payload);
+
+  assert.equal(validated.records.measurement.weightKg, 70);
+  assert.equal(validated.records.measurement.bodyFatPct, 22);
+  assert.equal(validated.records.measurement.fatFreeMassKg, null);
+  assert.equal(validated.semanticGate.status, 'sanitized');
+  assert.ok(validated.semanticGate.decisions.some(
+    (decision) => decision.action === 'sanitize' && decision.path === 'measurement.fatFreeMassKg',
+  ));
+  assert.ok(!validated.semanticGate.decisions.some((decision) => decision.action === 'review'));
+  assert.ok(validated.warnings.includes('semantic:measurement.fatFreeMassKg exceeds weightKg'));
+
+  const completeness = evaluateRecognitionCompleteness({ recognition: validated });
+  assert.equal(completeness.status, 'complete');
+  assert.equal(completeness.requiresFallback, false);
+});

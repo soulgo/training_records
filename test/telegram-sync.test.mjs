@@ -157,6 +157,77 @@ test('analyzeTelegramBatch blocks final incomplete, conflict, and fallback-unava
   }
 });
 
+test('analyzeTelegramBatch stores recognized data when only image-visible conditional fields are missing and fallback is unavailable', async () => {
+  const lib = await importTelegramSyncLib();
+  const [batch] = lib.groupTelegramUpdates([
+    telegramUpdate(108, {
+      messageId: 8,
+      telegram: { photo: [telegramPhoto({ fileId: 'partial-file', fileUniqueId: 'partial-unique' })] },
+    }),
+  ]);
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [{
+    messageId: 8,
+    imageType: 'workout',
+    detectedApp: '华为健康',
+    detectedDate: '2026-07-16',
+    dateEvidence: 'image header',
+    confidence: 0.95,
+    warnings: [],
+    records: {
+      measurement: null,
+      activities: [{ time: '07:30', type: '力量训练', detail: '哑铃胸肌训练', durationSeconds: 1810, calories: null, heartRate: null, distanceKm: null, avgSpeedKmh: null }],
+      meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null,
+    },
+    completeness: {
+      status: 'incomplete',
+      version: 'v1',
+      missingFields: [],
+      conditionalFields: ['records.workout.calories'],
+      reviewFields: [],
+    },
+    reconciliation: { status: 'fallback_unavailable', conflictFields: [] },
+  }]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-07-16');
+  assert.equal(analyzed.activities.length, 1);
+  assert.equal(analyzed.activities[0].type, '力量训练');
+  assert.equal(analyzed.businessIncomplete, true);
+  assert.deepEqual(analyzed.incompleteFieldLabels, ['活动热量']);
+});
+
+test('analyzeTelegramBatch stores a measurement with real values even when the recognition was marked fallback-unavailable', async () => {
+  const lib = await importTelegramSyncLib();
+  const [batch] = lib.groupTelegramUpdates([
+    telegramUpdate(109, {
+      messageId: 9,
+      telegram: { photo: [telegramPhoto({ fileId: 'measure-file', fileUniqueId: 'measure-unique' })] },
+    }),
+  ]);
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [{
+    messageId: 9,
+    imageType: 'measurement',
+    detectedApp: '华为健康',
+    detectedDate: '2026-07-16',
+    dateEvidence: 'image header',
+    confidence: 0.95,
+    warnings: [],
+    records: {
+      measurement: { weightKg: 70.2, bodyFatPct: 21.5, fatFreeMassKg: null },
+      activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null,
+    },
+    completeness: { status: 'incomplete', version: 'v1', missingFields: [], conditionalFields: [], reviewFields: [] },
+    reconciliation: { status: 'fallback_unavailable', conflictFields: [] },
+  }]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.measurement?.weightKg, 70.2);
+  assert.equal(analyzed.measurement?.bodyFatPct, 21.5);
+  assert.equal(analyzed.businessIncomplete, false);
+});
+
 test('groups album document images and applies filename date when screenshots are undated', async () => {
   const lib = await importTelegramSyncLib();
 

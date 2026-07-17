@@ -293,6 +293,9 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
   let detectedApp = null;
   const failedMessageIds = [];
   const dataIssues = [];
+  // 记录「图片可见但本次未识别到」的字段，用于诚实回执；不影响是否入库。
+  let businessIncomplete = false;
+  const incompleteFieldPaths = new Set();
 
   for (const message of batch.messages) {
     const recognition = recognitionMap.get(message.messageId);
@@ -344,19 +347,16 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
 
     const reconciliationStatus = recognition.reconciliation?.status ?? null;
     const completenessStatus = recognition.completeness?.status ?? null;
-    if (
-      completenessStatus === 'incomplete' ||
-      completenessStatus === 'needs_review' ||
-      reconciliationStatus === 'incomplete' ||
-      reconciliationStatus === 'conflict' ||
-      reconciliationStatus === 'fallback_unavailable'
-    ) {
-      const missingFields = [
-        ...(recognition.completeness?.missingFields ?? []),
-        ...(recognition.completeness?.conditionalFields ?? []),
-        ...(recognition.completeness?.reviewFields ?? []),
-      ];
-      const conflictFields = recognition.reconciliation?.conflictFields ?? [];
+    const missingFields = [
+      ...(recognition.completeness?.missingFields ?? []),
+      ...(recognition.completeness?.conditionalFields ?? []),
+      ...(recognition.completeness?.reviewFields ?? []),
+    ];
+    const conflictFields = recognition.reconciliation?.conflictFields ?? [];
+    // 只在两种情况拒绝入库：主备关键字段确定性冲突（需人工核对），或本张图片没有任何可写入的数据。
+    // 其余「主识别有可写入数据、只是 schema 未覆盖全部字段」按“只识别并写入图片上确有的数据”继续入库，
+    // 不再因缺条件字段或存疑复核而整条拒绝；备用识别（若已配置）仍会在识别阶段尽量补全可见字段。
+    if (reconciliationStatus === 'conflict' || !recognitionHasStorableData(recognition)) {
       const reason = buildRecognitionBusinessFailureReason({
         reconciliationStatus,
         missingFields,
@@ -380,6 +380,14 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
         reconciliationStatus,
         conflictFields: [...new Set(conflictFields)],
       };
+    }
+    // OCR/证据表明字段在图片中可见、但本次未识别到：不阻断入库，仅记录用于诚实回执与后续补识别。
+    const visibleButMissed = recognition.completeness?.conditionalFields ?? [];
+    if (visibleButMissed.length > 0) {
+      businessIncomplete = true;
+      for (const path of visibleButMissed) {
+        incompleteFieldPaths.add(path);
+      }
     }
 
     recognizedImageCount += 1;
@@ -636,6 +644,10 @@ export function analyzeTelegramBatch(batch, recognitions, options = {}) {
     sourceImageCount,
     recognizedImageCount,
     failedImageCount: failedMessageIds.length,
+    businessIncomplete,
+    incompleteFieldLabels: businessIncomplete
+      ? describeRecognitionFieldLabels([...incompleteFieldPaths])
+      : [],
     confidence: calculateBatchConfidence(recognitions),
     fingerprints: buildFingerprints({
       archivedDate,
@@ -715,6 +727,74 @@ function resolveRecognitionFieldLabel(path) {
     return ACTIVITY_METRIC_LABELS.get(activityMetric[1]);
   }
   return null;
+}
+
+const MEASUREMENT_VALUE_FIELDS = [
+  'bodyScore',
+  'weightKg',
+  'bmi',
+  'bodyFatPct',
+  'skeletalMuscleKg',
+  'visceralFatLevel',
+  'basalMetabolismKcal',
+  'bodyWaterPct',
+  'proteinPct',
+  'boneMassKg',
+  'fatFreeMassKg',
+  'bodyAge',
+];
+
+// 判断本张识别结果是否含有「图片上确有、可写入」的数据。用户口径：只识别并写入图片上有的数据，
+// 图片没有的 schema 字段不强求；但若整张图什么都没识别到，则没有可入库内容，进入业务不完整。
+function recognitionHasStorableData(recognition) {
+  const records = recognition?.records ?? {};
+  switch (recognition?.imageType) {
+    case 'measurement': {
+      const measurement = records.measurement;
+      if (!isPlainObjectValue(measurement)) return false;
+      if (MEASUREMENT_VALUE_FIELDS.some((field) => isFiniteNumberValue(measurement[field]))) return true;
+      return nonEmptyStringValue(measurement.bodyType);
+    }
+    case 'workout': {
+      const activities = Array.isArray(records.activities) ? records.activities : [];
+      const hasActivity = activities.some((activity) => isPlainObjectValue(activity)
+        && (nonEmptyStringValue(activity.type)
+          || nonEmptyStringValue(activity.detail)
+          || isFiniteNumberValue(activity.calories)
+          || isFiniteNumberValue(activity.durationSeconds)
+          || isFiniteNumberValue(activity.distanceKm)));
+      const summary = records.dailyWorkoutSummary;
+      const hasSummary = isPlainObjectValue(summary)
+        && ['activityCaloriesKcal', 'workoutDurationMinutes', 'activeHours'].some((field) => isFiniteNumberValue(summary[field]));
+      return hasActivity || hasSummary;
+    }
+    case 'nutrition': {
+      const meals = Array.isArray(records.meals) ? records.meals : [];
+      const hasMeal = meals.some((meal) => isPlainObjectValue(meal)
+        && (nonEmptyStringValue(meal.name) || isFiniteNumberValue(meal.calories)));
+      const hasDetails = Array.isArray(records.details) && records.details.some((detail) => nonEmptyStringValue(detail));
+      return isFiniteNumberValue(records.totalCalories) || hasMeal || hasDetails;
+    }
+    case 'sleep': {
+      // 睡眠由下方专门的 normalizeSleepRecord/normalizeSleepRecords 逻辑处理（含数组多段睡眠与
+      // 空睡眠→missing records.sleep 的既有分类），这里不预先拦截，交由其判断是否有可写入内容。
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
+function isPlainObjectValue(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFiniteNumberValue(value) {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function nonEmptyStringValue(value) {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 export function processTelegramBatch(batch, recognitions, options = {}) {

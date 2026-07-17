@@ -618,6 +618,13 @@ function formatTelegramSyncNotification(batch) {
     if (isDeferredPersistenceStatus(batch.persistenceStatus)) {
       return `图片已识别（${countText}），数据库写入未完成，${storageText}${dateText ? ` ${dateText}数据` : ''}`;
     }
+    if (batch.businessIncomplete) {
+      const labels = Array.isArray(batch.incompleteFieldLabels)
+        ? batch.incompleteFieldLabels.filter(Boolean)
+        : [];
+      const note = labels.length > 0 ? `，部分字段图片可见但未识别：${labels.join('、')}` : '';
+      return `解析成功（${countText}${note}），${storageText}${dateText ? ` ${dateText}数据` : ''}`;
+    }
     return `解析成功（${countText}），${storageText}${dateText ? ` ${dateText}数据` : ''}`;
   }
 

@@ -60,7 +60,7 @@ export function applyRecognitionSemanticGate(payload) {
     decisions,
   );
   sanitizePositiveNutrition(payload.records, gated.records, warnings, decisions);
-  addMeasurementReviews(payload.records?.measurement, warnings, decisions);
+  addMeasurementReviews(payload.records?.measurement, gated.records?.measurement, warnings, decisions);
   addSleepReviews(payload.records?.sleep, warnings, decisions);
 
   const result = {
@@ -121,7 +121,7 @@ function addPositiveSanitizeDecision(path, warnings, decisions) {
   decisions.push({ action: 'sanitize', path, reason: 'non_positive' });
 }
 
-function addMeasurementReviews(measurement, warnings, decisions) {
+function addMeasurementReviews(measurement, target, warnings, decisions) {
   if (!isPlainObject(measurement)) {
     return;
   }
@@ -132,13 +132,20 @@ function addMeasurementReviews(measurement, warnings, decisions) {
     }
   }
 
+  // 去脂体重物理上必然小于体重；主识别给出 fatFreeMassKg > weightKg 说明其中一个被误读。
+  // 体重是硬完整性字段、也是页面主展示值，去脂体重是非关键派生字段，因此清空存疑的去脂体重、
+  // 保留体重继续入库，而不是把整条体测判为需复核并强制备用识别（备用未配置时会导致体重已识别
+  // 成功的体测图整条无法入库）。与其它超范围体测值一样按 sanitize 处理，保持一致。
   if (
     isFiniteNumber(measurement.fatFreeMassKg) &&
     isFiniteNumber(measurement.weightKg) &&
     measurement.fatFreeMassKg > measurement.weightKg
   ) {
+    if (isPlainObject(target)) {
+      target.fatFreeMassKg = null;
+    }
     warnings.add('semantic:measurement.fatFreeMassKg exceeds weightKg');
-    decisions.push({ action: 'review', path: 'measurement.fatFreeMassKg', reason: 'exceeds_weight' });
+    decisions.push({ action: 'sanitize', path: 'measurement.fatFreeMassKg', reason: 'exceeds_weight' });
   }
 }
 
