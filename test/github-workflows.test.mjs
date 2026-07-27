@@ -457,7 +457,7 @@ test('refresh-telegram-webhook workflow supports manual and scheduled webhook re
 
   assert.match(workflow, /name:\s*Refresh Telegram Webhook/);
   assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /schedule:\s*\n\s*-\s*cron:\s*'17 \*\/6 \* \* \*'/);
+  assert.match(workflow, /schedule:\s*\n\s*-\s*cron:\s*'17 \*\/12 \* \* \*'/);
   assert.match(workflow, /group:\s*telegram-webhook/);
   assert.match(workflow, /actions\/checkout@v7/);
   assert.match(workflow, /actions\/setup-node@v6/);
@@ -552,7 +552,7 @@ test('pending replay runs independently per source channel with scheduled claim 
   const parsedWorkflow = parseYaml(workflow);
   assert.match(workflow, /name:\s*Pending Replay \(Dev\)/);
   assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /cron:\s*'\*\/10 \* \* \* \*'/);
+  assert.match(workflow, /cron:\s*'0 \*\/6 \* \* \*'/);
   assert.match(workflow, /matrix:[\s\S]*channel:[\s\S]*- telegram[\s\S]*- feishu/);
   assert.match(workflow, /SYNC_REPLAY_MODE:\s*scheduled/);
   assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{ secrets\.DEV_TRAINING_DB_URL \}\}/);
