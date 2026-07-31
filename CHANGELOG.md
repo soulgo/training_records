@@ -17,6 +17,11 @@
 
 - 降低定时 Workflow 执行频率以减少 Actions 列表噪音：`pending-replay.yml` 从每 10 分钟改为每 6 小时，`refresh-telegram-webhook.yml` 从每 6 小时改为每 12 小时。`action-monitor-report.yml` 无需修改（被动触发，随 Pending Replay 频率降低自然减少）。
 
+### Fixed
+
+- 修复睡眠回填重写同日全部 `core.*` 明细时，批量 upsert 可能因重复冲突键触发 `ON CONFLICT DO UPDATE command cannot affect row a second time` 的问题；回填现在只替换目标日期的 `core.sleep` 并更新 `core.training_day` 睡眠汇总，不再删除或重写同日体测、活动和餐次数据。
+- 修复 `Pending Replay (Dev)` 将 `sleep_backfill` 任务误走普通图片持久化、导致 `single-580`、`single-651` 持续失败并向 Telegram 重复发送“等待数据库重放”的问题；睡眠回填任务现在走专用重放分支，成功后标记为 resolved、清除数据库失败状态和旧回填错误提示，失败时才重新排队。
+
 ## [1.3.6] - 2026-07-17
 
 ### Added

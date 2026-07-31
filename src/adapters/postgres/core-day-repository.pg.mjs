@@ -181,6 +181,69 @@ export async function replaceCoreDay(client, day, batchId, processedAt, options 
   });
 }
 
+export async function replaceCoreSleepForDay(client, day, batchId, processedAt, options = {}) {
+  const archivedDate = normalizeDateKey(day?.date);
+  if (!archivedDate) {
+    return;
+  }
+
+  const normalizedDay = { ...day, date: archivedDate };
+  const processedAtIso = (processedAt ?? new Date()).toISOString();
+  const sourceChannel = options.sourceChannel ?? 'ingest_sleep_backfill';
+  const sleepSummary = normalizedDay.sleepSummary ?? {};
+
+  await client.query('delete from core.sleep where archived_date = $1', [archivedDate]);
+  await insertCoreSleep(client, [normalizedDay], { batchId, sourceChannel }, processedAtIso);
+  await client.query(
+    `
+      insert into core.training_day (
+        archived_date,
+        source_batch_id,
+        source_channel,
+        sleep_total_minutes,
+        night_sleep_minutes,
+        nap_minutes,
+        sleep_start_time,
+        sleep_end_time,
+        deep_sleep_minutes,
+        light_sleep_minutes,
+        rem_sleep_minutes,
+        awake_minutes,
+        updated_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      on conflict (archived_date) do update set
+        source_batch_id = excluded.source_batch_id,
+        source_channel = excluded.source_channel,
+        sleep_total_minutes = excluded.sleep_total_minutes,
+        night_sleep_minutes = excluded.night_sleep_minutes,
+        nap_minutes = excluded.nap_minutes,
+        sleep_start_time = excluded.sleep_start_time,
+        sleep_end_time = excluded.sleep_end_time,
+        deep_sleep_minutes = excluded.deep_sleep_minutes,
+        light_sleep_minutes = excluded.light_sleep_minutes,
+        rem_sleep_minutes = excluded.rem_sleep_minutes,
+        awake_minutes = excluded.awake_minutes,
+        updated_at = excluded.updated_at
+    `,
+    [
+      archivedDate,
+      batchId,
+      sourceChannel,
+      sleepSummary.totalSleepMinutes ?? null,
+      sleepSummary.nightSleepMinutes ?? null,
+      sleepSummary.napMinutes ?? null,
+      sleepSummary.sleepStartTime ?? sleepSummary.bedtime ?? null,
+      sleepSummary.sleepEndTime ?? sleepSummary.wakeTime ?? null,
+      sleepSummary.deepSleepMinutes ?? null,
+      sleepSummary.lightSleepMinutes ?? null,
+      sleepSummary.remSleepMinutes ?? null,
+      sleepSummary.awakeMinutes ?? null,
+      processedAtIso,
+    ],
+  );
+}
+
 export async function replaceCoreDays(client, days, options) {
   let transactionStarted = false;
   try {

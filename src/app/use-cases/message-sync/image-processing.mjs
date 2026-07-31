@@ -470,6 +470,17 @@ function normalizePendingPersistenceBatchEntry(entry) {
   return batch;
 }
 
+function normalizePendingSleepBackfillEntry(entry) {
+  const batch = entry?.batch ?? entry?.batch_payload_json ?? entry;
+  if (entry?.failureCategory !== 'database' && entry?.failure_category !== 'database') {
+    return null;
+  }
+  if (!batch?.batchId || batch.kind !== 'sleep_backfill' || batch.status !== 'ready') {
+    return null;
+  }
+  return batch;
+}
+
 function isCompleteImagePersistenceBatch(batch) {
   const recognitions = Array.isArray(batch.recognitions) ? batch.recognitions : [];
   return recognitions.length > 0 && recognitions.every((recognition) =>
@@ -606,6 +617,8 @@ export async function replayPendingRecognitionBatches({
   persistBatch,
   appendPendingRecognitionBatch,
   markPendingRecognitionResolved,
+  backfillCoreSleep,
+  sleepBackfillSourceChannel,
   now,
   env,
 }) {
@@ -614,6 +627,54 @@ export async function replayPendingRecognitionBatches({
   let replayStoredImageAny = false;
 
   for (const entry of entries ?? []) {
+    const pendingSleepBackfillBatch = normalizePendingSleepBackfillEntry(entry);
+    if (pendingSleepBackfillBatch) {
+      try {
+        const backfillResult = await backfillCoreSleep({
+          processedAt: now,
+          sourceChannel: sleepBackfillSourceChannel ?? 'telegram_sync',
+          targetArchivedDates: normalizePendingSleepBackfillDates(pendingSleepBackfillBatch),
+        });
+        const resolvedResult = await markPendingRecognitionResolved({
+          batchId: pendingSleepBackfillBatch.batchId,
+          sourceChannel: pendingSleepBackfillBatch.sourceChannel ?? 'telegram',
+        });
+        const remainingPartialFailure = hasNonBackfillPartialFailure(pendingSleepBackfillBatch);
+        changed ||= backfillResult.status === 'stored';
+        batches.push({
+          ...pendingSleepBackfillBatch,
+          pendingReplay: true,
+          persistenceStatus: backfillResult.status,
+          recognitionPendingStatus: resolvedResult.status,
+          partialFailure: remainingPartialFailure,
+          failureCategory: remainingPartialFailure ? pendingSleepBackfillBatch.failureCategory : null,
+          failureReason: remainingPartialFailure ? pendingSleepBackfillBatch.failureReason : null,
+          persistenceError: null,
+          warnings: (pendingSleepBackfillBatch.warnings ?? []).filter(
+            (warning) => !/^sleep backfill failed:/i.test(String(warning)),
+          ),
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await appendPendingRecognitionBatch({
+          batch: pendingSleepBackfillBatch,
+          failureCategory: 'database',
+          error: errorMessage,
+          failedAt: now.toISOString(),
+          nextRetryAt: new Date(now.getTime() + 10 * 60 * 1000),
+        });
+        batches.push({
+          ...pendingSleepBackfillBatch,
+          pendingReplay: true,
+          persistenceStatus: 'pending_replay',
+          persistenceError: errorMessage,
+          failureCategory: 'database',
+          failureReason: errorMessage,
+        });
+      }
+      continue;
+    }
+
     const pendingPersistenceBatch = normalizePendingPersistenceBatchEntry(entry);
     if (pendingPersistenceBatch) {
       try {
@@ -717,6 +778,24 @@ export async function replayPendingRecognitionBatches({
     replayStoredImageAny,
     batches,
   };
+}
+
+function normalizePendingSleepBackfillDates(batch) {
+  const values = Array.isArray(batch.targetArchivedDates) && batch.targetArchivedDates.length > 0
+    ? batch.targetArchivedDates
+    : [batch.archivedDate];
+  return [...new Set(values.filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? ''))))].sort();
+}
+
+function hasNonBackfillPartialFailure(batch) {
+  const sourceImageCount = Number(batch.sourceImageCount ?? 0);
+  const recognizedImageCount = Number(batch.recognizedImageCount ?? 0);
+  return (
+    Number(batch.failedImageCount ?? 0) > 0 ||
+    (sourceImageCount > 0 && recognizedImageCount < sourceImageCount) ||
+    (batch.recognitionErrors?.length ?? 0) > 0 ||
+    batch.businessIncomplete === true
+  );
 }
 
 export async function queueRecognitionFailureIfNeeded({

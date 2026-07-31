@@ -1367,6 +1367,62 @@ test('runTelegramSync runs sleep backfill when pending recognition replay stores
   assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), true);
 });
 
+test('runTelegramSync replays pending sleep_backfill tasks through the sleep backfill operation', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-pending-sleep-operation-'));
+  await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');
+  const backfillCalls = [];
+  const resolved = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv({
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+      SYNC_REPLAY_MODE: 'scheduled',
+    }),
+    repositoryDispatchEvent: { client_payload: {} },
+    getLastProcessedUpdateId: async () => 900,
+    readPendingRecognitionBatches: async () => [{
+      batchId: 'single-651',
+      failureCategory: 'database',
+      batch: {
+        kind: 'sleep_backfill',
+        batchId: 'single-651',
+        sourceChannel: 'telegram',
+        status: 'ready',
+        archivedDate: '2026-07-25',
+        targetArchivedDates: ['2026-07-25'],
+        messages: [{ messageId: 651, chatId: 42 }],
+        sourceImageCount: 1,
+        recognizedImageCount: 1,
+        failedImageCount: 0,
+        partialFailure: true,
+        failureReason: 'ON CONFLICT DO UPDATE command cannot affect row a second time',
+        warnings: ['sleep backfill failed: ON CONFLICT DO UPDATE command cannot affect row a second time'],
+      },
+    }],
+    persistNormalizedBatch: async () => {
+      throw new Error('sleep_backfill must not use normal batch persistence');
+    },
+    appendPendingRecognitionBatch: async () => ({ status: 'queued' }),
+    markPendingRecognitionResolved: async ({ batchId }) => {
+      resolved.push(batchId);
+      return { status: 'resolved', batchId };
+    },
+    backfillCoreSleepFromIngestBatches: async (input) => {
+      backfillCalls.push(input);
+      return { status: 'stored', batchesBackfilled: 2, daysBackfilled: ['2026-07-25'] };
+    },
+  });
+
+  assert.equal(backfillCalls.length, 1);
+  assert.deepEqual(backfillCalls[0].targetArchivedDates, ['2026-07-25']);
+  assert.deepEqual(resolved, ['single-651']);
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].recognitionPendingStatus, 'resolved');
+  assert.equal(result.batches[0].partialFailure, false);
+  assert.equal(result.batches[0].failureReason, null);
+});
+
 test('runTelegramSync does not run sleep backfill when pending recognition replay stores non-sleep data', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-pending-nonsleep-backfill-'));
   await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');

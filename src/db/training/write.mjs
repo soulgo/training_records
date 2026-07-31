@@ -15,6 +15,7 @@ import {
   readCoreDay,
   readCoreDays,
   replaceCoreDay,
+  replaceCoreSleepForDay,
   replaceCoreDays,
 } from '../../adapters/postgres/index.mjs';
 import { persistSourceImageBatchIncremental } from '../../adapters/postgres/incremental-write.pg.mjs';
@@ -736,7 +737,7 @@ ${targetArchiveDateFilter}
         mergedDay = mergeBatchIntoDay(mergedDay, batch);
         sourceBatchId = batch.batchId ?? batchId;
       }
-      await replaceCoreDay(
+      await replaceCoreSleepForDay(
         client,
         mergedDay,
         sourceBatchId,

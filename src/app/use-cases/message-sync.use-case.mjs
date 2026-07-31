@@ -296,6 +296,8 @@ export async function runMessageSync(options = {}) {
       persistBatch,
       appendPendingRecognitionBatch,
       markPendingRecognitionResolved,
+      backfillCoreSleep,
+      sleepBackfillSourceChannel: options.sleepBackfillSourceChannel ?? `${sourceChannel}_sync`,
       now,
       env,
     }),
