@@ -684,6 +684,43 @@ test('createRecognitionAiProvider lets a fallback model inherit the primary conn
   assert.equal(recognitionProvider.fallbackProvider.env.timeoutMs, 90000);
 });
 
+test('createRecognitionAiProvider prefers the shared standby connection for the fallback model', () => {
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'primary-key',
+      AI_BASE_URL: 'https://primary.example.com/v1/',
+      AI_MODEL: 'gpt-primary',
+      STANDBY_AI_API_KEY: 'standby-key',
+      STANDBY_AI_BASE_URL: 'https://standby.example.com/v1/',
+      TELEGRAM_RECOGNITION_FALLBACK_MODEL: 'kimi-k2.6',
+    },
+    { name: 'primary', env: { model: 'gpt-primary' } },
+  );
+
+  assert.equal(recognitionProvider.fallbackProvider.env.apiKey, 'standby-key');
+  assert.equal(recognitionProvider.fallbackProvider.env.baseUrl, 'https://standby.example.com/v1');
+  assert.equal(recognitionProvider.fallbackProvider.env.model, 'kimi-k2.6');
+});
+
+test('createRecognitionAiProvider ignores empty standby secrets and keeps the legacy fallback connection', () => {
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'primary-key',
+      AI_BASE_URL: 'https://primary.example.com/v1/',
+      AI_MODEL: 'gpt-primary',
+      STANDBY_AI_API_KEY: '',
+      STANDBY_AI_BASE_URL: '',
+      TELEGRAM_RECOGNITION_FALLBACK_API_KEY: 'legacy-key',
+      TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: 'https://legacy.example.com/v1/',
+      TELEGRAM_RECOGNITION_FALLBACK_MODEL: 'kimi-k2.6',
+    },
+    { name: 'primary', env: { model: 'gpt-primary' } },
+  );
+
+  assert.equal(recognitionProvider.fallbackProvider.env.apiKey, 'legacy-key');
+  assert.equal(recognitionProvider.fallbackProvider.env.baseUrl, 'https://legacy.example.com/v1');
+});
+
 test('createRecognitionAiProvider lets recognition scene fallback timeout override legacy fallback timeout', () => {
   const defaultProvider = {
     name: 'test-provider',

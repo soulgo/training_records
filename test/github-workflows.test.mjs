@@ -569,6 +569,18 @@ test('all AI sync workflows inject provider capability overrides', async () => {
   }
 });
 
+test('all AI sync workflows inject the shared standby AI connection secrets', async () => {
+  for (const workflowPath of [
+    '.github/workflows/sync.yml',
+    '.github/workflows/sync-dev.yml',
+    '.github/workflows/pending-replay.yml',
+  ]) {
+    const workflow = await readWorkflow(workflowPath);
+    assert.match(workflow, /STANDBY_AI_API_KEY:\s*\$\{\{\s*secrets\.STANDBY_AI_API_KEY\s*\}\}/);
+    assert.match(workflow, /STANDBY_AI_BASE_URL:\s*\$\{\{\s*secrets\.STANDBY_AI_BASE_URL\s*\}\}/);
+  }
+});
+
 test('pending replay runs independently per environment and source channel with scheduled claim mode', async () => {
   const workflow = await readWorkflow('.github/workflows/pending-replay.yml');
   const parsedWorkflow = parseYaml(workflow);
@@ -604,6 +616,8 @@ test('pending replay injects the same recognition fallback and cache configurati
     'AI_OCR_ENABLED',
     'AI_OCR_FAILURE_MODE',
     'TELEGRAM_RECOGNITION_MODEL',
+    'STANDBY_AI_API_KEY',
+    'STANDBY_AI_BASE_URL',
     'TELEGRAM_RECOGNITION_FALLBACK_API_KEY',
     'TELEGRAM_RECOGNITION_FALLBACK_BASE_URL',
     'TELEGRAM_RECOGNITION_FALLBACK_MODEL',
@@ -884,6 +898,8 @@ test('system configuration guides place GitHub Secrets in their Secrets tables',
   }
   for (const name of [
     'AI_BASE_URL',
+    'STANDBY_AI_API_KEY',
+    'STANDBY_AI_BASE_URL',
     'TELEGRAM_ALLOWED_CHAT_IDS',
     'FEISHU_ALLOWED_CHAT_IDS',
     'COS_BUCKET',

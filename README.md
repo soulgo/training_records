@@ -143,6 +143,8 @@ npm run server
 | `TELEGRAM_SYNC_RUN_SLEEP_BACKFILL` | 可选，显式运行睡眠全量补偿；默认在 pending replay 或新存储的睡眠图片后触发 |
 | `AI_API_KEY` | AI 服务鉴权 |
 | `AI_BASE_URL` | OpenAI-compatible base URL（通常以 `/v1` 结尾） |
+| `STANDBY_AI_API_KEY` | 可选，独立备用 AI 服务鉴权；Telegram/飞书图片识别共用 |
+| `STANDBY_AI_BASE_URL` | 可选，独立备用 AI base URL；备用模型与主模型不在同一服务时应配置 |
 | `AI_API_PROTOCOL` | AI 请求协议：`chat_completions`（默认）或 `responses` |
 | `AI_MODEL` | AI 模型名 |
 | `AI_CONCURRENCY` | 图片识别并发数，默认 3 |

@@ -657,8 +657,14 @@ function createLazyRecognitionAiProvider(rawEnv, configuredProvider, getDefaultP
 }
 
 function createRecognitionFallbackAiProvider(rawEnv) {
-  const configuredApiKey = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_API_KEY ?? '').trim();
-  const configuredBaseUrl = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL ?? '').trim();
+  const configuredApiKey = firstNonEmptyString(
+    rawEnv.STANDBY_AI_API_KEY,
+    rawEnv.TELEGRAM_RECOGNITION_FALLBACK_API_KEY,
+  );
+  const configuredBaseUrl = firstNonEmptyString(
+    rawEnv.STANDBY_AI_BASE_URL,
+    rawEnv.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL,
+  );
   const model = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_MODEL ?? '').trim();
 
   if (!configuredApiKey && !configuredBaseUrl && !model) {
@@ -685,4 +691,8 @@ function createRecognitionFallbackAiProvider(rawEnv) {
       rawEnv.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS ||
       rawEnv.AI_TIMEOUT_MS,
   });
+}
+
+function firstNonEmptyString(...values) {
+  return values.map((value) => String(value ?? '').trim()).find(Boolean) ?? '';
 }

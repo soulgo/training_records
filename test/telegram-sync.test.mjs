@@ -111,7 +111,7 @@ test('analyzeTelegramBatch keeps unknown recognition unmapped instead of returni
   assert.match(analyzed.reason, /unmapped|unknown/i);
 });
 
-test('analyzeTelegramBatch blocks final incomplete, conflict, and fallback-unavailable recognitions', async () => {
+test('analyzeTelegramBatch blocks recognitions without storable data across incomplete fallback states', async () => {
   const lib = await importTelegramSyncLib();
   const [batch] = lib.groupTelegramUpdates([
     telegramUpdate(104, {
@@ -130,7 +130,7 @@ test('analyzeTelegramBatch blocks final incomplete, conflict, and fallback-unava
     records: { measurement: { weightKg: null }, activities: [], meals: [], totalCalories: null, details: [], dailyWorkoutSummary: null, sleep: null },
   };
 
-  for (const reconciliationStatus of ['incomplete', 'conflict', 'fallback_unavailable']) {
+  for (const reconciliationStatus of ['incomplete', 'conflict', 'fallback_unavailable', 'fallback_failed']) {
     const analyzed = lib.analyzeTelegramBatch(batch, [{
       ...base,
       completeness: {
@@ -157,7 +157,7 @@ test('analyzeTelegramBatch blocks final incomplete, conflict, and fallback-unava
   }
 });
 
-test('analyzeTelegramBatch stores recognized data when only image-visible conditional fields are missing and fallback is unavailable', async () => {
+test('analyzeTelegramBatch stores recognized data when only image-visible conditional fields are missing and fallback failed', async () => {
   const lib = await importTelegramSyncLib();
   const [batch] = lib.groupTelegramUpdates([
     telegramUpdate(108, {
@@ -186,7 +186,7 @@ test('analyzeTelegramBatch stores recognized data when only image-visible condit
       conditionalFields: ['records.workout.calories'],
       reviewFields: [],
     },
-    reconciliation: { status: 'fallback_unavailable', conflictFields: [] },
+    reconciliation: { status: 'fallback_failed', conflictFields: [] },
   }]);
 
   assert.equal(analyzed.status, 'ready');
