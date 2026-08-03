@@ -14,6 +14,7 @@
 
 - `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL` 缺失。
 - `AI_API_PROTOCOL` 与模型不匹配，例如仅支持 Responses 的模型仍请求 `/chat/completions`。
+- 备用服务协议与主服务不同，但 `TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL` 未设置，导致备用 provider 请求不存在的 `/responses` 或 `/chat/completions` endpoint。
 - `AI_BASE_URL` 错填为完整 endpoint，`responses` 协议又自动追加 `/responses`，或上游网关在 HTTP 200 下返回 HTML，导致 JSON 解析失败。
 - Provider 能力配置与实际服务不一致，或不支持 vision / `json_schema` / `json_object` / 纯文本 JSON 中的某一种模式。
 - 识别 fallback 未配置模型，或备用连接未配置且主 `AI_API_KEY` / `AI_BASE_URL` 也缺失。
@@ -45,11 +46,12 @@
 5. 查 response format fallback：`src/app/use-cases/image-recognition.use-case.mjs:409`。
 6. 查 schema：`src/core/ai/telegram-recognition-schema.mjs`，当前版本应为 v4。
 7. 核对 `AI_SUPPORTS_VISION`、`AI_SUPPORTS_JSON_SCHEMA`、`AI_SUPPORTS_JSON_OBJECT`、`AI_SUPPORTS_TEXT_JSON`。
-8. 回执或日志出现备用模型、`distributor`、无可用渠道时，先确认 `TELEGRAM_RECOGNITION_FALLBACK_MODEL`，再检查 `STANDBY_AI_API_KEY` / `STANDBY_AI_BASE_URL` 是否指向真正提供该模型的服务。新参数为空时才回退旧 fallback 参数，再为空才继承主连接。
-9. 回执为“主备识别的关键字段不一致”时，说明主备对关键数值超出容差（`src/core/ai/recognition-reconciliation.mjs` 的 `RECOGNITION_RECONCILIATION_TOLERANCES`）或活动指标冲突；系统不自动二选一，需人工核对，该批次 `core.*` 零写入。
-10. 回执为“解析成功……部分字段图片可见但未识别”时属正常诚实提示：图片已入库可用字段，OCR 证据显示某字段可见但本次未识别，可重发或配置备用识别补全，不是失败。
-11. 查分析：`src/app/use-cases/training-analysis.impl.mjs`。
-12. 查图片处理：`src/adapters/image/sharp-image-processor.mjs`；查 OCR：`src/adapters/ocr/openai-compatible-ocr.adapter.mjs`。
+8. 日志先出现 `primary AI recognition failed ... retrying with fallback provider`、随后出现 HTTP 404 时，核对 `TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL` 是否匹配备用服务；当前主模型走 `responses`、备用 Kimi 走 `chat_completions`，必须显式设置覆盖变量。
+9. 回执或日志出现备用模型、`distributor`、无可用渠道时，先确认 `TELEGRAM_RECOGNITION_FALLBACK_MODEL`，再检查 `STANDBY_AI_API_KEY` / `STANDBY_AI_BASE_URL` 是否指向真正提供该模型的服务。新参数为空时才回退旧 fallback 参数，再为空才继承主连接。
+10. 回执为“主备识别的关键字段不一致”时，说明主备对关键数值超出容差（`src/core/ai/recognition-reconciliation.mjs` 的 `RECOGNITION_RECONCILIATION_TOLERANCES`）或活动指标冲突；系统不自动二选一，需人工核对，该批次 `core.*` 零写入。
+11. 回执为“解析成功……部分字段图片可见但未识别”时属正常诚实提示：图片已入库可用字段，OCR 证据显示某字段可见但本次未识别，可重发或配置备用识别补全，不是失败。
+12. 查分析：`src/app/use-cases/training-analysis.impl.mjs`。
+13. 查图片处理：`src/adapters/image/sharp-image-processor.mjs`；查 OCR：`src/adapters/ocr/openai-compatible-ocr.adapter.mjs`。
 
 ## 解决方案
 

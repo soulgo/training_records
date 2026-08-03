@@ -547,6 +547,21 @@ test('all AI sync workflows inject the configured API protocol', async () => {
   }
 });
 
+test('all AI sync workflows inject the configured fallback API protocol', async () => {
+  for (const workflowPath of [
+    '.github/workflows/sync.yml',
+    '.github/workflows/sync-dev.yml',
+    '.github/workflows/pending-replay.yml',
+  ]) {
+    const workflow = await readWorkflow(workflowPath);
+    assert.match(
+      workflow,
+      /TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL:\s*\$\{\{\s*vars\.TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL\s*\}\}/,
+      `${workflowPath} should inject the fallback AI API protocol`,
+    );
+  }
+});
+
 test('all AI sync workflows inject provider capability overrides', async () => {
   for (const workflowPath of [
     '.github/workflows/sync.yml',
