@@ -265,6 +265,86 @@ test('extractAiResponseContent throws AiProviderError when content is empty', ()
   );
 });
 
+test('extractAiResponseContent explains incomplete Responses output with safe metadata', () => {
+  assert.throws(
+    () =>
+      extractAiResponseContent(
+        {
+          choices: [{ message: { content: '' } }],
+          __aiResponseMeta: {
+            protocol: 'responses',
+            status: 'incomplete',
+            incompleteReason: 'max_output_tokens',
+            outputTypes: ['reasoning'],
+            contentTypes: [],
+            hasRefusal: false,
+          },
+        },
+        { label: 'AI recognition' },
+      ),
+    (error) => {
+      assert.equal(error instanceof AiProviderError, true);
+      assert.match(error.message, /incomplete Responses output/i);
+      assert.match(error.message, /status=incomplete/);
+      assert.match(error.message, /reason=max_output_tokens/);
+      assert.match(error.message, /output_types=reasoning/);
+      return true;
+    },
+  );
+});
+
+test('extractAiResponseContent rejects non-empty content from an incomplete Responses result', () => {
+  assert.throws(
+    () =>
+      extractAiResponseContent(
+        {
+          choices: [{ message: { content: '{"records":[]}' } }],
+          __aiResponseMeta: {
+            protocol: 'responses',
+            status: 'incomplete',
+            incompleteReason: 'max_output_tokens',
+            outputTypes: ['message'],
+            contentTypes: ['output_text'],
+            hasRefusal: false,
+          },
+        },
+        { label: 'AI recognition' },
+      ),
+    (error) => {
+      assert.equal(error instanceof AiProviderError, true);
+      assert.match(error.message, /incomplete Responses output/i);
+      assert.match(error.message, /reason=max_output_tokens/);
+      return true;
+    },
+  );
+});
+
+test('extractAiResponseContent identifies refusal Responses output without refusal text', () => {
+  assert.throws(
+    () =>
+      extractAiResponseContent(
+        {
+          choices: [{ message: { content: '' } }],
+          __aiResponseMeta: {
+            protocol: 'responses',
+            status: 'completed',
+            incompleteReason: null,
+            outputTypes: ['message'],
+            contentTypes: ['refusal'],
+            hasRefusal: true,
+          },
+        },
+        { label: 'AI recognition' },
+      ),
+    (error) => {
+      assert.equal(error instanceof AiProviderError, true);
+      assert.match(error.message, /refusal Responses output/i);
+      assert.doesNotMatch(error.message, /sensitive refusal text/i);
+      return true;
+    },
+  );
+});
+
 test('parseAiJsonContent throws AiSchemaError for invalid JSON', () => {
   assert.throws(
     () =>

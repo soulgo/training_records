@@ -516,7 +516,7 @@ test('action monitor reports completed business workflows asynchronously without
   const monitor = await readWorkflow('.github/workflows/action-monitor-report.yml');
   assert.match(monitor, /name:\s*Action Monitor Report/);
   assert.match(monitor, /workflow_run:\s*\n\s+workflows:/);
-  for (const workflowName of ['Sync (Main)', 'Sync (Dev)', 'Deploy GitHub Pages', 'Deploy Cloudflare Pages (Dev)', 'Pending Replay (Dev)']) {
+  for (const workflowName of ['Sync (Main)', 'Sync (Dev)', 'Deploy GitHub Pages', 'Deploy Cloudflare Pages (Dev)', 'Pending Replay']) {
     assert.match(monitor, new RegExp(`- ${escapeRegExp(workflowName)}`));
   }
   assert.doesNotMatch(monitor, /- Action Monitor Report/);
@@ -547,19 +547,53 @@ test('all AI sync workflows inject the configured API protocol', async () => {
   }
 });
 
-test('pending replay runs independently per source channel with scheduled claim mode', async () => {
+test('all AI sync workflows inject provider capability overrides', async () => {
+  for (const workflowPath of [
+    '.github/workflows/sync.yml',
+    '.github/workflows/sync-dev.yml',
+    '.github/workflows/pending-replay.yml',
+  ]) {
+    const workflow = await readWorkflow(workflowPath);
+    for (const capability of [
+      'AI_SUPPORTS_VISION',
+      'AI_SUPPORTS_JSON_SCHEMA',
+      'AI_SUPPORTS_JSON_OBJECT',
+      'AI_SUPPORTS_TEXT_JSON',
+    ]) {
+      assert.match(
+        workflow,
+        new RegExp(`${capability}:\\s*\\$\\{\\{\\s*vars\\.${capability}\\s*\\}\\}`),
+        `${workflowPath} should inject ${capability}`,
+      );
+    }
+  }
+});
+
+test('pending replay runs independently per environment and source channel with scheduled claim mode', async () => {
   const workflow = await readWorkflow('.github/workflows/pending-replay.yml');
   const parsedWorkflow = parseYaml(workflow);
-  assert.match(workflow, /name:\s*Pending Replay \(Dev\)/);
+  assert.match(workflow, /name:\s*Pending Replay/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /cron:\s*'0 \*\/6 \* \* \*'/);
+  assert.match(workflow, /matrix:[\s\S]*target:[\s\S]*- dev[\s\S]*- main/);
   assert.match(workflow, /matrix:[\s\S]*channel:[\s\S]*- telegram[\s\S]*- feishu/);
   assert.match(workflow, /SYNC_REPLAY_MODE:\s*scheduled/);
-  assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{ secrets\.DEV_TRAINING_DB_URL \}\}/);
+  assert.match(
+    workflow,
+    /TRAINING_DB_URL:\s*\$\{\{ matrix\.target == 'dev' && secrets\.DEV_TRAINING_DB_URL \|\| secrets\.TRAINING_DB_URL \}\}/,
+  );
+  assert.match(
+    workflow,
+    /TELEGRAM_BOT_TOKEN:\s*\$\{\{ matrix\.target == 'dev' && secrets\.DEV_TELEGRAM_BOT_TOKEN \|\| secrets\.TELEGRAM_BOT_TOKEN \}\}/,
+  );
+  assert.match(
+    workflow,
+    /FEISHU_APP_ID:\s*\$\{\{ matrix\.target == 'dev' && secrets\.DEV_FEISHU_APP_ID \|\| secrets\.FEISHU_APP_ID \}\}/,
+  );
   assert.match(workflow, /run:\s*npm run sync:\$\{\{ matrix\.channel \}\}/);
   assert.doesNotMatch(workflow, /repository_dispatch|dispatch_payload|queue_task_id/);
   assert.equal(parsedWorkflow.concurrency, undefined);
-  assert.equal(parsedWorkflow.jobs.replay.concurrency.group, 'pending-replay-dev-${{ matrix.channel }}');
+  assert.equal(parsedWorkflow.jobs.replay.concurrency.group, 'pending-replay-${{ matrix.target }}-${{ matrix.channel }}');
 });
 
 test('pending replay injects the same recognition fallback and cache configuration as normal sync', async () => {
@@ -695,6 +729,32 @@ test('telegram-sync workflows keep database-only detection without blocking on p
     assert.match(workflow, /- name: Dispatch site deploy[\s\S]*if: success\(\) && steps\.channel\.outputs\.is_webhook_dispatch == 'true' && \(steps\.detect\.outputs\.repo_changed == 'true' \|\| steps\.detect\.outputs\.db_content_changed == 'true'\)/);
     assert.match(workflow, /node tools\/dispatch-site-deploy\.mjs/);
     assert.doesNotMatch(workflow, /steps\.detect\.outputs\.db_content_changed == 'true'[\s\S]*uses:\s*\.\/\.github\/actions\/site-build/);
+  }
+});
+
+test('sync workflows enforce image business failures after detailed result notifications', async () => {
+  for (const workflowPath of ['.github/workflows/sync.yml', '.github/workflows/sync-dev.yml']) {
+    const workflow = await readWorkflowConfig(workflowPath);
+    const steps = workflow.jobs.sync.steps;
+    const telegramNotify = getWorkflowStep(workflow, 'sync', 'Notify Telegram sync result');
+    const feishuNotify = getWorkflowStep(workflow, 'sync', 'Notify Feishu sync result');
+    const gate = getWorkflowStep(workflow, 'sync', 'Enforce sync business result');
+    const deploy = getWorkflowStep(workflow, 'sync', 'Dispatch site deploy');
+    const telegramFailure = getWorkflowStep(workflow, 'sync', 'Notify Telegram sync failure');
+    const feishuFailure = getWorkflowStep(workflow, 'sync', 'Notify Feishu sync failure');
+
+    assert.equal(telegramNotify.id, 'notify_telegram_result');
+    assert.equal(feishuNotify.id, 'notify_feishu_result');
+    assert.equal(gate.id, 'business_gate');
+    assert.equal(gate.env.SYNC_RESULT_PATH, '${{ steps.channel.outputs.result_path }}');
+    assert.match(gate.run, /node tools\/assert-sync-business-result\.mjs "\$SYNC_RESULT_PATH"/);
+    assert.ok(steps.indexOf(gate) > steps.indexOf(telegramNotify));
+    assert.ok(steps.indexOf(gate) > steps.indexOf(feishuNotify));
+    assert.ok(steps.indexOf(gate) > steps.indexOf(deploy));
+    assert.match(telegramFailure.if, /steps\.business_gate\.outcome != 'failure'/);
+    assert.match(telegramFailure.if, /steps\.notify_telegram_result\.outcome == 'failure'/);
+    assert.match(feishuFailure.if, /steps\.business_gate\.outcome != 'failure'/);
+    assert.match(feishuFailure.if, /steps\.notify_feishu_result\.outcome == 'failure'/);
   }
 });
 

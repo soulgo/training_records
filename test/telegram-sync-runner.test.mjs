@@ -656,6 +656,34 @@ test('createRecognitionAiProvider attaches a configured fallback provider for im
   assert.equal(recognitionProvider.fallbackProvider.env.timeoutMs, 15000);
 });
 
+test('createRecognitionAiProvider lets a fallback model inherit the primary connection', () => {
+  const defaultProvider = {
+    name: 'test-provider',
+    env: { model: 'gpt-default' },
+    async requestChatCompletion() {
+      throw new Error('not used');
+    },
+  };
+
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'primary-key',
+      AI_BASE_URL: 'https://primary.example.com/v1/',
+      AI_MODEL: 'gpt-default',
+      AI_API_PROTOCOL: 'responses',
+      TELEGRAM_RECOGNITION_FALLBACK_MODEL: 'kimi-k2.6',
+      TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: '90000',
+    },
+    defaultProvider,
+  );
+
+  assert.equal(recognitionProvider.fallbackProvider.env.apiKey, 'primary-key');
+  assert.equal(recognitionProvider.fallbackProvider.env.baseUrl, 'https://primary.example.com/v1');
+  assert.equal(recognitionProvider.fallbackProvider.env.model, 'kimi-k2.6');
+  assert.equal(recognitionProvider.fallbackProvider.env.apiProtocol, 'chat_completions');
+  assert.equal(recognitionProvider.fallbackProvider.env.timeoutMs, 90000);
+});
+
 test('createRecognitionAiProvider lets recognition scene fallback timeout override legacy fallback timeout', () => {
   const defaultProvider = {
     name: 'test-provider',
@@ -7499,6 +7527,103 @@ test('runTelegramSync queues image batches when primary and fallback AI provider
   assert.equal(report.batches[0].failureDisposition, 'auto_retry');
   assert.equal(sentMessages.length, 1);
   assert.match(sentMessages[0].text, /已加入重试队列/);
+});
+
+test('pending replay reroutes a Feishu payload claimed by the Telegram worker', async () => {
+  const appended = [];
+  const resolved = [];
+  let recognitionCalls = 0;
+  const now = new Date('2026-08-03T00:00:00.000Z');
+
+  const result = await replayPendingRecognitionBatches({
+    entries: [
+      {
+        batchId: 'feishu-oc_chat_1-1785712821338',
+        sourceChannel: 'telegram',
+        failureCategory: 'ai_service',
+        failureReason: 'AI recognition returned empty content',
+        batch: {
+          kind: 'image',
+          batchId: 'feishu-oc_chat_1-1785712821338',
+          sourceChannel: 'feishu',
+          messages: [
+            {
+              messageId: 101,
+              sourceChannel: 'feishu',
+              chatId: 'oc_chat_1',
+              photos: [{ fileId: 'img_v3_1', source: 'feishu_image' }],
+            },
+          ],
+        },
+      },
+    ],
+    sourceChannel: 'telegram',
+    recognizeBatchRunner: async () => {
+      recognitionCalls += 1;
+      throw new Error('wrong channel API was called');
+    },
+    persistBatch: async () => ({ status: 'stored' }),
+    appendPendingRecognitionBatch: async (entry) => {
+      appended.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
+    markPendingRecognitionResolved: async (entry) => {
+      resolved.push(entry);
+      return { status: 'resolved', batchId: entry.batchId };
+    },
+    backfillCoreSleep: async () => ({ status: 'stored' }),
+    now,
+    env: { aiConcurrency: 1 },
+  });
+
+  assert.equal(recognitionCalls, 0);
+  assert.equal(appended.length, 1);
+  assert.equal(appended[0].batch.sourceChannel, 'feishu');
+  assert.deepEqual(resolved, [
+    { batchId: 'feishu-oc_chat_1-1785712821338', sourceChannel: 'telegram' },
+  ]);
+  assert.equal(result.batches.length, 0);
+  assert.equal(result.reroutedBatches[0].recognitionPendingStatus, 'rerouted');
+});
+
+test('pending replay keeps the original task unresolved when channel rerouting cannot be queued', async () => {
+  const resolved = [];
+  const now = new Date('2026-08-03T00:00:00.000Z');
+
+  await assert.rejects(
+    () => replayPendingRecognitionBatches({
+      entries: [{
+        batchId: 'feishu-oc_chat_2-1785712821339',
+        sourceChannel: 'telegram',
+        batch: {
+          kind: 'image',
+          batchId: 'feishu-oc_chat_2-1785712821339',
+          sourceChannel: 'feishu',
+          messages: [{
+            messageId: 102,
+            sourceChannel: 'feishu',
+            photos: [{ fileId: 'img_v3_2', source: 'feishu_image' }],
+          }],
+        },
+      }],
+      sourceChannel: 'telegram',
+      recognizeBatchRunner: async () => {
+        throw new Error('wrong channel API was called');
+      },
+      persistBatch: async () => ({ status: 'stored' }),
+      appendPendingRecognitionBatch: async () => ({ status: 'skipped', reason: 'missing_url' }),
+      markPendingRecognitionResolved: async (entry) => {
+        resolved.push(entry);
+        return { status: 'resolved' };
+      },
+      backfillCoreSleep: async () => ({ status: 'stored' }),
+      now,
+      env: { aiConcurrency: 1 },
+    }),
+    /could not queue pending batch for feishu/i,
+  );
+
+  assert.deepEqual(resolved, []);
 });
 
 test('runTelegramSync replays pending recognition batches and marks them resolved after storage', async () => {

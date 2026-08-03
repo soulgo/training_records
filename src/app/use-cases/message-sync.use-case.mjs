@@ -167,12 +167,14 @@ export async function runMessageSync(options = {}) {
       env: input.env ?? options.env ?? process.env,
     });
   const useDefaultPendingRecognitionStore =
-    !options.persistNormalizedBatch &&
-    !options.fetchUpdates &&
-    !options.repositoryDispatchEvent &&
-    !options.readPendingRecognitionBatches &&
-    !options.appendPendingRecognitionBatch &&
-    !options.markPendingRecognitionResolved;
+    options.useDefaultPendingRecognitionStore === true ||
+    (options.useDefaultPendingRecognitionStore !== false &&
+      !options.persistNormalizedBatch &&
+      !options.fetchUpdates &&
+      !options.repositoryDispatchEvent &&
+      !options.readPendingRecognitionBatches &&
+      !options.appendPendingRecognitionBatch &&
+      !options.markPendingRecognitionResolved);
   const readPendingRecognitionBatches =
     options.readPendingRecognitionBatches ??
     (useDefaultPendingRecognitionStore
@@ -292,6 +294,7 @@ export async function runMessageSync(options = {}) {
   const replayRecognitionResults = await measureSyncStage(timings, 'replayRecognition', () =>
     replayPendingRecognitionBatches({
       entries: pendingRecognitionEntries,
+      sourceChannel,
       recognizeBatchRunner,
       persistBatch,
       appendPendingRecognitionBatch,
@@ -654,13 +657,15 @@ function createLazyRecognitionAiProvider(rawEnv, configuredProvider, getDefaultP
 }
 
 function createRecognitionFallbackAiProvider(rawEnv) {
-  const apiKey = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_API_KEY ?? '').trim();
-  const baseUrl = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL ?? '').trim();
+  const configuredApiKey = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_API_KEY ?? '').trim();
+  const configuredBaseUrl = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL ?? '').trim();
   const model = String(rawEnv.TELEGRAM_RECOGNITION_FALLBACK_MODEL ?? '').trim();
 
-  if (!apiKey && !baseUrl && !model) {
+  if (!configuredApiKey && !configuredBaseUrl && !model) {
     return null;
   }
+  const apiKey = configuredApiKey || String(rawEnv.AI_API_KEY ?? '').trim();
+  const baseUrl = configuredBaseUrl || String(rawEnv.AI_BASE_URL ?? '').trim();
   if (!apiKey || !baseUrl || !model) {
     process.stderr.write(
       '[message-sync] fallback recognition AI provider is not configured completely; ignoring fallback provider\n',

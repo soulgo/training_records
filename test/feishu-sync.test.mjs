@@ -13,6 +13,18 @@ import { recognizeBatch } from '../src/app/use-cases/message-sync/image-processi
 import { notifyFeishuActionFailure } from '../tools/feishu-action-monitor.mjs';
 import { buildFeishuSyncReport, notifyFeishuSyncResultFromFile, runFeishuSync } from '../src/app/use-cases/feishu-sync.use-case.mjs';
 
+test('Feishu runtime enables the shared default pending recognition store', async () => {
+  const feishuSyncModule = await import('../src/app/use-cases/feishu-sync.use-case.mjs');
+
+  assert.equal(feishuSyncModule.shouldUseDefaultFeishuPendingRecognitionStore({}), true);
+  assert.equal(
+    feishuSyncModule.shouldUseDefaultFeishuPendingRecognitionStore({
+      appendPendingRecognitionBatch: async () => ({ status: 'queued' }),
+    }),
+    false,
+  );
+});
+
 test('normalizeFeishuMessage keeps Feishu source ids while exposing Telegram-compatible fields', () => {
   const normalized = normalizeFeishuMessage(createFeishuImageEvent({
     eventId: 'evt-image-1',

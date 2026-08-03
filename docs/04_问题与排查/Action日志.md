@@ -8,7 +8,7 @@
 - Telegram 睡眠图片已显示 `stored`，但 summary 同时出现 `sleep backfill failed` warning。
 - Worker 已收到消息，但 GitHub workflow 没有启动。
 - `/action-monitor/` 缺少 run、只有顶层 run 没有 job/step，或环境显示不正确。
-- `Pending Replay (Dev)` 长期失败、重复运行或某一渠道没有消费。
+- `Pending Replay` 长期失败、重复运行，或某个环境/渠道组合没有消费。
 
 ## 原因
 
@@ -16,7 +16,7 @@
 - 业务写入失败会进入 `ingest.pending_task`；GitHub run 的 conclusion 不能替代业务状态判断。
 - Queue 需要在 dispatch 后找到带 `queue_task_id` 的 sync run；查找超时会进入 dead letter。
 - `Action Monitor Report` 依赖 `workflow_run`、GitHub `actions: read` 和分支数据库连接；上报晚于原 workflow 完成是正常时序。
-- dev pending replay 按 Telegram/飞书两个 matrix job 分组；某一组失败不会取消另一组。
+- pending replay 按 `dev/main × Telegram/飞书` 四个 matrix job 分组；某一组失败不会取消其他组。
 
 ## 日志特征
 
@@ -49,14 +49,14 @@ Queue / Worker 重点字段：
 7. 如果没有 sync run，查 Cloudflare Worker/Queue 日志，确认分片键对应正确 channel/chat，并检查 `dead-letter`。
 8. 如果 workflow 已 dispatch 但 Queue 报 run lookup timeout，确认 run-name 含同一个 `queue_task_id`，并检查 workflow file/ref 配置。
 9. 对 `pending_replay`，运行 `npm run maintenance:inspect`；需要精确审计时加 `-- --batch-id <batchId>`。
-10. 检查 `Pending Replay (Dev)` 最近两条 matrix job，确认 `SYNC_REPLAY_MODE=scheduled` 和目标渠道凭据完整。
+10. 检查 `Pending Replay` 最近四个 matrix job，确认 `target`、`channel`、`SYNC_REPLAY_MODE=scheduled` 和对应环境凭据完整。
 11. `/action-monitor/` 缺少明细时，打开由原 run 触发的 `Action Monitor Report`，确认选择了正确分支数据库并成功读取 GitHub API。
 12. 页面只有 GitHub API 顶层 run 时，说明 PostgreSQL 明细尚未写入或上报失败；继续查 `Action Monitor Report`，不要修改原 workflow conclusion。
 
 ## 解决方案
 
 - deploy 失败：修复 Pages 构建、数据库快照或页面精确校验后，单独重跑 deploy workflow。
-- pending：修复 AI、COS 或 PostgreSQL 根因，等待定时 replay 或手工运行 `Pending Replay (Dev)`；不要让新 webhook 顺带消费历史任务。
+- pending：修复 AI、COS 或 PostgreSQL 根因，等待定时 replay 或手工运行 `Pending Replay`；不要让新 webhook 顺带消费历史任务。
 - queue `dead-letter`：修复 GitHub token、workflow file/ref、run-name 关联或 API 权限，再按原 payload 重跑；保留 `payload_hash` / `payloadHash`，相同批次应返回 `unchanged`，避免重复写 core。
 - Action monitor 上报失败：确认 `.github/workflows/action-monitor-report.yml` 的 `actions: read`、目标分支、DB Secret 和 `monitor.*` 表权限。
 - Provider fallback：核对 `AI_SUPPORTS_VISION/JSON_SCHEMA/JSON_OBJECT/TEXT_JSON` 与服务商真实能力，再查 HTTP 429/5xx、timeout 和本地 schema failure。
@@ -72,4 +72,4 @@ Queue / Worker 重点字段：
 - Queue 继续按会话分片；不要改成全局单队列，也不要破坏同一会话 FIFO。
 - summary、monitor 表和通知不得记录 dispatch payload、消息正文、chat id 明文、图片 key、Prompt、SQL 参数或 Secret。
 - workflow 后续步骤只能读取 `SYNC_DISPATCH_EVENT_PATH`；若日志出现 `SYNC_DISPATCH_PAYLOAD`、消息正文或图片 key，立即视为隐私回归。
-- 定期检查 `Pending Replay (Dev)`、dead letter 和 `/action-monitor/` 是否同时覆盖 dev/main 当前分支。
+- 定期检查 `Pending Replay` 的四个环境/渠道组合、dead letter 和 `/action-monitor/`，确认 dev/main 都有对应运行证据。

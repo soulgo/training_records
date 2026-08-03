@@ -1,4 +1,4 @@
-name: Pending Replay (Dev)
+name: Pending Replay
 
 on:
   workflow_dispatch:
@@ -11,20 +11,23 @@ permissions:
 jobs:
   replay:
     concurrency:
-      group: pending-replay-dev-${{ matrix.channel }}
+      group: pending-replay-${{ matrix.target }}-${{ matrix.channel }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
+        target:
+          - dev
+          - main
         channel:
           - telegram
           - feishu
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout dev branch
+      - name: Checkout target branch
         uses: actions/checkout@v7
         with:
-          ref: dev
+          ref: ${{ matrix.target }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -38,16 +41,16 @@ jobs:
       - name: Replay due pending tasks
         env:
           SYNC_REPLAY_MODE: scheduled
-          TRAINING_DB_ENABLED: 'true'
-          TRAINING_DB_URL: ${{ secrets.DEV_TRAINING_DB_URL }}
-          TRAINING_DB_APP_NAME: pending-replay-dev-${{ matrix.channel }}
+          TRAINING_DB_ENABLED: ${{ matrix.target == 'dev' && 'true' || vars.TRAINING_DB_ENABLED }}
+          TRAINING_DB_URL: ${{ matrix.target == 'dev' && secrets.DEV_TRAINING_DB_URL || secrets.TRAINING_DB_URL }}
+          TRAINING_DB_APP_NAME: pending-replay-${{ matrix.target }}-${{ matrix.channel }}
           TELEGRAM_SYNC_TRANSPORT: webhook
-          TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_ALLOWED_CHAT_IDS: ${{ secrets.DEV_TELEGRAM_ALLOWED_CHAT_IDS || secrets.TELEGRAM_ALLOWED_CHAT_IDS }}
+          TELEGRAM_BOT_TOKEN: ${{ matrix.target == 'dev' && secrets.DEV_TELEGRAM_BOT_TOKEN || secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALLOWED_CHAT_IDS: ${{ matrix.target == 'dev' && secrets.DEV_TELEGRAM_ALLOWED_CHAT_IDS || secrets.TELEGRAM_ALLOWED_CHAT_IDS }}
           FEISHU_SYNC_TRANSPORT: webhook
-          FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID }}
-          FEISHU_APP_SECRET: ${{ secrets.DEV_FEISHU_APP_SECRET }}
-          FEISHU_ALLOWED_CHAT_IDS: ${{ secrets.DEV_FEISHU_ALLOWED_CHAT_IDS }}
+          FEISHU_APP_ID: ${{ matrix.target == 'dev' && secrets.DEV_FEISHU_APP_ID || secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ matrix.target == 'dev' && secrets.DEV_FEISHU_APP_SECRET || secrets.FEISHU_APP_SECRET }}
+          FEISHU_ALLOWED_CHAT_IDS: ${{ matrix.target == 'dev' && secrets.DEV_FEISHU_ALLOWED_CHAT_IDS || secrets.FEISHU_ALLOWED_CHAT_IDS }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openai-compatible' }}
           AI_API_PROTOCOL: ${{ vars.AI_API_PROTOCOL || 'chat_completions' }}
@@ -55,6 +58,10 @@ jobs:
           AI_MODEL: ${{ vars.AI_MODEL }}
           AI_TIMEOUT_MS: ${{ vars.AI_TIMEOUT_MS }}
           AI_CONCURRENCY: ${{ vars.AI_CONCURRENCY }}
+          AI_SUPPORTS_VISION: ${{ vars.AI_SUPPORTS_VISION }}
+          AI_SUPPORTS_JSON_SCHEMA: ${{ vars.AI_SUPPORTS_JSON_SCHEMA }}
+          AI_SUPPORTS_JSON_OBJECT: ${{ vars.AI_SUPPORTS_JSON_OBJECT }}
+          AI_SUPPORTS_TEXT_JSON: ${{ vars.AI_SUPPORTS_TEXT_JSON }}
           TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline
           FEISHU_RECOGNITION_IMAGE_INPUT_MODE: inline
           AI_IMAGE_PROCESSING_ENABLED: 'true'
@@ -66,12 +73,12 @@ jobs:
           TELEGRAM_RECOGNITION_FALLBACK_MODEL: ${{ vars.TELEGRAM_RECOGNITION_FALLBACK_MODEL }}
           TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: ${{ vars.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS }}
           TELEGRAM_RECOGNITION_CACHE_ENABLED: ${{ vars.TELEGRAM_RECOGNITION_CACHE_ENABLED }}
-          COS_ENABLED: ${{ vars.DEV_COS_ENABLED }}
-          COS_PROVIDER: ${{ vars.DEV_COS_PROVIDER || 'tencent_cos' }}
-          COS_SECRET_ID: ${{ secrets.DEV_COS_SECRET_ID }}
-          COS_SECRET_KEY: ${{ secrets.DEV_COS_SECRET_KEY }}
-          COS_BUCKET: ${{ secrets.DEV_COS_BUCKET }}
-          COS_REGION: ${{ vars.DEV_COS_REGION }}
-          COS_DOMAIN: ${{ secrets.DEV_COS_DOMAIN }}
-          COS_PATH_PREFIX: ${{ secrets.DEV_COS_PATH_PREFIX }}
+          COS_ENABLED: ${{ matrix.target == 'dev' && vars.DEV_COS_ENABLED || vars.COS_ENABLED }}
+          COS_PROVIDER: ${{ matrix.target == 'dev' && vars.DEV_COS_PROVIDER || vars.COS_PROVIDER || 'tencent_cos' }}
+          COS_SECRET_ID: ${{ matrix.target == 'dev' && secrets.DEV_COS_SECRET_ID || secrets.COS_SECRET_ID }}
+          COS_SECRET_KEY: ${{ matrix.target == 'dev' && secrets.DEV_COS_SECRET_KEY || secrets.COS_SECRET_KEY }}
+          COS_BUCKET: ${{ matrix.target == 'dev' && secrets.DEV_COS_BUCKET || secrets.COS_BUCKET }}
+          COS_REGION: ${{ matrix.target == 'dev' && vars.DEV_COS_REGION || vars.COS_REGION }}
+          COS_DOMAIN: ${{ matrix.target == 'dev' && secrets.DEV_COS_DOMAIN || secrets.COS_DOMAIN }}
+          COS_PATH_PREFIX: ${{ matrix.target == 'dev' && secrets.DEV_COS_PATH_PREFIX || secrets.COS_PATH_PREFIX }}
         run: npm run sync:${{ matrix.channel }}

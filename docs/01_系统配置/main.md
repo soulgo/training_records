@@ -40,8 +40,8 @@ main 环境对应：
 | `CLOUDFLARE_API_TOKEN` | 部署 Worker 或清理缓存时必填 | 部署 Worker、清理 Cloudflare 缓存；也可作为 Pages 部署 token。 |
 | `CLOUDFLARE_PAGES_API_TOKEN` | 可选 | Pages / cache purge 专用 token；不填时使用 `CLOUDFLARE_API_TOKEN`。 |
 | `CLOUDFLARE_ZONE_ID` | 清理 Cloudflare 缓存时必填 | 生产站点发布后清理 Cloudflare 缓存。 |
-| `TELEGRAM_RECOGNITION_FALLBACK_API_KEY` | 启用备用识别时必填 | 图片识别备用 AI provider 的 key。当前 GitHub Settings 清单中缺少此项；空值时运行时不会创建备用 provider，主识别缺字段将无法补全，但图片上已有的数据仍按“只写入图片上确有的数据”正常入库。 |
-| `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` | 启用备用识别时必填 | 备用 AI provider base URL；当前 GitHub Settings 清单中缺少此项。 |
+| `TELEGRAM_RECOGNITION_FALLBACK_API_KEY` | 可选 | 图片识别备用 AI provider 的 key；不填继承 `AI_API_KEY`，仅备用服务商不同时需要单独配置。 |
+| `TELEGRAM_RECOGNITION_FALLBACK_BASE_URL` | 可选 | 备用 AI provider base URL；不填继承 `AI_BASE_URL`。 |
 
 ### 1.2 Variables
 
@@ -59,6 +59,7 @@ main 环境对应：
 | `AI_MODEL` | 例如 `gpt-4.1-mini` | 必填 | 默认 AI 模型。 |
 | `AI_TIMEOUT_MS` | `60000` | 建议填 | AI 请求超时。 |
 | `AI_CONCURRENCY` | `3` | 建议填 | 图片识别并发数。 |
+| `AI_SUPPORTS_VISION` / `AI_SUPPORTS_JSON_SCHEMA` / `AI_SUPPORTS_JSON_OBJECT` / `AI_SUPPORTS_TEXT_JSON` | `true` / `false` | 按模型配置 | 显式声明默认 AI 模型的图片与结构化输出能力；不填均默认 `true`。 |
 | `AI_OCR_ENABLED` | `false` / `true` | 按需 | 是否启用 OCR 文本与坐标提取。当前 GitHub Settings 清单中缺少该项。 |
 | `AI_OCR_FAILURE_MODE` | `best_effort` | 建议填 | OCR 失败时继续视觉识别或终止处理。当前 GitHub Settings 清单中缺少该项。 |
 | `TELEGRAM_RECOGNITION_MODEL` | 识别模型名 | 可选 | 只覆盖 Telegram/飞书图片识别模型；不填用 `AI_MODEL`。当前 GitHub Settings 清单中缺少该项。 |
@@ -140,11 +141,11 @@ npx wrangler secret put FEISHU_ALLOWED_CHAT_IDS --config wrangler.toml
 | `AI_API_PROTOCOL` | AI 服务商模型/API 文档 | Variable；未填默认 `chat_completions`；`chat_completions` 请求 `/chat/completions`，`responses` 请求 `/responses`。 |
 | `AI_MODEL` | AI 服务商模型列表 | Variable。默认识别和分析模型。 |
 | `TELEGRAM_RECOGNITION_MODEL` | AI 服务商模型列表 | Variable。只想让图片识别用另一个模型时再填；当前 GitHub Settings 清单中缺少该项。 |
-| `AI_SUPPORTS_VISION` / `AI_SUPPORTS_JSON_SCHEMA` / `AI_SUPPORTS_JSON_OBJECT` / `AI_SUPPORTS_TEXT_JSON` | AI 服务商能力说明 | 运行时代码支持，默认都为 `true`；当前 sync workflow 尚未注入这些变量，如需显式覆盖必须先同步修改 workflow。 |
+| `AI_SUPPORTS_VISION` / `AI_SUPPORTS_JSON_SCHEMA` / `AI_SUPPORTS_JSON_OBJECT` / `AI_SUPPORTS_TEXT_JSON` | AI 服务商能力说明 | 默认都为 `true`；`sync.yml`、`sync-dev.yml` 与 `pending-replay.yml` 均注入这些变量，应按模型真实能力显式覆盖。 |
 
 当前代码读取位置：`src/adapters/ai/openai-compatible.adapter.mjs`、`src/app/use-cases/message-sync.use-case.mjs`。
 
-图片识别完整性门禁始终启用（无功能开关）：主识别业务字段完整时不调用备 AI；`incomplete`/`needs_review` 且已配置 `TELEGRAM_RECOGNITION_FALLBACK_*` 三项时才调用备 AI 尽量补全图片可见字段。`.github/workflows/sync.yml` 与 `.github/workflows/pending-replay.yml` 注入同一套识别主备、超时和缓存配置，确保实时同步与 pending 重放使用相同的完整性门禁和主备能力。完整性门禁只决定是否触发备 AI，不决定是否入库，入库口径见 [数据入库流程](../02_系统核心逻辑/数据入库流程.md)。
+图片识别完整性门禁始终启用（无功能开关）：主识别业务字段完整时不调用备 AI；`incomplete`/`needs_review` 且已配置 `TELEGRAM_RECOGNITION_FALLBACK_MODEL` 时才调用备 AI 尽量补全图片可见字段，备用连接默认继承主 AI。`.github/workflows/sync.yml` 与 `.github/workflows/pending-replay.yml` 注入同一套识别主备、能力、超时和缓存配置，确保实时同步与 pending 重放使用相同的完整性门禁和主备能力。完整性门禁只决定是否触发备 AI，不决定是否入库，入库口径见 [数据入库流程](../02_系统核心逻辑/数据入库流程.md)。
 
 ### 3.2 Telegram
 

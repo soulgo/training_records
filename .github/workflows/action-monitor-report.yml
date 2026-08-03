@@ -7,7 +7,7 @@ on:
       - Sync (Dev)
       - Deploy GitHub Pages
       - Deploy Cloudflare Pages (Dev)
-      - Pending Replay (Dev)
+      - Pending Replay
     types:
       - completed
 

@@ -188,9 +188,11 @@ function normalizeResponsesApiPayload(payload) {
         completion_tokens: payload.usage.completion_tokens ?? payload.usage.output_tokens,
       }
     : payload?.usage;
+  const responseMeta = buildResponsesApiMeta(payload);
 
   return {
     ...payload,
+    __aiResponseMeta: responseMeta,
     choices: [
       {
         index: 0,
@@ -205,17 +207,43 @@ function normalizeResponsesApiPayload(payload) {
   };
 }
 
+function buildResponsesApiMeta(payload) {
+  const output = Array.isArray(payload?.output) ? payload.output : [];
+  const content = output.flatMap((item) => (Array.isArray(item?.content) ? item.content : []));
+  return {
+    protocol: 'responses',
+    status: typeof payload?.status === 'string' ? payload.status : null,
+    incompleteReason:
+      typeof payload?.incomplete_details?.reason === 'string'
+        ? payload.incomplete_details.reason
+        : null,
+    outputTypes: collectResponseTypes(output),
+    contentTypes: collectResponseTypes(content),
+    hasRefusal: content.some((item) => item?.type === 'refusal'),
+  };
+}
+
+function collectResponseTypes(items) {
+  return [...new Set(items.map((item) => item?.type).filter((type) => typeof type === 'string' && type))];
+}
+
 function extractResponsesOutputText(payload) {
-  if (typeof payload?.output_text === 'string') {
+  if (typeof payload?.output_text === 'string' && payload.output_text.trim()) {
     return payload.output_text;
   }
 
-  return (payload?.output ?? [])
+  const outputText = (payload?.output ?? [])
     .filter((item) => item?.type === 'message')
     .flatMap((item) => item.content ?? [])
     .filter((content) => content?.type === 'output_text' && typeof content.text === 'string')
     .map((content) => content.text)
     .join('');
+  if (outputText.trim()) {
+    return outputText;
+  }
+
+  const compatibleContent = payload?.choices?.[0]?.message?.content;
+  return typeof compatibleContent === 'string' ? compatibleContent : '';
 }
 
 function createTimeoutFetch(fetchImpl, timeoutMs) {

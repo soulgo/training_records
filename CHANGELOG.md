@@ -16,11 +16,16 @@
 ### Changed
 
 - 降低定时 Workflow 执行频率以减少 Actions 列表噪音：`pending-replay.yml` 从每 10 分钟改为每 6 小时，`refresh-telegram-webhook.yml` 从每 6 小时改为每 12 小时。`action-monitor-report.yml` 无需修改（被动触发，随 Pending Replay 频率降低自然减少）。
+- `Pending Replay` 扩展为 `dev/main × Telegram/飞书` 四个独立并发组，按环境选择数据库、Bot、飞书和 COS 凭据；识别 fallback 只需配置备用模型，未单独提供 key/base URL 时继承主 AI 连接，显式备用连接仍优先。
+- main、dev 与 pending replay workflow 现在注入 `AI_SUPPORTS_VISION`、`AI_SUPPORTS_JSON_SCHEMA`、`AI_SUPPORTS_JSON_OBJECT`、`AI_SUPPORTS_TEXT_JSON`，可按模型真实能力关闭不支持的图片或结构化输出模式。
 
 ### Fixed
 
 - 修复睡眠回填重写同日全部 `core.*` 明细时，批量 upsert 可能因重复冲突键触发 `ON CONFLICT DO UPDATE command cannot affect row a second time` 的问题；回填现在只替换目标日期的 `core.sleep` 并更新 `core.training_day` 睡眠汇总，不再删除或重写同日体测、活动和餐次数据。
 - 修复 `Pending Replay (Dev)` 将 `sleep_backfill` 任务误走普通图片持久化、导致 `single-580`、`single-651` 持续失败并向 Telegram 重复发送“等待数据库重放”的问题；睡眠回填任务现在走专用重放分支，成功后标记为 resolved、清除数据库失败状态和旧回填错误提示，失败时才重新排队。
+- 修复 OpenAI-compatible `/responses` 返回 HTTP 200 但文本位于 Chat Completions `choices` 形态时被覆盖为空的问题；官方 `output_text` 仍优先，`incomplete`、refusal 和仅 reasoning 响应现在输出不含正文的安全状态/类型诊断并触发现有技术 fallback。
+- 修复飞书生产同步因共享编排器的依赖注入检测而关闭默认 pending store、main 队列没有定时消费者，以及历史错标飞书任务被 Telegram worker 调用错误渠道 API 的问题；错配任务会先重排到正确渠道再解析旧记录。
+- 修复图片全部或部分识别失败时 workflow 仍显示绿色成功的问题；Telegram/飞书详细回执与有效数据站点部署完成后，独立业务门禁会把未恢复的技术性图片失败反映为 Action 失败，并避免重复发送通用失败通知。
 
 ## [1.3.6] - 2026-07-17
 

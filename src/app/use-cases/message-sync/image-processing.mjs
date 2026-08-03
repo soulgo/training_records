@@ -613,6 +613,7 @@ export async function buildImageProcessingBatch({
 
 export async function replayPendingRecognitionBatches({
   entries,
+  sourceChannel,
   recognizeBatchRunner,
   persistBatch,
   appendPendingRecognitionBatch,
@@ -623,10 +624,23 @@ export async function replayPendingRecognitionBatches({
   env,
 }) {
   const batches = [];
+  const reroutedBatches = [];
   let changed = false;
   let replayStoredImageAny = false;
 
   for (const entry of entries ?? []) {
+    const reroutedBatch = await rerouteMismatchedPendingRecognitionBatch({
+      entry,
+      sourceChannel,
+      appendPendingRecognitionBatch,
+      markPendingRecognitionResolved,
+      now,
+    });
+    if (reroutedBatch) {
+      reroutedBatches.push(reroutedBatch);
+      continue;
+    }
+
     const pendingSleepBackfillBatch = normalizePendingSleepBackfillEntry(entry);
     if (pendingSleepBackfillBatch) {
       try {
@@ -777,7 +791,83 @@ export async function replayPendingRecognitionBatches({
     changed,
     replayStoredImageAny,
     batches,
+    reroutedBatches,
   };
+}
+
+async function rerouteMismatchedPendingRecognitionBatch({
+  entry,
+  sourceChannel,
+  appendPendingRecognitionBatch,
+  markPendingRecognitionResolved,
+  now,
+}) {
+  const runnerChannel = normalizeSourceChannel(sourceChannel);
+  const targetChannel = inferPendingRecognitionSourceChannel(entry);
+  if (!runnerChannel || !targetChannel || runnerChannel === targetChannel) {
+    return null;
+  }
+
+  const batch = entry?.batch ?? entry?.batch_payload_json ?? entry;
+  if (!batch?.batchId) {
+    return null;
+  }
+  const queueResult = await appendPendingRecognitionBatch({
+    batch: {
+      ...batch,
+      sourceChannel: targetChannel,
+    },
+    failureCategory: entry?.failureCategory ?? entry?.failure_category ?? 'ai_service',
+    error: entry?.failureReason ?? entry?.failure_reason ?? 'pending source channel mismatch',
+    failedAt: now.toISOString(),
+    nextRetryAt: now,
+  });
+  if (queueResult?.status !== 'queued') {
+    throw new Error(`could not queue pending batch for ${targetChannel}`);
+  }
+  await markPendingRecognitionResolved({
+    batchId: batch.batchId,
+    sourceChannel: normalizeSourceChannel(entry?.sourceChannel ?? entry?.source_channel) ?? runnerChannel,
+  });
+  process.stderr.write(
+    `[message-sync] rerouted pending batch ${batch.batchId} from ${runnerChannel} to ${targetChannel}\n`,
+  );
+  return {
+    kind: batch.kind ?? 'image',
+    batchId: batch.batchId,
+    sourceChannel: targetChannel,
+    status: 'skipped',
+    pendingReplay: true,
+    failureCategory: 'system_bug',
+    failureReason: 'pending source channel mismatch',
+    recognitionPendingStatus: 'rerouted',
+  };
+}
+
+function inferPendingRecognitionSourceChannel(entry) {
+  const batch = entry?.batch ?? entry?.batch_payload_json ?? entry;
+  const explicit = normalizeSourceChannel(batch?.sourceChannel);
+  if (explicit) {
+    return explicit;
+  }
+  for (const message of batch?.messages ?? []) {
+    const messageChannel = normalizeSourceChannel(message?.sourceChannel);
+    if (messageChannel) {
+      return messageChannel;
+    }
+    if ((message?.photos ?? []).some((photo) => photo?.source === 'feishu_image')) {
+      return 'feishu';
+    }
+  }
+  if (String(batch?.batchId ?? '').startsWith('feishu-')) {
+    return 'feishu';
+  }
+  return normalizeSourceChannel(entry?.sourceChannel ?? entry?.source_channel);
+}
+
+function normalizeSourceChannel(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return /^[a-z][a-z0-9_-]*$/u.test(normalized) ? normalized : null;
 }
 
 function normalizePendingSleepBackfillDates(batch) {

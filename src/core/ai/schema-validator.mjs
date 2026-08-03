@@ -5,15 +5,61 @@ export { AiProviderError, AiSchemaError };
 export function extractAiResponseContent(payload, options = {}) {
   const label = options.label ?? 'AI response';
   const content = payload?.choices?.[0]?.message?.content;
+  const responseMeta = payload?.__aiResponseMeta;
+
+  if (
+    responseMeta?.protocol === 'responses' &&
+    (responseMeta.status === 'incomplete' || responseMeta.hasRefusal === true)
+  ) {
+    throw new AiProviderError(buildEmptyAiContentMessage(label, responseMeta), {
+      schemaName: options.schemaName,
+      schemaVersion: options.schemaVersion,
+    });
+  }
 
   if (content === null || content === undefined || String(content).trim() === '') {
-    throw new AiProviderError(`${label} returned empty content`, {
+    throw new AiProviderError(buildEmptyAiContentMessage(label, responseMeta), {
       schemaName: options.schemaName,
       schemaVersion: options.schemaVersion,
     });
   }
 
   return content;
+}
+
+function buildEmptyAiContentMessage(label, responseMeta) {
+  if (responseMeta?.protocol !== 'responses') {
+    return `${label} returned empty content`;
+  }
+
+  const details = [
+    ['status', responseMeta.status],
+    ['reason', responseMeta.incompleteReason],
+    ['output_types', normalizeSafeMetaList(responseMeta.outputTypes)],
+    ['content_types', normalizeSafeMetaList(responseMeta.contentTypes)],
+  ]
+    .map(([name, value]) => [name, normalizeSafeMetaToken(value)])
+    .filter(([, value]) => value)
+    .map(([name, value]) => `${name}=${value}`)
+    .join(', ');
+  const suffix = details ? ` (${details})` : '';
+
+  if (responseMeta.hasRefusal === true) {
+    return `${label} returned refusal Responses output${suffix}`;
+  }
+  if (responseMeta.status === 'incomplete') {
+    return `${label} returned incomplete Responses output${suffix}`;
+  }
+  return `${label} returned empty Responses output${suffix}`;
+}
+
+function normalizeSafeMetaList(value) {
+  return Array.isArray(value) ? value.join(',') : value;
+}
+
+function normalizeSafeMetaToken(value) {
+  const normalized = String(value ?? '').trim();
+  return /^[a-z0-9._,-]{1,160}$/i.test(normalized) ? normalized : '';
 }
 
 export function normalizeAiUsage(value) {
