@@ -2,7 +2,7 @@
   "_description": "Image recognition prompt rules. Edit here, then run `node tools/prompt-generator.mjs` to regenerate prompts/telegram-training-image-recognition.md.",
 
   "metadata": {
-    "version": "2026-06-30",
+    "version": "2026-08-03",
     "schemaName": "telegram_training_image",
     "schemaVersion": "v4"
   },
@@ -143,6 +143,7 @@
       "`sleepStageText` 写睡眠阶段原始文本；`sleepStageDetail` 只写画面明确可见的阶段或时间占比列表，没有则填 `null`。",
       "睡眠截图必须输出 `records.sleep` schema 中的全部字段；画面不可见的字段必须填 `null`，不得省略字段。",
       "夜间睡眠按醒来时间的前一天归档：例如截图显示 `6/3 入睡23:26`、`6/4 醒来06:19`，程序侧会把睡眠归档到 `2026-06-03`。AI 只负责提供真实入睡/醒来时间，不要自行换算归档日期。",
+      "睡眠页面只有单个醒来页头日期（例如 `8/3` 或 `8月3日`）且无年份时，用消息年份补全为 `YYYY-MM-DD`；该日期仍必须来自截图，程序会按睡眠逻辑归档到前一日。",
       "如果睡眠跨天但画面明确显示入睡月日和醒来月日，这不是日期冲突；使用入睡月日结合 Telegram 消息年份补全年份。",
       "如果只有页面顶部醒来日期，但时间轴明确显示前一天入睡日期，优先使用时间轴的入睡日期。",
       "提取睡眠健康指标：`sleepScore`、`sleepScorePercentile`、`deepSleepRatioPct`、`lightSleepRatioPct`、`remSleepRatioPct`、`deepSleepContinuityScore`、`wakeCount`、`breathingQualityScore`、`averageHeartRateBpm`、`hrvMs`、`averageSpo2Pct`、`averageRespiratoryRate`。",

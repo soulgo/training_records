@@ -9,6 +9,7 @@ import {
   recognizeTelegramImageMessage,
 } from '../src/app/use-cases/image-recognition.use-case.mjs';
 import { requestRecognitionWithProvider } from '../src/app/use-cases/image-recognition-provider.mjs';
+import { buildRecognitionMessages } from '../src/app/use-cases/image-recognition-schema.mjs';
 import { RECOGNITION_COMPLETENESS_VERSION } from '../src/core/ai/recognition-completeness.mjs';
 
 const promptMetadata = {
@@ -16,6 +17,24 @@ const promptMetadata = {
   schemaName: 'telegram_training_image',
   schemaVersion: 'v2',
 };
+
+test('buildRecognitionMessages supplies the message year only for visible image dates', () => {
+  const messages = buildRecognitionMessages({
+    imageUrl: 'data:image/png;base64,AA==',
+    message: {
+      caption: '',
+      text: '',
+      dateUnix: Math.floor(new Date('2026-08-03T05:00:00Z').getTime() / 1000),
+    },
+    systemPrompt: 'extract',
+    ocrDocument: null,
+  });
+
+  const context = messages[1].content[0].text;
+  assert.match(context, /图片消息发送年份.*2026/);
+  assert.match(context, /仅用于补全截图内可见的月日/);
+  assert.match(context, /不能把消息日期当作图片日期/);
+});
 
 test('requestRecognitionWithProvider performs one provider attempt without implicit fallback', async () => {
   const calls = [];
@@ -1465,12 +1484,19 @@ test('recognizeTelegramImageMessage retries fallback provider when primary timeo
 
 test('recognizeTelegramImageMessage retries fallback provider for retryable primary AI errors', async () => {
   const scenarios = [
-    ['http-429', new Error('AI recognition request failed with HTTP 429: rate limit')],
-    ['http-502', new Error('AI recognition request failed with HTTP 502')],
-    ['network', new Error('network fetch failed')],
+    ['http-404', async () => ({ ok: false, status: 404, async text() { return 'not found'; } })],
+    ['http-429', async () => { throw new Error('AI recognition request failed with HTTP 429: rate limit'); }],
+    ['http-502', async () => { throw new Error('AI recognition request failed with HTTP 502'); }],
+    ['html-json', async () => ({
+      ok: true,
+      async json() {
+        throw new SyntaxError('Unexpected token < in JSON at position 0');
+      },
+    })],
+    ['network', async () => { throw new Error('network fetch failed'); }],
   ];
 
-  for (const [name, primaryError] of scenarios) {
+  for (const [name, requestPrimary] of scenarios) {
     const calls = [];
     const result = await recognizeTelegramImageMessage({
       aiProvider: {
@@ -1513,7 +1539,7 @@ test('recognizeTelegramImageMessage retries fallback provider for retryable prim
         },
         async requestChatCompletion() {
           calls.push(`${name}:primary`);
-          throw primaryError;
+          return requestPrimary();
         },
       },
       message: {

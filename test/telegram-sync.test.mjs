@@ -549,6 +549,41 @@ test('sleep screenshots keep detected bedtime date when time fields only contain
   assert.equal(analyzed.sleep.totalSleepMinutes, 387);
 });
 
+test('sleep screenshots derive the archive date from a visible slash wake date', async () => {
+  const lib = await importTelegramSyncLib();
+  const [batch] = lib.groupTelegramUpdates([
+    telegramUpdate(182, {
+      messageId: 82,
+      date: Math.floor(new Date('2026-08-03T05:00:00Z').getTime() / 1000),
+      telegram: {
+        photo: [telegramPhoto({ fileId: 'sleep-file-aug-3', fileUniqueId: 'sleep-uniq-aug-3' })],
+      },
+    }),
+  ]);
+
+  const analyzed = lib.analyzeTelegramBatch(batch, [{
+    messageId: 82,
+    imageType: 'sleep',
+    detectedDate: null,
+    dateEvidence: 'image header: 8/3, year from telegram message',
+    confidence: 0.98,
+    warnings: [],
+    records: {
+      sleep: {
+        sleepType: '夜间睡眠',
+        bedtime: null,
+        wakeTime: '06:34',
+        nightSleepMinutes: 387,
+        totalSleepMinutes: null,
+      },
+    },
+  }]);
+
+  assert.equal(analyzed.status, 'ready');
+  assert.equal(analyzed.archivedDate, '2026-08-02');
+  assert.equal(analyzed.dateStages.sleep_bedtime_shift.resultDate, '2026-08-02');
+});
+
 test('sleep screenshots derive total sleep from night sleep when recognition omits total duration', async () => {
   const lib = await importTelegramSyncLib();
 

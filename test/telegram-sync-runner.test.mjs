@@ -650,7 +650,7 @@ test('createRecognitionAiProvider attaches a configured fallback provider for im
 
   assert.equal(recognitionProvider.env.model, 'gpt-vision-fast');
   assert.equal(recognitionProvider.env.apiProtocol, 'responses');
-  assert.equal(recognitionProvider.fallbackProvider.env.apiProtocol, 'chat_completions');
+  assert.equal(recognitionProvider.fallbackProvider.env.apiProtocol, 'responses');
   assert.equal(recognitionProvider.fallbackProvider.env.baseUrl, 'https://fallback.example.com/v1');
   assert.equal(recognitionProvider.fallbackProvider.env.model, 'gpt-vision-backup');
   assert.equal(recognitionProvider.fallbackProvider.env.timeoutMs, 15000);
@@ -680,7 +680,7 @@ test('createRecognitionAiProvider lets a fallback model inherit the primary conn
   assert.equal(recognitionProvider.fallbackProvider.env.apiKey, 'primary-key');
   assert.equal(recognitionProvider.fallbackProvider.env.baseUrl, 'https://primary.example.com/v1');
   assert.equal(recognitionProvider.fallbackProvider.env.model, 'kimi-k2.6');
-  assert.equal(recognitionProvider.fallbackProvider.env.apiProtocol, 'chat_completions');
+  assert.equal(recognitionProvider.fallbackProvider.env.apiProtocol, 'responses');
   assert.equal(recognitionProvider.fallbackProvider.env.timeoutMs, 90000);
 });
 

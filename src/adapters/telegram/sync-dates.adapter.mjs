@@ -297,6 +297,13 @@ function parseMonthDay(value) {
       day: Number(monthDayMatch[2]),
     };
   }
+  const slashMonthDayMatch = value.match(/(?:^|[^\d])(\d{1,2})\s*\/\s*(\d{1,2})(?=$|[^\d])/);
+  if (slashMonthDayMatch) {
+    return {
+      month: Number(slashMonthDayMatch[1]),
+      day: Number(slashMonthDayMatch[2]),
+    };
+  }
   const isoLikeMatch = value
     .replace(/[./_年]/g, '-')
     .replace(/[月]/g, '-')
