@@ -846,21 +846,23 @@ async function rerouteMismatchedPendingRecognitionBatch({
 
 function inferPendingRecognitionSourceChannel(entry) {
   const batch = entry?.batch ?? entry?.batch_payload_json ?? entry;
-  const explicit = normalizeSourceChannel(batch?.sourceChannel);
-  if (explicit) {
-    return explicit;
-  }
   for (const message of batch?.messages ?? []) {
-    const messageChannel = normalizeSourceChannel(message?.sourceChannel);
-    if (messageChannel) {
-      return messageChannel;
-    }
     if ((message?.photos ?? []).some((photo) => photo?.source === 'feishu_image')) {
       return 'feishu';
     }
   }
   if (String(batch?.batchId ?? '').startsWith('feishu-')) {
     return 'feishu';
+  }
+  for (const message of batch?.messages ?? []) {
+    const messageChannel = normalizeSourceChannel(message?.sourceChannel);
+    if (messageChannel) {
+      return messageChannel;
+    }
+  }
+  const explicit = normalizeSourceChannel(batch?.sourceChannel);
+  if (explicit) {
+    return explicit;
   }
   return normalizeSourceChannel(entry?.sourceChannel ?? entry?.source_channel);
 }

@@ -22,6 +22,7 @@
 
 ### Fixed
 
+- 修复历史 `ingest.pending_task` 同时存在飞书媒体证据与错误 Telegram 渠道字段时，Telegram replay 会把飞书 `image_key` 交给 `getFile` 并报 HTTP 400 的问题；重放现在优先依据 `feishu_image` 媒体来源和 `feishu-*` 批次命名空间纠正渠道，再安全重排到飞书队列。
 - 修复睡眠回填重写同日全部 `core.*` 明细时，批量 upsert 可能因重复冲突键触发 `ON CONFLICT DO UPDATE command cannot affect row a second time` 的问题；回填现在只替换目标日期的 `core.sleep` 并更新 `core.training_day` 睡眠汇总，不再删除或重写同日体测、活动和餐次数据。
 - 修复 `Pending Replay (Dev)` 将 `sleep_backfill` 任务误走普通图片持久化、导致 `single-580`、`single-651` 持续失败并向 Telegram 重复发送“等待数据库重放”的问题；睡眠回填任务现在走专用重放分支，成功后标记为 resolved、清除数据库失败状态和旧回填错误提示，失败时才重新排队。
 - 修复 OpenAI-compatible `/responses` 返回 HTTP 200 但文本位于 Chat Completions `choices` 形态时被覆盖为空的问题；官方 `output_text` 仍优先，`incomplete`、refusal 和仅 reasoning 响应现在输出不含正文的安全状态/类型诊断并触发现有技术 fallback。

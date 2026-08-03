@@ -7566,7 +7566,7 @@ test('runTelegramSync queues image batches when primary and fallback AI provider
   assert.match(sentMessages[0].text, /已加入重试队列/);
 });
 
-test('pending replay reroutes a Feishu payload claimed by the Telegram worker', async () => {
+test('pending replay trusts Feishu media evidence over polluted Telegram channel fields', async () => {
   const appended = [];
   const resolved = [];
   let recognitionCalls = 0;
@@ -7582,11 +7582,11 @@ test('pending replay reroutes a Feishu payload claimed by the Telegram worker', 
         batch: {
           kind: 'image',
           batchId: 'feishu-oc_chat_1-1785712821338',
-          sourceChannel: 'feishu',
+          sourceChannel: 'telegram',
           messages: [
             {
               messageId: 101,
-              sourceChannel: 'feishu',
+              sourceChannel: 'telegram',
               chatId: 'oc_chat_1',
               photos: [{ fileId: 'img_v3_1', source: 'feishu_image' }],
             },
