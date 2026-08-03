@@ -2,6 +2,25 @@ name: Pending Replay
 
 on:
   workflow_dispatch:
+    inputs:
+      target:
+        description: Environment to replay
+        required: true
+        type: choice
+        default: dev
+        options:
+          - dev
+          - main
+          - all
+      channel:
+        description: Source channel to replay
+        required: true
+        type: choice
+        default: all
+        options:
+          - telegram
+          - feishu
+          - all
   schedule:
     - cron: '0 */6 * * *'
 
@@ -16,12 +35,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - dev
-          - main
-        channel:
-          - telegram
-          - feishu
+        target: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.target != 'all' && format('["{0}"]', inputs.target) || '["dev","main"]') }}
+        channel: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.channel != 'all' && format('["{0}"]', inputs.channel) || '["telegram","feishu"]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout target branch

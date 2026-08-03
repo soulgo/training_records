@@ -16,7 +16,7 @@
 ### Changed
 
 - 降低定时 Workflow 执行频率以减少 Actions 列表噪音：`pending-replay.yml` 从每 10 分钟改为每 6 小时，`refresh-telegram-webhook.yml` 从每 6 小时改为每 12 小时。`action-monitor-report.yml` 无需修改（被动触发，随 Pending Replay 频率降低自然减少）。
-- `Pending Replay` 扩展为 `dev/main × Telegram/飞书` 四个独立并发组，按环境选择数据库、Bot、飞书和 COS 凭据；识别 fallback 只需配置备用模型，未单独提供 key/base URL 时继承主 AI 连接，显式备用连接仍优先。
+- `Pending Replay` 扩展为 `dev/main × Telegram/飞书` 四个独立并发组，按环境选择数据库、Bot、飞书和 COS 凭据；定时触发保持四组合，手工触发可用 `target` / `channel` 精确选择环境与渠道。识别 fallback 只需配置备用模型，未单独提供 key/base URL 时继承主 AI 连接，显式备用连接仍优先。
 - main、dev 与 pending replay workflow 现在注入 `AI_SUPPORTS_VISION`、`AI_SUPPORTS_JSON_SCHEMA`、`AI_SUPPORTS_JSON_OBJECT`、`AI_SUPPORTS_TEXT_JSON`，可按模型真实能力关闭不支持的图片或结构化输出模式。
 - 新增跨 Telegram/飞书共用的 `STANDBY_AI_API_KEY`、`STANDBY_AI_BASE_URL` 备用连接 Secrets；新参数优先，旧 `TELEGRAM_RECOGNITION_FALLBACK_API_KEY/BASE_URL` 继续兼容，均未配置时才继承主 AI 连接。
 

@@ -585,10 +585,12 @@ test('pending replay runs independently per environment and source channel with 
   const workflow = await readWorkflow('.github/workflows/pending-replay.yml');
   const parsedWorkflow = parseYaml(workflow);
   assert.match(workflow, /name:\s*Pending Replay/);
-  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /workflow_dispatch:\s*\n\s+inputs:/);
+  assert.match(workflow, /target:[\s\S]*default:\s*dev[\s\S]*options:[\s\S]*- dev[\s\S]*- main[\s\S]*- all/);
+  assert.match(workflow, /channel:[\s\S]*default:\s*all[\s\S]*options:[\s\S]*- telegram[\s\S]*- feishu[\s\S]*- all/);
   assert.match(workflow, /cron:\s*'0 \*\/6 \* \* \*'/);
-  assert.match(workflow, /matrix:[\s\S]*target:[\s\S]*- dev[\s\S]*- main/);
-  assert.match(workflow, /matrix:[\s\S]*channel:[\s\S]*- telegram[\s\S]*- feishu/);
+  assert.match(workflow, /matrix:[\s\S]*target:\s*\$\{\{\s*fromJSON\(/);
+  assert.match(workflow, /matrix:[\s\S]*channel:\s*\$\{\{\s*fromJSON\(/);
   assert.match(workflow, /SYNC_REPLAY_MODE:\s*scheduled/);
   assert.match(
     workflow,

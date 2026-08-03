@@ -55,7 +55,7 @@ workflow 根据被监控 run 的 `head_branch` 选择 `DEV_TRAINING_DB_URL` 或 
 
 - 可重试识别或数据库失败进入 `ingest.pending_task`，状态、attempt count、next retry 和失败分类都保存在 PostgreSQL。
 - 新 webhook 消息不读取 pending；只有 `SYNC_REPLAY_MODE=scheduled` 才消费到期任务。
-- `.github/workflows/pending-replay.yml` 每 6 小时运行，也可手工触发；按 `dev/main × Telegram/飞书` 四个 matrix job 独立重放，并使用独立 job concurrency group。
+- `.github/workflows/pending-replay.yml` 每 6 小时运行，也可手工触发；定时运行按 `dev/main × Telegram/飞书` 四个 matrix job 独立重放，手工运行可通过 `target` / `channel` 只选择一个环境或渠道，并使用独立 job concurrency group。
 - 历史任务的队列表字段、payload 字段与媒体证据冲突时，重放优先使用 `photo.source=feishu_image` 和 `feishu-*` 批次命名空间确定飞书来源；错误领取的任务先写入正确渠道队列并标记原任务 resolved，不会调用错误渠道的图片 API。
 - 本地 NDJSON pending 和双来源恢复路径已经删除。
 
