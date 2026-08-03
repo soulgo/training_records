@@ -151,6 +151,11 @@ export function resolveSleepArchiveDate(sleep, detectedDate, message, options = 
     return bedtimeDate;
   }
 
+  const evidenceSleepStartDate = extractSleepStartDateFromEvidence(options.dateEvidence, messageYear);
+  if (evidenceSleepStartDate) {
+    return evidenceSleepStartDate;
+  }
+
   const wakeDate = extractSleepTimeDate(sleep?.wakeTime, messageYear);
   if (wakeDate) {
     return shiftDateByDays(wakeDate, -1);
@@ -163,6 +168,31 @@ export function resolveSleepArchiveDate(sleep, detectedDate, message, options = 
     return shiftDateByDays(detectedDate, -1);
   }
 
+  return null;
+}
+
+function extractSleepStartDateFromEvidence(dateEvidence, messageYear) {
+  const text = String(dateEvidence ?? '').trim();
+  if (!text || !Number.isInteger(messageYear)) {
+    return null;
+  }
+
+  const dateToken = String.raw`(?:\d{4}\s*[-/.年]\s*)?\d{1,2}\s*[-/.月]\s*\d{1,2}\s*日?`;
+  const patterns = [
+    new RegExp(`(${dateToken})\\s*(?:入睡|bedtime|sleep\\s+start)`, 'i'),
+    new RegExp(`(?:入睡日期?|bedtime(?:\\s+date)?|sleep\\s+start(?:\\s+date)?)[^\\d]{0,8}(${dateToken})`, 'i'),
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const date = extractDateFromText(match?.[1], {
+      allowMonthDay: true,
+      messageYear,
+    });
+    if (date) {
+      return date;
+    }
+  }
   return null;
 }
 
