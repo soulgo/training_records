@@ -2361,6 +2361,90 @@ test('backfillCoreSleepFromIngestBatchesClient merges same-day ingest candidates
   assert.deepEqual(sleepInserts[0][1][8], [387]);
 });
 
+test('backfillCoreSleepFromIngestBatchesClient does not rewrite non-sleep core detail rows', async () => {
+  const calls = [];
+  const fakeClient = {
+    async query(sql, params) {
+      calls.push([sql, params]);
+      if (/from ingest\.source_batch b/i.test(sql)) {
+        return {
+          rows: [{
+            batch_id: 'sleep-only-replay',
+            batch_payload_json: {
+              status: 'ready',
+              archivedDate: '2026-07-25',
+              sleep: {
+                records: [{
+                  sleepType: '夜间睡眠',
+                  bedtime: '23:31',
+                  wakeTime: '08:02',
+                  totalSleepMinutes: 511,
+                }],
+              },
+            },
+          }],
+        };
+      }
+      if (/from archive\.training_sleep\s+a/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/from core\.training_day/i.test(sql)) {
+        return {
+          rows: [{
+            archived_date: '2026-07-25',
+            total_activities: 1,
+            total_duration_seconds: 2310,
+            training_calories: 300,
+            workout_duration_minutes: 38,
+            active_hours: 8,
+            cycling_distance_km: 0,
+            intake_calories: 1047,
+            nutrition_details_json: ['午餐 863 千卡'],
+          }],
+        };
+      }
+      if (/from core\.activity/i.test(sql)) {
+        return {
+          rows: [{
+            archived_date: '2026-07-25',
+            activity_time: '08:13',
+            activity_type: '室内跑步',
+            raw_type: '室内跑步',
+            detail: '3.22公里，时长 00:38:30',
+            duration_seconds: 2310,
+            calories: 300,
+          }],
+        };
+      }
+      if (/from core\.meal/i.test(sql)) {
+        return {
+          rows: [{
+            archived_date: '2026-07-25',
+            meal_name: '午餐',
+            calories: 863,
+          }],
+        };
+      }
+      if (/from core\.measurement/i.test(sql) || /from core\.sleep/i.test(sql)) {
+        return { rows: [] };
+      }
+      if (/insert into core\.(?:measurement|activity|meal)/i.test(sql)) {
+        throw new Error('sleep backfill must not rewrite non-sleep core detail rows');
+      }
+      return { rows: [] };
+    },
+  };
+
+  const result = await backfillCoreSleepFromIngestBatchesClient(fakeClient, {
+    processedAt: new Date('2026-07-26T00:30:00.000Z'),
+    targetArchivedDates: ['2026-07-25'],
+  });
+
+  assert.equal(result.status, 'stored');
+  assert.equal(calls.some(([sql]) => /insert into core\.(?:measurement|activity|meal)/i.test(sql)), false);
+  assert.equal(calls.some(([sql]) => /insert into core\.sleep/i.test(sql)), true);
+});
+
 test('backfillCoreSleepFromIngestBatchesClient creates core day from archive-only sleep rows', async () => {
   const calls = [];
   const fakeClient = {
@@ -2428,8 +2512,9 @@ test('backfillCoreSleepFromIngestBatchesClient creates core day from archive-onl
   assert.deepEqual(result.daysBackfilled, ['2026-06-04']);
   assert.ok(dayInsert);
   assert.ok(sleepInsert);
-  assert.deepEqual(dayInsert[1][0], ['2026-06-04']);
-  assert.deepEqual(dayInsert[1][9], [null]);
+  assert.equal(dayInsert[1][0], '2026-06-04');
+  assert.equal(dayInsert[1][3], 473);
+  assert.equal(dayInsert[1][8], 62);
   assert.deepEqual(sleepInsert[1][8], [473]);
   assert.deepEqual(sleepInsert[1][10], [62]);
 });

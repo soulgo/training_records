@@ -708,6 +708,44 @@ export function hasPartialRecognitionFailure(batch) {
   return (batch.issues ?? []).some((issue) => /missing recognition/i.test(String(issue)));
 }
 
+export function evaluateSyncBusinessResult(result = {}) {
+  const failures = (result.batches ?? [])
+    .filter((batch) => isUnrecoveredImageFailure(batch))
+    .map((batch) => ({
+      batchId: String(batch.batchId ?? 'unknown'),
+      failureCategory: batch.failureCategory ?? 'ai_service',
+      failedImageCount: resolveFailedImageCount(batch),
+    }));
+  return {
+    ok: failures.length === 0,
+    failures,
+  };
+}
+
+function isUnrecoveredImageFailure(batch) {
+  if (!batch || (batch.kind ?? 'image') !== 'image') {
+    return false;
+  }
+  if (resolveFailedImageCount(batch) > 0 || (batch.recognitionErrors?.length ?? 0) > 0) {
+    return true;
+  }
+  return batch.status === 'skipped' &&
+    ['ai_service', 'image_download', 'telegram_api', 'system_bug'].includes(batch.failureCategory);
+}
+
+function resolveFailedImageCount(batch) {
+  const explicit = Number(batch.failedImageCount ?? 0);
+  const source = Number(batch.sourceImageCount ?? 0);
+  const recognized = Number(batch.recognizedImageCount ?? 0);
+  const recognitionErrors = Array.isArray(batch.recognitionErrors) ? batch.recognitionErrors.length : 0;
+  return Math.max(
+    Number.isFinite(explicit) ? explicit : 0,
+    Number.isFinite(source) && Number.isFinite(recognized) ? source - recognized : 0,
+    recognitionErrors,
+    0,
+  );
+}
+
 function formatFailedRecognitionMessageIds(batch) {
   const ids = new Set();
   for (const error of batch.recognitionErrors ?? []) {

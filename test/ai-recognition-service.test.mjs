@@ -2125,3 +2125,74 @@ test('recognizeTelegramImageMessage uses fallback to complete business-incomplet
   assert.equal(result.reconciliation.status, 'fallback_completed');
   assert.deepEqual(result.reconciliation.filledFields, ['records.measurement.weightKg']);
 });
+
+test('recognizeTelegramImageMessage keeps usable primary data when business fallback is unavailable', async () => {
+  const calls = [];
+  const result = await recognizeTelegramImageMessage({
+    aiProvider: {
+      name: 'openai-compatible',
+      env: { model: 'gpt-primary' },
+      fallbackProvider: {
+        name: 'openai-compatible',
+        env: { model: 'kimi-k2.6' },
+        async requestChatCompletion() {
+          calls.push('fallback');
+          throw Object.assign(new Error('sensitive standby distributor response'), { status: 503 });
+        },
+      },
+      async requestChatCompletion() {
+        calls.push('primary');
+        return {
+          ok: true,
+          async json() {
+            return {
+              choices: [{
+                message: {
+                  content: JSON.stringify({
+                    imageType: 'measurement',
+                    detectedApp: '华为健康',
+                    detectedDate: '2026-08-02',
+                    dateEvidence: 'image header: 2026-08-02',
+                    confidence: 0.94,
+                    warnings: [],
+                    records: {
+                      measurement: validMeasurement(72.4),
+                      activities: [],
+                      meals: [],
+                      totalCalories: null,
+                      details: [],
+                      dailyWorkoutSummary: null,
+                      sleep: null,
+                    },
+                  }),
+                },
+              }],
+            };
+          },
+        };
+      },
+    },
+    message: {
+      messageId: 90,
+      caption: '',
+      text: '',
+      photos: [{ fileUniqueId: 'file-business-fallback-unavailable' }],
+    },
+    imageUrl: 'https://example.com/image.jpg',
+    systemPrompt: 'system prompt',
+    promptMetadata,
+    env: {
+      AI_MODEL: 'gpt-primary',
+      TELEGRAM_RECOGNITION_CACHE_ENABLED: '',
+    },
+    extractOcr: async () => ({ text: '体重 72.4 kg\n体脂率', blocks: [] }),
+  });
+
+  assert.deepEqual(calls, ['primary', 'fallback']);
+  assert.equal(result.records.measurement.weightKg, 72.4);
+  assert.equal(result.completeness.status, 'incomplete');
+  assert.equal(result.reconciliation.status, 'fallback_failed');
+  assert.equal(result.aiAttemptKind, 'fallback_business_completion_failed');
+  assert.match(result.warnings.join('\n'), /备用识别服务暂不可用/);
+  assert.doesNotMatch(JSON.stringify(result), /sensitive standby distributor response/);
+});

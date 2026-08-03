@@ -345,19 +345,49 @@ async function completeRecognitionWithBusinessFallback({
     });
   }
 
-  const fallbackResult = await requestRecognitionWithProvider({
-    aiProvider: fallbackProvider,
-    imageUrl: processedImage.imageUrl,
-    ocrDocument,
-    message,
-    systemPrompt,
-    promptVersion,
-    schemaName,
-    schemaVersion,
-    env,
-    onAiCallLog,
-    idempotencyKey,
-  });
+  let fallbackResult;
+  try {
+    fallbackResult = await requestRecognitionWithProvider({
+      aiProvider: fallbackProvider,
+      imageUrl: processedImage.imageUrl,
+      ocrDocument,
+      message,
+      systemPrompt,
+      promptVersion,
+      schemaName,
+      schemaVersion,
+      env,
+      onAiCallLog,
+      idempotencyKey,
+    });
+  } catch (error) {
+    const status = Number(error?.status);
+    const statusSuffix = Number.isInteger(status) && status > 0 ? ` with HTTP ${status}` : '';
+    process.stderr.write(
+      `[telegram-sync] business fallback recognition failed${statusSuffix}; keeping primary result\n`,
+    );
+    return buildRecognitionOutput({
+      message,
+      payload: appendRecognitionWarning(primary, '备用识别服务暂不可用，已保留主识别结果'),
+      ocrDocument,
+      imageMetadata: processedImage.metadata ?? null,
+      runtime: {
+        schemaName,
+        schemaVersion,
+        provider: cachedEnvelope?.provider ?? primaryResult?.aiProvider?.name ?? primaryProvider,
+        model: cachedEnvelope?.model ?? primaryResult?.aiProvider?.env?.model ?? primaryModel,
+        promptVersion,
+        cacheKey,
+        cacheStatus,
+      },
+      completeness: primaryCompleteness,
+      reconciliation: fallbackFailedReconciliation(),
+      aiAttemptKind: 'fallback_business_completion_failed',
+      aiIdempotencyKey: cachedEnvelope?.aiIdempotencyKey ?? primaryResult?.idempotencyKey ?? idempotencyKey,
+      aiUsage: cachedEnvelope?.aiUsage ?? primaryResult?.aiUsage ?? null,
+      fallbackModel: fallbackProvider?.env?.model ?? null,
+    });
+  }
   const reconciled = reconcileRecognitionResults({ primary, fallback: fallbackResult.value });
   if (!reconciled.value) {
     const finalCompleteness = reconciled.status === 'conflict'
@@ -514,6 +544,24 @@ function fallbackUnavailableReconciliation() {
     conflictFields: [],
     fieldSources: {},
     finalSource: 'primary_incomplete',
+  };
+}
+
+function fallbackFailedReconciliation() {
+  return {
+    status: 'fallback_failed',
+    filledFields: [],
+    agreedFields: [],
+    conflictFields: [],
+    fieldSources: {},
+    finalSource: 'primary_incomplete',
+  };
+}
+
+function appendRecognitionWarning(payload, warning) {
+  return {
+    ...payload,
+    warnings: [...new Set([...(payload?.warnings ?? []), warning])],
   };
 }
 

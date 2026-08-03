@@ -46,7 +46,7 @@ flowchart TD
   AI --> INGEST["NormalizedRecognition / generic ingest"]
   INGEST --> DB
   CMD -. "可重试失败" .-> Q["PostgreSQL pending_task"]
-  Q --> PR["Pending Replay (Dev)"]
+  Q --> PR["Pending Replay (dev/main)"]
   SYNC -->|"异步派发"| DEPLOY["Pages deploy workflow"]
   SYNC -. "workflow_run" .-> AM["Action Monitor Report"]
   DEPLOY -. "workflow_run" .-> AM
@@ -139,10 +139,12 @@ npm run server
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot token |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | 允许处理的 Telegram chat id，逗号分隔 |
 | `TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE` | 图片识别输入模式：`auto`、`url` 或 `inline`；Action 默认 `inline` |
-| `TELEGRAM_RECOGNITION_MODEL` | 可选，仅覆盖 Telegram 图片识别模型 |
+| `TELEGRAM_RECOGNITION_MODEL` | 可选，仅覆盖 Telegram/飞书图片识别模型 |
 | `TELEGRAM_SYNC_RUN_SLEEP_BACKFILL` | 可选，显式运行睡眠全量补偿；默认在 pending replay 或新存储的睡眠图片后触发 |
 | `AI_API_KEY` | AI 服务鉴权 |
 | `AI_BASE_URL` | OpenAI-compatible base URL（通常以 `/v1` 结尾） |
+| `STANDBY_AI_API_KEY` | 可选，独立备用 AI 服务鉴权；Telegram/飞书图片识别共用 |
+| `STANDBY_AI_BASE_URL` | 可选，独立备用 AI base URL；备用模型与主模型不在同一服务时应配置 |
 | `AI_API_PROTOCOL` | AI 请求协议：`chat_completions`（默认）或 `responses` |
 | `AI_MODEL` | AI 模型名 |
 | `AI_CONCURRENCY` | 图片识别并发数，默认 3 |
@@ -177,7 +179,7 @@ npm run server
 3. Queue 使用 `workflow_dispatch` 触发 `sync.yml` 或 `sync-dev.yml`；同一会话保持顺序，不同会话可以并行。
 4. 图片批次调用 AI 识别；随想、Markdown 附件随想、帮助和分析按通道能力分支处理。
 5. 带图随想先写本地图片 artifact 或腾讯云 COS，再把图片引用、随想和身体反馈写 PostgreSQL。
-6. PostgreSQL 或可重试识别失败时写入 `ingest.pending_task`；dev 的 `Pending Replay (Dev)` 定时或手工独立重放，不阻塞新消息。
+6. PostgreSQL 或可重试识别失败时写入 `ingest.pending_task`；`Pending Replay` 按 dev/main 与 Telegram/飞书四个并发组定时或手工独立重放，不阻塞新消息。
 7. 内容变化后 sync workflow 只派发站点部署，不等待 Pages 完成；部署失败由部署 workflow 独立通知，Action 监控由 `workflow_run` 异步采集。
 
 图片批次的持久化主路径使用 `ingest.source_batch`、`source_message`、`source_asset`、`recognition_run` 和 `pending_task`。旧 `ingest.telegram_*` 表只保留为迁移观察期历史数据，不再被生产代码访问。
@@ -217,7 +219,7 @@ docker compose up --build -d
 | `deploy-cloudflare-pages-dev.yml` | 构建 dev 分支并部署 Cloudflare Pages 预览 |
 | `sync.yml` | main Telegram / 飞书统一同步、提交内容变化，并在图片、随想新增/编辑/删除/移动等 DB-only 入库时异步触发站点部署 |
 | `sync-dev.yml` | dev Telegram / 飞书统一同步，并在图片、随想新增/编辑/删除/移动等 DB-only 入库时触发 dev Cloudflare Pages 预览部署 |
-| `pending-replay.yml` | 每 10 分钟或手工按 Telegram/飞书两条并发组重放 dev 到期 pending 任务 |
+| `pending-replay.yml` | 每 6 小时或手工按 dev/main 与 Telegram/飞书四个并发组重放到期 pending 任务 |
 | `action-monitor-report.yml` | 通过 `workflow_run` 异步采集 sync、deploy 和 pending replay 的 run/job/step/failure 状态 |
 | `markdown-backup.yml` | 按 GitHub Variables 控制定时从数据库导出 Markdown 备份 |
 | `deploy-cloudflare-worker.yml` | 部署 main 统一 Cloudflare Worker，并刷新 Telegram webhook |

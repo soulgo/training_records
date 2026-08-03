@@ -656,6 +656,71 @@ test('createRecognitionAiProvider attaches a configured fallback provider for im
   assert.equal(recognitionProvider.fallbackProvider.env.timeoutMs, 15000);
 });
 
+test('createRecognitionAiProvider lets a fallback model inherit the primary connection', () => {
+  const defaultProvider = {
+    name: 'test-provider',
+    env: { model: 'gpt-default' },
+    async requestChatCompletion() {
+      throw new Error('not used');
+    },
+  };
+
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'primary-key',
+      AI_BASE_URL: 'https://primary.example.com/v1/',
+      AI_MODEL: 'gpt-default',
+      AI_API_PROTOCOL: 'responses',
+      TELEGRAM_RECOGNITION_FALLBACK_MODEL: 'kimi-k2.6',
+      TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS: '90000',
+    },
+    defaultProvider,
+  );
+
+  assert.equal(recognitionProvider.fallbackProvider.env.apiKey, 'primary-key');
+  assert.equal(recognitionProvider.fallbackProvider.env.baseUrl, 'https://primary.example.com/v1');
+  assert.equal(recognitionProvider.fallbackProvider.env.model, 'kimi-k2.6');
+  assert.equal(recognitionProvider.fallbackProvider.env.apiProtocol, 'chat_completions');
+  assert.equal(recognitionProvider.fallbackProvider.env.timeoutMs, 90000);
+});
+
+test('createRecognitionAiProvider prefers the shared standby connection for the fallback model', () => {
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'primary-key',
+      AI_BASE_URL: 'https://primary.example.com/v1/',
+      AI_MODEL: 'gpt-primary',
+      STANDBY_AI_API_KEY: 'standby-key',
+      STANDBY_AI_BASE_URL: 'https://standby.example.com/v1/',
+      TELEGRAM_RECOGNITION_FALLBACK_MODEL: 'kimi-k2.6',
+    },
+    { name: 'primary', env: { model: 'gpt-primary' } },
+  );
+
+  assert.equal(recognitionProvider.fallbackProvider.env.apiKey, 'standby-key');
+  assert.equal(recognitionProvider.fallbackProvider.env.baseUrl, 'https://standby.example.com/v1');
+  assert.equal(recognitionProvider.fallbackProvider.env.model, 'kimi-k2.6');
+});
+
+test('createRecognitionAiProvider ignores empty standby secrets and keeps the legacy fallback connection', () => {
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'primary-key',
+      AI_BASE_URL: 'https://primary.example.com/v1/',
+      AI_MODEL: 'gpt-primary',
+      STANDBY_AI_API_KEY: '',
+      STANDBY_AI_BASE_URL: '',
+      TELEGRAM_RECOGNITION_FALLBACK_API_KEY: 'legacy-key',
+      TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: 'https://legacy.example.com/v1/',
+      TELEGRAM_RECOGNITION_FALLBACK_MODEL: 'kimi-k2.6',
+    },
+    { name: 'primary', env: { model: 'gpt-primary' } },
+  );
+
+  assert.equal(recognitionProvider.fallbackProvider.env.apiKey, 'legacy-key');
+  assert.equal(recognitionProvider.fallbackProvider.env.baseUrl, 'https://legacy.example.com/v1');
+});
+
 test('createRecognitionAiProvider lets recognition scene fallback timeout override legacy fallback timeout', () => {
   const defaultProvider = {
     name: 'test-provider',
@@ -1365,6 +1430,62 @@ test('runTelegramSync runs sleep backfill when pending recognition replay stores
   assert.equal(backfillCalls[0].sourceChannel, 'telegram_sync');
   assert.deepEqual(backfillCalls[0].targetArchivedDates, ['2026-05-29']);
   assert.equal(Object.hasOwn(result.timingsMs, 'sleepBackfill'), true);
+});
+
+test('runTelegramSync replays pending sleep_backfill tasks through the sleep backfill operation', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'telegram-sync-pending-sleep-operation-'));
+  await writeFile(path.join(tempRoot, '训练记录.md'), '# 训练记录\n', 'utf8');
+  const backfillCalls = [];
+  const resolved = [];
+
+  const result = await runTelegramSync({
+    rootDir: tempRoot,
+    env: telegramSyncEnv({
+      GITHUB_EVENT_NAME: 'repository_dispatch',
+      SYNC_REPLAY_MODE: 'scheduled',
+    }),
+    repositoryDispatchEvent: { client_payload: {} },
+    getLastProcessedUpdateId: async () => 900,
+    readPendingRecognitionBatches: async () => [{
+      batchId: 'single-651',
+      failureCategory: 'database',
+      batch: {
+        kind: 'sleep_backfill',
+        batchId: 'single-651',
+        sourceChannel: 'telegram',
+        status: 'ready',
+        archivedDate: '2026-07-25',
+        targetArchivedDates: ['2026-07-25'],
+        messages: [{ messageId: 651, chatId: 42 }],
+        sourceImageCount: 1,
+        recognizedImageCount: 1,
+        failedImageCount: 0,
+        partialFailure: true,
+        failureReason: 'ON CONFLICT DO UPDATE command cannot affect row a second time',
+        warnings: ['sleep backfill failed: ON CONFLICT DO UPDATE command cannot affect row a second time'],
+      },
+    }],
+    persistNormalizedBatch: async () => {
+      throw new Error('sleep_backfill must not use normal batch persistence');
+    },
+    appendPendingRecognitionBatch: async () => ({ status: 'queued' }),
+    markPendingRecognitionResolved: async ({ batchId }) => {
+      resolved.push(batchId);
+      return { status: 'resolved', batchId };
+    },
+    backfillCoreSleepFromIngestBatches: async (input) => {
+      backfillCalls.push(input);
+      return { status: 'stored', batchesBackfilled: 2, daysBackfilled: ['2026-07-25'] };
+    },
+  });
+
+  assert.equal(backfillCalls.length, 1);
+  assert.deepEqual(backfillCalls[0].targetArchivedDates, ['2026-07-25']);
+  assert.deepEqual(resolved, ['single-651']);
+  assert.equal(result.batches[0].persistenceStatus, 'stored');
+  assert.equal(result.batches[0].recognitionPendingStatus, 'resolved');
+  assert.equal(result.batches[0].partialFailure, false);
+  assert.equal(result.batches[0].failureReason, null);
 });
 
 test('runTelegramSync does not run sleep backfill when pending recognition replay stores non-sleep data', async () => {
@@ -7443,6 +7564,103 @@ test('runTelegramSync queues image batches when primary and fallback AI provider
   assert.equal(report.batches[0].failureDisposition, 'auto_retry');
   assert.equal(sentMessages.length, 1);
   assert.match(sentMessages[0].text, /已加入重试队列/);
+});
+
+test('pending replay trusts Feishu media evidence over polluted Telegram channel fields', async () => {
+  const appended = [];
+  const resolved = [];
+  let recognitionCalls = 0;
+  const now = new Date('2026-08-03T00:00:00.000Z');
+
+  const result = await replayPendingRecognitionBatches({
+    entries: [
+      {
+        batchId: 'feishu-oc_chat_1-1785712821338',
+        sourceChannel: 'telegram',
+        failureCategory: 'ai_service',
+        failureReason: 'AI recognition returned empty content',
+        batch: {
+          kind: 'image',
+          batchId: 'feishu-oc_chat_1-1785712821338',
+          sourceChannel: 'telegram',
+          messages: [
+            {
+              messageId: 101,
+              sourceChannel: 'telegram',
+              chatId: 'oc_chat_1',
+              photos: [{ fileId: 'img_v3_1', source: 'feishu_image' }],
+            },
+          ],
+        },
+      },
+    ],
+    sourceChannel: 'telegram',
+    recognizeBatchRunner: async () => {
+      recognitionCalls += 1;
+      throw new Error('wrong channel API was called');
+    },
+    persistBatch: async () => ({ status: 'stored' }),
+    appendPendingRecognitionBatch: async (entry) => {
+      appended.push(entry);
+      return { status: 'queued', batchId: entry.batch.batchId };
+    },
+    markPendingRecognitionResolved: async (entry) => {
+      resolved.push(entry);
+      return { status: 'resolved', batchId: entry.batchId };
+    },
+    backfillCoreSleep: async () => ({ status: 'stored' }),
+    now,
+    env: { aiConcurrency: 1 },
+  });
+
+  assert.equal(recognitionCalls, 0);
+  assert.equal(appended.length, 1);
+  assert.equal(appended[0].batch.sourceChannel, 'feishu');
+  assert.deepEqual(resolved, [
+    { batchId: 'feishu-oc_chat_1-1785712821338', sourceChannel: 'telegram' },
+  ]);
+  assert.equal(result.batches.length, 0);
+  assert.equal(result.reroutedBatches[0].recognitionPendingStatus, 'rerouted');
+});
+
+test('pending replay keeps the original task unresolved when channel rerouting cannot be queued', async () => {
+  const resolved = [];
+  const now = new Date('2026-08-03T00:00:00.000Z');
+
+  await assert.rejects(
+    () => replayPendingRecognitionBatches({
+      entries: [{
+        batchId: 'feishu-oc_chat_2-1785712821339',
+        sourceChannel: 'telegram',
+        batch: {
+          kind: 'image',
+          batchId: 'feishu-oc_chat_2-1785712821339',
+          sourceChannel: 'feishu',
+          messages: [{
+            messageId: 102,
+            sourceChannel: 'feishu',
+            photos: [{ fileId: 'img_v3_2', source: 'feishu_image' }],
+          }],
+        },
+      }],
+      sourceChannel: 'telegram',
+      recognizeBatchRunner: async () => {
+        throw new Error('wrong channel API was called');
+      },
+      persistBatch: async () => ({ status: 'stored' }),
+      appendPendingRecognitionBatch: async () => ({ status: 'skipped', reason: 'missing_url' }),
+      markPendingRecognitionResolved: async (entry) => {
+        resolved.push(entry);
+        return { status: 'resolved' };
+      },
+      backfillCoreSleep: async () => ({ status: 'stored' }),
+      now,
+      env: { aiConcurrency: 1 },
+    }),
+    /could not queue pending batch for feishu/i,
+  );
+
+  assert.deepEqual(resolved, []);
 });
 
 test('runTelegramSync replays pending recognition batches and marks them resolved after storage', async () => {

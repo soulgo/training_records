@@ -8,7 +8,7 @@
 - Telegram 睡眠图片已显示 `stored`，但 summary 同时出现 `sleep backfill failed` warning。
 - Worker 已收到消息，但 GitHub workflow 没有启动。
 - `/action-monitor/` 缺少 run、只有顶层 run 没有 job/step，或环境显示不正确。
-- `Pending Replay (Dev)` 长期失败、重复运行或某一渠道没有消费。
+- `Pending Replay` 长期失败、重复运行，或某个环境/渠道组合没有消费。
 
 ## 原因
 
@@ -16,7 +16,8 @@
 - 业务写入失败会进入 `ingest.pending_task`；GitHub run 的 conclusion 不能替代业务状态判断。
 - Queue 需要在 dispatch 后找到带 `queue_task_id` 的 sync run；查找超时会进入 dead letter。
 - `Action Monitor Report` 依赖 `workflow_run`、GitHub `actions: read` 和分支数据库连接；上报晚于原 workflow 完成是正常时序。
-- dev pending replay 按 Telegram/飞书两个 matrix job 分组；某一组失败不会取消另一组。
+- pending replay 按 `dev/main × Telegram/飞书` 四个 matrix job 分组；某一组失败不会取消其他组。
+- 历史 pending 行可能同时包含错误的 Telegram 渠道字段和飞书媒体证据；若 Telegram job 日志出现飞书 `image_key` 或 `feishu-*` batch，说明旧任务渠道受污染，应看到后续 `[message-sync] rerouted pending batch ... from telegram to feishu`，而不是继续调用 Telegram `getFile`。
 
 ## 日志特征
 
@@ -49,18 +50,18 @@ Queue / Worker 重点字段：
 7. 如果没有 sync run，查 Cloudflare Worker/Queue 日志，确认分片键对应正确 channel/chat，并检查 `dead-letter`。
 8. 如果 workflow 已 dispatch 但 Queue 报 run lookup timeout，确认 run-name 含同一个 `queue_task_id`，并检查 workflow file/ref 配置。
 9. 对 `pending_replay`，运行 `npm run maintenance:inspect`；需要精确审计时加 `-- --batch-id <batchId>`。
-10. 检查 `Pending Replay (Dev)` 最近两条 matrix job，确认 `SYNC_REPLAY_MODE=scheduled` 和目标渠道凭据完整。
+10. 检查 `Pending Replay` 最近四个 matrix job，确认 `target`、`channel`、`SYNC_REPLAY_MODE=scheduled` 和对应环境凭据完整。
 11. `/action-monitor/` 缺少明细时，打开由原 run 触发的 `Action Monitor Report`，确认选择了正确分支数据库并成功读取 GitHub API。
 12. 页面只有 GitHub API 顶层 run 时，说明 PostgreSQL 明细尚未写入或上报失败；继续查 `Action Monitor Report`，不要修改原 workflow conclusion。
 
 ## 解决方案
 
 - deploy 失败：修复 Pages 构建、数据库快照或页面精确校验后，单独重跑 deploy workflow。
-- pending：修复 AI、COS 或 PostgreSQL 根因，等待定时 replay 或手工运行 `Pending Replay (Dev)`；不要让新 webhook 顺带消费历史任务。
+- pending：修复 AI、COS 或 PostgreSQL 根因，等待定时 replay 或手工运行 `Pending Replay`；不要让新 webhook 顺带消费历史任务。
 - queue `dead-letter`：修复 GitHub token、workflow file/ref、run-name 关联或 API 权限，再按原 payload 重跑；保留 `payload_hash` / `payloadHash`，相同批次应返回 `unchanged`，避免重复写 core。
 - Action monitor 上报失败：确认 `.github/workflows/action-monitor-report.yml` 的 `actions: read`、目标分支、DB Secret 和 `monitor.*` 表权限。
 - Provider fallback：核对 `AI_SUPPORTS_VISION/JSON_SCHEMA/JSON_OBJECT/TEXT_JSON` 与服务商真实能力，再查 HTTP 429/5xx、timeout 和本地 schema failure。
-- 图片 batch `skipped` + `manual_intervention`：属识别业务门禁而非技术失败。查 summary 的 `completenessStatus` / `reconciliationStatus` / `missingFields` / `conflictFields`，主备关键字段冲突需人工核对真实数值后重发单一权威截图；主识别缺字段且备用未配置时补齐 `TELEGRAM_RECOGNITION_FALLBACK_*` 或重发更清晰截图，详见 [AI 排查](AI.md)。该批次 `core.*` 零写入，不进 pending 自动重放。
+- 图片 batch `skipped` + `manual_intervention`：属识别业务门禁而非技术失败。查 summary 的 `completenessStatus` / `reconciliationStatus` / `missingFields` / `conflictFields`，主备关键字段冲突需人工核对真实数值后重发单一权威截图；主识别缺字段且备用未配置时优先补齐 `STANDBY_AI_API_KEY` / `STANDBY_AI_BASE_URL`（旧 `TELEGRAM_RECOGNITION_FALLBACK_*` 仍兼容）或重发更清晰截图，详见 [AI 排查](AI.md)。该批次 `core.*` 零写入，不进 pending 自动重放。
 - DB 慢：先区分 connect/BEGIN/query/COMMIT 分段，再根据 `queryOrdinal + operation + table` 定位；不要把网络停顿猜成具体 SQL 执行慢。
 - sleep backfill 失败：从 v1.3.4 开始，系统已内置自动重试机制（最多 3 次）和 pending 队列自动恢复。如仍需手动干预，确认调用只携带本轮目标日期、同日候选合并且相同 `sleepKey` 已去重；修复后运行 `npm run sync:db` 执行一致性检查和自动修复，再核对 summary 不再出现 `partialFailure`。可使用 `npm run check:sleep-consistency` 单独检查睡眠数据一致性。
 - 全类型数据丢失：从 v1.3.5 开始，主事务已具备自动重试机制，瞬时错误（连接中断、超时、死锁）会立即重试最多 2 次。如仍出现数据丢失，运行 `npm run check:core-consistency` 检查所有数据类型（activities/measurements/meals/sleep）的一致性，发现不一致后运行 `npm run sync:db` 自动从 `ingest.source_batch` 重新执行增量写入修复。主事务重试日志格式：`[persist-batch] attempt 1/2 failed, retrying in 500ms: <error>`。
@@ -72,4 +73,4 @@ Queue / Worker 重点字段：
 - Queue 继续按会话分片；不要改成全局单队列，也不要破坏同一会话 FIFO。
 - summary、monitor 表和通知不得记录 dispatch payload、消息正文、chat id 明文、图片 key、Prompt、SQL 参数或 Secret。
 - workflow 后续步骤只能读取 `SYNC_DISPATCH_EVENT_PATH`；若日志出现 `SYNC_DISPATCH_PAYLOAD`、消息正文或图片 key，立即视为隐私回归。
-- 定期检查 `Pending Replay (Dev)`、dead letter 和 `/action-monitor/` 是否同时覆盖 dev/main 当前分支。
+- 定期检查 `Pending Replay` 的四个环境/渠道组合、dead letter 和 `/action-monitor/`，确认 dev/main 都有对应运行证据。

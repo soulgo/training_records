@@ -121,11 +121,17 @@ jobs:
           AI_MODEL: ${{ vars.AI_MODEL }}
           AI_TIMEOUT_MS: ${{ vars.AI_TIMEOUT_MS }}
           AI_CONCURRENCY: ${{ vars.AI_CONCURRENCY }}
+          AI_SUPPORTS_VISION: ${{ vars.AI_SUPPORTS_VISION }}
+          AI_SUPPORTS_JSON_SCHEMA: ${{ vars.AI_SUPPORTS_JSON_SCHEMA }}
+          AI_SUPPORTS_JSON_OBJECT: ${{ vars.AI_SUPPORTS_JSON_OBJECT }}
+          AI_SUPPORTS_TEXT_JSON: ${{ vars.AI_SUPPORTS_TEXT_JSON }}
           TELEGRAM_RECOGNITION_IMAGE_INPUT_MODE: inline
           AI_IMAGE_PROCESSING_ENABLED: "true"
           AI_OCR_ENABLED: ${{ vars.AI_OCR_ENABLED }}
           AI_OCR_FAILURE_MODE: ${{ vars.AI_OCR_FAILURE_MODE }}
           TELEGRAM_RECOGNITION_MODEL: ${{ vars.TELEGRAM_RECOGNITION_MODEL }}
+          STANDBY_AI_API_KEY: ${{ secrets.STANDBY_AI_API_KEY }}
+          STANDBY_AI_BASE_URL: ${{ secrets.STANDBY_AI_BASE_URL }}
           TELEGRAM_RECOGNITION_FALLBACK_API_KEY: ${{ secrets.TELEGRAM_RECOGNITION_FALLBACK_API_KEY }}
           TELEGRAM_RECOGNITION_FALLBACK_BASE_URL: ${{ secrets.TELEGRAM_RECOGNITION_FALLBACK_BASE_URL }}
           TELEGRAM_RECOGNITION_FALLBACK_MODEL: ${{ vars.TELEGRAM_RECOGNITION_FALLBACK_MODEL }}
@@ -311,6 +317,7 @@ jobs:
             --run-id "${{ github.run_id }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Notify Telegram sync result
+        id: notify_telegram_result
         if: success() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'telegram'
         continue-on-error: true
         env:
@@ -321,6 +328,7 @@ jobs:
         run: node tools/telegram-sync-notify.mjs
 
       - name: Notify Feishu sync result
+        id: notify_feishu_result
         if: success() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'feishu'
         continue-on-error: true
         env:
@@ -346,8 +354,15 @@ jobs:
           THOUGHT_CHECK_EXPECTATION: ${{ steps.detect.outputs.thought_check_expectation }}
         run: node tools/dispatch-site-deploy.mjs
 
+      - name: Enforce sync business result
+        id: business_gate
+        if: success() && steps.channel.outputs.is_webhook_dispatch == 'true'
+        env:
+          SYNC_RESULT_PATH: ${{ steps.channel.outputs.result_path }}
+        run: node tools/assert-sync-business-result.mjs "$SYNC_RESULT_PATH"
+
       - name: Notify Telegram sync failure
-        if: failure() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'telegram'
+        if: failure() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'telegram' && (steps.business_gate.outcome != 'failure' || steps.notify_telegram_result.outcome == 'failure')
         continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.DEV_TELEGRAM_BOT_TOKEN }}
@@ -361,7 +376,7 @@ jobs:
         run: node tools/telegram-action-monitor.mjs
 
       - name: Notify Feishu sync failure
-        if: failure() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'feishu'
+        if: failure() && steps.channel.outputs.is_webhook_dispatch == 'true' && steps.channel.outputs.channel == 'feishu' && (steps.business_gate.outcome != 'failure' || steps.notify_feishu_result.outcome == 'failure')
         continue-on-error: true
         env:
           FEISHU_APP_ID: ${{ secrets.DEV_FEISHU_APP_ID }}

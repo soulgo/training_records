@@ -33,6 +33,21 @@ export async function main() {
   process.stdout.write('\n');
 }
 
+export function shouldUseDefaultFeishuPendingRecognitionStore(options = {}) {
+  if (options.useDefaultPendingRecognitionStore !== undefined) {
+    return options.useDefaultPendingRecognitionStore === true;
+  }
+  return !(
+    options.persistNormalizedBatch ||
+    options.fetchUpdates ||
+    options.repositoryDispatchEvent ||
+    options.recognizeBatch ||
+    options.readPendingRecognitionBatches ||
+    options.appendPendingRecognitionBatch ||
+    options.markPendingRecognitionResolved
+  );
+}
+
 export async function runFeishuSync(options = {}) {
   const rawEnv = options.env ?? process.env;
   const feishuConfig = loadFeishuEnv(rawEnv);
@@ -98,6 +113,7 @@ export async function runFeishuSync(options = {}) {
     rootDir: options.rootDir ?? rootDir,
     env: sharedEnv,
     sourceChannel: 'feishu',
+    useDefaultPendingRecognitionStore: shouldUseDefaultFeishuPendingRecognitionStore(options),
     sleepBackfillSourceChannel: 'feishu_sync',
     resolveDispatchUpdates: ({ repositoryDispatchEvent, githubEventName, githubEventPath, dispatchPayload }) =>
       resolveDispatchFeishuUpdates({

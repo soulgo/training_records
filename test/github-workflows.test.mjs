@@ -457,7 +457,7 @@ test('refresh-telegram-webhook workflow supports manual and scheduled webhook re
 
   assert.match(workflow, /name:\s*Refresh Telegram Webhook/);
   assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /schedule:\s*\n\s*-\s*cron:\s*'17 \*\/6 \* \* \*'/);
+  assert.match(workflow, /schedule:\s*\n\s*-\s*cron:\s*'17 \*\/12 \* \* \*'/);
   assert.match(workflow, /group:\s*telegram-webhook/);
   assert.match(workflow, /actions\/checkout@v7/);
   assert.match(workflow, /actions\/setup-node@v6/);
@@ -516,7 +516,7 @@ test('action monitor reports completed business workflows asynchronously without
   const monitor = await readWorkflow('.github/workflows/action-monitor-report.yml');
   assert.match(monitor, /name:\s*Action Monitor Report/);
   assert.match(monitor, /workflow_run:\s*\n\s+workflows:/);
-  for (const workflowName of ['Sync (Main)', 'Sync (Dev)', 'Deploy GitHub Pages', 'Deploy Cloudflare Pages (Dev)', 'Pending Replay (Dev)']) {
+  for (const workflowName of ['Sync (Main)', 'Sync (Dev)', 'Deploy GitHub Pages', 'Deploy Cloudflare Pages (Dev)', 'Pending Replay']) {
     assert.match(monitor, new RegExp(`- ${escapeRegExp(workflowName)}`));
   }
   assert.doesNotMatch(monitor, /- Action Monitor Report/);
@@ -547,19 +547,87 @@ test('all AI sync workflows inject the configured API protocol', async () => {
   }
 });
 
-test('pending replay runs independently per source channel with scheduled claim mode', async () => {
+test('all AI sync workflows inject provider capability overrides', async () => {
+  for (const workflowPath of [
+    '.github/workflows/sync.yml',
+    '.github/workflows/sync-dev.yml',
+    '.github/workflows/pending-replay.yml',
+  ]) {
+    const workflow = await readWorkflow(workflowPath);
+    for (const capability of [
+      'AI_SUPPORTS_VISION',
+      'AI_SUPPORTS_JSON_SCHEMA',
+      'AI_SUPPORTS_JSON_OBJECT',
+      'AI_SUPPORTS_TEXT_JSON',
+    ]) {
+      assert.match(
+        workflow,
+        new RegExp(`${capability}:\\s*\\$\\{\\{\\s*vars\\.${capability}\\s*\\}\\}`),
+        `${workflowPath} should inject ${capability}`,
+      );
+    }
+  }
+});
+
+test('all AI sync workflows inject the shared standby AI connection secrets', async () => {
+  for (const workflowPath of [
+    '.github/workflows/sync.yml',
+    '.github/workflows/sync-dev.yml',
+    '.github/workflows/pending-replay.yml',
+  ]) {
+    const workflow = await readWorkflow(workflowPath);
+    assert.match(workflow, /STANDBY_AI_API_KEY:\s*\$\{\{\s*secrets\.STANDBY_AI_API_KEY\s*\}\}/);
+    assert.match(workflow, /STANDBY_AI_BASE_URL:\s*\$\{\{\s*secrets\.STANDBY_AI_BASE_URL\s*\}\}/);
+  }
+});
+
+test('pending replay runs independently per environment and source channel with scheduled claim mode', async () => {
   const workflow = await readWorkflow('.github/workflows/pending-replay.yml');
   const parsedWorkflow = parseYaml(workflow);
-  assert.match(workflow, /name:\s*Pending Replay \(Dev\)/);
-  assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /cron:\s*'\*\/10 \* \* \* \*'/);
-  assert.match(workflow, /matrix:[\s\S]*channel:[\s\S]*- telegram[\s\S]*- feishu/);
+  assert.match(workflow, /name:\s*Pending Replay/);
+  assert.match(workflow, /workflow_dispatch:\s*\n\s+inputs:/);
+  assert.match(workflow, /target:[\s\S]*default:\s*dev[\s\S]*options:[\s\S]*- dev[\s\S]*- main[\s\S]*- all/);
+  assert.match(workflow, /channel:[\s\S]*default:\s*all[\s\S]*options:[\s\S]*- telegram[\s\S]*- feishu[\s\S]*- all/);
+  assert.match(workflow, /cron:\s*'0 \*\/6 \* \* \*'/);
+  assert.match(workflow, /matrix:[\s\S]*target:\s*\$\{\{\s*fromJSON\(/);
+  assert.match(workflow, /matrix:[\s\S]*channel:\s*\$\{\{\s*fromJSON\(/);
   assert.match(workflow, /SYNC_REPLAY_MODE:\s*scheduled/);
-  assert.match(workflow, /TRAINING_DB_URL:\s*\$\{\{ secrets\.DEV_TRAINING_DB_URL \}\}/);
+  assert.match(
+    workflow,
+    /TRAINING_DB_URL:\s*\$\{\{ matrix\.target == 'dev' && secrets\.DEV_TRAINING_DB_URL \|\| secrets\.TRAINING_DB_URL \}\}/,
+  );
+  assert.match(
+    workflow,
+    /TELEGRAM_BOT_TOKEN:\s*\$\{\{ matrix\.target == 'dev' && secrets\.DEV_TELEGRAM_BOT_TOKEN \|\| secrets\.TELEGRAM_BOT_TOKEN \}\}/,
+  );
+  assert.match(
+    workflow,
+    /FEISHU_APP_ID:\s*\$\{\{ matrix\.target == 'dev' && secrets\.DEV_FEISHU_APP_ID \|\| secrets\.FEISHU_APP_ID \}\}/,
+  );
   assert.match(workflow, /run:\s*npm run sync:\$\{\{ matrix\.channel \}\}/);
   assert.doesNotMatch(workflow, /repository_dispatch|dispatch_payload|queue_task_id/);
   assert.equal(parsedWorkflow.concurrency, undefined);
-  assert.equal(parsedWorkflow.jobs.replay.concurrency.group, 'pending-replay-dev-${{ matrix.channel }}');
+  assert.equal(parsedWorkflow.jobs.replay.concurrency.group, 'pending-replay-${{ matrix.target }}-${{ matrix.channel }}');
+});
+
+test('pending replay injects the same recognition fallback and cache configuration as normal sync', async () => {
+  const workflow = await readWorkflow('.github/workflows/pending-replay.yml');
+
+  for (const variable of [
+    'AI_IMAGE_PROCESSING_ENABLED',
+    'AI_OCR_ENABLED',
+    'AI_OCR_FAILURE_MODE',
+    'TELEGRAM_RECOGNITION_MODEL',
+    'STANDBY_AI_API_KEY',
+    'STANDBY_AI_BASE_URL',
+    'TELEGRAM_RECOGNITION_FALLBACK_API_KEY',
+    'TELEGRAM_RECOGNITION_FALLBACK_BASE_URL',
+    'TELEGRAM_RECOGNITION_FALLBACK_MODEL',
+    'TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS',
+    'TELEGRAM_RECOGNITION_CACHE_ENABLED',
+  ]) {
+    assert.match(workflow, new RegExp(`\\b${variable}:`), `${variable} should be injected for pending replay`);
+  }
 });
 
 test('pending replay injects the same recognition fallback and cache configuration as normal sync', async () => {
@@ -698,6 +766,32 @@ test('telegram-sync workflows keep database-only detection without blocking on p
   }
 });
 
+test('sync workflows enforce image business failures after detailed result notifications', async () => {
+  for (const workflowPath of ['.github/workflows/sync.yml', '.github/workflows/sync-dev.yml']) {
+    const workflow = await readWorkflowConfig(workflowPath);
+    const steps = workflow.jobs.sync.steps;
+    const telegramNotify = getWorkflowStep(workflow, 'sync', 'Notify Telegram sync result');
+    const feishuNotify = getWorkflowStep(workflow, 'sync', 'Notify Feishu sync result');
+    const gate = getWorkflowStep(workflow, 'sync', 'Enforce sync business result');
+    const deploy = getWorkflowStep(workflow, 'sync', 'Dispatch site deploy');
+    const telegramFailure = getWorkflowStep(workflow, 'sync', 'Notify Telegram sync failure');
+    const feishuFailure = getWorkflowStep(workflow, 'sync', 'Notify Feishu sync failure');
+
+    assert.equal(telegramNotify.id, 'notify_telegram_result');
+    assert.equal(feishuNotify.id, 'notify_feishu_result');
+    assert.equal(gate.id, 'business_gate');
+    assert.equal(gate.env.SYNC_RESULT_PATH, '${{ steps.channel.outputs.result_path }}');
+    assert.match(gate.run, /node tools\/assert-sync-business-result\.mjs "\$SYNC_RESULT_PATH"/);
+    assert.ok(steps.indexOf(gate) > steps.indexOf(telegramNotify));
+    assert.ok(steps.indexOf(gate) > steps.indexOf(feishuNotify));
+    assert.ok(steps.indexOf(gate) > steps.indexOf(deploy));
+    assert.match(telegramFailure.if, /steps\.business_gate\.outcome != 'failure'/);
+    assert.match(telegramFailure.if, /steps\.notify_telegram_result\.outcome == 'failure'/);
+    assert.match(feishuFailure.if, /steps\.business_gate\.outcome != 'failure'/);
+    assert.match(feishuFailure.if, /steps\.notify_feishu_result\.outcome == 'failure'/);
+  }
+});
+
 test('telegram-sync workflows share AI sources while isolating environment resources', async () => {
   const main = await readWorkflowConfig('.github/workflows/sync.yml');
   const dev = await readWorkflowConfig('.github/workflows/sync-dev.yml');
@@ -824,6 +918,8 @@ test('system configuration guides place GitHub Secrets in their Secrets tables',
   }
   for (const name of [
     'AI_BASE_URL',
+    'STANDBY_AI_API_KEY',
+    'STANDBY_AI_BASE_URL',
     'TELEGRAM_ALLOWED_CHAT_IDS',
     'FEISHU_ALLOWED_CHAT_IDS',
     'COS_BUCKET',

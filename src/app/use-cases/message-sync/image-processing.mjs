@@ -470,6 +470,17 @@ function normalizePendingPersistenceBatchEntry(entry) {
   return batch;
 }
 
+function normalizePendingSleepBackfillEntry(entry) {
+  const batch = entry?.batch ?? entry?.batch_payload_json ?? entry;
+  if (entry?.failureCategory !== 'database' && entry?.failure_category !== 'database') {
+    return null;
+  }
+  if (!batch?.batchId || batch.kind !== 'sleep_backfill' || batch.status !== 'ready') {
+    return null;
+  }
+  return batch;
+}
+
 function isCompleteImagePersistenceBatch(batch) {
   const recognitions = Array.isArray(batch.recognitions) ? batch.recognitions : [];
   return recognitions.length > 0 && recognitions.every((recognition) =>
@@ -602,18 +613,82 @@ export async function buildImageProcessingBatch({
 
 export async function replayPendingRecognitionBatches({
   entries,
+  sourceChannel,
   recognizeBatchRunner,
   persistBatch,
   appendPendingRecognitionBatch,
   markPendingRecognitionResolved,
+  backfillCoreSleep,
+  sleepBackfillSourceChannel,
   now,
   env,
 }) {
   const batches = [];
+  const reroutedBatches = [];
   let changed = false;
   let replayStoredImageAny = false;
 
   for (const entry of entries ?? []) {
+    const reroutedBatch = await rerouteMismatchedPendingRecognitionBatch({
+      entry,
+      sourceChannel,
+      appendPendingRecognitionBatch,
+      markPendingRecognitionResolved,
+      now,
+    });
+    if (reroutedBatch) {
+      reroutedBatches.push(reroutedBatch);
+      continue;
+    }
+
+    const pendingSleepBackfillBatch = normalizePendingSleepBackfillEntry(entry);
+    if (pendingSleepBackfillBatch) {
+      try {
+        const backfillResult = await backfillCoreSleep({
+          processedAt: now,
+          sourceChannel: sleepBackfillSourceChannel ?? 'telegram_sync',
+          targetArchivedDates: normalizePendingSleepBackfillDates(pendingSleepBackfillBatch),
+        });
+        const resolvedResult = await markPendingRecognitionResolved({
+          batchId: pendingSleepBackfillBatch.batchId,
+          sourceChannel: pendingSleepBackfillBatch.sourceChannel ?? 'telegram',
+        });
+        const remainingPartialFailure = hasNonBackfillPartialFailure(pendingSleepBackfillBatch);
+        changed ||= backfillResult.status === 'stored';
+        batches.push({
+          ...pendingSleepBackfillBatch,
+          pendingReplay: true,
+          persistenceStatus: backfillResult.status,
+          recognitionPendingStatus: resolvedResult.status,
+          partialFailure: remainingPartialFailure,
+          failureCategory: remainingPartialFailure ? pendingSleepBackfillBatch.failureCategory : null,
+          failureReason: remainingPartialFailure ? pendingSleepBackfillBatch.failureReason : null,
+          persistenceError: null,
+          warnings: (pendingSleepBackfillBatch.warnings ?? []).filter(
+            (warning) => !/^sleep backfill failed:/i.test(String(warning)),
+          ),
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await appendPendingRecognitionBatch({
+          batch: pendingSleepBackfillBatch,
+          failureCategory: 'database',
+          error: errorMessage,
+          failedAt: now.toISOString(),
+          nextRetryAt: new Date(now.getTime() + 10 * 60 * 1000),
+        });
+        batches.push({
+          ...pendingSleepBackfillBatch,
+          pendingReplay: true,
+          persistenceStatus: 'pending_replay',
+          persistenceError: errorMessage,
+          failureCategory: 'database',
+          failureReason: errorMessage,
+        });
+      }
+      continue;
+    }
+
     const pendingPersistenceBatch = normalizePendingPersistenceBatchEntry(entry);
     if (pendingPersistenceBatch) {
       try {
@@ -716,7 +791,103 @@ export async function replayPendingRecognitionBatches({
     changed,
     replayStoredImageAny,
     batches,
+    reroutedBatches,
   };
+}
+
+async function rerouteMismatchedPendingRecognitionBatch({
+  entry,
+  sourceChannel,
+  appendPendingRecognitionBatch,
+  markPendingRecognitionResolved,
+  now,
+}) {
+  const runnerChannel = normalizeSourceChannel(sourceChannel);
+  const targetChannel = inferPendingRecognitionSourceChannel(entry);
+  if (!runnerChannel || !targetChannel || runnerChannel === targetChannel) {
+    return null;
+  }
+
+  const batch = entry?.batch ?? entry?.batch_payload_json ?? entry;
+  if (!batch?.batchId) {
+    return null;
+  }
+  const queueResult = await appendPendingRecognitionBatch({
+    batch: {
+      ...batch,
+      sourceChannel: targetChannel,
+    },
+    failureCategory: entry?.failureCategory ?? entry?.failure_category ?? 'ai_service',
+    error: entry?.failureReason ?? entry?.failure_reason ?? 'pending source channel mismatch',
+    failedAt: now.toISOString(),
+    nextRetryAt: now,
+  });
+  if (queueResult?.status !== 'queued') {
+    throw new Error(`could not queue pending batch for ${targetChannel}`);
+  }
+  await markPendingRecognitionResolved({
+    batchId: batch.batchId,
+    sourceChannel: normalizeSourceChannel(entry?.sourceChannel ?? entry?.source_channel) ?? runnerChannel,
+  });
+  process.stderr.write(
+    `[message-sync] rerouted pending batch ${batch.batchId} from ${runnerChannel} to ${targetChannel}\n`,
+  );
+  return {
+    kind: batch.kind ?? 'image',
+    batchId: batch.batchId,
+    sourceChannel: targetChannel,
+    status: 'skipped',
+    pendingReplay: true,
+    failureCategory: 'system_bug',
+    failureReason: 'pending source channel mismatch',
+    recognitionPendingStatus: 'rerouted',
+  };
+}
+
+function inferPendingRecognitionSourceChannel(entry) {
+  const batch = entry?.batch ?? entry?.batch_payload_json ?? entry;
+  for (const message of batch?.messages ?? []) {
+    if ((message?.photos ?? []).some((photo) => photo?.source === 'feishu_image')) {
+      return 'feishu';
+    }
+  }
+  if (String(batch?.batchId ?? '').startsWith('feishu-')) {
+    return 'feishu';
+  }
+  for (const message of batch?.messages ?? []) {
+    const messageChannel = normalizeSourceChannel(message?.sourceChannel);
+    if (messageChannel) {
+      return messageChannel;
+    }
+  }
+  const explicit = normalizeSourceChannel(batch?.sourceChannel);
+  if (explicit) {
+    return explicit;
+  }
+  return normalizeSourceChannel(entry?.sourceChannel ?? entry?.source_channel);
+}
+
+function normalizeSourceChannel(value) {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return /^[a-z][a-z0-9_-]*$/u.test(normalized) ? normalized : null;
+}
+
+function normalizePendingSleepBackfillDates(batch) {
+  const values = Array.isArray(batch.targetArchivedDates) && batch.targetArchivedDates.length > 0
+    ? batch.targetArchivedDates
+    : [batch.archivedDate];
+  return [...new Set(values.filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value ?? ''))))].sort();
+}
+
+function hasNonBackfillPartialFailure(batch) {
+  const sourceImageCount = Number(batch.sourceImageCount ?? 0);
+  const recognizedImageCount = Number(batch.recognizedImageCount ?? 0);
+  return (
+    Number(batch.failedImageCount ?? 0) > 0 ||
+    (sourceImageCount > 0 && recognizedImageCount < sourceImageCount) ||
+    (batch.recognitionErrors?.length ?? 0) > 0 ||
+    batch.businessIncomplete === true
+  );
 }
 
 export async function queueRecognitionFailureIfNeeded({

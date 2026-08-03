@@ -201,6 +201,128 @@ test('createAiProvider adapts multimodal structured requests and responses for t
   });
 });
 
+test('createAiProvider preserves chat-shaped content returned by a Responses-compatible gateway', async () => {
+  const provider = createAiProvider({
+    AI_API_KEY: 'key',
+    AI_BASE_URL: 'https://example.com/v1',
+    AI_MODEL: 'gpt-test',
+    AI_API_PROTOCOL: 'responses',
+  });
+
+  const response = await provider.requestChatCompletion({
+    messages: [{ role: 'user', content: 'hello' }],
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+          id: 'resp_gateway_123',
+          status: 'completed',
+          choices: [{ message: { role: 'assistant', content: '{"records":[]}' } }],
+        };
+      },
+    }),
+  });
+
+  const payload = await response.json();
+  assert.equal(payload.choices[0].message.content, '{"records":[]}');
+});
+
+test('createAiProvider falls back to chat-shaped content when Responses output_text is empty', async () => {
+  const provider = createAiProvider({
+    AI_API_KEY: 'key',
+    AI_BASE_URL: 'https://example.com/v1',
+    AI_MODEL: 'gpt-test',
+    AI_API_PROTOCOL: 'responses',
+  });
+
+  const response = await provider.requestChatCompletion({
+    messages: [{ role: 'user', content: 'hello' }],
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+          id: 'resp_gateway_empty_output_text',
+          status: 'completed',
+          output_text: '',
+          choices: [{ message: { role: 'assistant', content: '{"records":[]}' } }],
+        };
+      },
+    }),
+  });
+
+  const payload = await response.json();
+  assert.equal(payload.choices[0].message.content, '{"records":[]}');
+});
+
+test('createAiProvider exposes safe metadata for an incomplete Responses result', async () => {
+  const provider = createAiProvider({
+    AI_API_KEY: 'key',
+    AI_BASE_URL: 'https://example.com/v1',
+    AI_MODEL: 'gpt-test',
+    AI_API_PROTOCOL: 'responses',
+  });
+
+  const response = await provider.requestChatCompletion({
+    messages: [{ role: 'user', content: 'hello' }],
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+          id: 'resp_incomplete_123',
+          status: 'incomplete',
+          incomplete_details: { reason: 'max_output_tokens' },
+          output: [{ type: 'reasoning', content: [] }],
+        };
+      },
+    }),
+  });
+
+  const payload = await response.json();
+  assert.deepEqual(payload.__aiResponseMeta, {
+    protocol: 'responses',
+    status: 'incomplete',
+    incompleteReason: 'max_output_tokens',
+    outputTypes: ['reasoning'],
+    contentTypes: [],
+    hasRefusal: false,
+  });
+  assert.equal(JSON.stringify(payload.__aiResponseMeta).includes('hello'), false);
+});
+
+test('createAiProvider records refusal type without retaining refusal text in metadata', async () => {
+  const provider = createAiProvider({
+    AI_API_KEY: 'key',
+    AI_BASE_URL: 'https://example.com/v1',
+    AI_MODEL: 'gpt-test',
+    AI_API_PROTOCOL: 'responses',
+  });
+
+  const response = await provider.requestChatCompletion({
+    messages: [{ role: 'user', content: 'hello' }],
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+          status: 'completed',
+          output: [{
+            type: 'message',
+            content: [{ type: 'refusal', refusal: 'sensitive refusal text' }],
+          }],
+        };
+      },
+    }),
+  });
+
+  const payload = await response.json();
+  assert.equal(payload.__aiResponseMeta.hasRefusal, true);
+  assert.deepEqual(payload.__aiResponseMeta.contentTypes, ['refusal']);
+  assert.equal(JSON.stringify(payload.__aiResponseMeta).includes('sensitive refusal text'), false);
+});
+
 test('createAiProvider forwards idempotency keys on chat completion requests', async () => {
   let requestHeaders = null;
   const provider = createAiProvider({
