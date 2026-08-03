@@ -17,7 +17,7 @@ test('generateRecognitionPrompt includes all key constraints', async () => {
   const prompt = await generateRecognitionPrompt();
 
   assert.match(prompt, /^<!-- prompt-metadata /);
-  assert.equal(parsePromptMetadataHeader(prompt).version, '2026-06-30');
+  assert.equal(parsePromptMetadataHeader(prompt).version, '2026-08-03');
   assert.equal(parsePromptMetadataHeader(prompt).schemaName, 'telegram_training_image');
   assert.equal(parsePromptMetadataHeader(prompt).schemaVersion, 'v4');
   assert.match(prompt, /只能输出符合 schema 的 JSON/);
@@ -37,6 +37,7 @@ test('generateRecognitionPrompt includes all key constraints', async () => {
   assert.match(prompt, /detectedDate.*只来自截图画面内可见的可靠日期/);
   assert.match(prompt, /系统相册、文件详情或分享预览页/);
   assert.match(prompt, /dateEvidence.*写明截图内日期来源/);
+  assert.match(prompt, /睡眠.*8\/3.*消息年份.*YYYY-MM-DD/);
   assert.match(prompt, /## 体脂秤 measurement/);
   assert.match(prompt, /kg = 斤 \* 0\.5/);
   assert.match(prompt, /## 运动 workout/);

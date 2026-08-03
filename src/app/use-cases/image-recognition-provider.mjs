@@ -23,6 +23,7 @@ import {
 } from './image-recognition-schema.mjs';
 
 const RECOGNITION_RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+const RECOGNITION_FALLBACK_STATUSES = new Set([404, ...RECOGNITION_RETRYABLE_STATUSES]);
 
 export async function requestRecognitionWithProviderFallback(input) {
   const { aiProvider } = input;
@@ -103,15 +104,15 @@ function shouldRetryWithFallbackProvider(error) {
   if (error instanceof AiProviderError || error instanceof AiSchemaError) {
     return true;
   }
-  if (error?.status && RECOGNITION_RETRYABLE_STATUSES.has(Number(error.status))) {
+  if (error?.status && RECOGNITION_FALLBACK_STATUSES.has(Number(error.status))) {
     return true;
   }
   const name = String(error?.name ?? '');
-  if (name === 'AbortError' || name === 'TimeoutError') {
+  if (name === 'AbortError' || name === 'TimeoutError' || error instanceof SyntaxError) {
     return true;
   }
   const message = error instanceof Error ? error.message : String(error ?? '');
-  if (/timeout|timed out|empty content|rate limit|HTTP\s*(?:429|5\d\d)|network|fetch failed/i.test(message)) {
+  if (/timeout|timed out|empty content|rate limit|HTTP\s*(?:404|429|5\d\d)|network|fetch failed/i.test(message)) {
     return true;
   }
   return Boolean(error?.cause && shouldRetryWithFallbackProvider(error.cause));

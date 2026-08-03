@@ -22,6 +22,8 @@
 
 ### Fixed
 
+- 修复 `AI_API_PROTOCOL=responses` 时主图片识别 endpoint 返回 HTTP 404、或 HTTP 200 但返回 HTML/非 JSON 后未调用备用 AI 的问题；这两类技术故障现在直接切换备用 provider，避免在同一 404 endpoint 重试。备用图片识别默认继承主协议，因此主/备均可稳定使用 Responses；只有备用服务协议不同才需设置 `TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL`。
+- 修复睡眠截图仅显示醒来页头 `M/D` 日期时无法归档的问题：消息时间只补全年份，不替代截图日期；随后按睡眠规则归档到醒来日前一天（例如 `2026-08-03` 的 `8/3` 截图归档为 `2026-08-02`）。
 - 修复历史 `ingest.pending_task` 同时存在飞书媒体证据与错误 Telegram 渠道字段时，Telegram replay 会把飞书 `image_key` 交给 `getFile` 并报 HTTP 400 的问题；重放现在优先依据 `feishu_image` 媒体来源和 `feishu-*` 批次命名空间纠正渠道，再安全重排到飞书队列。
 - 修复睡眠回填重写同日全部 `core.*` 明细时，批量 upsert 可能因重复冲突键触发 `ON CONFLICT DO UPDATE command cannot affect row a second time` 的问题；回填现在只替换目标日期的 `core.sleep` 并更新 `core.training_day` 睡眠汇总，不再删除或重写同日体测、活动和餐次数据。
 - 修复 `Pending Replay (Dev)` 将 `sleep_backfill` 任务误走普通图片持久化、导致 `single-580`、`single-651` 持续失败并向 Telegram 重复发送“等待数据库重放”的问题；睡眠回填任务现在走专用重放分支，成功后标记为 resolved、清除数据库失败状态和旧回填错误提示，失败时才重新排队。

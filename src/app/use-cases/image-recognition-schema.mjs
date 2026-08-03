@@ -18,6 +18,7 @@ export function buildRecognitionMessages({ imageUrl, message, systemPrompt, ocrD
   const safeCaption = sanitizePromptUserText(message.caption);
   const safeText = sanitizePromptUserText(message.text);
   const safeOcrText = sanitizePromptUserText(ocrDocument?.text, { maxLength: 8000 });
+  const messageYear = resolveMessageYear(message.dateUnix);
   return [
     {
       role: 'system',
@@ -33,6 +34,9 @@ export function buildRecognitionMessages({ imageUrl, message, systemPrompt, ocrD
             `<caption>${safeCaption || '(empty)'}</caption>`,
             `<text>${safeText || '(empty)'}</text>`,
             `<ocr-evidence>${safeOcrText || '(not available)'}</ocr-evidence>`,
+            messageYear
+              ? `图片消息发送年份：${messageYear}。仅用于补全截图内可见的月日，不能把消息日期当作图片日期。`
+              : '图片消息发送年份不可用，不能用消息日期推断图片日期。',
             '将图片识别为训练系统可写回的结构化结果。',
             'Return only valid json.',
           ].join('\n'),
@@ -46,6 +50,21 @@ export function buildRecognitionMessages({ imageUrl, message, systemPrompt, ocrD
       ],
     },
   ];
+}
+
+function resolveMessageYear(dateUnix) {
+  if (!Number.isFinite(dateUnix)) {
+    return null;
+  }
+  const date = new Date(dateUnix * 1000);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  const year = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+  }).formatToParts(date).find((part) => part.type === 'year')?.value;
+  return year ? Number(year) : null;
 }
 
 function sanitizePromptUserText(input, { maxLength = PROMPT_USER_TEXT_MAX_LENGTH } = {}) {
