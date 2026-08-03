@@ -22,6 +22,7 @@
 
 ### Fixed
 
+- 修复 `sync.yml`、`sync-dev.yml` 和 `pending-replay.yml` 未注入 `TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL`，导致主模型使用 Responses、备用 Kimi 使用 Chat Completions 时覆盖变量在线上无效、备用请求错误命中 `/responses` 并返回 HTTP 404 的问题。
 - 修复 `AI_API_PROTOCOL=responses` 时主图片识别 endpoint 返回 HTTP 404、或 HTTP 200 但返回 HTML/非 JSON 后未调用备用 AI 的问题；这两类技术故障现在直接切换备用 provider，避免在同一 404 endpoint 重试。备用图片识别默认继承主协议，因此主/备均可稳定使用 Responses；只有备用服务协议不同才需设置 `TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL`。
 - 修复睡眠截图仅显示醒来页头 `M/D` 日期时无法归档的问题：消息时间只补全年份，不替代截图日期；随后按睡眠规则归档到醒来日前一天（例如 `2026-08-03` 的 `8/3` 截图归档为 `2026-08-02`）。
 - 修复历史 `ingest.pending_task` 同时存在飞书媒体证据与错误 Telegram 渠道字段时，Telegram replay 会把飞书 `image_key` 交给 `getFile` 并报 HTTP 400 的问题；重放现在优先依据 `feishu_image` 媒体来源和 `feishu-*` 批次命名空间纠正渠道，再安全重排到飞书队列。

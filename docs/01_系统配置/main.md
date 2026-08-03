@@ -66,6 +66,7 @@ main 环境对应：
 | `AI_OCR_FAILURE_MODE` | `best_effort` | 建议填 | OCR 失败时继续视觉识别或终止处理。当前 GitHub Settings 清单中缺少该项。 |
 | `TELEGRAM_RECOGNITION_MODEL` | 识别模型名 | 可选 | 只覆盖 Telegram/飞书图片识别模型；不填用 `AI_MODEL`。当前 GitHub Settings 清单中缺少该项。 |
 | `TELEGRAM_RECOGNITION_CACHE_ENABLED` | `true` | 建议填 | 是否启用识别结果缓存。 |
+| `TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL` | `chat_completions` / `responses` | 主备协议不同时必填 | 备用图片识别协议；不填继承 `AI_API_PROTOCOL`。当前主模型使用 `responses`、备用 Kimi 使用 `chat_completions`，因此生产配置必须显式设为 `chat_completions`。 |
 | `TELEGRAM_RECOGNITION_FALLBACK_MODEL` | 模型名 | 可选 | 备用 AI provider 模型。 |
 | `TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS` | `90000` | 可选 | 备用 AI 请求超时。备 AI 作为主 AI 故障与业务补全的最后防线，超时不应短于主 AI；睡眠等字段密集截图生成较慢，建议 90s。 |
 | `TELEGRAM_POLL_LIMIT` | `20` | 当前 workflow 无需配置 | poll 模式拉取数量；main workflow 当前固定 webhook 模式，因此该值不会影响当前 GitHub 同步。 |
@@ -142,13 +143,14 @@ npx wrangler secret put FEISHU_ALLOWED_CHAT_IDS --config wrangler.toml
 | `AI_BASE_URL` | AI 服务商文档 | Secret。OpenAI-compatible base URL，通常以 `/v1` 结尾。 |
 | `STANDBY_AI_API_KEY` / `STANDBY_AI_BASE_URL` | 备用 AI 服务商控制台与 API 文档 | Secrets；备用模型与主模型来自不同服务或分组时必须配置。 |
 | `AI_API_PROTOCOL` | AI 服务商模型/API 文档 | Variable；未填默认 `chat_completions`；`chat_completions` 请求 `/chat/completions`，`responses` 请求 `/responses`。 |
+| `TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL` | 备用 AI 服务商 API 文档 | Variable；备用服务协议与主服务不同时必填，`sync.yml`、`sync-dev.yml` 和 `pending-replay.yml` 均会注入。 |
 | `AI_MODEL` | AI 服务商模型列表 | Variable。默认识别和分析模型。 |
 | `TELEGRAM_RECOGNITION_MODEL` | AI 服务商模型列表 | Variable。只想让图片识别用另一个模型时再填；当前 GitHub Settings 清单中缺少该项。 |
 | `AI_SUPPORTS_VISION` / `AI_SUPPORTS_JSON_SCHEMA` / `AI_SUPPORTS_JSON_OBJECT` / `AI_SUPPORTS_TEXT_JSON` | AI 服务商能力说明 | 默认都为 `true`；`sync.yml`、`sync-dev.yml` 与 `pending-replay.yml` 均注入这些变量，应按模型真实能力显式覆盖。 |
 
 当前代码读取位置：`src/adapters/ai/openai-compatible.adapter.mjs`、`src/app/use-cases/message-sync.use-case.mjs`。
 
-图片识别完整性门禁始终启用（无功能开关）：主识别业务字段完整时不调用备 AI；`incomplete`/`needs_review` 且已配置 `TELEGRAM_RECOGNITION_FALLBACK_MODEL` 时才调用备 AI 尽量补全图片可见字段。备用连接按 `STANDBY_AI_*` → 旧 `TELEGRAM_RECOGNITION_FALLBACK_*` → 主 `AI_*` 取首个非空值；Kimi 与 GPT 不同服务时必须配置 `STANDBY_AI_*`。业务补全失败会保留主结果，主 AI 技术失败时备用也失败才判技术失败。`.github/workflows/sync.yml` 与 `.github/workflows/pending-replay.yml` 注入同一套配置。
+图片识别完整性门禁始终启用（无功能开关）：主识别业务字段完整时不调用备 AI；`incomplete`/`needs_review` 且已配置 `TELEGRAM_RECOGNITION_FALLBACK_MODEL` 时才调用备 AI 尽量补全图片可见字段。备用连接按 `STANDBY_AI_*` → 旧 `TELEGRAM_RECOGNITION_FALLBACK_*` → 主 `AI_*` 取首个非空值；Kimi 与 GPT 不同服务时必须配置 `STANDBY_AI_*`。业务补全失败会保留主结果，主 AI 技术失败时备用也失败才判技术失败。`.github/workflows/sync.yml`、`.github/workflows/sync-dev.yml` 与 `.github/workflows/pending-replay.yml` 注入同一套连接、模型和备用协议配置。
 
 ### 3.2 Telegram
 

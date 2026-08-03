@@ -146,6 +146,7 @@ npm run server
 | `STANDBY_AI_API_KEY` | 可选，独立备用 AI 服务鉴权；Telegram/飞书图片识别共用 |
 | `STANDBY_AI_BASE_URL` | 可选，独立备用 AI base URL；备用模型与主模型不在同一服务时应配置 |
 | `AI_API_PROTOCOL` | AI 请求协议：`chat_completions`（默认）或 `responses` |
+| `TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL` | 可选，备用图片识别协议；不填继承 `AI_API_PROTOCOL`，主备协议不同时必须显式配置 |
 | `AI_MODEL` | AI 模型名 |
 | `AI_CONCURRENCY` | 图片识别并发数，默认 3 |
 | `AI_IMAGE_PROCESSING_ENABLED` | 是否启用图片旋转、缩放、增强和 JPEG 标准化；同步 workflow 默认启用 |
