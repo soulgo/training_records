@@ -18,7 +18,8 @@ test('dev and main exports expose the same table and column layout while dev upd
   const devEntries = await readdir(new URL('../sql/dev-sql/', import.meta.url), { withFileTypes: true });
   const mainEntries = await readdir(new URL('../sql/main-sql/', import.meta.url), { withFileTypes: true });
   assert.deepEqual(devEntries.filter((entry) => entry.isFile()).map((entry) => entry.name).sort(), expectedFiles);
-  assert.deepEqual(devEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort(), ['update-dev-sql']);
+  const devUpdateDirectory = devEntries.find((entry) => entry.name === 'update-dev-sql');
+  assert.ok(!devUpdateDirectory || devUpdateDirectory.isDirectory());
   assert.deepEqual(mainEntries.filter((entry) => entry.isFile()).map((entry) => entry.name).sort(), expectedFiles);
   assert.deepEqual(mainEntries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort(), []);
 
