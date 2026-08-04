@@ -149,7 +149,7 @@ test('monitor page renders the daily report panel without legacy charts', { conc
       assert.match(monitorPage, /每日训练报告/);
       assert.match(monitorPage, /今天以恢复为先/);
       assert.match(monitorPage, /AI 已生成/);
-      assert.match(monitorPage, /<a href="\/monitor\/">监控<\/a>/);
+      assert.match(monitorPage, /<a href="\/monitor\/">每日报告<\/a>/);
       assert.match(monitorPage, /训练建议/);
       assert.match(monitorPage, /饮食建议/);
       assert.match(monitorPage, /恢复建议/);
