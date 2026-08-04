@@ -30,7 +30,7 @@
 | 数据读取和快照 | `src/domain/training/training-snapshot.mjs`、`src/db/training/read*.mjs` |
 | `/分析` 上下文 | `src/adapters/postgres/training-analysis-repository.pg.mjs`、`src/app/use-cases/training-analysis.impl.mjs` |
 | GitHub Action 监控 | `tools/report-github-action-status.mjs`、`tools/github-action-monitor-server.mjs`、`src/app/use-cases/github-action-monitor.use-case.mjs`、`src/adapters/postgres/github-action-monitor-repository.pg.mjs` |
-| 站点生成 | `src/app/use-cases/generate-training-data.use-case.mjs`、`src/site/dashboard-view.mjs`、`themes/cactus/*` |
+| 站点生成与每日报告 | `src/app/use-cases/generate-training-data.use-case.mjs`、`src/app/use-cases/daily-monitor-report.use-case.mjs`、`src/site/dashboard-view.mjs`、`src/site/monitor-view.mjs`、`prompts/daily-monitor-report.md`、`themes/cactus/*` |
 | Worker 入口 | `cloudflare/sync-dispatch-worker.mjs`、`cloudflare/*dispatch-worker.mjs`、`cloudflare/sync-dispatch-queue.mjs` |
 | SQL schema | `sql/dev-sql/`、`sql/main-sql/` |
 

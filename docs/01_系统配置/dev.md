@@ -75,6 +75,8 @@ dev 环境对应：
 | `CLOUDFLARE_PAGES_DEV_BASE_URL` | dev 站点 URL | 建议填 | dev 部署后页面验证使用。 |
 | `TRAINING_ANALYSIS_GOAL` | 自定义分析目标 | 可选 | dev 与 main 共用的训练分析提示词目标。当前 GitHub Settings 清单中缺少该项。 |
 
+`Deploy Cloudflare Pages (Dev)` 的站点构建会把共享 `AI_API_KEY`、`AI_BASE_URL`、`AI_PROVIDER`、`AI_API_PROTOCOL`、`AI_MODEL`、`AI_TIMEOUT_MS` 和 `AI_SUPPORTS_JSON_OBJECT` 注入 `build:data`，并只在实际构建步骤打开 `DAILY_MONITOR_REPORT_ENABLED=true`，用于生成 `/monitor/` 每日报告。测试步骤不会调用真实 AI；AI 配置缺失或请求失败时，页面使用规则降级建议并继续发布，不把降级结果标记为 AI 结果。
+
 ## 2. Cloudflare 必填清单
 
 Cloudflare 里有两类配置：`wrangler.dev.toml` 里的公开变量和 Durable Object 绑定，以及 Dashboard / `wrangler secret put` 写入的 Worker Secrets。

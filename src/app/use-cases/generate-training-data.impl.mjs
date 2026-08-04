@@ -27,6 +27,7 @@ import {
   mergeActionMonitorRows,
 } from './github-action-monitor.use-case.mjs';
 import { buildActionMonitorViewModel } from '../../site/action-monitor-view.mjs';
+import { generateDailyMonitorReport as defaultGenerateDailyMonitorReport } from './daily-monitor-report.use-case.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const defaultRootDir = path.resolve(__dirname, '..', '..', '..');
@@ -42,6 +43,7 @@ export async function generateTrainingData(options = {}) {
   const appendArchiveFailureLog =
     options.appendArchiveFailureLog ?? appendTrainingArchiveFailureLog;
   const buildSnapshot = options.buildSnapshot ?? buildTrainingSnapshot;
+  const generateDailyMonitorReport = options.generateDailyMonitorReport ?? defaultGenerateDailyMonitorReport;
   const runStartedAt = options.runStartedAt ?? new Date();
 
   const recordPath = path.join(rootDir, '训练记录.md');
@@ -84,6 +86,13 @@ export async function generateTrainingData(options = {}) {
   }
 
   await mkdir(outputDir, { recursive: true });
+  const dailyReport = await generateDailyMonitorReport({
+    snapshot: parsed,
+    env,
+    now: runStartedAt,
+    aiProvider: options.aiProvider,
+    fetchImpl: options.fetchImpl,
+  });
   const hexoGenerator = new HexoGeneratorAdapter({
     generators: [
       new TrainingDayGenerator(),
@@ -100,6 +109,7 @@ export async function generateTrainingData(options = {}) {
   });
   await hexoGenerator.generate({
     snapshot: parsed,
+    dailyReport,
     env,
     rootDir,
     now: runStartedAt,

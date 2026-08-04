@@ -138,6 +138,7 @@ runs:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_ACTIONS: 'true'
         GITHUB_TOKEN: ${{ github.token }}
+        DAILY_MONITOR_REPORT_ENABLED: 'true'
       run: npm run build
 
     - name: Verify generated site artifact

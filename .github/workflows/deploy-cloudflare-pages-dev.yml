@@ -92,6 +92,13 @@ jobs:
       TRAINING_SNAPSHOT_SOURCE: ${{ vars.TRAINING_SNAPSHOT_SOURCE }}
       TRAINING_SNAPSHOT_STRICT_DATABASE: ${{ github.event_name == 'workflow_dispatch' && inputs.strict_database_snapshot || 'true' }}
       TRAINING_BUILD_ARCHIVE_WRITE: false
+      AI_API_KEY: ${{ secrets.AI_API_KEY }}
+      AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+      AI_PROVIDER: ${{ vars.AI_PROVIDER || 'openai-compatible' }}
+      AI_API_PROTOCOL: ${{ vars.AI_API_PROTOCOL || 'chat_completions' }}
+      AI_MODEL: ${{ vars.AI_MODEL }}
+      AI_TIMEOUT_MS: ${{ vars.AI_TIMEOUT_MS }}
+      AI_SUPPORTS_JSON_OBJECT: ${{ vars.AI_SUPPORTS_JSON_OBJECT }}
     steps:
       - name: Checkout dev branch
         uses: actions/checkout@v7

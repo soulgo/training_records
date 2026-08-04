@@ -13,7 +13,7 @@
 - Telegram `/分析` / `/analysis` 基于训练快照生成训练建议，只回发 Telegram，不写入数据。
 - PostgreSQL 写入失败时，批次进入待补偿队列，数据库恢复后重放。
 - 定时从数据库导出 Markdown 备份。
-- 生成 `source/_data/training.json` 和 `source/_data/dashboardView.json`，由 Hexo 渲染为 GitHub Pages 静态站点。
+- 生成 `source/_data/training.json`、`source/_data/dashboardView.json` 和 `source/_data/monitorView.json`，由 Hexo 渲染为 GitHub Pages 静态站点；`/monitor/` 在构建时结合最新数据生成每日训练、饮食、恢复和其他建议。
 
 ## 技术栈
 
@@ -87,7 +87,7 @@ flowchart TD
 - `训练记录.md`：数据库派生的人工可读训练备份。
 - `训练数据解析.md`：`npm run build:data` 生成的解析排查输出，不建议手工维护。
 - `source/`：Hexo 内容源，包含首页、随想页、文章、图片和 CNAME。
-- `source/_data/`：构建生成的 `training.json` 与 `dashboardView.json`。
+- `source/_data/`：构建生成的 `training.json`、`dashboardView.json` 与 `monitorView.json`。
 - `tools/`：CLI 入口和核心编排脚本。
 - `src/`：AI、Telegram、数据库、站点和任务等内部模块。
 - `cloudflare/`：Telegram 和飞书 webhook 转 GitHub dispatch 的统一 Worker。
@@ -148,6 +148,8 @@ npm run server
 | `AI_API_PROTOCOL` | AI 请求协议：`chat_completions`（默认）或 `responses` |
 | `TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL` | 可选，备用图片识别协议；不填继承 `AI_API_PROTOCOL`，主备协议不同时必须显式配置 |
 | `AI_MODEL` | AI 模型名 |
+| `AI_SUPPORTS_JSON_OBJECT` | 每日报告是否使用 JSON object structured output；未配置时默认为 `true` |
+| `DAILY_MONITOR_REPORT_ENABLED` | 每日报告 AI 开关；共享站点构建步骤自动设为 `true`，测试和普通本地数据生成默认关闭 |
 | `AI_CONCURRENCY` | 图片识别并发数，默认 3 |
 | `AI_IMAGE_PROCESSING_ENABLED` | 是否启用图片旋转、缩放、增强和 JPEG 标准化；同步 workflow 默认启用 |
 | `AI_IMAGE_MAX_INPUT_BYTES` / `AI_IMAGE_MAX_DIMENSION` / `AI_IMAGE_MAX_PIXELS` | 图片输入字节、边长和总像素安全上限 |
@@ -181,7 +183,7 @@ npm run server
 4. 图片批次调用 AI 识别；随想、Markdown 附件随想、帮助和分析按通道能力分支处理。
 5. 带图随想先写本地图片 artifact 或腾讯云 COS，再把图片引用、随想和身体反馈写 PostgreSQL。
 6. PostgreSQL 或可重试识别失败时写入 `ingest.pending_task`；`Pending Replay` 按 dev/main 与 Telegram/飞书四个并发组定时或手工独立重放，不阻塞新消息。
-7. 内容变化后 sync workflow 只派发站点部署，不等待 Pages 完成；部署失败由部署 workflow 独立通知，Action 监控由 `workflow_run` 异步采集。
+7. 内容变化后 sync workflow 只派发站点部署，不等待 Pages 完成；站点构建从同一份快照生成首页数据和 `/monitor/` 每日报告，部署失败由部署 workflow 独立通知，Action 监控由 `workflow_run` 异步采集。
 
 图片批次的持久化主路径使用 `ingest.source_batch`、`source_message`、`source_asset`、`recognition_run` 和 `pending_task`。旧 `ingest.telegram_*` 表只保留为迁移观察期历史数据，不再被生产代码访问。
 

@@ -10,6 +10,9 @@ export class MonitorGenerator {
   }
 
   async generate(snapshot, options = {}) {
-    return this.buildMonitorViewModel(snapshot, options.monitorViewOptions || {});
+    return this.buildMonitorViewModel(snapshot, {
+      ...(options.monitorViewOptions || {}),
+      dailyReport: options.dailyReport,
+    });
   }
 }

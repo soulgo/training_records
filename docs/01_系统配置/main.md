@@ -81,6 +81,8 @@ main 环境对应：
 | `MARKDOWN_BACKUP_COMMIT` | `true` | 可选 | 备份有变更时是否自动提交；当前 GitHub Settings 清单中缺少该项，workflow 默认 `true`。 |
 | `TRAINING_ANALYSIS_GOAL` | 自定义分析目标 | 可选 | 训练分析提示词目标；当前 GitHub Settings 清单中缺少该项，运行时代码使用内置的“增肌减腹”目标。 |
 
+`Deploy GitHub Pages` 的站点构建会把共享 `AI_API_KEY`、`AI_BASE_URL`、`AI_PROVIDER`、`AI_API_PROTOCOL`、`AI_MODEL`、`AI_TIMEOUT_MS` 和 `AI_SUPPORTS_JSON_OBJECT` 注入 `build:data`，并只在实际构建步骤打开 `DAILY_MONITOR_REPORT_ENABLED=true`，用于生成 `/monitor/` 每日报告。测试步骤不会调用真实 AI；AI 配置缺失或请求失败时，页面使用规则降级建议并继续发布，不把降级结果标记为 AI 结果。
+
 ## 2. Cloudflare 必填清单
 
 Cloudflare 里有两类配置：`wrangler.toml` 里的公开变量和 Durable Object 绑定，以及 Dashboard / `wrangler secret put` 写入的 Worker Secrets。
