@@ -15,6 +15,8 @@
 
 ### Changed
 
+- `/monitor/` 收敛为每日训练报告面板：站点构建基于最新 `TrainingSnapshot` 调用 AI 生成训练、饮食、恢复和其他建议，移除与首页重复的监控趋势图；AI 不可用时显示明确标记的规则降级建议。
+- 每日报告的数据状态现在复用快照中的最新体测；仅使用正数饮食上限生成超量提醒，并在训练汇总缺少类型时从当天活动明细补齐。
 - 降低定时 Workflow 执行频率以减少 Actions 列表噪音：`pending-replay.yml` 从每 10 分钟改为每 6 小时，`refresh-telegram-webhook.yml` 从每 6 小时改为每 12 小时。`action-monitor-report.yml` 无需修改（被动触发，随 Pending Replay 频率降低自然减少）。
 - `Pending Replay` 扩展为 `dev/main × Telegram/飞书` 四个独立并发组，按环境选择数据库、Bot、飞书和 COS 凭据；定时触发保持四组合，手工触发可用 `target` / `channel` 精确选择环境与渠道。识别 fallback 只需配置备用模型，未单独提供 key/base URL 时继承主 AI 连接，显式备用连接仍优先。
 - main、dev 与 pending replay workflow 现在注入 `AI_SUPPORTS_VISION`、`AI_SUPPORTS_JSON_SCHEMA`、`AI_SUPPORTS_JSON_OBJECT`、`AI_SUPPORTS_TEXT_JSON`，可按模型真实能力关闭不支持的图片或结构化输出模式。

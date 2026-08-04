@@ -1,5 +1,16 @@
 # AI
 
+## 每日报告面板
+
+`/monitor/` 的每日报告在共享 site-build action 的实际构建步骤（`DAILY_MONITOR_REPORT_ENABLED=true`）调用 `src/app/use-cases/daily-monitor-report.use-case.mjs`。排查顺序：
+
+1. 先确认 Pages workflow 是否注入 `AI_API_KEY`、`AI_BASE_URL`、`AI_MODEL`、`AI_API_PROTOCOL` 和 `AI_SUPPORTS_JSON_OBJECT`。
+2. 再查看构建日志中的 `[daily-monitor-report]` 摘要；请求失败、空内容、非 JSON 或 schema 校验失败都会切换为 `dailyReport.source=rules`。
+3. 页面标记“规则降级建议”不代表训练数据失败，先检查 `source/_data/monitorView.json` 的 `latestDataDate`、`dailyReport.reason` 和 `dataQuality`。
+4. 修改建议口径时更新 `prompts/daily-monitor-report.md` 和 `src/core/ai/daily-monitor-report-schema.mjs`，不要在模板中拼接 AI 原始文本。
+
+每日报告不写数据库、不创建 AI 业务表，也不在浏览器端发起 AI 请求。没有 AI 配置时站点仍可发布，但只显示规则建议。
+
 ## 现象
 
 - 图片识别失败。

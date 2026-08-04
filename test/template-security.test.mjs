@@ -4,7 +4,6 @@ import { readFile } from 'node:fs/promises';
 
 const templatePaths = [
   'themes/cactus/layout/dashboard.ejs',
-  'themes/cactus/layout/monitor.ejs',
   'themes/cactus/layout/action-monitor.ejs',
 ];
 
@@ -15,6 +14,14 @@ test('production dependency graph uses COS SDK v3 without the legacy request sta
   assert.match(packageJson.dependencies['cos-nodejs-sdk-v5'], /^\^3\./);
   assert.match(packageLock.packages['node_modules/cos-nodejs-sdk-v5'].version, /^3\./);
   assert.equal(packageLock.packages['node_modules/request'], undefined);
+});
+
+test('daily monitor template is server-rendered and does not embed a JSON script', async () => {
+  const template = await readFile(new URL('../themes/cactus/layout/monitor.ejs', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(template, /type="application\/json"/);
+  assert.doesNotMatch(template, /chart\.umd\.min\.js/);
+  assert.doesNotMatch(template, /training-monitor\.js/);
 });
 
 test('JSON script templates escape HTML-significant code points before raw EJS output', async () => {

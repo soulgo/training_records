@@ -1,209 +1,113 @@
 <%
 const monitorView = site.data.monitorView || {};
 const summaryCards = monitorView.summaryCards || [];
-const trendCards = monitorView.trendCards || [];
-const chartPayload = monitorView.chartPayload || { windowDays: 30, charts: {} };
-const continuityStats = monitorView.continuityStats || [];
-const alerts = monitorView.alerts || [];
-const bodyCompositionStats = monitorView.bodyCompositionStats || [];
-const recoveryStats = monitorView.recoveryStats || [];
-const trainingStructure = monitorView.trainingStructure || { stats: [], typeBreakdown: [] };
-const nutritionStats = monitorView.nutritionStats || [];
-const rollingStats = monitorView.rollingStats || [];
-const dataQuality = monitorView.dataQuality || { stats: [], missingItems: [], completenessPct: 0 };
+const facts = monitorView.facts || { body: [], training: [], nutrition: [], recovery: [] };
+const report = monitorView.dailyReport || {};
+const reportSections = [
+  { key: 'training', label: '训练建议', data: report.report?.training },
+  { key: 'nutrition', label: '饮食建议', data: report.report?.nutrition },
+  { key: 'recovery', label: '恢复建议', data: report.report?.recovery },
+  { key: 'other', label: '其他提醒', data: report.report?.other },
+];
+const reportSourceLabel = report.source === 'ai' ? 'AI 已生成' : report.source === 'rules' ? '规则降级建议' : '等待生成';
 %>
 
 <section class="monitor-page">
-  <% if (!summaryCards.length) { %>
+  <% if (!monitorView.latestDataDate && !summaryCards.length) { %>
     <div class="monitor-empty">
-      <p>还没有可展示的监控数据。</p>
+      <span class="monitor-eyebrow">DAILY REPORT</span>
+      <h1><%= monitorView.title || '每日训练报告' %></h1>
+      <p>还没有可展示的每日数据。</p>
     </div>
   <% } else { %>
     <header class="monitor-header">
       <div>
-        <span class="monitor-eyebrow">MONITOR</span>
-        <h1><%= monitorView.title || '健身监控总览' %></h1>
+        <span class="monitor-eyebrow">DAILY REPORT</span>
+        <h1><%= monitorView.title || '每日训练报告' %></h1>
+        <p class="monitor-header__subtitle">围绕最新一天的数据，给出下一步可执行动作。</p>
       </div>
       <div class="monitor-header__meta">
-        <span>最新数据 <strong><%= monitorView.latestDataDate || '—' %></strong></span>
-        <span>更新 <strong><%= monitorView.updatedTime || '—' %></strong></span>
+        <span>数据日期 <strong><%= monitorView.latestDataDate || '—' %></strong></span>
+        <span>构建于 <strong><%= monitorView.updatedTime || '—' %></strong></span>
       </div>
     </header>
 
-    <section class="monitor-progress-grid" aria-label="核心监控指标">
+    <section class="monitor-report-panel" aria-label="每日 AI 报告">
+      <div class="monitor-report-panel__heading">
+        <div>
+          <span class="monitor-eyebrow">COACH NOTE</span>
+          <h2><%= report.report?.headline || '等待最新数据生成每日建议。' %></h2>
+        </div>
+        <span class="monitor-report-status monitor-report-status--<%= report.source || 'none' %>"><%= reportSourceLabel %></span>
+      </div>
+      <p class="monitor-report-panel__meta">建议基于 <%= report.latestDataDate || monitorView.latestDataDate || '最新数据' %> 更新，数据不完整时以保守建议为准。</p>
+    </section>
+
+    <section class="monitor-summary-grid" aria-label="最新数据摘要">
       <% summaryCards.forEach((card) => { %>
-        <article class="monitor-progress-card monitor-progress-card--<%= card.tone || 'default' %>">
-          <div class="monitor-progress-card__top">
-            <span><%= card.title %></span>
-            <strong><%= card.value %></strong>
-          </div>
-          <div class="monitor-progress-card__bar" aria-hidden="true">
-            <span style="width:<%= Math.max(0, Math.min(100, card.progressPct || 0)) %>%"></span>
-          </div>
-          <div class="monitor-progress-card__bottom">
-            <span><%= card.progressLabel %></span>
-            <strong><%= card.secondary %></strong>
-          </div>
+        <article class="monitor-summary-card monitor-summary-card--<%= card.tone || 'default' %>">
+          <span><%= card.title %></span>
+          <strong><%= card.value %></strong>
+          <small><%= card.hint %></small>
+          <% if (card.delta) { %><em><%= card.delta %></em><% } %>
         </article>
       <% }); %>
     </section>
 
-    <section class="monitor-snapshot-grid" aria-label="周期汇总">
-      <% rollingStats.forEach((stat) => { %>
-        <article class="monitor-mini-card">
-          <span><%= stat.label %></span>
-          <strong><%= stat.value %></strong>
-          <small><%= stat.hint %></small>
+    <section class="monitor-report-grid" aria-label="每日建议">
+      <% reportSections.forEach((section) => { %>
+        <article class="monitor-advice-panel monitor-advice-panel--<%= section.key %>">
+          <div class="monitor-section-heading">
+            <span class="monitor-eyebrow"><%= section.key.toUpperCase() %></span>
+            <h2><%= section.label %></h2>
+          </div>
+          <p class="monitor-advice-summary"><%= section.data?.summary || '暂无足够数据。' %></p>
+          <% if (section.data?.actions?.length) { %>
+            <ul class="monitor-advice-list">
+              <% section.data.actions.forEach((action) => { %>
+                <li><%= action %></li>
+              <% }); %>
+            </ul>
+          <% } %>
         </article>
       <% }); %>
     </section>
 
-    <section class="monitor-trends">
-      <div class="monitor-section-heading">
-        <span class="monitor-eyebrow">30 DAYS</span>
-        <h2>综合趋势</h2>
-      </div>
-      <div class="monitor-trend-grid">
-        <% trendCards.forEach((chart) => { %>
-          <article class="monitor-chart-card">
-            <div class="monitor-chart-card__heading">
-              <div>
-                <h2><%= chart.title %></h2>
-                <span class="monitor-chart-card__subtitle"><%= chart.subtitle %></span>
-              </div>
-              <div class="monitor-chart-legend" data-monitor-legend-for="<%= chart.chartId %>"></div>
+    <section class="monitor-facts-layout" aria-label="最新事实">
+      <article class="monitor-facts-panel">
+        <div class="monitor-section-heading">
+          <span class="monitor-eyebrow">FACTS</span>
+          <h2>最新数据</h2>
+        </div>
+        <div class="monitor-facts-grid">
+          <% [
+            ['身体', facts.body],
+            ['训练', facts.training],
+            ['饮食', facts.nutrition],
+            ['恢复', facts.recovery],
+          ].forEach(([label, items]) => { %>
+            <div class="monitor-fact-group">
+              <h3><%= label %></h3>
+              <% (items || []).forEach((fact) => { %>
+                <div class="monitor-fact-row"><span><%= fact.label %></span><strong><%= fact.value %></strong></div>
+              <% }); %>
             </div>
-            <canvas id="<%= chart.chartId %>"></canvas>
-          </article>
-        <% }); %>
-      </div>
+          <% }); %>
+        </div>
+      </article>
+
+      <aside class="monitor-side-panel">
+        <div class="monitor-section-heading">
+          <span class="monitor-eyebrow">CHECK</span>
+          <h2>数据状态</h2>
+        </div>
+        <div class="monitor-quality-value"><strong><%= monitorView.dataQuality?.completenessPct || 0 %>%</strong><span><%= monitorView.dataQuality?.label || '暂无数据' %></span></div>
+        <div class="monitor-quality-bar" aria-hidden="true"><span style="width:<%= Math.max(0, Math.min(100, monitorView.dataQuality?.completenessPct || 0)) %>%"></span></div>
+        <p><%= monitorView.dataQuality?.missingItems?.length ? `缺失：${monitorView.dataQuality.missingItems.join('、')}` : '关键数据已齐备' %></p>
+        <div class="monitor-alerts">
+          <% (monitorView.alerts || []).forEach((alert) => { %><span><%= alert %></span><% }); %>
+        </div>
+      </aside>
     </section>
-
-    <section class="monitor-detail-grid" aria-label="监控明细">
-      <article class="monitor-panel monitor-panel--wide">
-        <div class="monitor-section-heading">
-          <span class="monitor-eyebrow">BODY</span>
-          <h2>身体成分</h2>
-        </div>
-        <div class="monitor-metric-grid">
-          <% bodyCompositionStats.forEach((stat) => { %>
-            <div class="monitor-stat">
-              <span><%= stat.label %></span>
-              <strong><%= stat.value %></strong>
-              <small><%= stat.hint %></small>
-            </div>
-          <% }); %>
-        </div>
-      </article>
-
-      <article class="monitor-panel monitor-panel--wide">
-        <div class="monitor-section-heading">
-          <span class="monitor-eyebrow">RECOVERY</span>
-          <h2>恢复监控</h2>
-        </div>
-        <div class="monitor-metric-grid">
-          <% recoveryStats.forEach((stat) => { %>
-            <div class="monitor-stat">
-              <span><%= stat.label %></span>
-              <strong><%= stat.value %></strong>
-              <small><%= stat.hint %></small>
-            </div>
-          <% }); %>
-        </div>
-      </article>
-
-      <article class="monitor-panel">
-        <div class="monitor-section-heading">
-          <span class="monitor-eyebrow">TRAINING</span>
-          <h2>训练结构</h2>
-        </div>
-        <div class="monitor-metric-grid monitor-metric-grid--compact">
-          <% (trainingStructure.stats || []).forEach((stat) => { %>
-            <div class="monitor-stat">
-              <span><%= stat.label %></span>
-              <strong><%= stat.value %></strong>
-              <small><%= stat.hint %></small>
-            </div>
-          <% }); %>
-        </div>
-        <div class="monitor-breakdown" aria-label="近30天活动类型分布">
-          <% (trainingStructure.typeBreakdown || []).forEach((item) => { %>
-            <div class="monitor-breakdown__row">
-              <span><%= item.label %></span>
-              <div aria-hidden="true"><span style="width:<%= Math.max(6, Math.min(100, item.value * 8)) %>%"></span></div>
-              <strong><%= item.value %></strong>
-            </div>
-          <% }); %>
-        </div>
-      </article>
-
-      <article class="monitor-panel">
-        <div class="monitor-section-heading">
-          <span class="monitor-eyebrow">NUTRITION</span>
-          <h2>饮食维护</h2>
-        </div>
-        <div class="monitor-metric-grid monitor-metric-grid--compact">
-          <% nutritionStats.forEach((stat) => { %>
-            <div class="monitor-stat">
-              <span><%= stat.label %></span>
-              <strong><%= stat.value %></strong>
-              <small><%= stat.hint %></small>
-            </div>
-          <% }); %>
-        </div>
-      </article>
-
-      <article class="monitor-panel">
-        <div class="monitor-section-heading">
-          <span class="monitor-eyebrow">DATA</span>
-          <h2>数据完整性</h2>
-        </div>
-        <div class="monitor-quality-meter" aria-label="今日数据完整率 <%= dataQuality.completenessPct || 0 %>%">
-          <span style="width:<%= Math.max(0, Math.min(100, dataQuality.completenessPct || 0)) %>%"></span>
-        </div>
-        <div class="monitor-metric-grid monitor-metric-grid--compact">
-          <% (dataQuality.stats || []).forEach((stat) => { %>
-            <div class="monitor-stat">
-              <span><%= stat.label %></span>
-              <strong><%= stat.value %></strong>
-              <small><%= stat.hint %></small>
-            </div>
-          <% }); %>
-        </div>
-        <p><%= (dataQuality.missingItems || []).length ? `缺失：${dataQuality.missingItems.join('、')}` : '今日关键数据已补齐' %></p>
-      </article>
-
-      <article class="monitor-panel">
-        <div class="monitor-section-heading">
-          <span class="monitor-eyebrow">STREAK</span>
-          <h2>连续性</h2>
-        </div>
-        <div class="monitor-stats">
-          <% continuityStats.forEach((stat) => { %>
-            <div class="monitor-stat">
-              <span><%= stat.label %></span>
-              <strong><%= stat.value %></strong>
-            </div>
-          <% }); %>
-        </div>
-        <p><%= monitorView.continuityText || '暂无连续性数据' %></p>
-      </article>
-
-      <article class="monitor-panel monitor-panel--alerts">
-        <div class="monitor-section-heading">
-          <span class="monitor-eyebrow">ALERTS</span>
-          <h2>预警</h2>
-        </div>
-        <ul>
-          <% alerts.forEach((alert) => { %>
-            <li><%= alert %></li>
-          <% }); %>
-        </ul>
-      </article>
-    </section>
-
-    <script id="training-monitor-data" type="application/json"><%- JSON.stringify(chartPayload).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029') %></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" integrity="sha384-JUh163oCRItcbPme8pYnROHQMC6fNKTBWtRG3I3I0erJkzNgL7uxKlNwcrcFKeqF" crossorigin="anonymous" defer></script>
-    <script defer src="<%- url_for('/js/training-monitor.js') %>"></script>
   <% } %>
 </section>
