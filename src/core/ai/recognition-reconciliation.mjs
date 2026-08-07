@@ -85,6 +85,13 @@ const KILOGRAM_FIELDS = new Set([
 const NON_CRITICAL_NUMERIC_FIELDS = new Set([
   'records.meals[].recommendedMin',
   'records.meals[].recommendedMax',
+  'records.sleep.deepSleepMinutes',
+  'records.sleep.lightSleepMinutes',
+  'records.sleep.remSleepMinutes',
+  'records.sleep.awakeMinutes',
+  'records.sleep.deepSleepRatioPct',
+  'records.sleep.lightSleepRatioPct',
+  'records.sleep.remSleepRatioPct',
 ]);
 
 export function reconcileRecognitionResults({ primary, fallback } = {}) {

@@ -25,6 +25,7 @@
 
 ### Fixed
 
+- 修复 Telegram 睡眠截图因主备 AI 对深睡、浅睡、REM 阶段分钟及比例识别存在差异而整张图片拒绝入库的问题；这些阶段明细属于非关键睡眠字段，现保留主识别值继续写入 `core.sleep`，睡眠总时长、图片类型等关键字段冲突仍需人工核对。
 - 修复睡眠识别已在 `dateEvidence` 给出 `8/2 入睡、8/3 醒来` 且 `detectedDate=2026-08-02` 时，归档逻辑仍把该日期当作醒来日再次减一天、错误写入 `2026-08-01` 的问题；显式入睡证据现在优先于醒来日期回推。
 - 修复 `sync.yml`、`sync-dev.yml` 和 `pending-replay.yml` 未注入 `TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL`，导致主模型使用 Responses、备用 Kimi 使用 Chat Completions 时覆盖变量在线上无效、备用请求错误命中 `/responses` 并返回 HTTP 404 的问题。
 - 修复 `AI_API_PROTOCOL=responses` 时主图片识别 endpoint 返回 HTTP 404、或 HTTP 200 但返回 HTML/非 JSON 后未调用备用 AI 的问题；这两类技术故障现在直接切换备用 provider，避免在同一 404 endpoint 重试。备用图片识别默认继承主协议，因此主/备均可稳定使用 Responses；只有备用服务协议不同才需设置 `TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL`。
