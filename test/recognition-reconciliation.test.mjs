@@ -133,6 +133,40 @@ test('does not turn non-critical explanatory text differences into core conflict
   assert.equal(result.fieldSources['records.sleep.analysisText'], 'primary');
 });
 
+test('does not block sleep storage when stage details differ between primary and fallback', () => {
+  const primary = recognition('sleep', {
+    sleep: {
+      totalSleepMinutes: 480,
+      deepSleepMinutes: 120,
+      lightSleepMinutes: 240,
+      remSleepMinutes: 120,
+      deepSleepRatioPct: 25,
+      lightSleepRatioPct: 50,
+      remSleepRatioPct: 25,
+    },
+  });
+  const fallback = recognition('sleep', {
+    sleep: {
+      totalSleepMinutes: 480,
+      deepSleepMinutes: 96,
+      lightSleepMinutes: 270,
+      remSleepMinutes: 114,
+      deepSleepRatioPct: 20,
+      lightSleepRatioPct: 56,
+      remSleepRatioPct: 24,
+    },
+  });
+
+  const result = reconcileRecognitionResults({ primary, fallback });
+
+  assert.equal(result.status, 'primary');
+  assert.ok(result.value);
+  assert.equal(result.value.records.sleep.deepSleepMinutes, 120);
+  assert.equal(result.value.records.sleep.lightSleepMinutes, 240);
+  assert.equal(result.value.records.sleep.remSleepMinutes, 120);
+  assert.deepEqual(result.conflictFields, []);
+});
+
 test('blocks reconciliation when primary and fallback image types differ', () => {
   const primary = recognition('measurement', {
     measurement: { weightKg: null },
