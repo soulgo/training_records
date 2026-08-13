@@ -37,6 +37,7 @@
 - 修复飞书生产同步因共享编排器的依赖注入检测而关闭默认 pending store、main 队列没有定时消费者，以及历史错标飞书任务被 Telegram worker 调用错误渠道 API 的问题；错配任务会先重排到正确渠道再解析旧记录。
 - 修复图片全部或部分识别失败时 workflow 仍显示绿色成功的问题；Telegram/飞书详细回执与有效数据站点部署完成后，独立业务门禁会把未恢复的技术性图片失败反映为 Action 失败，并避免重复发送通用失败通知。
 - 修复主 AI 已返回合法但不完整结果时，业务补全备用 AI 的 HTTP 503 会覆盖主结果并导致整图无法入库的问题；业务补全失败现在记录 `fallback_failed` 安全状态并保留主结果，只有主 AI 本身技术失败且备用 AI 也失败时才维持技术失败与 pending 重试。
+- 修复主 AI 失败后同一相册多张图并发切换备用 provider，撞上备用服务（如 Kimi）组织并发上限 1（`organization concurrency: 1`）而被 HTTP 429 拒绝的问题；备用 provider 的 `requestChatCompletion` 现在串行化（`serializeAiProviderRequests`），同一时刻最多一个备用在途请求，主 provider 仍按 `AI_CONCURRENCY` 并发。
 
 ## [1.3.6] - 2026-07-17
 

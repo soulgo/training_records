@@ -679,7 +679,7 @@ function createRecognitionFallbackAiProvider(rawEnv) {
     return null;
   }
 
-  return createAiProvider({
+  const provider = createAiProvider({
     ...rawEnv,
     AI_API_KEY: apiKey,
     AI_BASE_URL: baseUrl,
@@ -691,6 +691,31 @@ function createRecognitionFallbackAiProvider(rawEnv) {
       rawEnv.TELEGRAM_RECOGNITION_FALLBACK_TIMEOUT_MS ||
       rawEnv.AI_TIMEOUT_MS,
   });
+  // 备用服务（如 Kimi）通常有更严格的组织并发上限（organization concurrency: 1）。
+  // 主 AI 失败后同一相册多张图会并发切换到备用 provider，第二个请求会被 429 拒绝。
+  // 这里把备用 provider 的请求串行化，避免备用服务并发撞上限；主 provider 保持原有并发不受影响。
+  return serializeAiProviderRequests(provider);
+}
+
+function serializeAiProviderRequests(provider) {
+  const request = provider?.requestChatCompletion;
+  if (typeof request !== 'function') {
+    return provider;
+  }
+
+  let tail = Promise.resolve();
+  return {
+    ...provider,
+    async requestChatCompletion(input) {
+      const run = () => request.call(provider, input);
+      const result = tail.then(run, run);
+      tail = result.then(
+        () => undefined,
+        () => undefined,
+      );
+      return result;
+    },
+  };
 }
 
 function firstNonEmptyString(...values) {

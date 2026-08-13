@@ -747,6 +747,51 @@ test('createRecognitionAiProvider lets recognition scene fallback timeout overri
   assert.equal(recognitionProvider.fallbackProvider.env.timeoutMs, 12000);
 });
 
+test('createRecognitionAiProvider serializes concurrent fallback recognition requests', async () => {
+  const recognitionProvider = createRecognitionAiProvider(
+    {
+      AI_API_KEY: 'primary-key',
+      AI_BASE_URL: 'https://primary.example.com/v1',
+      AI_MODEL: 'gpt-primary',
+      AI_API_PROTOCOL: 'chat_completions',
+      STANDBY_AI_API_KEY: 'standby-key',
+      STANDBY_AI_BASE_URL: 'https://standby.example.com/v1',
+      TELEGRAM_RECOGNITION_FALLBACK_MODEL: 'kimi-k2.6',
+    },
+    { name: 'primary', env: { model: 'gpt-primary' } },
+  );
+
+  let active = 0;
+  let maxActive = 0;
+  async function fakeFetch() {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    active -= 1;
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+      url: 'https://standby.example.com/v1/chat/completions',
+      async json() {
+        return { choices: [{ message: { content: '{}' } }] };
+      },
+    };
+  }
+
+  const fallback = recognitionProvider.fallbackProvider;
+  const requests = Array.from({ length: 5 }, () =>
+    fallback.requestChatCompletion({
+      messages: [],
+      fetchImpl: fakeFetch,
+    }),
+  );
+  await Promise.all(requests);
+
+  assert.equal(maxActive, 1);
+});
+
 test('recognizeBatch sends inline Telegram image data when inline mode is configured', async () => {
   const requestedImageUrls = [];
   const downloadedFileIds = [];
