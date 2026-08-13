@@ -34,6 +34,8 @@
 - 主识别业务字段缺失（硬完整性/条件完整性未满足），且备用 provider 未配置或补全后仍不完整。
 - 主备识别对关键数值字段给出超容差的不同值（`reconciliation:conflict`），或活动结构化指标冲突（`ACTIVITY_METRIC_CONFLICT`）。
 - `AI_OCR_FAILURE_MODE=required` 且 OCR provider 失败，或图片输入超过 `AI_IMAGE_MAX_*` 安全上限。
+- 主 AI 走 `responses` 协议但网关返回 `status=completed` 且 `output` 为空（无 `output_text`、无 refusal、无 incomplete reason），被判定为「empty Responses output」后切换备用 provider；此时每一张图都依赖备用 AI 兜底。
+- 备用 AI 服务组织并发上限为 1（`organization concurrency: 1`），而 `AI_CONCURRENCY` 大于 1 时，同一相册多张图在主 AI 失败后会并发切换备用 provider，第二个及后续请求立即被 HTTP 429 拒绝。
 
 ## 日志特征
 
@@ -42,6 +44,7 @@
 - `recognition parse failure`
 - `fallback recognition AI provider is not configured completely`
 - `primary AI recognition failed`
+- `AI recognition returned empty Responses output (status=completed)`（主 AI 空输出，随后 `retrying with fallback provider`）
 - `strict_json_retry`
 - `incomplete Responses output` / `refusal Responses output` / `empty Responses output`
 - `business fallback recognition failed with HTTP ...; keeping primary result` / `reconciliation.status=fallback_failed`
@@ -70,6 +73,8 @@
 - 按 Provider 真实能力设置 capability；代码只在声明允许时从 strict schema 降级到 `json_object` 或纯文本 JSON。
 - fallback provider 至少需要配置 model；它默认继承主 `AI_API_PROTOCOL`，只有备用服务协议不同才设置 `TELEGRAM_RECOGNITION_FALLBACK_API_PROTOCOL`。备用服务商与主服务商不同时，必须配置 `STANDBY_AI_API_KEY` / `STANDBY_AI_BASE_URL`。主 endpoint 的 HTTP 404 或 HTTP 200 HTML/非 JSON 响应会直接切换到备用 provider；业务补全失败会保留主 AI 已有数据并标记 `fallback_failed`，不会再因备用增强不可用而丢弃主结果。
 - 主备关键字段冲突需人工核对真实数值后重发单一权威截图；不要靠调大容差掩盖真实差异。
+- 主 AI 持续返回「empty Responses output」时，先核对 `AI_BASE_URL` 指向的网关是否真正支持 `AI_MODEL`（如 `gpt-5.4-mini`）的 Responses 结构化输出（`text.format` + `json_schema` + `store:false`）；不支持则改 `AI_API_PROTOCOL=chat_completions`，或设 `AI_SUPPORTS_JSON_SCHEMA=false` 让主 AI 降级到 `json_object`/纯文本 JSON。这属于主 AI 连接配置问题，不是「主 AI 坏了」。
+- 备用 AI 服务组织并发上限为 1 时，代码已对备用 provider 的请求串行化（`serializeAiProviderRequests`），同一时刻最多一个备用在途请求，`AI_CONCURRENCY` 只作用于主 provider；不要再通过调低 `AI_CONCURRENCY` 去迁就备用服务，那会拖慢主 AI 的正常并发识别。
 - schema 变更必须同步 Prompt source、生成后的 Prompt、App Profile、测试 fixture 和 DB/core 映射。
 - OCR 非强依赖场景使用 `AI_OCR_FAILURE_MODE=best_effort`；只有业务明确要求 OCR 证据时使用 `required`。图片超限应调整来源图片或在评估资源风险后修改上限。
 
